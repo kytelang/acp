@@ -549,8 +549,8 @@ customer), not deferred.
   - [x] `acp_core::liveness::GapDetector` (silence + decision-stall) wired into acp-server: `POST /heartbeat/:proxy` records liveness, `GET /liveness` reports silent proxies within a 30s window (integration-tested). Killing/silencing an enrolled proxy surfaces as a gap.
 - [x] **B2 [H1/P1] Canary / synthetic decisions prove the gate is live.**
   - [x] `acp canary <policy> <probes>` asserts must-deny/must-step_up verdicts and exits non-zero (pages) when a mis-loaded policy lets a probe through; 2 integration tests.
-- [~] **B3 [H1/P1] Fail-open / anomaly spike alerting.**
-  - [x] `acp_core::anomaly::SpikeDetector` sliding-window rate detector, unit-tested induced spike (B3 core). [ ] wire event feed + pager in acp-server.
+- [x] **B3 [H1/P1] Fail-open / anomaly spike alerting.**
+  - [x] `acp_core::anomaly::SpikeDetector` wired into acp-server: `POST /event/:kind` feeds per-kind detectors, `GET /alerts` reports tripped kinds; a >10/min deny surge trips the alert (integration-tested).
 - [~] **B4 [H1/P1] Governance-weakening alerts (control turned down).**
   - [x] `/report` emits `weakening` flags (default-allow+low-coverage, shadow-heavy) computed from the verifiable export + loaded policy (tested). [ ] wire flags to an alerting pipeline.
 - [~] **B5 [H1/P1] Tool-server supply-chain integrity.** (`--tool-hash` verifies the tool binary fingerprint before launch, fail-closed, tested; recording the fingerprint in evidence is next)

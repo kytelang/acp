@@ -157,4 +157,15 @@ async fn control_service_inbox_and_endpoints() {
     assert!(hb.status().is_success());
     let live1: serde_json::Value = c.get(format!("{base}/liveness")).send().await.unwrap().json().await.unwrap();
     assert_eq!(live1["healthy"], true, "a freshly-heartbeating proxy is healthy: {live1}");
+
+    // B3: no events yet -> no alert.
+    let a0: serde_json::Value = c.get(format!("{base}/alerts")).send().await.unwrap().json().await.unwrap();
+    assert_eq!(a0["healthy"], true);
+    // A burst of >10 deny events within the window trips the alert.
+    for _ in 0..12 {
+        c.post(format!("{base}/event/deny")).send().await.unwrap();
+    }
+    let a1: serde_json::Value = c.get(format!("{base}/alerts")).send().await.unwrap().json().await.unwrap();
+    assert_eq!(a1["healthy"], false, "a deny surge must trip an alert: {a1}");
+    assert!(a1["tripped"].as_array().unwrap().iter().any(|k| k == "deny"));
 }

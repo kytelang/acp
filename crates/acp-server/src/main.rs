@@ -20,6 +20,8 @@ struct AppState {
     ledger: Option<String>,
     // B1: server-side liveness of enrolled proxies (dead-man's-switch).
     liveness: std::sync::Mutex<acp_core::liveness::GapDetector>,
+    // B3: fail-open/deny spike detectors, one per event kind.
+    spikes: std::sync::Mutex<std::collections::HashMap<String, acp_core::anomaly::SpikeDetector>>,
 }
 
 #[tokio::main]
@@ -61,6 +63,7 @@ async fn main() {
         policy,
         ledger,
         liveness: std::sync::Mutex::new(acp_core::liveness::GapDetector::new()),
+        spikes: std::sync::Mutex::new(std::collections::HashMap::new()),
     });
     let app = Router::new()
         .route("/", get(inbox))
@@ -73,6 +76,8 @@ async fn main() {
         .route("/metrics", get(metrics))
         .route("/heartbeat/:proxy", post(heartbeat))
         .route("/liveness", get(liveness))
+        .route("/event/:kind", post(record_event))
+        .route("/alerts", get(alerts))
         .with_state(state);
 
     let listener = tokio::net::TcpListener::bind(&addr).await.expect("bind");
@@ -266,6 +271,32 @@ async fn heartbeat(State(st): State<Arc<AppState>>, Path(proxy): Path<String>) -
     // not yet gated a call is not falsely flagged.
     st.liveness.lock().unwrap().heartbeat(&proxy, now_ms());
     Json(serde_json::json!({"ok": true, "proxy": proxy}))
+}
+
+/// B3: a proxy reports a governance event (e.g. fail_open, deny) for spike detection.
+async fn record_event(State(st): State<Arc<AppState>>, Path(kind): Path<String>) -> impl IntoResponse {
+    const WINDOW_MS: u64 = 60_000;
+    const THRESHOLD: usize = 10; // >10 of one kind per minute trips
+    let mut map = st.spikes.lock().unwrap();
+    map.entry(kind.clone())
+        .or_insert_with(|| acp_core::anomaly::SpikeDetector::new(WINDOW_MS, THRESHOLD))
+        .record(now_ms());
+    Json(serde_json::json!({"ok": true, "kind": kind}))
+}
+
+/// B3: which event kinds are currently spiking (over threshold in the window). A fail-open surge
+/// or a deny surge pages here.
+async fn alerts(State(st): State<Arc<AppState>>) -> impl IntoResponse {
+    let now = now_ms();
+    let mut map = st.spikes.lock().unwrap();
+    let mut tripped: Vec<String> = Vec::new();
+    for (k, d) in map.iter_mut() {
+        if d.tripped(now) {
+            tripped.push(k.clone());
+        }
+    }
+    tripped.sort();
+    Json(serde_json::json!({"tripped": tripped, "healthy": tripped.is_empty()}))
 }
 
 /// B1: report proxies that have gone silent (no heartbeat within the window). A gap here is the

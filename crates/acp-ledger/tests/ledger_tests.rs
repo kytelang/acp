@@ -402,3 +402,22 @@ fn chaos_failure_injection_preserves_invariants() {
     assert_eq!(l.size(), 6, "idempotent under repeated recovery");
     l.verify().expect("still verifies");
 }
+
+#[test]
+fn an_archived_pack_verifies_with_the_live_store_removed() {
+    // H2.1/C3: evidence in a cold/archive tier must verify without the hot database. Export a pack,
+    // delete the live ledger file, and confirm the pack still self-verifies from its own bytes.
+    let p = tmp("l-archive.db");
+    let pack = {
+        let mut l = open(&p);
+        for i in 0..7 {
+            l.append(&format!("d{i}"), "decision", &rec(i), Some(&json!({"n": i}))).unwrap();
+        }
+        l.export().expect("export")
+    };
+    // Simulate archive-only: the hot store is gone.
+    std::fs::remove_file(&p).expect("remove live store");
+    assert!(std::fs::metadata(&p).is_err(), "hot store removed");
+    // The archived pack verifies from its own bytes with only the embedded public key.
+    verify_pack(&pack).expect("archived pack self-verifies without the live store");
+}
