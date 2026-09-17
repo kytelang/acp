@@ -15,6 +15,7 @@ pub mod canonical;
 pub mod classify;
 pub mod discovery;
 pub mod drift;
+pub mod dualcontrol;
 pub mod egress;
 pub mod fleet;
 pub mod grc;

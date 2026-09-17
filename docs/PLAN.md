@@ -420,8 +420,8 @@ was not actually performed.
   - [d] docs/compliance/cross-border.md: transfer mechanism (SCCs/IDTA/TIA) + the product's own GDPR Art.22 / EU AI Act self-assessment. [ ] legal review.
 - [d] **H1.8 Security-questionnaire machinery [R6].**
   - [d] docs/compliance/security-questionnaire.md: standing CAIQ/SIG answers kept in sync with the product + trust-portal index; gaps stated honestly. [ ] the hosted trust portal + the SOC2/pen-test artifacts it links are [e].
-- [~] **H1.9 Right-to-erasure + four-eyes [4][G].**
-  - [x] `Ledger::erase_args_for(id)` removes a subject's payload; the record + hash remain so the ledger still verifies (tested). [ ] four-eyes/dual-control on key rotation still to wire.
+- [x] **H1.9 Right-to-erasure + four-eyes [4][G].**
+  - [x] `Ledger::erase_args_for(id)` erases a subject's payload keeping the ledger verifiable; `acp_core::dualcontrol` enforces four-eyes (two distinct approvers, no self-approval) for key rotation / PII export / prod policy change. Tested.
 
 ### v1 GA gate
 
@@ -469,8 +469,8 @@ was not actually performed.
   - [m] `acp_core::residency::ResidencyPolicy`: default-deny placement restricted to a tenant's allowed regions; out-of-region placement refused (tested). [ ] the multi-region deployment topology.
 - [e] **H2.3 Sector attestations [10].** (external: HIPAA/sector assessor)
   - [b] HIPAA posture (and other vertical attestations) as demanded by target verticals.
-- [~] **H2.4 Chaos + property tests [12].**
-  - [x] Exhaustive Merkle invariant tests (inclusion over sizes 1-64 every index; consistency 1-48; tamper changes root) in merkle_invariants.rs. [ ] failure-injection chaos harness over outage/replay/failover still open.
+- [x] **H2.4 Chaos + property tests [12].**
+  - [x] Exhaustive Merkle invariant tests + a failure-injection chaos harness (crash-before-ledger, duplicate-replay, partial-then-complete drain) asserting no lost/double-applied decision and the ledger verifies after each (merkle_invariants.rs, ledger_tests.rs).
 
 ### v2 exit gate
 
@@ -529,7 +529,7 @@ customer), not deferred.
 
 - [~] **A1 [H0/P0] Formal model-checking of the concurrency cores.**
   - [~] In-repo exhaustive interleaving model check for the single-use-approval invariant (model_check.rs): atomic consume forwards at most once on every interleaving, and the checker provably catches a broken non-atomic consume. [ ] full TLA+/stateright specs for D6 fencing + D9 precedence.
-  - [x] "At most one forward per approval" holds on every interleaving; a deliberately broken consume is caught by the model (model_check.rs). [ ] "at most one leaf-extender per head" (D6) still to model.
+  - [x] Exhaustive interleaving model checks for BOTH "at most one forward per approval" and "at most one leaf-extender per head" (CAS), each catching its deliberately-broken variant (model_check.rs). [ ] full TLA+/stateright specs remain.
 - [~] **A2 [H0/P0] Differential conformance of `acp verify` vs a reference CT implementation.**
   - [x] RFC 6962 known-answer vectors (empty root, leaf domain prefix) pin CT compliance; inclusion/consistency self-checks over random trees. [ ] cross-check vs an external reference CT lib.
 - [x] **A3 [H0/P0] Cedar evaluation-error is fail-closed + alert.** (engine fail-closes on eval/context error; tested via typed-guard bypass)

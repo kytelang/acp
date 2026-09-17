@@ -26,8 +26,16 @@ fn a_batch_of_calls_flows_through_the_full_pipeline() {
 
     // A few raw HTTP tool calls arriving from a non-MCP surface.
     let calls = [
-        ("POST", "/v1/payments/charge", json!({"amount_cents": 90000})),
-        ("POST", "/v1/email/send", json!({"body": "contact jane@example.com"})),
+        (
+            "POST",
+            "/v1/payments/charge",
+            json!({"amount_cents": 90000}),
+        ),
+        (
+            "POST",
+            "/v1/email/send",
+            json!({"body": "contact jane@example.com"}),
+        ),
         ("GET", "/v1/catalog/read", json!({"id": 7})),
     ];
 
@@ -56,16 +64,29 @@ fn a_batch_of_calls_flows_through_the_full_pipeline() {
 
         // 6. Stamp an HLC for cross-proxy ordering.
         let stamp = clock.tick(1000 + i as u64);
-        timeline.push(TimelineEntry { hlc: stamp.encode(), proxy: "proxy-eu".into(), wall_ms: 1000 + i as u64 });
+        timeline.push(TimelineEntry {
+            hlc: stamp.encode(),
+            proxy: "proxy-eu".into(),
+            wall_ms: 1000 + i as u64,
+        });
 
         let _ = impact; // scored and available for the decision engine
     }
 
     // The pipeline produced consistent governance state:
     assert_eq!(meter.usage("acme").decisions, 3, "every call metered");
-    assert_eq!(overages, 1, "the 3rd call is over the quota of 2, billed not blocked");
-    assert!(lineage.classes_for("email.send").contains("pii"), "pii flow to email.send recorded");
-    assert!(lineage.classes_for("catalog.read").is_empty(), "no sensitive class to catalog.read");
+    assert_eq!(
+        overages, 1,
+        "the 3rd call is over the quota of 2, billed not blocked"
+    );
+    assert!(
+        lineage.classes_for("email.send").contains("pii"),
+        "pii flow to email.send recorded"
+    );
+    assert!(
+        lineage.classes_for("catalog.read").is_empty(),
+        "no sensitive class to catalog.read"
+    );
 
     // Timeline orders causally by HLC.
     let ordered = order(&timeline);

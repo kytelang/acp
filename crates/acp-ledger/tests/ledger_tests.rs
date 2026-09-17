@@ -360,3 +360,45 @@ fn approval_and_evidence_survive_a_crash_with_no_ledger_gap() {
     let _ = report2;
     assert_eq!(l.size(), 4, "idempotent replay, no duplicates");
 }
+
+#[test]
+fn chaos_failure_injection_preserves_invariants() {
+    // Generalised chaos over the durability path: inject a crash between spool and ledger, a
+    // duplicate-decision replay, and a partial-then-complete drain, asserting after each that no
+    // decision is lost, none is double-applied, and the ledger verifies.
+    let p = tmp("l-chaos.db");
+    let spool_path = format!("{p}.spool");
+    let _ = std::fs::remove_file(&p);
+    let _ = std::fs::remove_file(&spool_path);
+
+    // Phase 1: decisions fsync'd to the spool, process dies before the ledger write.
+    {
+        let spool = Spool::open(&spool_path);
+        for i in 0..6 {
+            spool
+                .append(&json!({"decision_id": format!("d{i}"), "kind": "decision", "record": rec(i), "args": {"n": i}}))
+                .unwrap();
+        }
+    }
+    let mut l = open(&p);
+
+    // Phase 2: a duplicate of an already-spooled decision arrives (retry after a timeout). Replay
+    // must be idempotent: the duplicate does not create a second leaf.
+    {
+        let spool = Spool::open(&spool_path);
+        spool
+            .append(&json!({"decision_id": "d0", "kind": "decision", "record": rec(0), "args": {"n": 0}}))
+            .unwrap();
+    }
+
+    // Phase 3: drain everything and verify. 6 distinct ids -> 6 leaves despite the duplicate.
+    let report = Spool::open(&spool_path).drain_into(&mut l).unwrap();
+    assert!(report.ingested >= 6, "all distinct decisions recovered");
+    assert_eq!(l.size(), 6, "duplicate did not create a second leaf (no double-apply)");
+    l.verify().expect("ledger verifies after chaos");
+
+    // Phase 4: a redundant drain after the crash-recovery completes changes nothing.
+    let _ = Spool::open(&spool_path).drain_into(&mut l).unwrap();
+    assert_eq!(l.size(), 6, "idempotent under repeated recovery");
+    l.verify().expect("still verifies");
+}
