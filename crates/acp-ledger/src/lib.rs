@@ -504,3 +504,38 @@ pub fn purge_args_file(path: &str, before_ms: u64) -> Result<usize, String> {
     )
     .map_err(|e| e.to_string())
 }
+
+/// Summarise the distinct tools observed in decision records and the highest impact seen for
+/// each (read-only). Used by `acp learn` to propose a starter policy (E5).
+pub fn observed_tools(path: &str) -> Result<Vec<(String, String)>, String> {
+    let conn = Connection::open_with_flags(path, OpenFlags::SQLITE_OPEN_READ_ONLY)
+        .map_err(|e| e.to_string())?;
+    let mut stmt = conn
+        .prepare("SELECT canonical FROM records WHERE kind='decision'")
+        .map_err(|e| e.to_string())?;
+    let rows = stmt
+        .query_map([], |r| r.get::<_, Vec<u8>>(0))
+        .map_err(|e| e.to_string())?;
+    let rank = |s: &str| match s {
+        "high" => 3,
+        "medium" => 2,
+        "low" => 1,
+        _ => 0,
+    };
+    let mut best: std::collections::BTreeMap<String, String> = std::collections::BTreeMap::new();
+    for row in rows {
+        let canonical = row.map_err(|e| e.to_string())?;
+        if let Ok(v) = serde_json::from_slice::<Value>(&canonical) {
+            let tool = v["action"]["tool"].as_str().unwrap_or("").to_string();
+            let impact = v["action"]["impact"].as_str().unwrap_or("low").to_string();
+            if tool.is_empty() {
+                continue;
+            }
+            let cur = best.entry(tool).or_insert_with(|| "low".to_string());
+            if rank(&impact) > rank(cur) {
+                *cur = impact;
+            }
+        }
+    }
+    Ok(best.into_iter().collect())
+}

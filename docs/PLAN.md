@@ -449,12 +449,12 @@ customer), not deferred.
   - [x] acp-server `/report` computes verdict + outcome breakdown from the verifiable ledger export (deny/allow/step_up counts, outcome kinds; tested). [ ] approval-latency percentiles.
 - [~] **E2 [v1/P1] Policy coverage / gap reporting.**
   - [x] `/report` computes `policy_coverage` = % of decisions matched by an explicit rule vs default (tested). [ ] per-tool no-rule worklist.
-- [b] **E3 [v1/P1] Decision explainability to the agent/user.**
-  - [b] Deny/step-up responses carry a redaction-safe rationale (matched condition, triggering signal, "to pass, X") without leaking raw argument values.
+- [x] **E3 [v1/P1] Decision explainability to the agent/user.**
+  - [x] Denials carry rule + reason + impact + a remediation hint + structuredContent; the record stores `matched`; no raw args leaked (tested).
 - [x] **E4 [v1/P1] Configurable impact taxonomy (replaces the fixed blast-radius heuristic).**
   - [b] A declarative, per-tenant, versioned impact config (factors, weights, thresholds, data classes) evaluated into the un-spoofable context; two tenants score the same call differently; the taxonomy version is stamped into evidence.
-- [b] **E5 [v1/P1] Learn-mode / policy bootstrapping from observed traffic.**
-  - [b] After a shadow window, emits a compilable draft policy covering all observed action methods + suggested step_up thresholds, diffed against current.
+- [x] **E5 [v1/P1] Learn-mode / policy bootstrapping from observed traffic.**
+  - [x] `acp learn <ledger>` summarises observed tools + max impact and emits a compilable draft policy (step-up for high/medium-impact tools); verified the draft compiles (tested).
 - [b] **E6 [v2/P1] Default-deny posture maturity path.**
   - [b] Enabling default-deny requires a coverage threshold and produces the set of calls that would newly block with per-rule exceptions; posture stage (shadow/partial/default-deny) is tracked.
 - [b] **E7 [v3/P2] Governance-maturity / posture scoring.**

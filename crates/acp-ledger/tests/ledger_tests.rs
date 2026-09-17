@@ -215,3 +215,41 @@ fn acp_approvals_now() -> u64 {
         .unwrap()
         .as_millis() as u64
 }
+
+#[test]
+fn observed_tools_summarises_max_impact() {
+    let p = tmp("lobs.db");
+    let _ = std::fs::remove_file(&p);
+    let mut l = Ledger::open(&p, Box::new(Ed25519Signer::generate())).unwrap();
+    l.append(
+        "d1",
+        "decision",
+        &json!({"action":{"tool":"payments.charge","impact":"low"}}),
+        None,
+    )
+    .unwrap();
+    l.append(
+        "d2",
+        "decision",
+        &json!({"action":{"tool":"payments.charge","impact":"high"}}),
+        None,
+    )
+    .unwrap();
+    l.append(
+        "d3",
+        "decision",
+        &json!({"action":{"tool":"db.read","impact":"low"}}),
+        None,
+    )
+    .unwrap();
+    drop(l);
+    let tools = acp_ledger::observed_tools(&p).unwrap();
+    // max impact per tool, sorted by tool name
+    assert_eq!(
+        tools,
+        vec![
+            ("db.read".to_string(), "low".to_string()),
+            ("payments.charge".to_string(), "high".to_string())
+        ]
+    );
+}

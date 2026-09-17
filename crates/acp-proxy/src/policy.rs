@@ -15,15 +15,16 @@ pub enum Enforce {
     Reply(String),
 }
 
-fn deny_result(id: &Value, rule: &str, reason: &str) -> String {
+fn deny_result(id: &Value, rule: &str, reason: &str, impact: &str) -> String {
+    // Explainable denial (E3): what fired, why, the impact, and how to proceed.
+    let text = format!(
+        "blocked by policy rule '{rule}': {reason} (impact={impact}). To proceed, adjust the flagged argument(s) or request human approval."
+    );
     json!({
         "jsonrpc": "2.0",
         "id": id,
-        "result": {
-            "isError": true,
-            "content": [{"type": "text",
-                "text": format!("blocked by policy rule '{rule}': {reason}")}]
-        }
+        "result": {"isError": true, "content": [{"type": "text", "text": text}],
+                   "structuredContent": {"blocked": true, "rule": rule, "reason": reason, "impact": impact}}
     })
     .to_string()
 }
@@ -64,7 +65,12 @@ pub fn assess(engine: &PolicyEngine, env: &str, tc: &ToolCall, tax: &ImpactTaxon
     let impact = impact_str(tax, &tc.name, &tc.arguments);
     if !valid_tool(&tc.name) {
         return Assessment {
-            enforce: Enforce::Reply(deny_result(&tc.id, "safe-entity", "invalid tool name")),
+            enforce: Enforce::Reply(deny_result(
+                &tc.id,
+                "safe-entity",
+                "invalid tool name",
+                impact,
+            )),
             outcome: PolicyOutcome {
                 verdict: Verdict::Deny,
                 rule_id: Some("safe-entity".into()),
@@ -82,6 +88,7 @@ pub fn assess(engine: &PolicyEngine, env: &str, tc: &ToolCall, tax: &ImpactTaxon
             &tc.id,
             outcome.rule_id.as_deref().unwrap_or("policy"),
             outcome.reason.as_deref().unwrap_or("blocked by policy"),
+            impact,
         )),
         Verdict::StepUp => Enforce::Reply(approval_required(
             &tc.id,
