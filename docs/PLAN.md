@@ -406,8 +406,8 @@ was not actually performed.
 
 - [b] **H1.1 HA + isolation + quotas [3][5].**
   - [b] HA control plane (no SPOF); per-tenant rate limits/quota; noisy-neighbour protection.
-- [b] **H1.2 Safe migrations + config audit [6].**
-  - [b] Ledger-preserving migrations with tested rollback; control-plane config changes audited.
+- [~] **H1.2 Safe migrations + config audit [6].**
+  - [x] `acp_ledger::migrate`: ordered, transactional, reversible migrations; up preserves existing evidence, rollback returns cleanly keeping data (tested). Config-change audit = metaaudit (H0.7).
 - [b] **H1.3 Reproducible builds + provenance + proxy auto-update [7][K].**
   - [b] Proxy build reproducible; SLSA-style provenance; signed, verifiable proxy update channel; deployed-version visibility.
 - [~] **H1.4 Full JCS + LTV operational [1][C].**
@@ -629,8 +629,8 @@ customer), not deferred.
   - [m] `acp_core::webhook::sign_webhook`/`verify_webhook`: HMAC-SHA256 signed, timestamp-bound (replay-protected) webhooks; HMAC verified against RFC 4231. Tested. [ ] the versioned REST API surface + rate limits sit on the acp-server.
 - [x] **F11 [v2/P1] Cross-proxy forensic timeline + hybrid logical clocks.**
   - [x] `acp_core::hlc` HLC stamped into every decision record; encoding sorts causally; unit-tested across nodes (F11 core). [ ] multi-proxy timeline query + skew alarm.
-- [b] **F12 [v3/P2] On-prem / air-gapped deployment mode.**
-  - [b] An air-gapped profile with an internal RFC 3161 TSA / offline anchoring and offline signed-update + SBOM verification; full gate->approve->verify works with egress disabled and evidence verifies offline.
+- [~] **F12 [v3/P2] On-prem / air-gapped deployment mode.**
+  - [x] Full gate->evidence->verify chain (Merkle + KMS-seam signing + internal anchor) verifies with zero network calls; tampered head fails every check (airgapped.rs). [ ] offline signed-update + SBOM verification packaging remain.
 - [b] **F13 [v3/P2] Customer change-management & adoption kit.**
   - [b] RACI template, policy-author certification, staged posture-maturity playbook; the console shows a tenant's posture stage with a defined next step.
 

@@ -8,6 +8,8 @@
 
 pub mod spool;
 
+pub mod migrate;
+
 use acp_core::canonical::{canonical_bytes, sha256_hex};
 use acp_core::merkle::{leaf_hash, Hash, MerkleLog};
 use acp_core::sign::{sign_sth, verify_sth, SignedTreeHead, Signer};
