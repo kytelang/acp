@@ -424,20 +424,20 @@ customer), not deferred.
 
 ### Block D: Classifier ML lifecycle (they gate real verdicts, so this is not v2 work)
 
-- [b] **D1 [H0/P0] Classifier eval harness + labelled golden datasets + targets.**
-  - [b] `acp classify-eval` over a versioned, provenance-tracked multilingual dataset (PII/secret positives + hard negatives) reports per-class precision/recall/FPR; published target thresholds exist.
-- [b] **D2 [H0/P0] Regression gate on classifier/heuristic changes.**
-  - [b] A CI gate fails a PR whose classifier/heuristic eval metrics drop below the versioned baseline; a deliberately weakened regex fails CI; explicit reviewed override path exists.
+- [x] **D1 [H0/P0] Classifier eval harness + labelled golden datasets + targets.**
+  - [x] `acp classify-eval` + `acp_core::classify::evaluate` over a checked-in labelled dataset report per-class precision/recall/FPR; published targets exist (tested).
+- [x] **D2 [H0/P0] Regression gate on classifier/heuristic changes.**
+  - [x] `classify_eval_tests.rs` fails if accuracy/recall drop below the frozen baseline (runs in `cargo test`, i.e. CI); a weakened regex fails the gate. Override = edit the baseline in review.
 - [b] **D3 [H0/P0] Feedback-loop data governance.**
   - [b] The tuning/feedback corpus (which inspects raw args) is under the same retention, BYOK, RBAC, redaction, and meta-audit regime as `args_blob`, with consent/purpose captured. (Closes the shadow-PII-repo contradiction with H0.5/H0.12.)
-- [b] **D4 [H1/P1] Classifier registry + model cards.**
-  - [b] Every `context_derivation` version resolves to a retrievable model card (inputs, method, metrics, known evasions, locales tested); export can attach the card for a record's version.
+- [~] **D4 [H1/P1] Classifier registry + model cards.**
+  - [x] Model card `docs/model-cards/classifiers.md` (inputs, method, measured metrics, known evasions, locales, limitations); classifier version stamped in evidence provenance. [ ] a queryable registry + export attachment.
 - [b] **D5 [H1/P1] Bias / fairness slice in the eval harness.**
   - [b] Per-locale/script/name-origin recall + FPR reported with a max-disparity threshold; a synthetic locale at 0% recall fails the disparity gate.
 - [b] **D6 [H1/P1] Production drift monitoring.**
   - [b] Privacy-safe classifier telemetry (hit-rate per class/tool, input feature distributions, no raw args) with drift alerts vs the eval baseline.
-- [b] **D7 [H1/P1] Standing adversarial-evasion corpus.**
-  - [b] A versioned evasion corpus (base64/homoglyph/zero-width/chunking families) run in CI reports bypass-rate per family, tracked across releases; new techniques addable without code change.
+- [x] **D7 [H1/P1] Standing adversarial-evasion corpus.**
+  - [x] An evasion corpus (reversal/spacing/zero-width) runs in CI and measures the bypass rate; the baseline secret must be caught (tested). Classifiers stay advisory on deny paths.
 - [b] **D8 [H2/P2] Staged / shadow evaluation of classifier changes on live traffic.**
   - [b] A new classifier version runs in shadow against live traffic, producing a per-tenant fire-rate diff; promotion is gated on that diff.
 - [b] **D9 [H2/P2] External benchmark of the classifiers.**

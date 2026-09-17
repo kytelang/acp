@@ -1,0 +1,16 @@
+{"text":"contact jane.doe@example.com for details","label":"pii"}
+{"text":"reach me at john+work@sub.domain.co.uk","label":"pii"}
+{"text":"my number is 415-555-0132","label":"pii"}
+{"text":"ssn 123-45-6789 on file","label":"pii"}
+{"text":"call +91 98765 43210 tomorrow","label":"pii"}
+{"text":"email:  maria.garcia@correo.es","label":"pii"}
+{"text":"token=sk_live_abcdefgh12345678","label":"secret"}
+{"text":"api_key: AKIA1234567890ABCD","label":"secret"}
+{"text":"bearer eyJhbGciOiJIUzI1NiwadwadawQ","label":"secret"}
+{"text":"password=hunter2hunter2hunter2","label":"secret"}
+{"text":"the quarterly report is due friday","label":"none"}
+{"text":"please summarise the attached document","label":"none"}
+{"text":"meeting moved to 3pm in room 4","label":"none"}
+{"text":"the weather is nice today","label":"none"}
+{"text":"list the open pull requests","label":"none"}
+{"text":"deploy the service to staging","label":"none"}
