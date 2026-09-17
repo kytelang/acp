@@ -1,0 +1,11 @@
+[package]
+name = "acp-server"
+version = "0.0.0"
+edition.workspace = true
+license.workspace = true
+description = "Agent Control Plane: control service - policy, approvals, evidence ledger, export."
+
+[dependencies]
+acp-core = { path = "../acp-core" }
+acp-policy = { path = "../acp-policy" }
+# to wire: axum, sqlx, reqwest, maud, cedar-policy (M2/M3/M4)

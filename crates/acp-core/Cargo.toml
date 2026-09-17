@@ -1,0 +1,12 @@
+[package]
+name = "acp-core"
+version = "0.0.0"
+edition.workspace = true
+license.workspace = true
+description = "Agent Control Plane: trust core (types, verifiable log, signing, policy). No I/O."
+
+[dependencies]
+sha2.workspace = true
+serde.workspace = true
+serde_json.workspace = true
+hex.workspace = true

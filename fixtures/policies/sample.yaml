@@ -1,0 +1,41 @@
+# Policy authoring surface (YAML). Compiles to Cedar via `acp policy-compile`.
+# First match wins; if nothing matches, `default` applies.
+version: 1
+default: allow            # allow | deny | step_up | shadow
+metadata:
+  name: payments-and-deletes
+  owner: platform-security
+
+rules:
+  - id: block-prod-deletes
+    when:
+      tool: "db.*"
+      arg:
+        operation: { in: ["delete", "drop", "truncate"] }
+        env: { eq: "prod" }
+    verdict: step_up
+    approvers: ["oncall-platform"]
+    reason: "Destructive prod DB operation"
+
+  - id: cap-spend
+    when:
+      tool: "payments.charge"
+      arg:
+        amount_cents: { gt: 50000 }
+    verdict: step_up
+    approvers: ["finance-approvers"]
+
+  - id: no-pii-to-external
+    when:
+      tool: "email.send"
+      arg:
+        body: { contains_class: "pii" }
+    verdict: deny
+    reason: "PII must not leave via the unmanaged email tool"
+
+  - id: allow-readonly
+    when:
+      tool: "*"
+      arg:
+        operation: { in: ["read", "get", "list", "search"] }
+    verdict: allow
