@@ -275,10 +275,10 @@ was not actually performed.
   - [b] Secrets in a vault, not env files.
 - [x] **H0.4 Backups/DR [3].**
   - [x] Real backup/restore drill: back up (copy), simulate loss, restore, and the ledger reverifies end to end (ledger_tests). RPO/RTO targets documented with the backup cadence.
-- [b] **H0.5 Encryption-at-rest + BYOK + redaction [F][4].**
-  - [b] Store encrypted at rest; field-level BYOK for `args_blob`; argument redaction available for a partner's data class.
-- [b] **H0.6 Egress/SSRF + signed policy provenance [H].**
-  - [b] Egress allowlists on proxy dial + policy git pull; policy provenance signed/verified; who-can-push-policy controlled.
+- [~] **H0.5 Encryption-at-rest + BYOK + redaction [F][4].**
+  - [x] `acp_core::redact`: deterministic argument redaction by field name + sensitive class, leaving the args hash intact so evidence still verifies; unit-tested. [ ] at-rest encryption + field-level BYOK for args_blob.
+- [~] **H0.6 Egress/SSRF + signed policy provenance [H].**
+  - [x] `acp_core::egress`: default-deny host allowlist that blocks internal/SSRF targets (loopback, link-local metadata, private ranges) even if allowlisted; unit-tested. [ ] signed policy provenance + who-can-push wiring.
 - [~] **H0.7 Self-governance meta-audit [G].**
   - [x] `acp_core::metaaudit::MetaEvent` (policy/key/RBAC/approver/break-glass) appends to the same RFC 6962 ledger and keeps it verifiable + exportable (ledger integration test). [ ] emit on live admin actions once SSO/RBAC (H0.8) lands.
 - [m] **H0.8 Auth hardening + RBAC [8].**
