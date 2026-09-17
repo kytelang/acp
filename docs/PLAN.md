@@ -82,6 +82,83 @@ end to end against mocked backends, and the only things left to the outside worl
 attestations that, by definition, an outside party must give. The backlog below is now worked in
 that order: `[x]`/`[m]` first, `[d]` next, `[e]` last.
 
+## Prerequisites to reach 100%
+
+"Finish 100%" needs three kinds of input the code alone cannot supply: external services to point
+the already-built adapters at, third parties and non-software deliverables, and the developer
+tooling for the assurance items. None of these is a design flaw; they are the normal external
+surface of an enterprise trust product. This section lists them so nothing is a surprise, and then
+answers the question directly: is everything else available in Rust? Yes, with a couple of caveats
+noted at the end.
+
+### A. External services to provision (the `[m]` adapters point at these)
+Each already has a working local/mock backend in-repo; going live means providing the real one and
+changing a connection string or config, not writing new logic.
+- Managed Postgres (evidence store, multi-tenant) `->` `acp-pgstore` (done against local PG)
+- Azure Entra ID tenant + app registration (SSO/OIDC, RBAC roles) `->` `acp-auth` (done against a mock IdP)
+- A KMS/HSM: AWS KMS, Azure Key Vault, GCP KMS, or a PKCS#11 HSM (signing + rotation) `->` `keymgr`
+- A transparency anchor: a Rekor instance/public log or an RFC 3161 timestamp authority `->` `anchor`
+- Cloud object storage with object-lock (WORM archive + continuous export) `->` tiering/export
+- Notification and workflow tenants for the connectors: Slack, Microsoft Teams, PagerDuty, email/SMTP,
+  Jira or ServiceNow, a GRC platform (ServiceNow IRM / Archer / OneTrust), a data warehouse
+  (Snowflake / BigQuery), and an IdP that speaks SCIM
+- A secrets vault (for the app's own credentials) and a CI secret store for signing keys
+
+### B. Third parties and non-software deliverables (the `[e]` and `[d]` items)
+No code closes these; the enabling artifact is built and handed to them.
+- An independent cryptography/security reviewer (for the log/signing review)
+- A penetration-testing vendor
+- A SOC 2 Type II auditor and an ISO 27001 certification body (and HIPAA/sector assessors as needed)
+- Legal counsel to execute the DPA/DPIA, SCCs/IDTA, and sub-processor agreements
+- An accessibility reviewer to sign the VPAT against WCAG 2.1 AA / EN 301 549
+- Two or more design partners to run real agents through the proxy, and a first paying customer
+
+### C. Developer tooling for the assurance items
+- A fuzzing toolchain (`cargo-fuzz` / libFuzzer) and property testing (`proptest`)
+- A model checker: `stateright` (Rust-native) or an external TLA+/Alloy install for the concurrency cores
+- SBOM + supply-chain tooling (`cargo-cyclonedx` / `cargo-auditable`, `cargo-audit`, `cargo-deny`)
+- A container/Linux host for the sandboxing and load/chaos runs
+
+### D. Is everything available in Rust? Yes. Capability-by-capability
+| Capability | Rust crate(s) | Maturity |
+| --- | --- | --- |
+| Postgres store + pooling | `tokio-postgres`, `sqlx`, `deadpool-postgres` | mature, in use |
+| OIDC / JWT (Entra, Okta) | `openidconnect`, `jsonwebtoken` (RS256/ES256/EdDSA) | mature |
+| mTLS between services | `rustls`, `tokio-rustls` | mature |
+| AWS KMS / S3 (object-lock) | `aws-sdk-kms`, `aws-sdk-s3` | official SDK |
+| Azure Key Vault / identity | `azure_security_keyvault_*`, `azure_identity` | official, still stabilising |
+| GCP KMS / BigQuery | `google-cloud-kms`, `gcp-bigquery-client` | community |
+| HSM (PKCS#11) | `cryptoki` | mature |
+| Transparency log (Rekor/sigstore) | `sigstore` | official-ish, active |
+| Merkle CT proofs | `ct-merkle` + our `acp_core::merkle` | in use, plus in-repo fallback |
+| Encryption at rest / envelope BYOK | `aes-gcm`, `chacha20poly1305`, `ring` | mature (RustCrypto) |
+| Slack/webhook signature (HMAC) | `hmac`, `sha2` | mature, trivial |
+| HTTP for all REST connectors | `reqwest` | mature |
+| OpenTelemetry spans | `opentelemetry`, `opentelemetry-otlp`, `tracing-opentelemetry` | mature |
+| Linux sandboxing | `seccompiler`, `landlock`, `cgroups-rs`, `caps`, `nix` | mature (Linux) |
+| Fuzzing / property tests | `cargo-fuzz`, `arbitrary`, `proptest` | mature |
+| Model checking | `stateright` | mature Rust option |
+| SBOM / supply chain | `cargo-cyclonedx`, `cargo-auditable`, `cargo-audit`, `cargo-deny` | mature |
+| Release signing | `sigstore`, `rsign2` (minisign) | usable |
+
+### E. The honest caveats (small, none blocking)
+1. RFC 3161 timestamp-authority clients are thin in Rust today. Workaround: use Rekor via `sigstore`
+   as the anchor (already our `Anchor` seam), or a minimal ASN.1 client on `der`/`x509-cert`.
+2. The Azure Rust SDK is official but younger than the AWS one; the REST-over-`reqwest` path is a
+   reliable fallback for any Key Vault call not yet covered.
+3. A few connectors (SCIM, Snowflake) have only community crates; the dependable route there is the
+   vendor REST API over `reqwest`, which the connector seam already assumes.
+4. Formal specification in TLA+ uses a Java toolchain, not Rust. `stateright` gives a Rust-native
+   alternative for the same invariants, so the assurance item does not force a non-Rust dependency.
+
+### Bottom line on the stack
+There is no capability in this plan that forces a non-Rust runtime component. Every technical
+dependency is either a mature Rust crate, an official cloud SDK, or a REST API we call over
+`reqwest`. The only genuinely non-Rust, non-software prerequisites are the human attestations in
+section B. So the answer to "is everything available in Rust" is yes, and the answer to "what do we
+still need" is: the external accounts in A, the third parties in B, and the tooling in C.
+
+
 - Traceability tags map back to the design docs: `D1-D11` = decisions (`DESIGN.md`);
   `R1-R7` = round-three gaps; `H0/H1/H2` = hardening gates; bracket numbers/letters =
   `PLAN.md` sections.
