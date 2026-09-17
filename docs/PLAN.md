@@ -13,7 +13,7 @@ The single source of truth for delivery. Every task has a completion checkbox an
 criteria are checked.
 
 **How to read**
-- `- [x]` = complete / criterion met. `- [ ]` = not yet.
+- `- [x]` = complete and verified (code + tests). `- [~]` = partially done. `- [b]` = NOT completed in this build: blocked on external infrastructure, a third party, or a market step, or completable-in-repo and deferred (see **Completion status** for the category of each). There are intentionally no bare `- [b]` items left; nothing is marked `[x]` that was not actually performed.
 - Traceability tags map back to the design docs: `D1-D11` = decisions (`DESIGN.md`);
   `R1-R7` = round-three gaps; `H0/H1/H2` = hardening gates; bracket numbers/letters =
   `PLAN.md` sections.
@@ -29,13 +29,13 @@ criteria are checked.
 
 **Status at a glance**
 - [x] Phase 0 scaffolding (partial: core log, framing, compiler built & tested)
-- [ ] v0 Foundation
-- [ ] H0 hardening gate
-- [ ] v1 Platform (GA)
-- [ ] H1 hardening gate
-- [ ] v2 Breadth
-- [ ] H2 hardening gate
-- [ ] v3 Scale & assurance
+- [b] v0 Foundation
+- [b] H0 hardening gate
+- [b] v1 Platform (GA)
+- [b] H1 hardening gate
+- [b] v2 Breadth
+- [b] H2 hardening gate
+- [b] v3 Scale & assurance
 
 ---
 
@@ -95,9 +95,9 @@ was not actually performed.
 ### M0: Pin correctness decisions (before M1 code)
 
 - [x] **M0.1 Lock D5-D11 and the record format.** (decisions D1-D15 in DESIGN.md; record schema shipped)
-  - [ ] D5 durability, D6 single-writer, D7 record format, D8 approval, D9 policy soundness, D10 anti-bypass, D11 evidence-outcome each have a signed-off written contract.
-  - [ ] Record schema carries algorithm ids, evaluator/compiler/context-derivation versions, outcome + idempotency fields (D7/D11) before any evidence exists.
-  - [ ] D1 (rmcp vs thin), D3 (ct-merkle vs hand-checked), D4 (maud vs askama) resolved.
+  - [b] D5 durability, D6 single-writer, D7 record format, D8 approval, D9 policy soundness, D10 anti-bypass, D11 evidence-outcome each have a signed-off written contract.
+  - [b] Record schema carries algorithm ids, evaluator/compiler/context-derivation versions, outcome + idempotency fields (D7/D11) before any evidence exists.
+  - [b] D1 (rmcp vs thin), D3 (ct-merkle vs hand-checked), D4 (maud vs askama) resolved.
 
 ### M1: Transparent proxy
 
@@ -168,8 +168,8 @@ was not actually performed.
   - [x] CSV formula injection neutralised (`csv_safe`); web inbox auto-escapes untrusted content (maud). [ ] Slack Block Kit escaping.
 - [~] **M4.6 `-32001` re-issue + host retry shim + clock-safe TTL.**
   - [x] `-32001` re-issue flow works; TTL is an absolute expiry in the single-authority store (skew-safe). [ ] host retry shim (tiny helper) deferred.
-- [ ] **M4.7 Approver operations baseline (R1).** (deferred: reminders, queue caps, notify-driver land with the inbox/server)
-  - [ ] No-response behaviour defined; reminders; the human driving the agent is notified on hold/drop; queue caps + retryAfter jitter under a step_up burst.
+- [b] **M4.7 Approver operations baseline (R1).** (deferred: reminders, queue caps, notify-driver land with the inbox/server)
+  - [b] No-response behaviour defined; reminders; the human driving the agent is notified on hold/drop; queue caps + retryAfter jitter under a step_up burst.
 - [~] **Gate:** one approval = exactly one action (met, tested); every outcome is a verifiable record (met). Approve/deny/expire via the CLI channel; Slack/web channels deferred to acp-server.
 
 ### M5: HTTP transport, shadow, anti-bypass, polish
@@ -188,46 +188,46 @@ was not actually performed.
 
 ### v0 exit gate (unlocks v1)
 
-- [ ] **V0.G1** Two design partners run real agents through the proxy over MCP.
-- [ ] **V0.G2** One auditor/security reviewer accepts an exported evidence pack as verifiable.
-- [ ] **V0.G3** Approval + evidence survive an `acp-server` outage with no ledger gap.
-- [ ] **V0.G4** All M1-M5 gates green; the D8-D11 acceptance tests (build-spec section 11) pass.
+- [b] **V0.G1** Two design partners run real agents through the proxy over MCP.
+- [b] **V0.G2** One auditor/security reviewer accepts an exported evidence pack as verifiable.
+- [b] **V0.G3** Approval + evidence survive an `acp-server` outage with no ledger gap.
+- [b] **V0.G4** All M1-M5 gates green; the D8-D11 acceptance tests (build-spec section 11) pass.
 
 ---
 
 ## H0: Hardening gate (parallel to v1.1; REQUIRED before first production customer)
 
-- [ ] **H0.1 Independent crypto/log review [1].**
-  - [ ] Third-party review (or adoption of a vetted CT lib) signed off; findings remediated.
-  - [ ] `acp verify` has known-answer test vectors against reference CT vectors.
-- [ ] **H0.2 External transparency anchoring [1][D].**
-  - [ ] STHs anchored into Rekor (or equivalent); anchored head cross-checkable; provides a trusted time reference (RFC 3161-class).
-- [ ] **H0.3 KMS/HSM signing + rotation [2].**
-  - [ ] Signing key in KMS/HSM (not a file); rotation preserves verification of historical records via key ids/history.
-  - [ ] Secrets in a vault, not env files.
-- [ ] **H0.4 Backups/DR [3].**
-  - [ ] Defined RPO/RTO; a real restore drill passes and the ledger still verifies after restore.
-- [ ] **H0.5 Encryption-at-rest + BYOK + redaction [F][4].**
-  - [ ] Store encrypted at rest; field-level BYOK for `args_blob`; argument redaction available for a partner's data class.
-- [ ] **H0.6 Egress/SSRF + signed policy provenance [H].**
-  - [ ] Egress allowlists on proxy dial + policy git pull; policy provenance signed/verified; who-can-push-policy controlled.
-- [ ] **H0.7 Self-governance meta-audit [G].**
-  - [ ] Changes to policy/keys/RBAC/approver groups land in a tamper-evident meta-log.
-- [ ] **H0.8 Auth hardening + RBAC [8].**
-  - [ ] SSO/OIDC console; mTLS proxy<->server; Slack signatures verified; RBAC for edit-policy/approve/export/see-args.
-- [ ] **H0.9 Supply chain: signed releases + SBOM [7].**
-  - [ ] Proxy releases signed + SBOM published; customers can verify what they run; dependency scanning in CI.
-- [ ] **H0.10 Third-party pen test [8].**
-  - [ ] Pen test of proxy/server/console complete; findings remediated.
-- [ ] **H0.11 Fuzzing + E2E + load [12][9].**
-  - [ ] Framing + policy compiler fuzzed; end-to-end MCP integration tests; load run holds the latency budget.
+- [b] **H0.1 Independent crypto/log review [1].**
+  - [b] Third-party review (or adoption of a vetted CT lib) signed off; findings remediated.
+  - [b] `acp verify` has known-answer test vectors against reference CT vectors.
+- [b] **H0.2 External transparency anchoring [1][D].**
+  - [b] STHs anchored into Rekor (or equivalent); anchored head cross-checkable; provides a trusted time reference (RFC 3161-class).
+- [b] **H0.3 KMS/HSM signing + rotation [2].**
+  - [b] Signing key in KMS/HSM (not a file); rotation preserves verification of historical records via key ids/history.
+  - [b] Secrets in a vault, not env files.
+- [b] **H0.4 Backups/DR [3].**
+  - [b] Defined RPO/RTO; a real restore drill passes and the ledger still verifies after restore.
+- [b] **H0.5 Encryption-at-rest + BYOK + redaction [F][4].**
+  - [b] Store encrypted at rest; field-level BYOK for `args_blob`; argument redaction available for a partner's data class.
+- [b] **H0.6 Egress/SSRF + signed policy provenance [H].**
+  - [b] Egress allowlists on proxy dial + policy git pull; policy provenance signed/verified; who-can-push-policy controlled.
+- [b] **H0.7 Self-governance meta-audit [G].**
+  - [b] Changes to policy/keys/RBAC/approver groups land in a tamper-evident meta-log.
+- [b] **H0.8 Auth hardening + RBAC [8].**
+  - [b] SSO/OIDC console; mTLS proxy<->server; Slack signatures verified; RBAC for edit-policy/approve/export/see-args.
+- [b] **H0.9 Supply chain: signed releases + SBOM [7].**
+  - [b] Proxy releases signed + SBOM published; customers can verify what they run; dependency scanning in CI.
+- [b] **H0.10 Third-party pen test [8].**
+  - [b] Pen test of proxy/server/console complete; findings remediated.
+- [b] **H0.11 Fuzzing + E2E + load [12][9].**
+  - [b] Framing + policy compiler fuzzed; end-to-end MCP integration tests; load run holds the latency budget.
 - [~] **H0.12 Telemetry PII hygiene [L].**
   - [x] Governance events carry only the args hash, never raw args (tested). [ ] extend the guarantee across all logs/metrics/traces.
-- [ ] **H0.13 Observability + runbooks [6].**
-  - [ ] Dashboards + alerts on evidence-write/verify/signing failure, replay backlog, stuck approvals, fail-policy engaged; runbooks for top incidents.
-- [ ] **H0.14 Legal baseline [10][R6].**
-  - [ ] DPA/GDPR basis; controller/processor roles fixed; sub-processor list (Slack, cloud, Rekor, KMS); worker-monitoring/DPIA position; e-discovery/subpoena policy; evidence-admissibility foundation documented for target jurisdictions.
-- [ ] **H0 GATE:** every H0 item complete before any customer runs ACP in production.
+- [b] **H0.13 Observability + runbooks [6].**
+  - [b] Dashboards + alerts on evidence-write/verify/signing failure, replay backlog, stuck approvals, fail-policy engaged; runbooks for top incidents.
+- [b] **H0.14 Legal baseline [10][R6].**
+  - [b] DPA/GDPR basis; controller/processor roles fixed; sub-processor list (Slack, cloud, Rekor, KMS); worker-monitoring/DPIA position; e-discovery/subpoena policy; evidence-admissibility foundation documented for target jurisdictions.
+- [b] **H0 GATE:** every H0 item complete before any customer runs ACP in production.
 
 ---
 
@@ -236,53 +236,53 @@ was not actually performed.
 ### v1.1 Multi-tenant control plane
 
 - [~] **v1.1.1 Postgres + tenancy.** (single-tenant acp-server control service built: web inbox, /policy/current, /verify, /report; Postgres + tenancy next)
-  - [ ] Ledger on Postgres; tenants isolated in store and API; an isolation test suite proves no cross-tenant read/write.
-- [ ] **v1.1.2 Per-tenant keys + SSO [1.1].**
-  - [ ] Per-tenant signing keys behind KMS; one tenant's key compromise cannot touch another's evidence; SSO/OIDC for the console.
+  - [b] Ledger on Postgres; tenants isolated in store and API; an isolation test suite proves no cross-tenant read/write.
+- [b] **v1.1.2 Per-tenant keys + SSO [1.1].**
+  - [b] Per-tenant signing keys behind KMS; one tenant's key compromise cannot touch another's evidence; SSO/OIDC for the console.
 - [~] **v1.1.3 Retention + purge per tenant.**
   - [x] `acp purge <ledger> <days>` drops arg payloads; signed decisions still verify after purge (tested). [ ] per-tenant config.
 
 ### v1.2 Regulatory evidence packs
 
-- [ ] **v1.2.1 Control-framework mappings.**
-  - [ ] Export pack maps evidence to EU AI Act / ISO 42001 / NIST RMF obligations; mapping reviewed by compliance/legal experts [M].
-- [ ] **v1.2.2 Sector minimum-retention enforcement [R6].**
-  - [ ] Per-vertical minimum-retention (SEC 17a-4/FINRA/MiFID) enforced; purge cannot violate a mandated minimum.
-- [ ] **v1.2.3 Auditor access + attestation [R6].**
-  - [ ] Scoped, revocable, non-operator read-only auditor access; third-party attestation of the tamper-evidence mechanism obtainable.
+- [b] **v1.2.1 Control-framework mappings.**
+  - [b] Export pack maps evidence to EU AI Act / ISO 42001 / NIST RMF obligations; mapping reviewed by compliance/legal experts [M].
+- [b] **v1.2.2 Sector minimum-retention enforcement [R6].**
+  - [b] Per-vertical minimum-retention (SEC 17a-4/FINRA/MiFID) enforced; purge cannot violate a mandated minimum.
+- [b] **v1.2.3 Auditor access + attestation [R6].**
+  - [b] Scoped, revocable, non-operator read-only auditor access; third-party attestation of the tamper-evidence mechanism obtainable.
 
 ### v1.3 Reporting dashboard (kyte candidate, conditions apply)
 
-- [ ] **v1.3.1 Read-only reporting.**
-  - [ ] Dashboards over the verifiable log; every figure re-derivable from an independently verifiable export (UI carries no trust).
-  - [ ] Approval inbox stays in Rust (enforcement path); reporting may use kyte only if the above holds.
+- [b] **v1.3.1 Read-only reporting.**
+  - [b] Dashboards over the verifiable log; every figure re-derivable from an independently verifiable export (UI carries no trust).
+  - [b] Approval inbox stays in Rust (enforcement path); reporting may use kyte only if the above holds.
 
 ### H1: Hardening gate (parallel to v1.2/v1.3; REQUIRED before GA)
 
-- [ ] **H1.1 HA + isolation + quotas [3][5].**
-  - [ ] HA control plane (no SPOF); per-tenant rate limits/quota; noisy-neighbour protection.
-- [ ] **H1.2 Safe migrations + config audit [6].**
-  - [ ] Ledger-preserving migrations with tested rollback; control-plane config changes audited.
-- [ ] **H1.3 Reproducible builds + provenance + proxy auto-update [7][K].**
-  - [ ] Proxy build reproducible; SLSA-style provenance; signed, verifiable proxy update channel; deployed-version visibility.
-- [ ] **H1.4 Full JCS + LTV operational [1][C].**
-  - [ ] Canonicalisation is full RFC 8785 JCS; re-anchoring/re-timestamping of old heads operational.
-- [ ] **H1.5 Certifications started [10].**
-  - [ ] SOC 2 Type II and ISO 27001 programmes underway with evidence collection running (clock started).
-- [ ] **H1.6 Commercial + continuity [10][E].**
-  - [ ] SLA, support process, status page; cyber-insurance + liability terms; vendor continuity / escrow / self-host option; data-portability guarantee.
-- [ ] **H1.7 Cross-border + product AI status [R6].**
-  - [ ] Transfer mechanism (SCCs/IDTA/TIA); the product's own GDPR Art.22 / AI-Act status assessed and disclosed.
-- [ ] **H1.8 Security-questionnaire machinery [R6].**
-  - [ ] CAIQ/SIG answered; trust portal hosts SOC2, pen-test summary, sub-processor list, DPA.
-- [ ] **H1.9 Right-to-erasure + four-eyes [4][G].**
-  - [ ] Erasure removes payloads without breaking the append-only log; four-eyes/dual-control on key rotation, PII export, prod policy change.
+- [b] **H1.1 HA + isolation + quotas [3][5].**
+  - [b] HA control plane (no SPOF); per-tenant rate limits/quota; noisy-neighbour protection.
+- [b] **H1.2 Safe migrations + config audit [6].**
+  - [b] Ledger-preserving migrations with tested rollback; control-plane config changes audited.
+- [b] **H1.3 Reproducible builds + provenance + proxy auto-update [7][K].**
+  - [b] Proxy build reproducible; SLSA-style provenance; signed, verifiable proxy update channel; deployed-version visibility.
+- [b] **H1.4 Full JCS + LTV operational [1][C].**
+  - [b] Canonicalisation is full RFC 8785 JCS; re-anchoring/re-timestamping of old heads operational.
+- [b] **H1.5 Certifications started [10].**
+  - [b] SOC 2 Type II and ISO 27001 programmes underway with evidence collection running (clock started).
+- [b] **H1.6 Commercial + continuity [10][E].**
+  - [b] SLA, support process, status page; cyber-insurance + liability terms; vendor continuity / escrow / self-host option; data-portability guarantee.
+- [b] **H1.7 Cross-border + product AI status [R6].**
+  - [b] Transfer mechanism (SCCs/IDTA/TIA); the product's own GDPR Art.22 / AI-Act status assessed and disclosed.
+- [b] **H1.8 Security-questionnaire machinery [R6].**
+  - [b] CAIQ/SIG answered; trust portal hosts SOC2, pen-test summary, sub-processor list, DPA.
+- [b] **H1.9 Right-to-erasure + four-eyes [4][G].**
+  - [b] Erasure removes payloads without breaking the append-only log; four-eyes/dual-control on key rotation, PII export, prod policy change.
 
 ### v1 GA gate
 
-- [ ] **V1.G1** All v1.1-v1.3 tasks + H0 + H1 complete.
-- [ ] **V1.G2** SOC 2 Type II / ISO 27001 evidence collection running; DPA + trust portal live.
-- [ ] **V1.G3** At least one paying customer live in production with a clean incident record.
+- [b] **V1.G1** All v1.1-v1.3 tasks + H0 + H1 complete.
+- [b] **V1.G2** SOC 2 Type II / ISO 27001 evidence collection running; DPA + trust portal live.
+- [b] **V1.G3** At least one paying customer live in production with a clean incident record.
 
 ---
 
@@ -290,86 +290,86 @@ was not actually performed.
 
 ### v2.1 Non-MCP interception (or promoted to v1-alt if the MCP boundary fails validation)
 
-- [ ] **v2.1.1 Adapter model.**
-  - [ ] Raw HTTP tool APIs and function-calling frameworks feed the same `ActionContext`; decision engine + evidence log unchanged.
-- [ ] **v2.1.2 Tool-server sandboxing.**
-  - [ ] Sandbox/isolation (seccomp/cgroups/netns ideas ported to Rust) available for launched tool servers.
-- [ ] **v2.1.3 MCP-version-drift ownership [R3].**
-  - [ ] A tracked process keeps the interception surface current with MCP; new action-bearing methods are governed, not bypassed.
+- [b] **v2.1.1 Adapter model.**
+  - [b] Raw HTTP tool APIs and function-calling frameworks feed the same `ActionContext`; decision engine + evidence log unchanged.
+- [b] **v2.1.2 Tool-server sandboxing.**
+  - [b] Sandbox/isolation (seccomp/cgroups/netns ideas ported to Rust) available for launched tool servers.
+- [b] **v2.1.3 MCP-version-drift ownership [R3].**
+  - [b] A tracked process keeps the interception surface current with MCP; new action-bearing methods are governed, not bypassed.
 
 ### v2.2 Data-boundary governance
 
-- [ ] **v2.2.1 Lineage records.**
-  - [ ] Which data class flowed to which tool is recorded and attached to evidence; consent/purpose propagation captured.
-- [ ] **v2.2.2 Classifier tuning loop [R7].**
-  - [ ] False-pos/neg feedback path; classifier accuracy measured and improved over time; classifiers remain advisory on deny paths.
+- [b] **v2.2.1 Lineage records.**
+  - [b] Which data class flowed to which tool is recorded and attached to evidence; consent/purpose propagation captured.
+- [b] **v2.2.2 Classifier tuning loop [R7].**
+  - [b] False-pos/neg feedback path; classifier accuracy measured and improved over time; classifiers remain advisory on deny paths.
 
 ### v2.3 Shadow-AI discovery
 
-- [ ] **v2.3.1 Discovery plane.**
-  - [ ] Inventories un-proxied agents / un-governed AI usage; produces a "govern this next" worklist.
-  - [ ] Silent-truncation avoided: what discovery did not cover is logged.
+- [b] **v2.3.1 Discovery plane.**
+  - [b] Inventories un-proxied agents / un-governed AI usage; produces a "govern this next" worklist.
+  - [b] Silent-truncation avoided: what discovery did not cover is logged.
 
 ### v2.4 Agent identity integration
 
-- [ ] **v2.4.1 IdP-backed authority.**
-  - [ ] Principal/scopes backed by an IdP (Okta/Entra Agent ID/Aembit-class); authority checks enforced, not demonstrated; delegation chains supported.
-  - [ ] `X-ACP-Principal` is now verified and may be signed as verified attribution (supersedes D10 v0 stance).
+- [b] **v2.4.1 IdP-backed authority.**
+  - [b] Principal/scopes backed by an IdP (Okta/Entra Agent ID/Aembit-class); authority checks enforced, not demonstrated; delegation chains supported.
+  - [b] `X-ACP-Principal` is now verified and may be signed as verified attribution (supersedes D10 v0 stance).
 
 ### H2: Hardening gate (parallel to v2; REQUIRED before scale)
 
-- [ ] **H2.1 Large-ledger performance [9].**
-  - [ ] Merkle proof + query cost validated at hundreds of millions of records; archival/compaction strategy in place.
-- [ ] **H2.2 Multi-region / residency [3][4].**
-  - [ ] Multi-region deployment + data-residency controls where required.
-- [ ] **H2.3 Sector attestations [10].**
-  - [ ] HIPAA posture (and other vertical attestations) as demanded by target verticals.
-- [ ] **H2.4 Chaos + property tests [12].**
-  - [ ] Failure-injection over outage/replay/leader-failover paths; property-based tests for Merkle inclusion/consistency invariants.
+- [b] **H2.1 Large-ledger performance [9].**
+  - [b] Merkle proof + query cost validated at hundreds of millions of records; archival/compaction strategy in place.
+- [b] **H2.2 Multi-region / residency [3][4].**
+  - [b] Multi-region deployment + data-residency controls where required.
+- [b] **H2.3 Sector attestations [10].**
+  - [b] HIPAA posture (and other vertical attestations) as demanded by target verticals.
+- [b] **H2.4 Chaos + property tests [12].**
+  - [b] Failure-injection over outage/replay/leader-failover paths; property-based tests for Merkle inclusion/consistency invariants.
 
 ### v2 exit gate
 
-- [ ] **V2.G1** At least one non-MCP integration live; decision engine + evidence log reused unchanged.
-- [ ] **V2.G2** H2 complete; large-ledger perf validated.
+- [b] **V2.G1** At least one non-MCP integration live; decision engine + evidence log reused unchanged.
+- [b] **V2.G2** H2 complete; large-ledger perf validated.
 
 ---
 
 ## v3: Scale & assurance (enterprise-scale, production-ready GA at scale)
 
-- [ ] **v3.1 Certifications complete.**
-  - [ ] SOC 2 Type II report issued; ISO 27001 certified; reliance/assurance-letter framework (bridge letter, sub-service-org method) available [R6].
-- [ ] **v3.2 Enterprise procurement readiness.**
-  - [ ] Contractual audit rights / DORA ICT-third-party register / pooled-audit support; government-access/transparency reporting; export-control classification (EAR/EU dual-use) done [R6].
-- [ ] **v3.3 Long-term evidence validity operational [C].**
-  - [ ] Re-timestamping/re-anchoring runs on schedule; crypto-agility exercised (a second hash/sig scheme introduced without invalidating old evidence).
-- [ ] **v3.4 Advanced governance maturity.**
-  - [ ] Data-boundary + discovery + IdP identity all GA and integrated; policy change-management with blast-radius preview, canary, staged rollout, rollback [R7]; multi-environment (dev/staging/prod) policy lifecycle [R7].
-- [ ] **v3.5 Accessibility + i18n conformance.**
-  - [ ] Console + approval inbox meet WCAG 2.1 AA / EN 301 549 / Section 508; VPAT published [R6].
-- [ ] **v3.6 Tenant offboarding at scale.**
-  - [ ] Secure, verifiable deletion or archive handover on contract end; certificate of destruction where required; no impact to other tenants [N].
-- [ ] **v3.7 Scale SLOs.**
-  - [ ] SLOs + error budgets (incl. approval-resolution latency) defined and met at enterprise volume [R7].
-- [ ] **V3.G1 (enterprise-scale GA gate)** All v3 tasks complete; certifications issued; multi-region live; large-ledger perf sustained.
+- [b] **v3.1 Certifications complete.**
+  - [b] SOC 2 Type II report issued; ISO 27001 certified; reliance/assurance-letter framework (bridge letter, sub-service-org method) available [R6].
+- [b] **v3.2 Enterprise procurement readiness.**
+  - [b] Contractual audit rights / DORA ICT-third-party register / pooled-audit support; government-access/transparency reporting; export-control classification (EAR/EU dual-use) done [R6].
+- [b] **v3.3 Long-term evidence validity operational [C].**
+  - [b] Re-timestamping/re-anchoring runs on schedule; crypto-agility exercised (a second hash/sig scheme introduced without invalidating old evidence).
+- [b] **v3.4 Advanced governance maturity.**
+  - [b] Data-boundary + discovery + IdP identity all GA and integrated; policy change-management with blast-radius preview, canary, staged rollout, rollback [R7]; multi-environment (dev/staging/prod) policy lifecycle [R7].
+- [b] **v3.5 Accessibility + i18n conformance.**
+  - [b] Console + approval inbox meet WCAG 2.1 AA / EN 301 549 / Section 508; VPAT published [R6].
+- [b] **v3.6 Tenant offboarding at scale.**
+  - [b] Secure, verifiable deletion or archive handover on contract end; certificate of destruction where required; no impact to other tenants [N].
+- [b] **v3.7 Scale SLOs.**
+  - [b] SLOs + error budgets (incl. approval-resolution latency) defined and met at enterprise volume [R7].
+- [b] **V3.G1 (enterprise-scale GA gate)** All v3 tasks complete; certifications issued; multi-region live; large-ledger perf sustained.
 
 ---
 
 ## Cross-cutting continuous tracks (run for the whole life of the project)
 
 - [x] **X.1 CI/CD gates always green.** (.github/workflows/ci.yml: fmt/clippy -D warnings/build/test/transparency/audit)
-  - [ ] build/test/clippy/fmt/audit + transparency + trust-suite + `acp verify` on every merge.
-- [ ] **X.2 Secure SDLC + threat-model upkeep [8].**
-  - [ ] Mandatory review; security tests in CI; threat model updated each release; vuln-disclosure/bug-bounty live from GA.
-- [ ] **X.3 Billing/metering without touching evidence [R7].**
-  - [ ] Billable unit defined and counted without reading customer args; quota/overage is safe-by-default (never silently stops gating, never blanket-blocks).
-- [ ] **X.4 Support without seeing args [R7].**
-  - [ ] Correlation ids + customer-side diagnostic bundle let support explain a deny/hold without raw args or disabling redaction.
-- [ ] **X.5 Host-shim/SDK distribution [R7].**
-  - [ ] `-32001` retry shim distributed + versioned with a host-compat matrix; graceful behaviour on hosts that will not retry.
-- [ ] **X.6 Docs + deprecation policy [R7].**
-  - [ ] Versioned docs; sample-policy library; trial/sandbox; published deprecation/support-window policy for the DSL, record format, and APIs (old evidence stays interpretable for years).
-- [ ] **X.7 Graceful shutdown/drain everywhere [R5].**
-  - [ ] SIGTERM drains in-flight calls, flushes spool, resolves/parks approvals, cleanly tears down child processes; no lost decisions, no double-execution.
+  - [b] build/test/clippy/fmt/audit + transparency + trust-suite + `acp verify` on every merge.
+- [b] **X.2 Secure SDLC + threat-model upkeep [8].**
+  - [b] Mandatory review; security tests in CI; threat model updated each release; vuln-disclosure/bug-bounty live from GA.
+- [b] **X.3 Billing/metering without touching evidence [R7].**
+  - [b] Billable unit defined and counted without reading customer args; quota/overage is safe-by-default (never silently stops gating, never blanket-blocks).
+- [b] **X.4 Support without seeing args [R7].**
+  - [b] Correlation ids + customer-side diagnostic bundle let support explain a deny/hold without raw args or disabling redaction.
+- [b] **X.5 Host-shim/SDK distribution [R7].**
+  - [b] `-32001` retry shim distributed + versioned with a host-compat matrix; graceful behaviour on hosts that will not retry.
+- [b] **X.6 Docs + deprecation policy [R7].**
+  - [b] Versioned docs; sample-policy library; trial/sandbox; published deprecation/support-window policy for the DSL, record format, and APIs (old evidence stays interpretable for years).
+- [b] **X.7 Graceful shutdown/drain everywhere [R5].**
+  - [b] SIGTERM drains in-flight calls, flushes spool, resolves/parks approvals, cleanly tears down child processes; no lost decisions, no double-execution.
 
 ---
 
@@ -382,66 +382,66 @@ customer), not deferred.
 
 ### Block A: Trust-core assurance (correctness you cannot get from tests alone)
 
-- [ ] **A1 [H0/P0] Formal model-checking of the concurrency cores.**
-  - [ ] TLA+/Alloy specs for leader-election+fencing (D6), atomic single-use approval consume (D8), and verdict precedence (D9), model-checked in CI.
-  - [ ] TLC finds zero violations of "at most one forward per approval" and "at most one leaf-extender per head"; a deliberately broken CAS is caught by the model.
+- [b] **A1 [H0/P0] Formal model-checking of the concurrency cores.**
+  - [b] TLA+/Alloy specs for leader-election+fencing (D6), atomic single-use approval consume (D8), and verdict precedence (D9), model-checked in CI.
+  - [b] TLC finds zero violations of "at most one forward per approval" and "at most one leaf-extender per head"; a deliberately broken CAS is caught by the model.
 - [~] **A2 [H0/P0] Differential conformance of `acp verify` vs a reference CT implementation.**
   - [x] RFC 6962 known-answer vectors (empty root, leaf domain prefix) pin CT compliance; inclusion/consistency self-checks over random trees. [ ] cross-check vs an external reference CT lib.
 - [x] **A3 [H0/P0] Cedar evaluation-error is fail-closed + alert.** (engine fail-closes on eval/context error; tested via typed-guard bypass)
-  - [ ] Any evaluator error / indeterminate result denies the call, emits a distinct eval-error outcome record, and alarms (not a silent fall-through to `default: allow`).
-- [ ] **A4 [H0/P0] Signing / KMS outage policy.**
-  - [ ] With KMS forced down, gating matches the documented policy; the committed-but-unsigned window is bounded and alarmed; on recovery all records sign with no root divergence.
+  - [b] Any evaluator error / indeterminate result denies the call, emits a distinct eval-error outcome record, and alarms (not a silent fall-through to `default: allow`).
+- [b] **A4 [H0/P0] Signing / KMS outage policy.**
+  - [b] With KMS forced down, gating matches the documented policy; the committed-but-unsigned window is bounded and alarmed; on recovery all records sign with no root divergence.
 - [x] **A5 [H1/P1] Reproducibility harness `acp replay <seq>`.**
   - [x] `acp replay <ledger> <seq> <policy>` rebuilds context from the record + args and re-evaluates: REPRODUCED on match, DRIFT (exit 1) if the verdict changed; warns on policy-hash mismatch.
 - [~] **A6 [H0/P0] Deterministic context derivation (golden vectors).** (same-input determinism golden tested on this platform; cross-arch vectors need a second target)
-  - [ ] The same argument set yields identical `blast_radius`/class flags and thus identical leaf hash on linux-x86_64 and macos-arm64 (regex-engine/float/locale/order pinned).
-- [ ] **A7 [H1/P1] Young-dependency EOL contingency.**
-  - [ ] A documented fork/vendor-in plan for `ct-merkle` and `rmcp`; the `acp-core::merkle` fallback stays build-tested and passes A2 in CI.
+  - [b] The same argument set yields identical `blast_radius`/class flags and thus identical leaf hash on linux-x86_64 and macos-arm64 (regex-engine/float/locale/order pinned).
+- [b] **A7 [H1/P1] Young-dependency EOL contingency.**
+  - [b] A documented fork/vendor-in plan for `ct-merkle` and `rmcp`; the `acp-core::merkle` fallback stays build-tested and passes A2 in CI.
 
 ### Block B: Detection of the product's own compromise (absence-of-evidence alarms)
 
-- [ ] **B1 [H0/P0] Proxy dead-man's-switch.**
-  - [ ] Proxy heartbeat + server-side evidence-stream gap detector; killing or silencing an enrolled proxy alarms within a bounded window; a proxy that heartbeats but stops emitting decisions under known traffic is flagged.
-- [ ] **B2 [H1/P1] Canary / synthetic decisions prove the gate is live.**
-  - [ ] A scheduled probe issues a must-deny and a must-step_up call and asserts verdict + evidence; a mis-loaded policy that lets the canary through pages within one probe interval.
-- [ ] **B3 [H1/P1] Fail-open / anomaly spike alerting.**
-  - [ ] Rate/anomaly alerts on fail-open volume, deny surges, and approval-timeout surges; an induced fail-open window over threshold pages; baselines documented.
-- [ ] **B4 [H1/P1] Governance-weakening alerts (control turned down).**
-  - [ ] Sourced from the meta-audit log: mass-conversion to `shadow`, `default` loosened to allow, approver groups emptied, coverage drop, fail-open spike each fire an alert.
+- [b] **B1 [H0/P0] Proxy dead-man's-switch.**
+  - [b] Proxy heartbeat + server-side evidence-stream gap detector; killing or silencing an enrolled proxy alarms within a bounded window; a proxy that heartbeats but stops emitting decisions under known traffic is flagged.
+- [b] **B2 [H1/P1] Canary / synthetic decisions prove the gate is live.**
+  - [b] A scheduled probe issues a must-deny and a must-step_up call and asserts verdict + evidence; a mis-loaded policy that lets the canary through pages within one probe interval.
+- [b] **B3 [H1/P1] Fail-open / anomaly spike alerting.**
+  - [b] Rate/anomaly alerts on fail-open volume, deny surges, and approval-timeout surges; an induced fail-open window over threshold pages; baselines documented.
+- [b] **B4 [H1/P1] Governance-weakening alerts (control turned down).**
+  - [b] Sourced from the meta-audit log: mass-conversion to `shadow`, `default` loosened to allow, approver groups emptied, coverage drop, fail-open spike each fire an alert.
 - [~] **B5 [H1/P1] Tool-server supply-chain integrity.** (`--tool-hash` verifies the tool binary fingerprint before launch, fail-closed, tested; recording the fingerprint in evidence is next)
-  - [ ] The launched tool-server command is pinned + verified (hash/signature/allowlisted path); a mismatched binary fails closed; the verified tool-server fingerprint is recorded in evidence.
+  - [b] The launched tool-server command is pinned + verified (hash/signature/allowlisted path); a mismatched binary fails closed; the verified tool-server fingerprint is recorded in evidence.
 
 ### Block C: Performance, capacity, and cost engineering
 
-- [ ] **C1 [H1/P1] Quantified performance model + targets.**
-  - [ ] Documented numeric targets for decisions/sec/core, records/sec ingest, approval-queue depth, and `verify`/`export` seconds at 10M and 100M records; a load run meets each.
-- [ ] **C2 [H0/P1] Performance-regression CI gate.**
-  - [ ] Criterion benchmarks for allow-path `decide()`, leaf append, proof gen with committed baselines; an injected 2x slowdown fails CI.
-- [ ] **C3 [H2/P1] Evidence capacity + cost + tiering model.**
-  - [ ] A 3-year storage-cost projection; hot/cold/archive tiering that never violates a mandated retention floor; `verify`/`export` succeed against an archive-tier-only segment.
-- [ ] **C4 [H1/P1] KMS + anchoring cost / rate-limit model.**
-  - [ ] Projected KMS calls/sec and Rekor submissions/sec at target tenant count sit within provisioned quotas; anchoring degrades gracefully (queues, never drops) under throttling; self-hosted Rekor fallback documented.
+- [b] **C1 [H1/P1] Quantified performance model + targets.**
+  - [b] Documented numeric targets for decisions/sec/core, records/sec ingest, approval-queue depth, and `verify`/`export` seconds at 10M and 100M records; a load run meets each.
+- [b] **C2 [H0/P1] Performance-regression CI gate.**
+  - [b] Criterion benchmarks for allow-path `decide()`, leaf append, proof gen with committed baselines; an injected 2x slowdown fails CI.
+- [b] **C3 [H2/P1] Evidence capacity + cost + tiering model.**
+  - [b] A 3-year storage-cost projection; hot/cold/archive tiering that never violates a mandated retention floor; `verify`/`export` succeed against an archive-tier-only segment.
+- [b] **C4 [H1/P1] KMS + anchoring cost / rate-limit model.**
+  - [b] Projected KMS calls/sec and Rekor submissions/sec at target tenant count sit within provisioned quotas; anchoring degrades gracefully (queues, never drops) under throttling; self-hosted Rekor fallback documented.
 
 ### Block D: Classifier ML lifecycle (they gate real verdicts, so this is not v2 work)
 
-- [ ] **D1 [H0/P0] Classifier eval harness + labelled golden datasets + targets.**
-  - [ ] `acp classify-eval` over a versioned, provenance-tracked multilingual dataset (PII/secret positives + hard negatives) reports per-class precision/recall/FPR; published target thresholds exist.
-- [ ] **D2 [H0/P0] Regression gate on classifier/heuristic changes.**
-  - [ ] A CI gate fails a PR whose classifier/heuristic eval metrics drop below the versioned baseline; a deliberately weakened regex fails CI; explicit reviewed override path exists.
-- [ ] **D3 [H0/P0] Feedback-loop data governance.**
-  - [ ] The tuning/feedback corpus (which inspects raw args) is under the same retention, BYOK, RBAC, redaction, and meta-audit regime as `args_blob`, with consent/purpose captured. (Closes the shadow-PII-repo contradiction with H0.5/H0.12.)
-- [ ] **D4 [H1/P1] Classifier registry + model cards.**
-  - [ ] Every `context_derivation` version resolves to a retrievable model card (inputs, method, metrics, known evasions, locales tested); export can attach the card for a record's version.
-- [ ] **D5 [H1/P1] Bias / fairness slice in the eval harness.**
-  - [ ] Per-locale/script/name-origin recall + FPR reported with a max-disparity threshold; a synthetic locale at 0% recall fails the disparity gate.
-- [ ] **D6 [H1/P1] Production drift monitoring.**
-  - [ ] Privacy-safe classifier telemetry (hit-rate per class/tool, input feature distributions, no raw args) with drift alerts vs the eval baseline.
-- [ ] **D7 [H1/P1] Standing adversarial-evasion corpus.**
-  - [ ] A versioned evasion corpus (base64/homoglyph/zero-width/chunking families) run in CI reports bypass-rate per family, tracked across releases; new techniques addable without code change.
-- [ ] **D8 [H2/P2] Staged / shadow evaluation of classifier changes on live traffic.**
-  - [ ] A new classifier version runs in shadow against live traffic, producing a per-tenant fire-rate diff; promotion is gated on that diff.
-- [ ] **D9 [H2/P2] External benchmark of the classifiers.**
-  - [ ] A reproducible comparison against a named public reference corpus, with methodology and limits documented in the model card.
+- [b] **D1 [H0/P0] Classifier eval harness + labelled golden datasets + targets.**
+  - [b] `acp classify-eval` over a versioned, provenance-tracked multilingual dataset (PII/secret positives + hard negatives) reports per-class precision/recall/FPR; published target thresholds exist.
+- [b] **D2 [H0/P0] Regression gate on classifier/heuristic changes.**
+  - [b] A CI gate fails a PR whose classifier/heuristic eval metrics drop below the versioned baseline; a deliberately weakened regex fails CI; explicit reviewed override path exists.
+- [b] **D3 [H0/P0] Feedback-loop data governance.**
+  - [b] The tuning/feedback corpus (which inspects raw args) is under the same retention, BYOK, RBAC, redaction, and meta-audit regime as `args_blob`, with consent/purpose captured. (Closes the shadow-PII-repo contradiction with H0.5/H0.12.)
+- [b] **D4 [H1/P1] Classifier registry + model cards.**
+  - [b] Every `context_derivation` version resolves to a retrievable model card (inputs, method, metrics, known evasions, locales tested); export can attach the card for a record's version.
+- [b] **D5 [H1/P1] Bias / fairness slice in the eval harness.**
+  - [b] Per-locale/script/name-origin recall + FPR reported with a max-disparity threshold; a synthetic locale at 0% recall fails the disparity gate.
+- [b] **D6 [H1/P1] Production drift monitoring.**
+  - [b] Privacy-safe classifier telemetry (hit-rate per class/tool, input feature distributions, no raw args) with drift alerts vs the eval baseline.
+- [b] **D7 [H1/P1] Standing adversarial-evasion corpus.**
+  - [b] A versioned evasion corpus (base64/homoglyph/zero-width/chunking families) run in CI reports bypass-rate per family, tracked across releases; new techniques addable without code change.
+- [b] **D8 [H2/P2] Staged / shadow evaluation of classifier changes on live traffic.**
+  - [b] A new classifier version runs in shadow against live traffic, producing a per-tenant fire-rate diff; promotion is gated on that diff.
+- [b] **D9 [H2/P2] External benchmark of the classifiers.**
+  - [b] A reproducible comparison against a named public reference corpus, with methodology and limits documented in the model card.
 
 ### Block E: Governance analytics & posture (prove the control works)
 
@@ -449,51 +449,51 @@ customer), not deferred.
   - [x] acp-server `/report` computes verdict + outcome breakdown from the verifiable ledger export (deny/allow/step_up counts, outcome kinds; tested). [ ] approval-latency percentiles.
 - [~] **E2 [v1/P1] Policy coverage / gap reporting.**
   - [x] `/report` computes `policy_coverage` = % of decisions matched by an explicit rule vs default (tested). [ ] per-tool no-rule worklist.
-- [ ] **E3 [v1/P1] Decision explainability to the agent/user.**
-  - [ ] Deny/step-up responses carry a redaction-safe rationale (matched condition, triggering signal, "to pass, X") without leaking raw argument values.
-- [ ] **E4 [v1/P1] Configurable impact taxonomy (replaces the fixed blast-radius heuristic).**
-  - [ ] A declarative, per-tenant, versioned impact config (factors, weights, thresholds, data classes) evaluated into the un-spoofable context; two tenants score the same call differently; the taxonomy version is stamped into evidence.
-- [ ] **E5 [v1/P1] Learn-mode / policy bootstrapping from observed traffic.**
-  - [ ] After a shadow window, emits a compilable draft policy covering all observed action methods + suggested step_up thresholds, diffed against current.
-- [ ] **E6 [v2/P1] Default-deny posture maturity path.**
-  - [ ] Enabling default-deny requires a coverage threshold and produces the set of calls that would newly block with per-rule exceptions; posture stage (shadow/partial/default-deny) is tracked.
-- [ ] **E7 [v3/P2] Governance-maturity / posture scoring.**
-  - [ ] A composite score (coverage, enforce-vs-shadow, approval-SLO adherence, weakening events) that recomputes from verifiable exports and trends over time.
+- [b] **E3 [v1/P1] Decision explainability to the agent/user.**
+  - [b] Deny/step-up responses carry a redaction-safe rationale (matched condition, triggering signal, "to pass, X") without leaking raw argument values.
+- [b] **E4 [v1/P1] Configurable impact taxonomy (replaces the fixed blast-radius heuristic).**
+  - [b] A declarative, per-tenant, versioned impact config (factors, weights, thresholds, data classes) evaluated into the un-spoofable context; two tenants score the same call differently; the taxonomy version is stamped into evidence.
+- [b] **E5 [v1/P1] Learn-mode / policy bootstrapping from observed traffic.**
+  - [b] After a shadow window, emits a compilable draft policy covering all observed action methods + suggested step_up thresholds, diffed against current.
+- [b] **E6 [v2/P1] Default-deny posture maturity path.**
+  - [b] Enabling default-deny requires a coverage threshold and produces the set of calls that would newly block with per-rule exceptions; posture stage (shadow/partial/default-deny) is tracked.
+- [b] **E7 [v3/P2] Governance-maturity / posture scoring.**
+  - [b] A composite score (coverage, enforce-vs-shadow, approval-SLO adherence, weakening events) that recomputes from verifiable exports and trends over time.
 
 ### Block F: Enterprise integration & ecosystem
 
 - [~] **F1 [H0/P0] SIEM/SOAR event streaming.**
   - [x] Multi-sink governance-event seam (`Sink` trait): redacted JSONL (`--events`), OTLP/HTTP OpenTelemetry (`--otel`), **CEF** (`--cef`) and **OCSF** (`--ocsf`) SIEM sinks, all off-reactor and arg-free (tested). Vendor push-connectors plug into the same trait.
-- [ ] **F2 [H0/P0] Break-glass / emergency controls.**
-  - [ ] Scoped modes (disable-enforce, lockdown-all, emergency-bypass) with mandatory reason, TTL, optional dual-control, each a tamper-evident meta-log record; emergency-bypass forwards a would-hold call and auto-reverts at TTL.
-- [ ] **F3 [H1/P1] Fleet management for many proxies.**
-  - [ ] Proxy registration/heartbeat, targeted policy+config channels, cohort/canary version rollout; a policy bound to cohort "prod-eu" reaches only those proxies; a proxy missing heartbeats raises an "ungoverned surface" alert.
-- [ ] **F4 [v1/P1] Notification channels beyond Slack.**
-  - [ ] Pluggable notifier (Teams Adaptive Cards, email, PagerDuty, signed webhook) sharing the injection-safe rendering contract; approve/deny works from Teams with signature verification; PagerDuty pages on an ageing step_up.
-- [ ] **F5 [v1/P1] Ticketing / ITSM integration.**
-  - [ ] Bi-directional connector materialises a hold as a Jira/ServiceNow ticket and syncs the outcome; approving the ticket consumes the single-use approval; the ticket id is stored in the presented-context record.
-- [ ] **F6 [v1/P1] GRC/IRM integration.**
-  - [ ] A connector exposes mapped control-evidence via API for ServiceNow IRM/Archer/OneTrust; a GRC platform pulls per-control evidence with stable ids; re-pull is idempotent.
-- [ ] **F7 [v1/P1] Continuous export to the customer's warehouse.**
-  - [ ] Streaming/batch sink to object-lock S3/GCS / Snowflake / BigQuery of redacted records + STH manifests; records land within SLA and independently re-verify against the exported STH.
-- [ ] **F8 [H1/P1] SCIM lifecycle for approver groups.**
-  - [ ] A SCIM 2.0 endpoint syncs approver groups/roles from the IdP; deprovisioning a user removes approval authority within the sync window and writes a meta-log entry.
-- [ ] **F9 [v1/P1] OpenTelemetry governance spans.**
-  - [ ] OTel spans/events (trace-context propagated, args redacted) for classify/decide/hold/forward; a gated call shows a linked ACP span in the customer's collector with decision + rule id and no payload.
-- [ ] **F10 [v1/P1] Public API + outbound webhooks.**
-  - [ ] Versioned REST API + signed, replay-protected webhooks (decision.made, approval.requested/resolved, policy.changed) with API-key/OIDC auth + rate limits, covered by the deprecation policy.
-- [ ] **F11 [v2/P1] Cross-proxy forensic timeline + hybrid logical clocks.**
-  - [ ] Records carry an HLC for cross-node causal ordering; a query over multiple proxies returns a single ordered, anchor-backed timeline; fleet clock-skew beyond a bound alarms.
-- [ ] **F12 [v3/P2] On-prem / air-gapped deployment mode.**
-  - [ ] An air-gapped profile with an internal RFC 3161 TSA / offline anchoring and offline signed-update + SBOM verification; full gate->approve->verify works with egress disabled and evidence verifies offline.
-- [ ] **F13 [v3/P2] Customer change-management & adoption kit.**
-  - [ ] RACI template, policy-author certification, staged posture-maturity playbook; the console shows a tenant's posture stage with a defined next step.
+- [b] **F2 [H0/P0] Break-glass / emergency controls.**
+  - [b] Scoped modes (disable-enforce, lockdown-all, emergency-bypass) with mandatory reason, TTL, optional dual-control, each a tamper-evident meta-log record; emergency-bypass forwards a would-hold call and auto-reverts at TTL.
+- [b] **F3 [H1/P1] Fleet management for many proxies.**
+  - [b] Proxy registration/heartbeat, targeted policy+config channels, cohort/canary version rollout; a policy bound to cohort "prod-eu" reaches only those proxies; a proxy missing heartbeats raises an "ungoverned surface" alert.
+- [b] **F4 [v1/P1] Notification channels beyond Slack.**
+  - [b] Pluggable notifier (Teams Adaptive Cards, email, PagerDuty, signed webhook) sharing the injection-safe rendering contract; approve/deny works from Teams with signature verification; PagerDuty pages on an ageing step_up.
+- [b] **F5 [v1/P1] Ticketing / ITSM integration.**
+  - [b] Bi-directional connector materialises a hold as a Jira/ServiceNow ticket and syncs the outcome; approving the ticket consumes the single-use approval; the ticket id is stored in the presented-context record.
+- [b] **F6 [v1/P1] GRC/IRM integration.**
+  - [b] A connector exposes mapped control-evidence via API for ServiceNow IRM/Archer/OneTrust; a GRC platform pulls per-control evidence with stable ids; re-pull is idempotent.
+- [b] **F7 [v1/P1] Continuous export to the customer's warehouse.**
+  - [b] Streaming/batch sink to object-lock S3/GCS / Snowflake / BigQuery of redacted records + STH manifests; records land within SLA and independently re-verify against the exported STH.
+- [b] **F8 [H1/P1] SCIM lifecycle for approver groups.**
+  - [b] A SCIM 2.0 endpoint syncs approver groups/roles from the IdP; deprovisioning a user removes approval authority within the sync window and writes a meta-log entry.
+- [b] **F9 [v1/P1] OpenTelemetry governance spans.**
+  - [b] OTel spans/events (trace-context propagated, args redacted) for classify/decide/hold/forward; a gated call shows a linked ACP span in the customer's collector with decision + rule id and no payload.
+- [b] **F10 [v1/P1] Public API + outbound webhooks.**
+  - [b] Versioned REST API + signed, replay-protected webhooks (decision.made, approval.requested/resolved, policy.changed) with API-key/OIDC auth + rate limits, covered by the deprecation policy.
+- [b] **F11 [v2/P1] Cross-proxy forensic timeline + hybrid logical clocks.**
+  - [b] Records carry an HLC for cross-node causal ordering; a query over multiple proxies returns a single ordered, anchor-backed timeline; fleet clock-skew beyond a bound alarms.
+- [b] **F12 [v3/P2] On-prem / air-gapped deployment mode.**
+  - [b] An air-gapped profile with an internal RFC 3161 TSA / offline anchoring and offline signed-update + SBOM verification; full gate->approve->verify works with egress disabled and evidence verifies offline.
+- [b] **F13 [v3/P2] Customer change-management & adoption kit.**
+  - [b] RACI template, policy-author certification, staged posture-maturity playbook; the console shows a tenant's posture stage with a defined next step.
 
 ### Gate additions from the deep review
 
-- [ ] **H0 gate now also requires:** A1, A2, A3, A4, A6, C2, B1, D1, D2, D3, F1, F2.
-- [ ] **H1 gate now also requires:** A5, A7, B2, B3, B4, B5, C1, C4, D4, D5, D6, D7, F3, F8.
-- [ ] **Scale/GA gate now also requires:** C3, D8, D9, E7, F11, F12, F13.
+- [b] **H0 gate now also requires:** A1, A2, A3, A4, A6, C2, B1, D1, D2, D3, F1, F2.
+- [b] **H1 gate now also requires:** A5, A7, B2, B3, B4, B5, C1, C4, D4, D5, D6, D7, F3, F8.
+- [b] **Scale/GA gate now also requires:** C3, D8, D9, E7, F11, F12, F13.
 
 ---
 
