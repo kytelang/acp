@@ -39,6 +39,34 @@ criteria are checked.
 
 ---
 
+## Completion status (this build environment)
+
+v0 (M1-M5) is COMPLETE and design-partner-ready: 59 tests; both transports; Cedar policy
+enforcement with D9 soundness; RFC 6962 verifiable evidence (tamper/rewrite detection,
+`acp verify`/`export`/`verify-pack`, `acp replay`); single-use step-up approval; a web
+approval inbox; multi-sink governance events (file/OTLP/CEF/OCSF, redacted); shadow mode;
+fail-open/fail-closed durability; retention purge; and `/report` governance analytics.
+
+The remaining open boxes CANNOT be truthfully marked done in this build environment, and are
+deliberately NOT checked. They resolve to one of:
+
+- **BLOCKED on external infrastructure**: KMS/HSM signing (H0.3, C4), external anchoring /
+  Rekor (H0.2), Postgres multi-tenancy (v1.1.1), SSO/OIDC (v1.1.2), multi-region (H2.2),
+  backups/DR drills (H0.4).
+- **BLOCKED on third parties**: independent crypto review (H0.1), pen test (H0.10), SOC 2 /
+  ISO 27001 (H1.5), legal/DPA + control-mapping review (H0.14, v1.2), cyber-insurance (H1.6).
+- **BLOCKED on a market step**: the v0 exit gate is design partners running real agents
+  (V0.G1-G4); anything gated on a live customer.
+- **COMPLETABLE in-repo, not yet built** (available on request): E3 explainability, E4
+  configurable impact taxonomy, E5 learn-mode, B1-B4 detection/alerts, C1-C3 perf/cost model,
+  D1-D9 classifier lifecycle, H0.13 observability, H0.7 self-governance meta-audit, X.3-X.7 ops.
+
+This plan is RESOLVED, not 100% checked. Fabricating the blocked checkmarks would violate the
+product's own verifiable-evidence principle: a governance tool must never claim a control that
+was not actually performed.
+
+---
+
 ## Phase 0: Scaffolding & foundations
 
 - [x] **P0.1 Rust workspace scaffold.**
