@@ -177,3 +177,41 @@ fn poison_entry_is_dead_lettered_not_blocking() {
     assert_eq!(l.size(), 2);
     l.verify().unwrap();
 }
+
+#[test]
+fn purge_drops_args_but_keeps_records_verifiable() {
+    let p = tmp("lpurge.db");
+    let _ = std::fs::remove_file(&p);
+    {
+        let mut l = Ledger::open(&p, Box::new(Ed25519Signer::generate())).unwrap();
+        for i in 0..4 {
+            l.append(
+                &format!("d{i}"),
+                "decision",
+                &rec(i),
+                Some(&json!({"amount": i, "note": "secret"})),
+            )
+            .unwrap();
+        }
+        l.verify().unwrap();
+    }
+    // purge everything older than "now + 1s" (i.e. all of it)
+    let future = acp_approvals_now() + 1000;
+    let n = acp_ledger::purge_args_file(&p, future).unwrap();
+    assert!(n >= 4, "purged {n} args");
+    // records still verify after the payloads are gone
+    acp_ledger::verify_file(&p).expect("verifies after purge");
+    // and the blobs are actually gone
+    let conn = rusqlite::Connection::open(&p).unwrap();
+    let remaining: i64 = conn
+        .query_row("SELECT COUNT(*) FROM args_blob", [], |r| r.get(0))
+        .unwrap();
+    assert_eq!(remaining, 0);
+}
+
+fn acp_approvals_now() -> u64 {
+    std::time::SystemTime::now()
+        .duration_since(std::time::UNIX_EPOCH)
+        .unwrap()
+        .as_millis() as u64
+}

@@ -101,7 +101,7 @@ impl Evidence {
         impact: &str,
         env: &str,
         policy_hash: &str,
-    ) -> String {
+    ) -> (String, bool) {
         let did = self.next_id();
         let record = json!({
             "schema": 1, "type": "decision", "ts_ms": now_ms(),
@@ -115,11 +115,15 @@ impl Evidence {
                            "evaluator": "cedar-policy", "compiler": "acp-policy"}
         });
         // Record-before-forward: the durable spool write (fsync) happens before the caller forwards.
-        let _ = self.spool.append(&json!({"decision_id": did, "kind": "decision", "record": record, "args": tc.arguments}));
+        // `durable` is whether that write succeeded; the caller fails closed if not (D5).
+        let durable = self
+            .spool
+            .append(&json!({"decision_id": did, "kind": "decision", "record": record, "args": tc.arguments}))
+            .is_ok();
         let _ = self
             .ledger
             .append(&did, "decision", &record, Some(&tc.arguments));
-        did
+        (did, durable)
     }
 
     /// Write the linked outcome record for a decision (D11): forwarded / not_executed.

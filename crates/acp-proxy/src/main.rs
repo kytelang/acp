@@ -29,10 +29,13 @@ struct Opts {
     approvals: Option<String>,
     env: Option<String>,
     shadow: bool,
+    fail_open: bool,
     addr: Option<String>,
     upstream: Option<String>,
     events: Option<String>,
     otel: Option<String>,
+    cef: Option<String>,
+    ocsf: Option<String>,
 }
 
 fn parse_opts(items: &[String]) -> Result<(Opts, Vec<String>), String> {
@@ -54,7 +57,10 @@ fn parse_opts(items: &[String]) -> Result<(Opts, Vec<String>), String> {
             "--upstream" => o.upstream = it.next().cloned(),
             "--events" => o.events = it.next().cloned(),
             "--otel" => o.otel = it.next().cloned(),
+            "--cef" => o.cef = it.next().cloned(),
+            "--ocsf" => o.ocsf = it.next().cloned(),
             "--shadow" => o.shadow = true,
+            "--fail-open" => o.fail_open = true,
             other => return Err(format!("unknown option '{other}'")),
         }
     }
@@ -105,12 +111,30 @@ fn build_controller(o: &Opts) -> Result<Arc<Controller>, String> {
         sinks.push(Box::new(events::OtelSink::new(url.clone())));
         eprintln!("acp-proxy: OTLP governance events -> {url}");
     }
+    if let Some(cp) = &o.cef {
+        sinks.push(Box::new(
+            events::CefSink::open(cp).map_err(|e| format!("cannot open cef {cp}: {e}"))?,
+        ));
+        eprintln!("acp-proxy: CEF governance events -> {cp}");
+    }
+    if let Some(op) = &o.ocsf {
+        sinks.push(Box::new(
+            events::OcsfSink::open(op).map_err(|e| format!("cannot open ocsf {op}: {e}"))?,
+        ));
+        eprintln!("acp-proxy: OCSF governance events -> {op}");
+    }
     let env = o.env.clone().unwrap_or_else(|| "prod".to_string());
     if o.shadow {
         eprintln!("acp-proxy: SHADOW MODE (recording would-blocks, enforcing nothing)");
     }
     Ok(Arc::new(Controller::new(
-        engine, env, o.shadow, evidence, approvals, sinks,
+        engine,
+        env,
+        o.shadow,
+        evidence,
+        approvals,
+        sinks,
+        o.fail_open,
     )))
 }
 

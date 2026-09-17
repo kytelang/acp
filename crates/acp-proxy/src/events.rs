@@ -159,3 +159,85 @@ impl Drop for OtelSink {
         }
     }
 }
+
+/// Severity 0-10 for a verdict (CEF/OCSF convention).
+fn severity(verdict: &str) -> u8 {
+    match verdict {
+        "deny" => 8,
+        "step_up" => 6,
+        "shadow" => 3,
+        _ => 2,
+    }
+}
+
+fn cef_escape_header(s: &str) -> String {
+    s.replace('\\', "\\\\").replace('|', "\\|")
+}
+fn cef_escape_ext(s: &str) -> String {
+    s.replace('\\', "\\\\")
+        .replace('=', "\\=")
+        .replace(['\n', '\r'], " ")
+}
+
+/// A CEF (ArcSight Common Event Format) file sink for direct SIEM ingestion. Redacted: no args.
+pub struct CefSink {
+    file: Mutex<File>,
+}
+impl CefSink {
+    pub fn open(path: &str) -> std::io::Result<CefSink> {
+        Ok(CefSink {
+            file: Mutex::new(OpenOptions::new().create(true).append(true).open(path)?),
+        })
+    }
+}
+impl Sink for CefSink {
+    fn emit(&self, ev: &Event<'_>) {
+        let line = format!(
+            "CEF:0|ACP|acp-proxy|1.0|{}|AI action {}|{}|act={} cs1={} cs1Label=tool cs2={} cs2Label=rule cs3={} cs3Label=impact suser={}",
+            cef_escape_header(ev.verdict),
+            cef_escape_header(ev.outcome),
+            severity(ev.verdict),
+            cef_escape_ext(ev.outcome),
+            cef_escape_ext(ev.tool),
+            cef_escape_ext(ev.rule_id.unwrap_or("")),
+            cef_escape_ext(ev.impact),
+            cef_escape_ext(ev.session),
+        );
+        if let Ok(mut f) = self.file.lock() {
+            let _ = writeln!(f, "{line}");
+            let _ = f.flush();
+        }
+    }
+}
+
+/// An OCSF (Open Cybersecurity Schema Framework) JSONL file sink. Minimal Application Activity
+/// shape; redacted (no raw arguments).
+pub struct OcsfSink {
+    file: Mutex<File>,
+}
+impl OcsfSink {
+    pub fn open(path: &str) -> std::io::Result<OcsfSink> {
+        Ok(OcsfSink {
+            file: Mutex::new(OpenOptions::new().create(true).append(true).open(path)?),
+        })
+    }
+}
+impl Sink for OcsfSink {
+    fn emit(&self, ev: &Event<'_>) {
+        let v = json!({
+            "class_uid": 6003,                 // Application Activity
+            "category_uid": 6,
+            "activity_name": ev.outcome,
+            "severity_id": (severity(ev.verdict) / 3).max(1),
+            "time": now_ms(),
+            "metadata": {"product": {"name": "acp-proxy", "vendor_name": "ACP"}, "version": "1.4.0"},
+            "status": if ev.verdict == "allow" { "Success" } else { "Other" },
+            "unmapped": {"tool": ev.tool, "verdict": ev.verdict, "rule_id": ev.rule_id,
+                         "impact": ev.impact, "session": ev.session}
+        });
+        if let Ok(mut f) = self.file.lock() {
+            let _ = writeln!(f, "{v}");
+            let _ = f.flush();
+        }
+    }
+}

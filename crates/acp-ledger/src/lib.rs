@@ -493,3 +493,14 @@ pub fn read_record(path: &str, seq: u64) -> Result<(Value, Option<Value>), Strin
     };
     Ok((record, args))
 }
+
+/// Retention purge of a ledger file (read-write): drop argument payloads older than `before_ms`.
+/// No signing key is needed -- only `args_blob` rows are removed; signed decisions stay verifiable.
+pub fn purge_args_file(path: &str, before_ms: u64) -> Result<usize, String> {
+    let conn = Connection::open(path).map_err(|e| e.to_string())?;
+    conn.execute(
+        "DELETE FROM args_blob WHERE args_hash IN (SELECT args_hash FROM records WHERE created_ms < ? AND args_hash IS NOT NULL)",
+        params![before_ms as i64],
+    )
+    .map_err(|e| e.to_string())
+}

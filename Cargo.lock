@@ -90,6 +90,7 @@ dependencies = [
  "acp-ledger",
  "acp-policy",
  "axum",
+ "hex",
  "maud",
  "reqwest",
  "serde_json",

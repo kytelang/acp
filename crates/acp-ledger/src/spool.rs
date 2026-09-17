@@ -44,12 +44,15 @@ impl Spool {
     pub fn entries(&self) -> std::io::Result<Vec<Value>> {
         let file = match std::fs::File::open(&self.path) {
             Ok(f) => f,
-            Err(e) if e.kind() == std::io::ErrorKind::NotFound => return Ok(vec![]),
-            Err(e) => return Err(e),
+            // Missing or unreadable spool at startup: treat as empty rather than failing to open.
+            Err(_) => return Ok(vec![]),
         };
         let mut out = Vec::new();
         for line in BufReader::new(file).lines() {
-            let line = line?;
+            let line = match line {
+                Ok(l) => l,
+                Err(_) => break,
+            };
             if line.trim().is_empty() {
                 continue;
             }
