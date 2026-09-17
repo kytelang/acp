@@ -47,6 +47,16 @@ dependencies = [
 ]
 
 [[package]]
+name = "acp-encrypt"
+version = "0.0.0"
+dependencies = [
+ "hex",
+ "ring",
+ "serde",
+ "serde_json",
+]
+
+[[package]]
 name = "acp-jsonrpc"
 version = "0.0.0"
 dependencies = [

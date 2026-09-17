@@ -352,8 +352,8 @@ was not actually performed.
   - [b] Secrets in a vault, not env files.
 - [x] **H0.4 Backups/DR [3].**
   - [x] Real backup/restore drill: back up (copy), simulate loss, restore, and the ledger reverifies end to end (ledger_tests). RPO/RTO targets documented with the backup cadence.
-- [~] **H0.5 Encryption-at-rest + BYOK + redaction [F][4].**
-  - [x] `acp_core::redact`: deterministic argument redaction by field name + sensitive class, leaving the args hash intact so evidence still verifies; unit-tested. [ ] at-rest encryption + field-level BYOK for args_blob.
+- [x] **H0.5 Encryption-at-rest + BYOK + redaction [F][4].**
+  - [x] `acp_core::redact` argument redaction (hash intact) + `acp-encrypt`: envelope AES-256-GCM at rest with customer-managed KEK (BYOK) wrapping a per-blob DEK; wrong/rotated KEK = crypto-erasure, tamper + AAD-context both enforced (4 tests). Real KMS-held KEK = config.
 - [~] **H0.6 Egress/SSRF + signed policy provenance [H].**
   - [x] `acp_core::egress`: default-deny host allowlist that blocks internal/SSRF targets (loopback, link-local metadata, private ranges) even if allowlisted; unit-tested. [ ] signed policy provenance + who-can-push wiring.
 - [~] **H0.7 Self-governance meta-audit [G].**
