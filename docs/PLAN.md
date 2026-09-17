@@ -389,8 +389,8 @@ was not actually performed.
 
 ### v1.2 Regulatory evidence packs
 
-- [b] **v1.2.1 Control-framework mappings.**
-  - [b] Export pack maps evidence to EU AI Act / ISO 42001 / NIST RMF obligations; mapping reviewed by compliance/legal experts [M].
+- [d] **v1.2.1 Control-framework mappings.**
+  - [d] docs/compliance/control-mappings.md maps ACP controls + evidence to EU AI Act, ISO 42001, NIST AI RMF, and SOC2/800-53, each row naming the ledger field/module that evidences it (grc export is the machine form). [ ] compliance/legal expert review is the open leg.
 - [b] **v1.2.2 Sector minimum-retention enforcement [R6].**
   - [b] Per-vertical minimum-retention (SEC 17a-4/FINRA/MiFID) enforced; purge cannot violate a mandated minimum.
 - [b] **v1.2.3 Auditor access + attestation [R6].**
@@ -527,9 +527,9 @@ customer), not deferred.
 
 ### Block A: Trust-core assurance (correctness you cannot get from tests alone)
 
-- [b] **A1 [H0/P0] Formal model-checking of the concurrency cores.**
-  - [b] TLA+/Alloy specs for leader-election+fencing (D6), atomic single-use approval consume (D8), and verdict precedence (D9), model-checked in CI.
-  - [b] TLC finds zero violations of "at most one forward per approval" and "at most one leaf-extender per head"; a deliberately broken CAS is caught by the model.
+- [~] **A1 [H0/P0] Formal model-checking of the concurrency cores.**
+  - [~] In-repo exhaustive interleaving model check for the single-use-approval invariant (model_check.rs): atomic consume forwards at most once on every interleaving, and the checker provably catches a broken non-atomic consume. [ ] full TLA+/stateright specs for D6 fencing + D9 precedence.
+  - [x] "At most one forward per approval" holds on every interleaving; a deliberately broken consume is caught by the model (model_check.rs). [ ] "at most one leaf-extender per head" (D6) still to model.
 - [~] **A2 [H0/P0] Differential conformance of `acp verify` vs a reference CT implementation.**
   - [x] RFC 6962 known-answer vectors (empty root, leaf domain prefix) pin CT compliance; inclusion/consistency self-checks over random trees. [ ] cross-check vs an external reference CT lib.
 - [x] **A3 [H0/P0] Cedar evaluation-error is fail-closed + alert.** (engine fail-closes on eval/context error; tested via typed-guard bypass)
