@@ -8,6 +8,7 @@
 
 mod approvals;
 mod dispatch;
+mod events;
 mod evidence;
 mod http;
 mod intercept;
@@ -30,6 +31,7 @@ struct Opts {
     shadow: bool,
     addr: Option<String>,
     upstream: Option<String>,
+    events: Option<String>,
 }
 
 fn parse_opts(items: &[String]) -> Result<(Opts, Vec<String>), String> {
@@ -49,6 +51,7 @@ fn parse_opts(items: &[String]) -> Result<(Opts, Vec<String>), String> {
             "--env" => o.env = it.next().cloned(),
             "--addr" => o.addr = it.next().cloned(),
             "--upstream" => o.upstream = it.next().cloned(),
+            "--events" => o.events = it.next().cloned(),
             "--shadow" => o.shadow = true,
             other => return Err(format!("unknown option '{other}'")),
         }
@@ -89,12 +92,22 @@ fn build_controller(o: &Opts) -> Result<Arc<Controller>, String> {
         }
         None => None,
     };
+    let events = match &o.events {
+        Some(ep) => match events::EventSink::open(ep) {
+            Ok(s) => {
+                eprintln!("acp-proxy: governance events -> {ep}");
+                Some(s)
+            }
+            Err(e) => return Err(format!("cannot open events {ep}: {e}")),
+        },
+        None => None,
+    };
     let env = o.env.clone().unwrap_or_else(|| "prod".to_string());
     if o.shadow {
         eprintln!("acp-proxy: SHADOW MODE (recording would-blocks, enforcing nothing)");
     }
     Ok(Arc::new(Controller::new(
-        engine, env, o.shadow, evidence, approvals,
+        engine, env, o.shadow, evidence, approvals, events,
     )))
 }
 

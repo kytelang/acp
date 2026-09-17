@@ -7,6 +7,7 @@
 //! are identical across transports.
 
 use crate::approvals::Step;
+use crate::events::EventSink;
 use crate::evidence::Evidence;
 use crate::intercept::{decide, Action, CODE_BLOCKED};
 use crate::limits;
@@ -29,6 +30,7 @@ pub enum FrameAction {
 struct State {
     evidence: Option<Evidence>,
     approvals: Option<ApprovalStore>,
+    events: Option<EventSink>,
 }
 
 pub struct Controller {
@@ -48,6 +50,7 @@ impl Controller {
         shadow: bool,
         evidence: Option<Evidence>,
         approvals: Option<ApprovalStore>,
+        events: Option<EventSink>,
     ) -> Controller {
         Controller {
             engine,
@@ -56,6 +59,7 @@ impl Controller {
             state: Mutex::new(State {
                 evidence,
                 approvals,
+                events,
             }),
             agent: "acp-client".to_string(),
             session: "acp-session".to_string(),
@@ -98,6 +102,12 @@ impl Controller {
                 _ => return FrameAction::Forward,
             };
             let a = policy::assess(&eng, &self.env, &tc);
+            let verdict_s = match a.outcome.verdict {
+                Verdict::Allow => "allow",
+                Verdict::Deny => "deny",
+                Verdict::StepUp => "step_up",
+                Verdict::Shadow => "shadow",
+            };
             let mut st = self.state.lock().unwrap();
 
             // Shadow mode (M5.3): record what WOULD happen, but forward everything.
@@ -175,11 +185,33 @@ impl Controller {
                     if let (Some(ev), Some(did)) = (st.evidence.as_mut(), did.as_ref()) {
                         ev.record_outcome(did, "forwarded");
                     }
+                    if let Some(ev) = st.events.as_mut() {
+                        ev.emit(
+                            &self.agent,
+                            &self.session,
+                            &tc.name,
+                            verdict_s,
+                            a.outcome.rule_id.as_deref(),
+                            a.impact,
+                            "forwarded",
+                        );
+                    }
                     FrameAction::Forward
                 }
                 Enforce::Reply(json) => {
                     if let (Some(ev), Some(did)) = (st.evidence.as_mut(), did.as_ref()) {
                         ev.record_outcome(did, "not_executed");
+                    }
+                    if let Some(ev) = st.events.as_mut() {
+                        ev.emit(
+                            &self.agent,
+                            &self.session,
+                            &tc.name,
+                            verdict_s,
+                            a.outcome.rule_id.as_deref(),
+                            a.impact,
+                            "denied",
+                        );
                     }
                     FrameAction::Reply(json)
                 }

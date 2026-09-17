@@ -193,8 +193,8 @@ criteria are checked.
   - [ ] Pen test of proxy/server/console complete; findings remediated.
 - [ ] **H0.11 Fuzzing + E2E + load [12][9].**
   - [ ] Framing + policy compiler fuzzed; end-to-end MCP integration tests; load run holds the latency budget.
-- [ ] **H0.12 Telemetry PII hygiene [L].**
-  - [ ] Logs/metrics/traces provably never contain customer args/PII (scrubbing verified).
+- [~] **H0.12 Telemetry PII hygiene [L].**
+  - [x] Governance events carry only the args hash, never raw args (tested). [ ] extend the guarantee across all logs/metrics/traces.
 - [ ] **H0.13 Observability + runbooks [6].**
   - [ ] Dashboards + alerts on evidence-write/verify/signing failure, replay backlog, stuck approvals, fail-policy engaged; runbooks for top incidents.
 - [ ] **H0.14 Legal baseline [10][R6].**
@@ -434,8 +434,8 @@ customer), not deferred.
 
 ### Block F: Enterprise integration & ecosystem
 
-- [ ] **F1 [H0/P0] SIEM/SOAR event streaming.**
-  - [ ] A push connector emits redacted governance events (deny/hold/approval/break-glass) as parseable OCSF/CEF to Splunk/Sentinel/Datadog within N seconds; args never leave via this channel.
+- [~] **F1 [H0/P0] SIEM/SOAR event streaming.**
+  - [x] Canonical governance-event seam: one redacted JSONL event per decision (verdict/rule/outcome, no raw args; tested). `--events <file>`. [ ] OCSF/CEF + Splunk/Sentinel/Datadog sinks plug into the seam.
 - [ ] **F2 [H0/P0] Break-glass / emergency controls.**
   - [ ] Scoped modes (disable-enforce, lockdown-all, emergency-bypass) with mandatory reason, TTL, optional dual-control, each a tamper-evident meta-log record; emergency-bypass forwards a would-hold call and auto-reverts at TTL.
 - [ ] **F3 [H1/P1] Fleet management for many proxies.**
