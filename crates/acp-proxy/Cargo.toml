@@ -17,6 +17,7 @@ path = "src/bin/mock_mcp_server.rs"
 acp-core = { path = "../acp-core" }
 acp-jsonrpc = { path = "../acp-jsonrpc" }
 acp-policy = { path = "../acp-policy" }
+acp-ledger = { path = "../acp-ledger" }
 tokio = { workspace = true }
 serde_json.workspace = true
 anyhow.workspace = true

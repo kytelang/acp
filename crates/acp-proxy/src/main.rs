@@ -3,6 +3,7 @@
 //!
 //! `acp-proxy stdio [--policy <file.yaml>] [--env <env>] -- <mcp-server-cmd> [args...]`
 
+mod evidence;
 mod intercept;
 mod limits;
 mod policy;
@@ -37,11 +38,15 @@ async fn main() -> ExitCode {
     }
 
     let mut policy_path: Option<String> = None;
+    let mut ledger_path: Option<String> = None;
+    let mut key_path: Option<String> = None;
     let mut env = "prod".to_string();
     let mut it = opts.iter();
     while let Some(o) = it.next() {
         match o.as_str() {
             "--policy" => policy_path = it.next().cloned(),
+            "--ledger" => ledger_path = it.next().cloned(),
+            "--key" => key_path = it.next().cloned(),
             "--env" => {
                 if let Some(v) = it.next() {
                     env = v.clone();
@@ -80,7 +85,24 @@ async fn main() -> ExitCode {
         None => None,
     };
 
-    match stdio::run(&cmd_args[0], &cmd_args[1..], engine, env).await {
+    let evidence = match ledger_path {
+        Some(lp) => {
+            let kp = key_path.unwrap_or_else(|| format!("{lp}.key"));
+            match evidence::Evidence::open(&lp, &kp) {
+                Ok(ev) => {
+                    eprintln!("acp-proxy: evidence ledger {lp} ({} records)", ev.size());
+                    Some(ev)
+                }
+                Err(e) => {
+                    eprintln!("acp-proxy: cannot open ledger {lp}: {e}");
+                    return ExitCode::from(1);
+                }
+            }
+        }
+        None => None,
+    };
+
+    match stdio::run(&cmd_args[0], &cmd_args[1..], engine, env, evidence).await {
         Ok(code) => ExitCode::from(code as u8),
         Err(e) => {
             eprintln!("acp-proxy: {e}");

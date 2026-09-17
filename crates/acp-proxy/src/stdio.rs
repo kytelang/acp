@@ -4,6 +4,7 @@
 //! Non-decision frames pass through; `tools/call` is gated by the policy engine when one is
 //! loaded; other client-to-server requests are classified by `intercept::decide`.
 
+use crate::evidence::Evidence;
 use crate::intercept::{decide, Action, CODE_BLOCKED};
 use crate::limits;
 use crate::policy::{self, Enforce};
@@ -21,7 +22,10 @@ pub async fn run(
     args: &[String],
     engine: Option<Arc<PolicyEngine>>,
     env: String,
+    mut evidence: Option<Evidence>,
 ) -> anyhow::Result<i32> {
+    let agent = "stdio-client".to_string();
+    let session = "stdio-session".to_string();
     let mut child = Command::new(cmd)
         .args(args)
         .stdin(Stdio::piped())
@@ -103,20 +107,41 @@ pub async fn run(
             if insp.is_tool_call {
                 if let Some(eng) = &engine {
                     if let ParsedFrame::ToolCall(tc) = classify(raw) {
-                        match policy::enforce(eng, &env, &tc) {
+                        let a = policy::assess(eng, &env, &tc);
+                        // record-before-forward (durable spool fsync happens inside record_decision)
+                        let did = evidence.as_mut().map(|ev| {
+                            ev.record_decision(
+                                &agent,
+                                &session,
+                                &tc,
+                                &a.outcome,
+                                a.impact,
+                                eng.hash(),
+                            )
+                        });
+                        match a.enforce {
                             Enforce::Forward => {
-                                if to_child.send(line).await.is_err() {
+                                let ok = to_child.send(line).await.is_ok();
+                                if let (Some(ev), Some(did)) = (evidence.as_mut(), did.as_ref()) {
+                                    ev.record_outcome(
+                                        did,
+                                        if ok { "forwarded" } else { "not_executed" },
+                                    );
+                                }
+                                if !ok {
                                     break;
                                 }
                             }
                             Enforce::Reply(json) => {
                                 let _ = c2s_out.send(json).await;
+                                if let (Some(ev), Some(did)) = (evidence.as_mut(), did.as_ref()) {
+                                    ev.record_outcome(did, "not_executed");
+                                }
                             }
                         }
                         continue;
                     }
                 }
-                // no policy loaded: forward (pre-M2 behaviour).
                 if to_child.send(line).await.is_err() {
                     break;
                 }

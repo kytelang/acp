@@ -38,22 +38,57 @@ fn approval_required(id: &Value, rule: &str) -> String {
     .to_string()
 }
 
-/// Evaluate and enforce a tool call.
-pub fn enforce(engine: &PolicyEngine, env: &str, tc: &ToolCall) -> Enforce {
-    if !valid_tool(&tc.name) {
-        return Enforce::Reply(deny_result(&tc.id, "safe-entity", "invalid tool name"));
+use acp_core::blast_radius;
+use acp_policy::PolicyOutcome;
+
+/// The full assessment of a tool call: the proxy action plus the fields needed to build an
+/// evidence record (M3). `gated` is true for deny/step_up (which must fail closed on a write
+/// failure, D5).
+pub struct Assessment {
+    pub enforce: Enforce,
+    pub outcome: PolicyOutcome,
+    pub impact: &'static str,
+}
+
+fn impact_str(tool: &str, args: &Value) -> &'static str {
+    match blast_radius::score(tool, args) {
+        acp_core::types::BlastRadius::Low => "low",
+        acp_core::types::BlastRadius::Medium => "medium",
+        acp_core::types::BlastRadius::High => "high",
     }
-    let out = engine.evaluate(build_context(&tc.name, &tc.arguments, env));
-    match out.verdict {
+}
+
+/// Evaluate a tool call and return both the enforcement action and the evidence fields.
+pub fn assess(engine: &PolicyEngine, env: &str, tc: &ToolCall) -> Assessment {
+    let impact = impact_str(&tc.name, &tc.arguments);
+    if !valid_tool(&tc.name) {
+        return Assessment {
+            enforce: Enforce::Reply(deny_result(&tc.id, "safe-entity", "invalid tool name")),
+            outcome: PolicyOutcome {
+                verdict: Verdict::Deny,
+                rule_id: Some("safe-entity".into()),
+                approvers: vec![],
+                reason: Some("invalid tool name".into()),
+            },
+            impact,
+        };
+    }
+    let outcome = engine.evaluate(build_context(&tc.name, &tc.arguments, env));
+    let enforce = match outcome.verdict {
         Verdict::Allow | Verdict::Shadow => Enforce::Forward,
         Verdict::Deny => Enforce::Reply(deny_result(
             &tc.id,
-            out.rule_id.as_deref().unwrap_or("policy"),
-            out.reason.as_deref().unwrap_or("blocked by policy"),
+            outcome.rule_id.as_deref().unwrap_or("policy"),
+            outcome.reason.as_deref().unwrap_or("blocked by policy"),
         )),
         Verdict::StepUp => Enforce::Reply(approval_required(
             &tc.id,
-            out.rule_id.as_deref().unwrap_or("policy"),
+            outcome.rule_id.as_deref().unwrap_or("policy"),
         )),
+    };
+    Assessment {
+        enforce,
+        outcome,
+        impact,
     }
 }

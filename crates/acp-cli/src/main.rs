@@ -12,14 +12,18 @@ fn main() -> ExitCode {
             None => usage("acp policy-compile <policy.yaml>"),
         },
         "policy-test" => run_policy_test(&args[2..]),
-        "verify" => {
-            eprintln!("acp verify (skeleton) - Merkle + STH + consistency via acp_core in M3");
-            ExitCode::SUCCESS
-        }
-        "export" => {
-            eprintln!("acp export (skeleton) - M3");
-            ExitCode::SUCCESS
-        }
+        "verify" => match args.get(2) {
+            Some(p) => cmd_verify(p),
+            None => usage("acp verify <ledger.db>"),
+        },
+        "verify-pack" => match args.get(2) {
+            Some(p) => cmd_verify_pack(p),
+            None => usage("acp verify-pack <pack.json>"),
+        },
+        "export" => match args.get(2) {
+            Some(p) => cmd_export(p),
+            None => usage("acp export <ledger.db>"),
+        },
         _ => usage("acp [init|verify|export|policy-compile|policy-test]"),
     }
 }
@@ -145,6 +149,59 @@ fn read_calls(path: &str) -> Result<Vec<Value>, ExitCode> {
         out.push(build_context(tool, &args, env));
     }
     Ok(out)
+}
+
+fn cmd_verify(path: &str) -> ExitCode {
+    match acp_ledger::verify_file(path) {
+        Ok(()) => {
+            println!("OK: {path} verifies");
+            ExitCode::SUCCESS
+        }
+        Err(e) => {
+            eprintln!("FAIL: {e}");
+            ExitCode::from(1)
+        }
+    }
+}
+
+fn cmd_verify_pack(path: &str) -> ExitCode {
+    let text = match std::fs::read_to_string(path) {
+        Ok(t) => t,
+        Err(e) => {
+            eprintln!("acp: cannot read {path}: {e}");
+            return ExitCode::from(1);
+        }
+    };
+    let pack: Value = match serde_json::from_str(&text) {
+        Ok(v) => v,
+        Err(e) => {
+            eprintln!("acp: invalid pack: {e}");
+            return ExitCode::from(1);
+        }
+    };
+    match acp_ledger::verify_pack(&pack) {
+        Ok(()) => {
+            println!("OK: export pack verifies standalone");
+            ExitCode::SUCCESS
+        }
+        Err(e) => {
+            eprintln!("FAIL: {e}");
+            ExitCode::from(1)
+        }
+    }
+}
+
+fn cmd_export(path: &str) -> ExitCode {
+    match acp_ledger::export_file(path) {
+        Ok(pack) => {
+            println!("{}", serde_json::to_string_pretty(&pack).unwrap());
+            ExitCode::SUCCESS
+        }
+        Err(e) => {
+            eprintln!("acp: export failed: {e}");
+            ExitCode::from(1)
+        }
+    }
 }
 
 fn label(ctx: &Value) -> String {

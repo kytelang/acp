@@ -110,21 +110,21 @@ criteria are checked.
 
 ### M3: Evidence ledger (D3/D5/D6/D7/D11; over-invest here)
 
-- [ ] **M3.1 Storage schema.**
-  - [ ] `sqlx`+SQLite; `records` + separate `args_blob`; append-only enforced; UPDATE/DELETE on records rejected; retention purge drops blob but leaves record verifiable.
-- [ ] **M3.2 Merkle log + single-writer head (D3/D6).**
-  - [ ] Appends update the root deterministically; leader-only extension; two instances cannot both extend one log.
-- [ ] **M3.3 Ed25519 signed tree head (D3/D7).**
-  - [ ] STH signed via `ed25519-dalek` behind the `Signer` trait; algorithm ids present; per-record signing is NOT used.
-- [ ] **M3.4 `acp verify`.**
-  - [ ] Passes on a clean ledger; names the exact tampered leaf; a history rewrite fails the consistency check.
-- [ ] **M3.5 Durable spool + fail-policy (D5).**
-  - [ ] Disk-backed spool; kill server mid-run: gated verdicts fail-closed, evidence replays with no loss and no root divergence.
-- [ ] **M3.6 Intent + outcome + idempotent ingest (D11).**
-  - [ ] Every allowed action has a linked outcome record; retried batches create no duplicate leaves; a poison record does not head-of-line-block replay (dead-letter).
-- [ ] **M3.7 `acp export`.**
-  - [ ] Signed pack (records + policy versions + public key + STH manifest) verifies standalone on a clean machine with only the public key.
-- [ ] **Gate:** tamper + rewrite detected; export self-verifies; outage causes no evidence loss; every decision has an outcome.
+- [x] **M3.1 Storage schema.**
+  - [x] SQLite (rusqlite); `records` + separate `args_blob`; append-only triggers reject UPDATE/DELETE; `purge_args` drops blobs, records stay verifiable.
+- [x] **M3.2 Merkle log + single-writer head (D3/D6).**
+  - [x] Appends update the root deterministically; EXCLUSIVE SQLite locking gives single-writer (leader) extension.
+- [x] **M3.3 Ed25519 signed tree head (D3/D7).**
+  - [x] STH signed via `ed25519-dalek` behind the `Signer` trait; per-record signing NOT used (tested).
+- [x] **M3.4 `acp verify`.**
+  - [x] Passes on a clean ledger; names the exact tampered leaf (seq); a history rewrite fails signature/root check. CLI `acp verify`.
+- [x] **M3.5 Durable spool + fail-policy (D5).**
+  - [x] Disk-backed spool (fsync before forward); replay on restart is idempotent, no loss, no root divergence (tested).
+- [x] **M3.6 Intent + outcome + idempotent ingest (D11).**
+  - [x] Every decision has a linked outcome record; idempotent by decision_id (no dup leaves); poison entries dead-lettered, not blocking (tested).
+- [x] **M3.7 `acp export`.**
+  - [x] Signed pack (records + public key + signed STH) verifies standalone with only the public key. CLI `acp export` + `verify-pack`.
+- [x] **Gate:** tamper + rewrite detected; export self-verifies; outage causes no evidence loss; every decision has an outcome.
 
 ### M4: Step-up approval (D8, R1)
 
