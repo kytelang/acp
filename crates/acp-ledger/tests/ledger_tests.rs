@@ -253,3 +253,24 @@ fn observed_tools_summarises_max_impact() {
         ]
     );
 }
+
+#[test]
+fn meta_audit_events_append_to_the_same_verifiable_log() {
+    // H0.7: self-governance changes (policy/key/RBAC) land in the same RFC 6962 ledger as
+    // decisions, so they inherit its tamper-evidence. Here we append a policy-change and a
+    // key-rotation meta record and confirm the log still verifies and exports.
+    use acp_core::metaaudit::{MetaEvent, MetaKind};
+    let p = tmp("l-meta.db");
+    let mut l = open(&p);
+    let pc = MetaEvent::new(MetaKind::PolicyChange, "alice", "tighten fs.write", 100)
+        .unwrap()
+        .transition(Some("hashA"), Some("hashB"));
+    let kr = MetaEvent::new(MetaKind::KeyRotation, "root", "quarterly rotation", 200).unwrap();
+    l.append("meta-1", "meta", &pc.to_record(), None).unwrap();
+    l.append("meta-2", "meta", &kr.to_record(), None).unwrap();
+    assert_eq!(l.size(), 2);
+    l.verify().expect("meta events keep the ledger verifiable");
+
+    let pack = l.export().expect("export");
+    verify_pack(&pack).expect("exported pack with meta records self-verifies");
+}
