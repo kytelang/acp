@@ -7,6 +7,10 @@ fn main() {
     let _ = acp_core::sign::NoopSigner;
     // Prove the policy compiler is reachable from the server binary.
     if let Ok(p) = acp_policy::parse_str("version: 1\ndefault: allow\nrules: []\n") {
-        eprintln!("policy parsed: version {}, {} rules", p.version, p.rules.len());
+        eprintln!(
+            "policy parsed: version {}, {} rules",
+            p.version,
+            p.rules.len()
+        );
     }
 }

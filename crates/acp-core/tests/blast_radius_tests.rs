@@ -4,12 +4,18 @@ use serde_json::json;
 
 #[test]
 fn read_is_low() {
-    assert_eq!(score("db.query", &json!({"operation": "read"})), BlastRadius::Low);
+    assert_eq!(
+        score("db.query", &json!({"operation": "read"})),
+        BlastRadius::Low
+    );
 }
 
 #[test]
 fn big_charge_is_high() {
-    let r = score("payments.charge", &json!({"amount_cents": 90000, "recipient": "x@y.z"}));
+    let r = score(
+        "payments.charge",
+        &json!({"amount_cents": 90000, "recipient": "x@y.z"}),
+    );
     assert_eq!(r, BlastRadius::High);
 }
 

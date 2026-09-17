@@ -29,7 +29,10 @@ fn compile_rule(rule: &Rule) -> String {
     out.push_str(&format!("@id(\"{}\")\n", esc(&rule.id)));
     out.push_str(&format!("@verdict(\"{}\")\n", verdict_str(rule.verdict)));
     if !rule.approvers.is_empty() {
-        out.push_str(&format!("@approvers(\"{}\")\n", esc(&rule.approvers.join(","))));
+        out.push_str(&format!(
+            "@approvers(\"{}\")\n",
+            esc(&rule.approvers.join(","))
+        ));
     }
     if let Some(reason) = &rule.reason {
         out.push_str(&format!("@reason(\"{}\")\n", esc(reason)));

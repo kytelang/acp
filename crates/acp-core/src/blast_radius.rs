@@ -37,7 +37,10 @@ pub fn score(tool: &str, args: &Value) -> BlastRadius {
             points += 2;
         }
     }
-    if ["to", "recipient", "external"].iter().any(|k| args.get(*k).is_some()) {
+    if ["to", "recipient", "external"]
+        .iter()
+        .any(|k| args.get(*k).is_some())
+    {
         points += 2; // leaving the boundary (external recipient) is high-impact
     }
 

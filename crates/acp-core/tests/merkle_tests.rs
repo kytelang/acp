@@ -1,9 +1,7 @@
 //! The trust suite: the verifiable log must catch edits and rewrites.
 
 use acp_core::canonical::canonical_bytes;
-use acp_core::merkle::{
-    leaf_hash, root_of, verify_consistency, verify_inclusion, MerkleLog,
-};
+use acp_core::merkle::{leaf_hash, root_of, verify_consistency, verify_inclusion, MerkleLog};
 
 fn record_bytes(seq: u64, verdict: &str) -> Vec<u8> {
     // A stand-in evidence record; canonical bytes are what the log commits to.
@@ -91,5 +89,7 @@ fn consistency_proof_confirms_append_only() {
     // A tampered second root must fail the consistency check.
     let mut bad = new_root;
     bad[0] ^= 0xff;
-    assert!(!verify_consistency(old_size, new_size, &proof, old_root, bad));
+    assert!(!verify_consistency(
+        old_size, new_size, &proof, old_root, bad
+    ));
 }

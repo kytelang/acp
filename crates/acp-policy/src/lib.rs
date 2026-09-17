@@ -6,8 +6,8 @@
 //! which are our unit-tested code. `acp policy-compile` prints the generated Cedar so the
 //! mapping is reviewable.
 
-pub mod dsl;
 pub mod compile;
+pub mod dsl;
 
 pub use compile::compile_to_cedar;
 pub use dsl::{parse_str, Policy, Rule};
