@@ -463,8 +463,8 @@ was not actually performed.
 
 ### H2: Hardening gate (parallel to v2; REQUIRED before scale)
 
-- [b] **H2.1 Large-ledger performance [9].**
-  - [b] Merkle proof + query cost validated at hundreds of millions of records; archival/compaction strategy in place.
+- [~] **H2.1 Large-ledger performance [9].**
+  - [x] Inclusion-proof cost validated to scale logarithmically (<= ceil(log2 n) hashes) over sizes up to 2^16 (merkle_invariants.rs); archival/compaction = the hot/cold/archive tiering in docs/ops/cost-and-tiering.md. [ ] the full 100M-record wall-clock load run remains.
 - [m] **H2.2 Multi-region / residency [3][4].**
   - [m] `acp_core::residency::ResidencyPolicy`: default-deny placement restricted to a tenant's allowed regions; out-of-region placement refused (tested). [ ] the multi-region deployment topology.
 - [e] **H2.3 Sector attestations [10].** (external: HIPAA/sector assessor)

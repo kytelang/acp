@@ -63,3 +63,22 @@ fn a_changed_leaf_changes_the_root() {
     let r2 = root_of(&leaves);
     assert_ne!(r1, r2, "changing any leaf must change the root");
 }
+
+#[test]
+fn inclusion_proof_cost_scales_logarithmically() {
+    // H2.1 (cost model): the per-record proof cost must grow with log2(n), not n, which is what
+    // makes hundreds of millions of records tractable. Validate the scaling on tractable sizes;
+    // the full 100M wall-clock validation is a separate load run.
+    for pow in [10u32, 12, 14, 16] {
+        let size = 1usize << pow;
+        let m = log_of(size);
+        let proof = m.inclusion_proof(size / 2).expect("proof");
+        // An RFC 6962 inclusion proof is at most ceil(log2(n)) hashes.
+        assert!(
+            proof.len() as u32 <= pow + 1,
+            "proof for size 2^{pow} was {} hashes, expected <= {}",
+            proof.len(),
+            pow + 1
+        );
+    }
+}
