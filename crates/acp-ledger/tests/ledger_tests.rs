@@ -286,8 +286,13 @@ fn backup_and_restore_drill_reverifies_the_ledger() {
     {
         let mut l = open(&p);
         for i in 0..8 {
-            l.append(&format!("d{i}"), "decision", &rec(i), Some(&json!({"n": i})))
-                .unwrap();
+            l.append(
+                &format!("d{i}"),
+                "decision",
+                &rec(i),
+                Some(&json!({"n": i})),
+            )
+            .unwrap();
         }
         l.verify().expect("live ledger verifies");
     }

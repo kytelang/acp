@@ -1,0 +1,14 @@
+[package]
+name = "acp-pgstore"
+version = "0.0.0"
+edition.workspace = true
+license.workspace = true
+description = "Agent Control Plane: Postgres tenant-isolated store (Row-Level Security, FORCE RLS)."
+
+[dependencies]
+tokio-postgres.workspace = true
+tokio.workspace = true
+serde_json.workspace = true
+
+[dev-dependencies]
+tokio.workspace = true
