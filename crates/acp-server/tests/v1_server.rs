@@ -34,6 +34,7 @@ impl Drop for Kill {
 async fn control_service_inbox_and_endpoints() {
     let approvals = format!("{TMP}/v1.approvals");
     let ledger = format!("{TMP}/v1.db");
+    let meta_ledger = format!("{TMP}/v1-meta.db");
     let policy = format!("{TMP}/v1-policy.yaml");
     for f in [
         &approvals,
@@ -42,6 +43,10 @@ async fn control_service_inbox_and_endpoints() {
         &format!("{approvals}-shm"),
         &format!("{ledger}-wal"),
         &format!("{ledger}-shm"),
+        &meta_ledger,
+        &format!("{meta_ledger}-wal"),
+        &format!("{meta_ledger}-shm"),
+        &format!("{meta_ledger}.key"),
     ] {
         let _ = std::fs::remove_file(f);
     }
@@ -85,6 +90,8 @@ async fn control_service_inbox_and_endpoints() {
             &policy,
             "--ledger",
             &ledger,
+            "--meta-ledger",
+            &meta_ledger,
         ])
         .stderr(Stdio::inherit())
         .spawn()
@@ -168,4 +175,17 @@ async fn control_service_inbox_and_endpoints() {
     let a1: serde_json::Value = c.get(format!("{base}/alerts")).send().await.unwrap().json().await.unwrap();
     assert_eq!(a1["healthy"], false, "a deny surge must trip an alert: {a1}");
     assert!(a1["tripped"].as_array().unwrap().iter().any(|k| k == "deny"));
+
+    // H0.7: recording an admin policy change lands in the tamper-evident meta-audit log.
+    let m0: serde_json::Value = c.get(format!("{base}/meta-audit")).send().await.unwrap().json().await.unwrap();
+    assert_eq!(m0["configured"], true);
+    assert_eq!(m0["size"], 0);
+    let rec = c
+        .post(format!("{base}/admin/meta"))
+        .json(&serde_json::json!({"kind":"policy_change","actor":"alice","reason":"tighten fs.write","before":"hashA","after":"hashB"}))
+        .send().await.unwrap();
+    assert!(rec.status().is_success());
+    let m1: serde_json::Value = c.get(format!("{base}/meta-audit")).send().await.unwrap().json().await.unwrap();
+    assert_eq!(m1["size"], 1, "meta event recorded: {m1}");
+    assert_eq!(m1["verified"], true, "meta-audit log verifies");
 }

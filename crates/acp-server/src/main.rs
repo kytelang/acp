@@ -22,6 +22,8 @@ struct AppState {
     liveness: std::sync::Mutex<acp_core::liveness::GapDetector>,
     // B3: fail-open/deny spike detectors, one per event kind.
     spikes: std::sync::Mutex<std::collections::HashMap<String, acp_core::anomaly::SpikeDetector>>,
+    // H0.7: tamper-evident self-governance meta-audit log (None if not configured).
+    meta: Option<std::sync::Mutex<acp_ledger::Ledger>>,
 }
 
 #[tokio::main]
@@ -29,6 +31,7 @@ async fn main() {
     let args: Vec<String> = std::env::args().collect();
     let mut addr = "127.0.0.1:8787".to_string();
     let (mut approvals, mut policy_path, mut ledger) = (None, None, None);
+    let mut meta_ledger: Option<String> = None;
     let mut it = args.iter().skip(1);
     while let Some(a) = it.next() {
         match a.as_str() {
@@ -36,6 +39,7 @@ async fn main() {
             "--approvals" => approvals = it.next().cloned(),
             "--policy" => policy_path = it.next().cloned(),
             "--ledger" => ledger = it.next().cloned(),
+            "--meta-ledger" => meta_ledger = it.next().cloned(),
             other => {
                 eprintln!("acp-server: unknown option '{other}'");
                 std::process::exit(2);
@@ -58,12 +62,37 @@ async fn main() {
         None => None,
     };
 
+    // H0.7: a tamper-evident meta-audit ledger for admin actions (policy/key/RBAC changes).
+    let meta = meta_ledger.and_then(|path| {
+        let key_path = format!("{path}.key");
+        let signer: Box<dyn acp_core::sign::Signer + Send> = match std::fs::read(&key_path) {
+            Ok(b) if b.len() == 32 => {
+                let mut s = [0u8; 32];
+                s.copy_from_slice(&b);
+                Box::new(acp_core::sign::Ed25519Signer::from_seed(&s))
+            }
+            _ => {
+                let s = acp_core::sign::Ed25519Signer::generate();
+                let _ = std::fs::write(&key_path, s.seed());
+                Box::new(s)
+            }
+        };
+        match acp_ledger::Ledger::open(&path, signer) {
+            Ok(l) => Some(std::sync::Mutex::new(l)),
+            Err(e) => {
+                eprintln!("acp-server: could not open meta-ledger {path}: {e}");
+                None
+            }
+        }
+    });
+
     let state = Arc::new(AppState {
         approvals,
         policy,
         ledger,
         liveness: std::sync::Mutex::new(acp_core::liveness::GapDetector::new()),
         spikes: std::sync::Mutex::new(std::collections::HashMap::new()),
+        meta,
     });
     let app = Router::new()
         .route("/", get(inbox))
@@ -78,6 +107,8 @@ async fn main() {
         .route("/liveness", get(liveness))
         .route("/event/:kind", post(record_event))
         .route("/alerts", get(alerts))
+        .route("/admin/meta", post(record_meta))
+        .route("/meta-audit", get(meta_audit))
         .with_state(state);
 
     let listener = tokio::net::TcpListener::bind(&addr).await.expect("bind");
@@ -254,6 +285,47 @@ async fn report(State(st): State<Arc<AppState>>) -> impl IntoResponse {
             .into_response()
         }
         None => (axum::http::StatusCode::NOT_FOUND, "no ledger configured").into_response(),
+    }
+}
+
+/// H0.7: record a self-governance change (policy/key/RBAC/approver/break-glass) to the tamper-
+/// evident meta-audit log. Body: {kind, actor, reason, before?, after?}.
+async fn record_meta(State(st): State<Arc<AppState>>, Json(body): Json<serde_json::Value>) -> impl IntoResponse {
+    let Some(meta) = st.meta.as_ref() else {
+        return Json(serde_json::json!({"ok": false, "detail": "meta-audit not configured"}));
+    };
+    let kind = match body.get("kind").and_then(|v| v.as_str()) {
+        Some("policy_change") => acp_core::metaaudit::MetaKind::PolicyChange,
+        Some("key_rotation") => acp_core::metaaudit::MetaKind::KeyRotation,
+        Some("rbac_change") => acp_core::metaaudit::MetaKind::RbacChange,
+        Some("approver_group_change") => acp_core::metaaudit::MetaKind::ApproverGroupChange,
+        Some("break_glass_engage") => acp_core::metaaudit::MetaKind::BreakGlassEngage,
+        Some("break_glass_revert") => acp_core::metaaudit::MetaKind::BreakGlassRevert,
+        _ => return Json(serde_json::json!({"ok": false, "detail": "unknown kind"})),
+    };
+    let actor = body.get("actor").and_then(|v| v.as_str()).unwrap_or("unknown");
+    let reason = body.get("reason").and_then(|v| v.as_str()).unwrap_or("");
+    let ev = match acp_core::metaaudit::MetaEvent::new(kind, actor, reason, now_ms()) {
+        Ok(e) => e.transition(
+            body.get("before").and_then(|v| v.as_str()),
+            body.get("after").and_then(|v| v.as_str()),
+        ),
+        Err(e) => return Json(serde_json::json!({"ok": false, "detail": e})),
+    };
+    let mut l = meta.lock().unwrap();
+    let id = format!("meta-{}", l.size() + 1);
+    let _ = l.append(&id, "meta", &ev.to_record(), None);
+    Json(serde_json::json!({"ok": true, "id": id, "size": l.size()}))
+}
+
+/// H0.7: the meta-audit log status, verifiable like any evidence.
+async fn meta_audit(State(st): State<Arc<AppState>>) -> impl IntoResponse {
+    match st.meta.as_ref() {
+        Some(meta) => {
+            let l = meta.lock().unwrap();
+            Json(serde_json::json!({"configured": true, "size": l.size(), "verified": l.verify().is_ok()}))
+        }
+        None => Json(serde_json::json!({"configured": false})),
     }
 }
 

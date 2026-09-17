@@ -356,8 +356,8 @@ was not actually performed.
   - [x] `acp_core::redact` argument redaction (hash intact) + `acp-encrypt`: envelope AES-256-GCM at rest with customer-managed KEK (BYOK) wrapping a per-blob DEK; wrong/rotated KEK = crypto-erasure, tamper + AAD-context both enforced (4 tests). Real KMS-held KEK = config.
 - [x] **H0.6 Egress/SSRF + signed policy provenance [H].**
   - [x] `acp_core::egress` default-deny SSRF-safe host allowlist + `acp_core::policyprov`: policies are signed by an author (signature binds author+hash, cannot be moved), verified before load, and only an allowlisted principal may push (revocable). Tested.
-- [~] **H0.7 Self-governance meta-audit [G].**
-  - [x] `acp_core::metaaudit::MetaEvent` (policy/key/RBAC/approver/break-glass) appends to the same RFC 6962 ledger and keeps it verifiable + exportable (ledger integration test). [ ] emit on live admin actions once SSO/RBAC (H0.8) lands.
+- [x] **H0.7 Self-governance meta-audit [G].**
+  - [x] `acp_core::metaaudit::MetaEvent` appends to an RFC 6962 ledger AND wired into acp-server: `POST /admin/meta` records a policy/key/RBAC change to a tamper-evident meta-ledger, `GET /meta-audit` shows it verifies (integration-tested). SSO/RBAC gating of the endpoint = acp-auth.
 - [m] **H0.8 Auth hardening + RBAC [8].**
   - [m] `acp-auth` Entra OIDC verify + RBAC (mock IdP, 8 tests); `acp_core::webhook::verify_slack` Slack signature verify; `acp-mtls` mutual TLS proxy<->server (rustls, client-cert REQUIRED, real in-memory handshake test: valid client completes mutual auth, rogue client rejected). Real Entra/certs = config.
 - [~] **H0.9 Supply chain: signed releases + SBOM [7].**
