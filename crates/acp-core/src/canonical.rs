@@ -36,3 +36,10 @@ fn sort_value(v: serde_json::Value) -> serde_json::Value {
         other => other,
     }
 }
+
+/// SHA-256 of raw bytes, hex-encoded (used for tool-binary fingerprints, D12/B5).
+pub fn sha256_hex_bytes(data: &[u8]) -> String {
+    let mut h = Sha256::new();
+    h.update(data);
+    hex::encode(h.finalize())
+}
