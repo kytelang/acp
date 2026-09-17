@@ -16,7 +16,7 @@ use acp_approvals::ApprovalStore;
 use acp_core::types::Verdict;
 use acp_jsonrpc::{classify, error_response, inspect, ParsedFrame};
 use acp_policy::PolicyEngine;
-use serde_json::Value;
+use serde_json::{json, Value};
 use std::sync::{Arc, Mutex};
 
 /// What a transport should do with one client-to-server frame.
@@ -41,6 +41,7 @@ pub struct Controller {
     session: String,
     principal: String,
     sinks: Vec<Box<dyn Sink>>,
+    fail_open: bool,
 }
 
 impl Controller {
@@ -51,6 +52,7 @@ impl Controller {
         evidence: Option<Evidence>,
         approvals: Option<ApprovalStore>,
         sinks: Vec<Box<dyn Sink>>,
+        fail_open: bool,
     ) -> Controller {
         Controller {
             engine,
@@ -64,6 +66,7 @@ impl Controller {
             session: "acp-session".to_string(),
             principal: "unknown".to_string(),
             sinks,
+            fail_open,
         }
     }
 
@@ -138,7 +141,7 @@ impl Controller {
             // Shadow mode (M5.3): record what WOULD happen, but forward everything.
             if self.shadow && a.outcome.verdict != Verdict::Allow {
                 if let Some(ev) = st.evidence.as_mut() {
-                    let did = ev.record_decision(
+                    let (did, _) = ev.record_decision(
                         &self.agent,
                         &self.session,
                         &tc,
@@ -161,7 +164,7 @@ impl Controller {
                 match step {
                     Step::Forward(_view) => {
                         if let Some(ev) = st.evidence.as_mut() {
-                            let did = ev.record_decision(
+                            let (did, _) = ev.record_decision(
                                 &self.agent,
                                 &self.session,
                                 &tc,
@@ -172,12 +175,30 @@ impl Controller {
                             );
                             ev.record_outcome(&did, "forwarded");
                         }
+                        drop(st);
+                        self.emit_event(
+                            &tc.name,
+                            verdict_s,
+                            a.outcome.rule_id.as_deref(),
+                            a.impact,
+                            "approved",
+                        );
                         return FrameAction::Forward;
                     }
-                    Step::Held(json) => return FrameAction::Reply(json),
+                    Step::Held(json) => {
+                        drop(st);
+                        self.emit_event(
+                            &tc.name,
+                            verdict_s,
+                            a.outcome.rule_id.as_deref(),
+                            a.impact,
+                            "held",
+                        );
+                        return FrameAction::Reply(json);
+                    }
                     Step::Denied(json) => {
                         if let Some(ev) = st.evidence.as_mut() {
-                            let did = ev.record_decision(
+                            let (did, _) = ev.record_decision(
                                 &self.agent,
                                 &self.session,
                                 &tc,
@@ -188,13 +209,21 @@ impl Controller {
                             );
                             ev.record_outcome(&did, "not_executed");
                         }
+                        drop(st);
+                        self.emit_event(
+                            &tc.name,
+                            verdict_s,
+                            a.outcome.rule_id.as_deref(),
+                            a.impact,
+                            "denied",
+                        );
                         return FrameAction::Reply(json);
                     }
                 }
             }
 
             // Allow / deny / (step_up without a store): enforce and record.
-            let did = st.evidence.as_mut().map(|ev| {
+            let rec = st.evidence.as_mut().map(|ev| {
                 ev.record_decision(
                     &self.agent,
                     &self.session,
@@ -205,8 +234,24 @@ impl Controller {
                     eng.hash(),
                 )
             });
+            let did = rec.as_ref().map(|(d, _)| d.clone());
+            let durable = rec.as_ref().map(|(_, dur)| *dur).unwrap_or(true);
             match a.enforce {
                 Enforce::Forward => {
+                    if !durable && !self.fail_open {
+                        if let (Some(ev), Some(did)) = (st.evidence.as_mut(), did.as_ref()) {
+                            ev.record_outcome(did, "not_executed");
+                        }
+                        drop(st);
+                        self.emit_event(
+                            &tc.name,
+                            verdict_s,
+                            a.outcome.rule_id.as_deref(),
+                            a.impact,
+                            "fail_closed",
+                        );
+                        return FrameAction::Reply(fail_closed_reply(&tc.id));
+                    }
                     if let (Some(ev), Some(did)) = (st.evidence.as_mut(), did.as_ref()) {
                         ev.record_outcome(did, "forwarded");
                     }
@@ -245,4 +290,13 @@ impl Controller {
             }
         }
     }
+}
+
+fn fail_closed_reply(id: &Value) -> String {
+    json!({
+        "jsonrpc": "2.0", "id": id,
+        "result": {"isError": true, "content": [{"type": "text",
+            "text": "blocked: evidence unavailable, failing closed"}]}
+    })
+    .to_string()
 }

@@ -149,9 +149,48 @@ async fn report(State(st): State<Arc<AppState>>) -> impl IntoResponse {
     {
         Some(pack) => {
             let recs = pack["records"].as_array().cloned().unwrap_or_default();
-            let decisions = recs.iter().filter(|r| r["kind"] == "decision").count();
-            let outcomes = recs.iter().filter(|r| r["kind"] == "outcome").count();
-            Json(serde_json::json!({"records": recs.len(), "decisions": decisions, "outcomes": outcomes})).into_response()
+            let mut verdicts = std::collections::BTreeMap::<String, u64>::new();
+            let mut outcomes = std::collections::BTreeMap::<String, u64>::new();
+            let (mut decisions, mut with_rule) = (0u64, 0u64);
+            for r in &recs {
+                if let Some(json) = r["canonical"]
+                    .as_str()
+                    .and_then(|h| hex::decode(h).ok())
+                    .and_then(|b| serde_json::from_slice::<serde_json::Value>(&b).ok())
+                {
+                    match json["type"].as_str() {
+                        Some("decision") => {
+                            decisions += 1;
+                            let v = json["decision"]["verdict"]
+                                .as_str()
+                                .unwrap_or("?")
+                                .to_string();
+                            *verdicts.entry(v).or_default() += 1;
+                            if json["decision"]["rule_id"].is_string() {
+                                with_rule += 1;
+                            }
+                        }
+                        Some("outcome") => {
+                            let k = json["kind"].as_str().unwrap_or("?").to_string();
+                            *outcomes.entry(k).or_default() += 1;
+                        }
+                        _ => {}
+                    }
+                }
+            }
+            let coverage = if decisions > 0 {
+                with_rule as f64 / decisions as f64
+            } else {
+                0.0
+            };
+            Json(serde_json::json!({
+                "records": recs.len(),
+                "decisions": decisions,
+                "verdicts": verdicts,
+                "outcomes": outcomes,
+                "policy_coverage": (coverage * 1000.0).round() / 1000.0
+            }))
+            .into_response()
         }
         None => (axum::http::StatusCode::NOT_FOUND, "no ledger configured").into_response(),
     }

@@ -151,7 +151,7 @@ criteria are checked.
 - [~] **M5.2 Tool<->proxy binding + upstream TLS (D10).**
   - [x] stdio: tool<->proxy binding is structural (proxy owns the child's stdio). HTTP: rustls verifies https upstreams, cleartext-http warned. [ ] mTLS tool binding + cert pinning (H0).
 - [x] **M5.3 Shadow mode + safe fail-policy (D9).**
-  - [x] `--shadow` forwards everything but records a would-block (tested); impact is proxy-derived (D9), never agent-influenceable.
+  - [x] `--shadow` forwards everything but records a would-block (tested); `--fail-open`/fail-closed (default) surface: an allow whose evidence cannot be durably recorded is blocked unless fail-open (tested); impact is proxy-derived (D9), never agent-influenceable.
 - [x] **M5.4 Installer + single `acp` CLI.**
   - [x] `install.sh` builds + installs acp/acp-proxy; `acp init` scaffolds a working policy + workspace (smoke-tested; the generated policy compiles).
 - [~] **M5.5 Worked example + latency budget.**
@@ -211,8 +211,8 @@ criteria are checked.
   - [ ] Ledger on Postgres; tenants isolated in store and API; an isolation test suite proves no cross-tenant read/write.
 - [ ] **v1.1.2 Per-tenant keys + SSO [1.1].**
   - [ ] Per-tenant signing keys behind KMS; one tenant's key compromise cannot touch another's evidence; SSO/OIDC for the console.
-- [ ] **v1.1.3 Retention + purge per tenant.**
-  - [ ] Per-tenant retention config; purge tested; signed leaf + STH survive payload purge.
+- [~] **v1.1.3 Retention + purge per tenant.**
+  - [x] `acp purge <ledger> <days>` drops arg payloads; signed decisions still verify after purge (tested). [ ] per-tenant config.
 
 ### v1.2 Regulatory evidence packs
 
@@ -417,10 +417,10 @@ customer), not deferred.
 
 ### Block E: Governance analytics & posture (prove the control works)
 
-- [ ] **E1 [v1/P1] Governance-effectiveness analytics.**
-  - [ ] Deny/approve/step-up/fail-open rates and approval-latency percentiles (distribution, not mean), each independently re-derivable from a verifiable export.
-- [ ] **E2 [v1/P1] Policy coverage / gap reporting.**
-  - [ ] Report of % of calls matched by an explicit rule vs `default` fall-through, plus a per-tool "no explicit rule" worklist. (Distinct from shadow-AI discovery.)
+- [~] **E1 [v1/P1] Governance-effectiveness analytics.**
+  - [x] acp-server `/report` computes verdict + outcome breakdown from the verifiable ledger export (deny/allow/step_up counts, outcome kinds; tested). [ ] approval-latency percentiles.
+- [~] **E2 [v1/P1] Policy coverage / gap reporting.**
+  - [x] `/report` computes `policy_coverage` = % of decisions matched by an explicit rule vs default (tested). [ ] per-tool no-rule worklist.
 - [ ] **E3 [v1/P1] Decision explainability to the agent/user.**
   - [ ] Deny/step-up responses carry a redaction-safe rationale (matched condition, triggering signal, "to pass, X") without leaking raw argument values.
 - [ ] **E4 [v1/P1] Configurable impact taxonomy (replaces the fixed blast-radius heuristic).**
@@ -435,7 +435,7 @@ customer), not deferred.
 ### Block F: Enterprise integration & ecosystem
 
 - [~] **F1 [H0/P0] SIEM/SOAR event streaming.**
-  - [x] Multi-sink governance-event seam (`Sink` trait): a redacted JSONL file sink (`--events`) and an **OTLP/HTTP OpenTelemetry sink** (`--otel`, off-reactor, no raw args; tested against a mock collector). [ ] OCSF/CEF + vendor sinks plug into the same trait.
+  - [x] Multi-sink governance-event seam (`Sink` trait): redacted JSONL (`--events`), OTLP/HTTP OpenTelemetry (`--otel`), **CEF** (`--cef`) and **OCSF** (`--ocsf`) SIEM sinks, all off-reactor and arg-free (tested). Vendor push-connectors plug into the same trait.
 - [ ] **F2 [H0/P0] Break-glass / emergency controls.**
   - [ ] Scoped modes (disable-enforce, lockdown-all, emergency-bypass) with mandatory reason, TTL, optional dual-control, each a tamper-evident meta-log record; emergency-bypass forwards a would-hold call and auto-reverts at TTL.
 - [ ] **F3 [H1/P1] Fleet management for many proxies.**

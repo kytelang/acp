@@ -32,6 +32,7 @@ fn main() -> ExitCode {
         },
         "init" => cmd_init(args.get(2).map(String::as_str).unwrap_or("acp-demo")),
         "replay" => cmd_replay(&args[2..]),
+        "purge" => cmd_purge(&args[2..]),
         _ => usage("acp [init|verify|verify-pack|export|policy-compile|policy-test|approve|deny|approvals]"),
     }
 }
@@ -254,6 +255,43 @@ fn cmd_init(dir: &str) -> ExitCode {
     println!("  acp verify    {dir}/ledger.db                  # verify the evidence");
     println!("  acp export    {dir}/ledger.db > pack.json      # regulator-ready pack");
     ExitCode::SUCCESS
+}
+
+fn cmd_purge(rest: &[String]) -> ExitCode {
+    if rest.len() < 2 {
+        return usage("acp purge <ledger.db> <older-than-days>");
+    }
+    let days: u64 = match rest[1].parse() {
+        Ok(n) => n,
+        Err(_) => {
+            eprintln!("acp: days must be a number");
+            return ExitCode::from(2);
+        }
+    };
+    let now = std::time::SystemTime::now()
+        .duration_since(std::time::UNIX_EPOCH)
+        .unwrap()
+        .as_millis() as u64;
+    let before = now.saturating_sub(days.saturating_mul(86_400_000));
+    match acp_ledger::purge_args_file(&rest[0], before) {
+        Ok(n) => {
+            println!("purged {n} argument payloads older than {days} days");
+            match acp_ledger::verify_file(&rest[0]) {
+                Ok(()) => {
+                    println!("ledger still verifies");
+                    ExitCode::SUCCESS
+                }
+                Err(e) => {
+                    eprintln!("WARNING: ledger verify after purge: {e}");
+                    ExitCode::from(1)
+                }
+            }
+        }
+        Err(e) => {
+            eprintln!("acp: {e}");
+            ExitCode::from(1)
+        }
+    }
 }
 
 fn cmd_replay(rest: &[String]) -> ExitCode {
