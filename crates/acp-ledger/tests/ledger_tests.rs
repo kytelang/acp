@@ -421,3 +421,19 @@ fn an_archived_pack_verifies_with_the_live_store_removed() {
     // The archived pack verifies from its own bytes with only the embedded public key.
     verify_pack(&pack).expect("archived pack self-verifies without the live store");
 }
+
+#[test]
+fn records_order_into_a_single_hlc_timeline() {
+    // F11: records carry an hlc; ordered_by_hlc returns one causal timeline regardless of insert
+    // order (as would happen when merging records from several proxies).
+    let p = tmp("l-timeline.db");
+    let mut l = open(&p);
+    // Append with hlc values deliberately out of seq order.
+    l.append("d1", "decision", &json!({"schema":1,"type":"decision","hlc":"000c:0:pB"}), None).unwrap();
+    l.append("d2", "decision", &json!({"schema":1,"type":"decision","hlc":"000a:0:pA"}), None).unwrap();
+    l.append("d3", "decision", &json!({"schema":1,"type":"decision","hlc":"000b:0:pA"}), None).unwrap();
+    drop(l);
+    let order = acp_ledger::ordered_by_hlc(&p).unwrap();
+    let hlcs: Vec<&str> = order.iter().map(|(_, h)| h.as_str()).collect();
+    assert_eq!(hlcs, vec!["000a:0:pA", "000b:0:pA", "000c:0:pB"], "sorted causally by hlc");
+}

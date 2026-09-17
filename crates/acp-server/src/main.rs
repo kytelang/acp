@@ -109,6 +109,7 @@ async fn main() {
         .route("/alerts", get(alerts))
         .route("/admin/meta", post(record_meta))
         .route("/meta-audit", get(meta_audit))
+        .route("/timeline", get(timeline))
         .with_state(state);
 
     let listener = tokio::net::TcpListener::bind(&addr).await.expect("bind");
@@ -285,6 +286,24 @@ async fn report(State(st): State<Arc<AppState>>) -> impl IntoResponse {
             .into_response()
         }
         None => (axum::http::StatusCode::NOT_FOUND, "no ledger configured").into_response(),
+    }
+}
+
+/// F11: a single causally-ordered timeline (by HLC) over the evidence ledger, so an investigator
+/// sees one ordered view even across proxies.
+async fn timeline(State(st): State<Arc<AppState>>) -> impl IntoResponse {
+    match st.ledger.as_ref() {
+        Some(path) => match acp_ledger::ordered_by_hlc(path) {
+            Ok(rows) => {
+                let entries: Vec<serde_json::Value> = rows
+                    .into_iter()
+                    .map(|(seq, hlc)| serde_json::json!({"seq": seq, "hlc": hlc}))
+                    .collect();
+                Json(serde_json::json!({"count": entries.len(), "timeline": entries}))
+            }
+            Err(e) => Json(serde_json::json!({"error": e})),
+        },
+        None => Json(serde_json::json!({"error": "no ledger configured"})),
     }
 }
 

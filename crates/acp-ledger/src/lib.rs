@@ -482,6 +482,32 @@ pub fn export_file(path: &str) -> Result<Value, String> {
 }
 
 /// Read a single record (and its args, if not purged) by seq, read-only. Used by `acp replay`.
+/// F11: read all records and return (seq, hlc) ordered by the hybrid logical clock, giving a single
+/// causally-ordered timeline across proxies (records carry an `hlc` field). Records without an hlc
+/// sort first (empty string).
+pub fn ordered_by_hlc(path: &str) -> Result<Vec<(u64, String)>, String> {
+    let conn = Connection::open_with_flags(path, OpenFlags::SQLITE_OPEN_READ_ONLY)
+        .map_err(|e| e.to_string())?;
+    let mut stmt = conn
+        .prepare("SELECT seq, canonical FROM records")
+        .map_err(|e| e.to_string())?;
+    let mut rows: Vec<(u64, String)> = stmt
+        .query_map([], |r| {
+            let seq: i64 = r.get(0)?;
+            let canonical: Vec<u8> = r.get(1)?;
+            let hlc = serde_json::from_slice::<Value>(&canonical)
+                .ok()
+                .and_then(|v| v.get("hlc").and_then(|h| h.as_str().map(str::to_string)))
+                .unwrap_or_default();
+            Ok((seq as u64, hlc))
+        })
+        .map_err(|e| e.to_string())?
+        .collect::<Result<_, _>>()
+        .map_err(|e| e.to_string())?;
+    rows.sort_by(|a, b| a.1.cmp(&b.1));
+    Ok(rows)
+}
+
 pub fn read_record(path: &str, seq: u64) -> Result<(Value, Option<Value>), String> {
     let conn = Connection::open_with_flags(path, OpenFlags::SQLITE_OPEN_READ_ONLY)
         .map_err(|e| e.to_string())?;
