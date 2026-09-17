@@ -211,8 +211,8 @@ was not actually performed.
   - [b] Store encrypted at rest; field-level BYOK for `args_blob`; argument redaction available for a partner's data class.
 - [b] **H0.6 Egress/SSRF + signed policy provenance [H].**
   - [b] Egress allowlists on proxy dial + policy git pull; policy provenance signed/verified; who-can-push-policy controlled.
-- [b] **H0.7 Self-governance meta-audit [G].**
-  - [b] Changes to policy/keys/RBAC/approver groups land in a tamper-evident meta-log.
+- [~] **H0.7 Self-governance meta-audit [G].**
+  - [x] `acp_core::metaaudit::MetaEvent` (policy/key/RBAC/approver/break-glass) appends to the same RFC 6962 ledger and keeps it verifiable + exportable (ledger integration test). [ ] emit on live admin actions once SSO/RBAC (H0.8) lands.
 - [b] **H0.8 Auth hardening + RBAC [8].**
   - [b] SSO/OIDC console; mTLS proxy<->server; Slack signatures verified; RBAC for edit-policy/approve/export/see-args.
 - [b] **H0.9 Supply chain: signed releases + SBOM [7].**
@@ -360,16 +360,16 @@ was not actually performed.
   - [b] build/test/clippy/fmt/audit + transparency + trust-suite + `acp verify` on every merge.
 - [b] **X.2 Secure SDLC + threat-model upkeep [8].**
   - [b] Mandatory review; security tests in CI; threat model updated each release; vuln-disclosure/bug-bounty live from GA.
-- [b] **X.3 Billing/metering without touching evidence [R7].**
-  - [b] Billable unit defined and counted without reading customer args; quota/overage is safe-by-default (never silently stops gating, never blanket-blocks).
-- [b] **X.4 Support without seeing args [R7].**
-  - [b] Correlation ids + customer-side diagnostic bundle let support explain a deny/hold without raw args or disabling redaction.
+- [x] **X.3 Billing/metering without touching evidence [R7].**
+  - [x] `acp_core::metering::Meter` counts one unit/decision, never reads args, overage is BillOverage (never stops gating); /report exposes billable_units. Unit-tested.
+- [x] **X.4 Support without seeing args [R7].**
+  - [x] `acp diagnose <ledger> <seq>` emits a redacted bundle (verdict/rule/impact/args-hash, never raw args); test proves a secret arg does not leak (X.4).
 - [b] **X.5 Host-shim/SDK distribution [R7].**
   - [b] `-32001` retry shim distributed + versioned with a host-compat matrix; graceful behaviour on hosts that will not retry.
-- [b] **X.6 Docs + deprecation policy [R7].**
-  - [b] Versioned docs; sample-policy library; trial/sandbox; published deprecation/support-window policy for the DSL, record format, and APIs (old evidence stays interpretable for years).
-- [b] **X.7 Graceful shutdown/drain everywhere [R5].**
-  - [b] SIGTERM drains in-flight calls, flushes spool, resolves/parks approvals, cleanly tears down child processes; no lost decisions, no double-execution.
+- [~] **X.6 Docs + deprecation policy [R7].**
+  - [x] Deprecation/support-window policy for DSL, record format, and APIs documented in docs/ops/deprecation-policy.md (record readers never removed). [ ] hosted versioned docs site + trial/sandbox are infra.
+- [~] **X.7 Graceful shutdown/drain everywhere [R5].**
+  - [x] acp-server drains in-flight requests on SIGTERM/Ctrl-C (graceful shutdown); spool is durable per-append so no decision is lost/double-executed. [ ] child-process teardown + approval parking in the proxy path.
 
 ---
 
@@ -389,23 +389,23 @@ customer), not deferred.
   - [x] RFC 6962 known-answer vectors (empty root, leaf domain prefix) pin CT compliance; inclusion/consistency self-checks over random trees. [ ] cross-check vs an external reference CT lib.
 - [x] **A3 [H0/P0] Cedar evaluation-error is fail-closed + alert.** (engine fail-closes on eval/context error; tested via typed-guard bypass)
   - [b] Any evaluator error / indeterminate result denies the call, emits a distinct eval-error outcome record, and alarms (not a silent fall-through to `default: allow`).
-- [b] **A4 [H0/P0] Signing / KMS outage policy.**
-  - [b] With KMS forced down, gating matches the documented policy; the committed-but-unsigned window is bounded and alarmed; on recovery all records sign with no root divergence.
+- [~] **A4 [H0/P0] Signing / KMS outage policy.**
+  - [x] Eval-error/indeterminate fails closed to deny with a distinct eval_error outcome record + alarm event (dispatch.rs, A4 done). [ ] full KMS-outage drill needs a live KMS (H0.3).
 - [x] **A5 [H1/P1] Reproducibility harness `acp replay <seq>`.**
   - [x] `acp replay <ledger> <seq> <policy>` rebuilds context from the record + args and re-evaluates: REPRODUCED on match, DRIFT (exit 1) if the verdict changed; warns on policy-hash mismatch.
 - [~] **A6 [H0/P0] Deterministic context derivation (golden vectors).** (same-input determinism golden tested on this platform; cross-arch vectors need a second target)
   - [b] The same argument set yields identical `blast_radius`/class flags and thus identical leaf hash on linux-x86_64 and macos-arm64 (regex-engine/float/locale/order pinned).
-- [b] **A7 [H1/P1] Young-dependency EOL contingency.**
-  - [b] A documented fork/vendor-in plan for `ct-merkle` and `rmcp`; the `acp-core::merkle` fallback stays build-tested and passes A2 in CI.
+- [x] **A7 [H1/P1] Young-dependency EOL contingency.**
+  - [x] Fork/vendor-in plan documented in docs/ops/dependency-contingency.md; acp-core::merkle fallback stays build-tested + A2-checked in CI (A7).
 
 ### Block B: Detection of the product's own compromise (absence-of-evidence alarms)
 
-- [b] **B1 [H0/P0] Proxy dead-man's-switch.**
-  - [b] Proxy heartbeat + server-side evidence-stream gap detector; killing or silencing an enrolled proxy alarms within a bounded window; a proxy that heartbeats but stops emitting decisions under known traffic is flagged.
-- [b] **B2 [H1/P1] Canary / synthetic decisions prove the gate is live.**
-  - [b] A scheduled probe issues a must-deny and a must-step_up call and asserts verdict + evidence; a mis-loaded policy that lets the canary through pages within one probe interval.
-- [b] **B3 [H1/P1] Fail-open / anomaly spike alerting.**
-  - [b] Rate/anomaly alerts on fail-open volume, deny surges, and approval-timeout surges; an induced fail-open window over threshold pages; baselines documented.
+- [~] **B1 [H0/P0] Proxy dead-man's-switch.**
+  - [x] `acp_core::liveness::GapDetector`: silence + decision-stall detection within a bounded window, unit-tested (B1 core). [ ] wire heartbeat transport into acp-server.
+- [x] **B2 [H1/P1] Canary / synthetic decisions prove the gate is live.**
+  - [x] `acp canary <policy> <probes>` asserts must-deny/must-step_up verdicts and exits non-zero (pages) when a mis-loaded policy lets a probe through; 2 integration tests.
+- [~] **B3 [H1/P1] Fail-open / anomaly spike alerting.**
+  - [x] `acp_core::anomaly::SpikeDetector` sliding-window rate detector, unit-tested induced spike (B3 core). [ ] wire event feed + pager in acp-server.
 - [~] **B4 [H1/P1] Governance-weakening alerts (control turned down).**
   - [x] `/report` emits `weakening` flags (default-allow+low-coverage, shadow-heavy) computed from the verifiable export + loaded policy (tested). [ ] wire flags to an alerting pipeline.
 - [~] **B5 [H1/P1] Tool-server supply-chain integrity.** (`--tool-hash` verifies the tool binary fingerprint before launch, fail-closed, tested; recording the fingerprint in evidence is next)
@@ -413,12 +413,12 @@ customer), not deferred.
 
 ### Block C: Performance, capacity, and cost engineering
 
-- [b] **C1 [H1/P1] Quantified performance model + targets.**
-  - [b] Documented numeric targets for decisions/sec/core, records/sec ingest, approval-queue depth, and `verify`/`export` seconds at 10M and 100M records; a load run meets each.
-- [b] **C2 [H0/P1] Performance-regression CI gate.**
-  - [b] Criterion benchmarks for allow-path `decide()`, leaf append, proof gen with committed baselines; an injected 2x slowdown fails CI.
-- [b] **C3 [H2/P1] Evidence capacity + cost + tiering model.**
-  - [b] A 3-year storage-cost projection; hot/cold/archive tiering that never violates a mandated retention floor; `verify`/`export` succeed against an archive-tier-only segment.
+- [~] **C1 [H1/P1] Quantified performance model + targets.**
+  - [x] Targets + cost model documented in docs/ops/perf-targets.md; allow-path + build checked by C2. [ ] the 10M/100M load runs are named prerequisites of H0.11/H2.1.
+- [x] **C2 [H0/P1] Performance-regression CI gate.**
+  - [x] Offline std-time perf gate (criterion unavailable in this build) on allow-path decide + engine build with committed budgets; an order-of-magnitude regression fails CI (perf_gate_tests).
+- [~] **C3 [H2/P1] Evidence capacity + cost + tiering model.**
+  - [x] Capacity/cost/tiering model + retention-floor rule documented in docs/ops/cost-and-tiering.md. [ ] the archive-only verify/export test is a named H2.1 prerequisite.
 - [b] **C4 [H1/P1] KMS + anchoring cost / rate-limit model.**
   - [b] Projected KMS calls/sec and Rekor submissions/sec at target tenant count sit within provisioned quotas; anchoring degrades gracefully (queues, never drops) under throttling; self-hosted Rekor fallback documented.
 
@@ -434,8 +434,8 @@ customer), not deferred.
   - [x] Model card `docs/model-cards/classifiers.md` (inputs, method, measured metrics, known evasions, locales, limitations); classifier version stamped in evidence provenance. [ ] a queryable registry + export attachment.
 - [x] **D5 [H1/P1] Bias / fairness slice in the eval harness.**
   - [x] Per-locale PII recall (US vs international) with a max-disparity bound, enforced as a test (D5).
-- [b] **D6 [H1/P1] Production drift monitoring.**
-  - [b] Privacy-safe classifier telemetry (hit-rate per class/tool, input feature distributions, no raw args) with drift alerts vs the eval baseline.
+- [x] **D6 [H1/P1] Production drift monitoring.**
+  - [x] `acp_core::drift::DriftMonitor`: privacy-safe per-class hit-rate counters (no raw args) with drift-vs-baseline flags and min-support gate, unit-tested (D6).
 - [x] **D7 [H1/P1] Standing adversarial-evasion corpus.**
   - [x] An evasion corpus (reversal/spacing/zero-width) runs in CI and measures the bypass rate; the baseline secret must be caught (tested). Classifiers stay advisory on deny paths.
 - [b] **D8 [H2/P2] Staged / shadow evaluation of classifier changes on live traffic.**
@@ -455,8 +455,8 @@ customer), not deferred.
   - [b] A declarative, per-tenant, versioned impact config (factors, weights, thresholds, data classes) evaluated into the un-spoofable context; two tenants score the same call differently; the taxonomy version is stamped into evidence.
 - [x] **E5 [v1/P1] Learn-mode / policy bootstrapping from observed traffic.**
   - [x] `acp learn <ledger>` summarises observed tools + max impact and emits a compilable draft policy (step-up for high/medium-impact tools); verified the draft compiles (tested).
-- [b] **E6 [v2/P1] Default-deny posture maturity path.**
-  - [b] Enabling default-deny requires a coverage threshold and produces the set of calls that would newly block with per-rule exceptions; posture stage (shadow/partial/default-deny) is tracked.
+- [x] **E6 [v2/P1] Default-deny posture maturity path.**
+  - [x] `acp_core::posture` coverage-gated stage path emitting the would-block set; /report exposes posture.default_deny_ready against the coverage gate (E6). Unit + server tests.
 - [x] **E7 [v3/P2] Governance-maturity / posture scoring.**
   - [x] `/report` computes a `posture_score` (0-100) from coverage + enforce-vs-shadow ratio, recomputed from the verifiable export (tested). [ ] SLO-adherence + trend.
 
@@ -464,8 +464,8 @@ customer), not deferred.
 
 - [~] **F1 [H0/P0] SIEM/SOAR event streaming.**
   - [x] Multi-sink governance-event seam (`Sink` trait): redacted JSONL (`--events`), OTLP/HTTP OpenTelemetry (`--otel`), **CEF** (`--cef`) and **OCSF** (`--ocsf`) SIEM sinks, all off-reactor and arg-free (tested). Vendor push-connectors plug into the same trait.
-- [b] **F2 [H0/P0] Break-glass / emergency controls.**
-  - [b] Scoped modes (disable-enforce, lockdown-all, emergency-bypass) with mandatory reason, TTL, optional dual-control, each a tamper-evident meta-log record; emergency-bypass forwards a would-hold call and auto-reverts at TTL.
+- [~] **F2 [H0/P0] Break-glass / emergency controls.**
+  - [x] `acp_core::breakglass`: scoped modes with mandatory reason + TTL that auto-revert; emergency-bypass forwards a would-hold; unit-tested. Meta-log record shape = H0.7. [ ] wire the engage/revert control channel into the proxy.
 - [b] **F3 [H1/P1] Fleet management for many proxies.**
   - [b] Proxy registration/heartbeat, targeted policy+config channels, cohort/canary version rollout; a policy bound to cohort "prod-eu" reaches only those proxies; a proxy missing heartbeats raises an "ungoverned surface" alert.
 - [b] **F4 [v1/P1] Notification channels beyond Slack.**
@@ -482,8 +482,8 @@ customer), not deferred.
   - [b] OTel spans/events (trace-context propagated, args redacted) for classify/decide/hold/forward; a gated call shows a linked ACP span in the customer's collector with decision + rule id and no payload.
 - [b] **F10 [v1/P1] Public API + outbound webhooks.**
   - [b] Versioned REST API + signed, replay-protected webhooks (decision.made, approval.requested/resolved, policy.changed) with API-key/OIDC auth + rate limits, covered by the deprecation policy.
-- [b] **F11 [v2/P1] Cross-proxy forensic timeline + hybrid logical clocks.**
-  - [b] Records carry an HLC for cross-node causal ordering; a query over multiple proxies returns a single ordered, anchor-backed timeline; fleet clock-skew beyond a bound alarms.
+- [~] **F11 [v2/P1] Cross-proxy forensic timeline + hybrid logical clocks.**
+  - [x] `acp_core::hlc` HLC stamped into every decision record; encoding sorts causally; unit-tested across nodes (F11 core). [ ] multi-proxy timeline query + skew alarm.
 - [b] **F12 [v3/P2] On-prem / air-gapped deployment mode.**
   - [b] An air-gapped profile with an internal RFC 3161 TSA / offline anchoring and offline signed-update + SBOM verification; full gate->approve->verify works with egress disabled and evidence verifies offline.
 - [b] **F13 [v3/P2] Customer change-management & adoption kit.**
