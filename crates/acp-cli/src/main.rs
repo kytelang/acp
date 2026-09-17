@@ -36,6 +36,7 @@ fn main() -> ExitCode {
         "learn" => cmd_learn(args.get(2).map(String::as_str)),
         "classify-eval" => cmd_classify_eval(args.get(2).map(String::as_str)),
         "canary" => cmd_canary(&args[2..]),
+        "diagnose" => cmd_diagnose(&args[2..]),
         _ => usage("acp [init|verify|verify-pack|export|policy-compile|policy-test|approve|deny|approvals|canary|learn|replay|purge|classify-eval]"),
     }
 }
@@ -563,4 +564,46 @@ fn cmd_canary(rest: &[String]) -> ExitCode {
         eprintln!("canary: {failures} probe(s) failed; policy may be mis-loaded (PAGE)");
         ExitCode::from(1)
     }
+}
+
+/// X.4: support without seeing arguments. `acp diagnose <ledger.db> <seq>` prints a redacted
+/// bundle a support engineer can use to explain a deny/hold, decision id, tool, verdict, rule,
+/// impact, hlc, and the args HASH, but never the raw arguments. Redaction is never disabled.
+fn cmd_diagnose(rest: &[String]) -> ExitCode {
+    let (ledger, seq_s) = match (rest.first(), rest.get(1)) {
+        (Some(l), Some(s)) => (l, s),
+        _ => return usage("acp diagnose <ledger.db> <seq>"),
+    };
+    let seq: u64 = match seq_s.parse() {
+        Ok(n) => n,
+        Err(_) => {
+            eprintln!("acp: seq must be a number");
+            return ExitCode::from(2);
+        }
+    };
+    // Deliberately ignore the args half of the tuple: the support bundle never carries payloads.
+    let (record, _args) = match acp_ledger::read_record(ledger, seq) {
+        Ok(v) => v,
+        Err(e) => {
+            eprintln!("acp: cannot read record #{seq}: {e}");
+            return ExitCode::from(1);
+        }
+    };
+    let action = &record["action"];
+    let decision = &record["decision"];
+    let bundle = serde_json::json!({
+        "seq": seq,
+        "hlc": record["hlc"],
+        "tool": action["tool"],
+        "env": action["env"],
+        "impact": action["impact"],
+        "args_hash": action["args_hash"],
+        "verdict": decision["verdict"],
+        "rule_id": decision["rule_id"],
+        "matched": decision["matched"],
+        "policy_hash": decision["policy_hash"],
+        "redacted": true
+    });
+    println!("{}", serde_json::to_string_pretty(&bundle).unwrap());
+    ExitCode::SUCCESS
 }
