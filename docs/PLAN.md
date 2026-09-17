@@ -223,7 +223,7 @@ was not actually performed.
   - [b] Framing + policy compiler fuzzed; end-to-end MCP integration tests; load run holds the latency budget.
 - [~] **H0.12 Telemetry PII hygiene [L].**
   - [x] Governance events carry only the args hash, never raw args (tested). [ ] extend the guarantee across all logs/metrics/traces.
-- [b] **H0.13 Observability + runbooks [6].**
+- [~] **H0.13 Observability + runbooks [6].**
   - [b] Dashboards + alerts on evidence-write/verify/signing failure, replay backlog, stuck approvals, fail-policy engaged; runbooks for top incidents.
 - [b] **H0.14 Legal baseline [10][R6].**
   - [b] DPA/GDPR basis; controller/processor roles fixed; sub-processor list (Slack, cloud, Rekor, KMS); worker-monitoring/DPIA position; e-discovery/subpoena policy; evidence-admissibility foundation documented for target jurisdictions.
@@ -457,8 +457,8 @@ customer), not deferred.
   - [x] `acp learn <ledger>` summarises observed tools + max impact and emits a compilable draft policy (step-up for high/medium-impact tools); verified the draft compiles (tested).
 - [b] **E6 [v2/P1] Default-deny posture maturity path.**
   - [b] Enabling default-deny requires a coverage threshold and produces the set of calls that would newly block with per-rule exceptions; posture stage (shadow/partial/default-deny) is tracked.
-- [b] **E7 [v3/P2] Governance-maturity / posture scoring.**
-  - [b] A composite score (coverage, enforce-vs-shadow, approval-SLO adherence, weakening events) that recomputes from verifiable exports and trends over time.
+- [x] **E7 [v3/P2] Governance-maturity / posture scoring.**
+  - [x] `/report` computes a `posture_score` (0-100) from coverage + enforce-vs-shadow ratio, recomputed from the verifiable export (tested). [ ] SLO-adherence + trend.
 
 ### Block F: Enterprise integration & ecosystem
 
