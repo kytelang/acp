@@ -14,6 +14,7 @@ pub mod classify;
 pub mod discovery;
 pub mod drift;
 pub mod egress;
+pub mod fleet;
 pub mod grc;
 pub mod hlc;
 pub mod impact;
@@ -34,6 +35,7 @@ pub mod ticket;
 pub mod timeline;
 pub mod tuning;
 pub mod types;
+pub mod warehouse;
 pub mod webhook;
 
 pub use types::{ActionContext, BlastRadius, Decision, Record, Verdict};

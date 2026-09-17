@@ -33,6 +33,20 @@ fn sort_value(v: serde_json::Value) -> serde_json::Value {
         serde_json::Value::Array(arr) => {
             serde_json::Value::Array(arr.into_iter().map(sort_value).collect())
         }
+        // JCS number handling (partial RFC 8785): an integer-valued float serialises as an
+        // integer, so 1.0 and 1 canonicalise identically. Arbitrary-precision float formatting
+        // remains a documented boundary.
+        serde_json::Value::Number(n) => {
+            if let Some(f) = n.as_f64() {
+                if f.fract() == 0.0 && f.abs() < 9.007_199_254_740_992e15 {
+                    if let Some(i) = n.as_i64() {
+                        return serde_json::Value::Number(i.into());
+                    }
+                    return serde_json::Value::Number((f as i64).into());
+                }
+            }
+            serde_json::Value::Number(n)
+        }
         other => other,
     }
 }

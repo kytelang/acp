@@ -410,8 +410,8 @@ was not actually performed.
   - [b] Ledger-preserving migrations with tested rollback; control-plane config changes audited.
 - [b] **H1.3 Reproducible builds + provenance + proxy auto-update [7][K].**
   - [b] Proxy build reproducible; SLSA-style provenance; signed, verifiable proxy update channel; deployed-version visibility.
-- [b] **H1.4 Full JCS + LTV operational [1][C].**
-  - [b] Canonicalisation is full RFC 8785 JCS; re-anchoring/re-timestamping of old heads operational.
+- [~] **H1.4 Full JCS + LTV operational [1][C].**
+  - [~] Canonicalisation is sorted-key + integer-normalised (1.0==1), with a conformance test pinning the record value domain so a leaf-hash-changing regression is caught (H1.4). [ ] arbitrary-precision float JCS + re-anchoring of old heads still open.
 - [b] **H1.5 Certifications started [10].**
   - [b] SOC 2 Type II and ISO 27001 programmes underway with evidence collection running (clock started).
 - [b] **H1.6 Commercial + continuity [10][E].**
@@ -611,16 +611,16 @@ customer), not deferred.
   - [x] Multi-sink governance-event seam (`Sink` trait): redacted JSONL (`--events`), OTLP/HTTP OpenTelemetry (`--otel`), **CEF** (`--cef`) and **OCSF** (`--ocsf`) SIEM sinks, all off-reactor and arg-free (tested). Vendor push-connectors plug into the same trait.
 - [~] **F2 [H0/P0] Break-glass / emergency controls.**
   - [x] `acp_core::breakglass`: scoped modes with mandatory reason + TTL that auto-revert; emergency-bypass forwards a would-hold; unit-tested. Meta-log record shape = H0.7. [ ] wire the engage/revert control channel into the proxy.
-- [b] **F3 [H1/P1] Fleet management for many proxies.**
-  - [b] Proxy registration/heartbeat, targeted policy+config channels, cohort/canary version rollout; a policy bound to cohort "prod-eu" reaches only those proxies; a proxy missing heartbeats raises an "ungoverned surface" alert.
+- [m] **F3 [H1/P1] Fleet management for many proxies.**
+  - [m] `acp_core::fleet::FleetRegistry`: register/heartbeat, cohort-scoped rollout targets (prod-eu reaches only its proxies), silent-proxy ungoverned-surface alert. Tested. Real config-push channel = transport.
 - [m] **F4 [v1/P1] Notification channels beyond Slack.**
   - [m] `acp_core::notify` injection-safe Teams Adaptive Card + PagerDuty rendering (hostile tool/reason stay data, cannot forge structure); `acp_core::webhook::verify_slack` verifies inbound approve/deny with replay protection. Tested. Real transport = reqwest POST.
 - [m] **F5 [v1/P1] Ticketing / ITSM integration.**
   - [m] `acp_core::ticket`: hold -> ticket state machine (Open->Approved/Denied->Consumed); consuming yields the single-use approval id exactly once (no double execution); ticket id is evidence-ready. Tested. Real Jira/ServiceNow sync = REST.
 - [m] **F6 [v1/P1] GRC/IRM integration.**
   - [m] `acp_core::grc::export_evidence`: decisions mapped to controls (AC-3/AU-2) with content-hash-stable evidence ids; re-pull is idempotent (tested). Real API = REST surface on acp-server.
-- [b] **F7 [v1/P1] Continuous export to the customer's warehouse.**
-  - [b] Streaming/batch sink to object-lock S3/GCS / Snowflake / BigQuery of redacted records + STH manifests; records land within SLA and independently re-verify against the exported STH.
+- [m] **F7 [v1/P1] Continuous export to the customer's warehouse.**
+  - [m] `acp_core::warehouse`: export rows (leaf record, never raw args) independently re-verify against the exported STH root via inclusion proof; a tampered warehouse row fails. Tested. Real sink = S3/Snowflake/BigQuery writer.
 - [m] **F8 [H1/P1] SCIM lifecycle for approver groups.**
   - [m] `acp_core::scim::ApproverDirectory`: provision/deprovision/reprovision transitions; deprovisioning removes approval authority (fail-closed), changes are meta-log-ready. Tested. Real SCIM REST endpoint drives these transitions.
 - [m] **F9 [v1/P1] OpenTelemetry governance spans.**
