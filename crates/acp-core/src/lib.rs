@@ -4,6 +4,7 @@
 //! trust-critical pieces are unit-testable in isolation: the four-way policy verdict, the
 //! RFC 6962-style verifiable log, and the signing seam.
 
+pub mod adapter;
 pub mod anchor;
 pub mod anomaly;
 pub mod blast_radius;

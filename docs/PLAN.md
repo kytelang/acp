@@ -435,8 +435,8 @@ was not actually performed.
 
 ### v2.1 Non-MCP interception (or promoted to v1-alt if the MCP boundary fails validation)
 
-- [b] **v2.1.1 Adapter model.**
-  - [b] Raw HTTP tool APIs and function-calling frameworks feed the same `ActionContext`; decision engine + evidence log unchanged.
+- [m] **v2.1.1 Adapter model.**
+  - [m] `acp_core::adapter`: raw HTTP + framework invocations normalise to one call shape (HTTP `POST /v1/payments/charge` == MCP `payments.charge`), so the decision + evidence path does not branch on the surface. Tested. Real HTTP front-end wires onto acp-server.
 - [b] **v2.1.2 Tool-server sandboxing.**
   - [b] Sandbox/isolation (seccomp/cgroups/netns ideas ported to Rust) available for launched tool servers.
 - [b] **v2.1.3 MCP-version-drift ownership [R3].**
@@ -469,8 +469,8 @@ was not actually performed.
   - [b] Multi-region deployment + data-residency controls where required.
 - [b] **H2.3 Sector attestations [10].**
   - [b] HIPAA posture (and other vertical attestations) as demanded by target verticals.
-- [b] **H2.4 Chaos + property tests [12].**
-  - [b] Failure-injection over outage/replay/leader-failover paths; property-based tests for Merkle inclusion/consistency invariants.
+- [~] **H2.4 Chaos + property tests [12].**
+  - [x] Exhaustive Merkle invariant tests (inclusion over sizes 1-64 every index; consistency 1-48; tamper changes root) in merkle_invariants.rs. [ ] failure-injection chaos harness over outage/replay/failover still open.
 
 ### v2 exit gate
 
