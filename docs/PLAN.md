@@ -444,10 +444,10 @@ was not actually performed.
 
 ### v2.2 Data-boundary governance
 
-- [b] **v2.2.1 Lineage records.**
-  - [b] Which data class flowed to which tool is recorded and attached to evidence; consent/purpose propagation captured.
-- [b] **v2.2.2 Classifier tuning loop [R7].**
-  - [b] False-pos/neg feedback path; classifier accuracy measured and improved over time; classifiers remain advisory on deny paths.
+- [x] **v2.2.1 Lineage records.**
+  - [x] `acp_core::lineage::LineageLog`: per-tool data-class flow + purpose recorded from class labels only (no raw values), attachable to evidence. Tested.
+- [x] **v2.2.2 Classifier tuning loop [R7].**
+  - [x] `acp_core::tuning::TuningLog`: labelled feedback -> running precision/recall; `apply_advisory` guard proves classifier feedback never flips an enforced verdict. Tested.
 
 ### v2.3 Shadow-AI discovery
 
@@ -615,16 +615,16 @@ customer), not deferred.
   - [b] Proxy registration/heartbeat, targeted policy+config channels, cohort/canary version rollout; a policy bound to cohort "prod-eu" reaches only those proxies; a proxy missing heartbeats raises an "ungoverned surface" alert.
 - [m] **F4 [v1/P1] Notification channels beyond Slack.**
   - [m] `acp_core::notify` injection-safe Teams Adaptive Card + PagerDuty rendering (hostile tool/reason stay data, cannot forge structure); `acp_core::webhook::verify_slack` verifies inbound approve/deny with replay protection. Tested. Real transport = reqwest POST.
-- [b] **F5 [v1/P1] Ticketing / ITSM integration.**
-  - [b] Bi-directional connector materialises a hold as a Jira/ServiceNow ticket and syncs the outcome; approving the ticket consumes the single-use approval; the ticket id is stored in the presented-context record.
+- [m] **F5 [v1/P1] Ticketing / ITSM integration.**
+  - [m] `acp_core::ticket`: hold -> ticket state machine (Open->Approved/Denied->Consumed); consuming yields the single-use approval id exactly once (no double execution); ticket id is evidence-ready. Tested. Real Jira/ServiceNow sync = REST.
 - [b] **F6 [v1/P1] GRC/IRM integration.**
   - [b] A connector exposes mapped control-evidence via API for ServiceNow IRM/Archer/OneTrust; a GRC platform pulls per-control evidence with stable ids; re-pull is idempotent.
 - [b] **F7 [v1/P1] Continuous export to the customer's warehouse.**
   - [b] Streaming/batch sink to object-lock S3/GCS / Snowflake / BigQuery of redacted records + STH manifests; records land within SLA and independently re-verify against the exported STH.
 - [m] **F8 [H1/P1] SCIM lifecycle for approver groups.**
   - [m] `acp_core::scim::ApproverDirectory`: provision/deprovision/reprovision transitions; deprovisioning removes approval authority (fail-closed), changes are meta-log-ready. Tested. Real SCIM REST endpoint drives these transitions.
-- [b] **F9 [v1/P1] OpenTelemetry governance spans.**
-  - [b] OTel spans/events (trace-context propagated, args redacted) for classify/decide/hold/forward; a gated call shows a linked ACP span in the customer's collector with decision + rule id and no payload.
+- [m] **F9 [v1/P1] OpenTelemetry governance spans.**
+  - [m] `acp_core::otelspan`: OTLP span with trace-context propagated + decision/rule/impact attributes and provably no argument payload (tested). Real emit = OTLP export (OtelSink already exists).
 - [m] **F10 [v1/P1] Public API + outbound webhooks.**
   - [m] `acp_core::webhook::sign_webhook`/`verify_webhook`: HMAC-SHA256 signed, timestamp-bound (replay-protected) webhooks; HMAC verified against RFC 4231. Tested. [ ] the versioned REST API surface + rate limits sit on the acp-server.
 - [~] **F11 [v2/P1] Cross-proxy forensic timeline + hybrid logical clocks.**
