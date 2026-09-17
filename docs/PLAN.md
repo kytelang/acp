@@ -370,8 +370,8 @@ was not actually performed.
   - [x] Governance events carry only the args hash, never raw args (tested). [ ] extend the guarantee across all logs/metrics/traces.
 - [~] **H0.13 Observability + runbooks [6].**
   - [b] Dashboards + alerts on evidence-write/verify/signing failure, replay backlog, stuck approvals, fail-policy engaged; runbooks for top incidents.
-- [b] **H0.14 Legal baseline [10][R6].**
-  - [b] DPA/GDPR basis; controller/processor roles fixed; sub-processor list (Slack, cloud, Rekor, KMS); worker-monitoring/DPIA position; e-discovery/subpoena policy; evidence-admissibility foundation documented for target jurisdictions.
+- [d] **H0.14 Legal baseline [10][R6].**
+  - [d] docs/compliance/dpa-and-subprocessors.md: controller/processor split, lawful basis, sub-processor list, retention/erasure (payload erasable without breaking the log), transfers/DPIA. [ ] execution with legal counsel is the open leg.
 - [b] **H0 GATE:** every H0 item complete before any customer runs ACP in production.
 
 ---
@@ -414,12 +414,12 @@ was not actually performed.
   - [~] Canonicalisation is sorted-key + integer-normalised (1.0==1), with a conformance test pinning the record value domain so a leaf-hash-changing regression is caught (H1.4). [ ] arbitrary-precision float JCS + re-anchoring of old heads still open.
 - [b] **H1.5 Certifications started [10].**
   - [b] SOC 2 Type II and ISO 27001 programmes underway with evidence collection running (clock started).
-- [b] **H1.6 Commercial + continuity [10][E].**
-  - [b] SLA, support process, status page; cyber-insurance + liability terms; vendor continuity / escrow / self-host option; data-portability guarantee.
+- [d] **H1.6 Commercial + continuity [10][E].**
+  - [d] docs/commercial/sla-and-continuity.md: SLA/SLO posture (fail-safe not fail-available), support-without-args, continuity (escrow/self-host), verifiable-export portability. [ ] contract-level SLA%/liability + status page remain.
 - [b] **H1.7 Cross-border + product AI status [R6].**
   - [b] Transfer mechanism (SCCs/IDTA/TIA); the product's own GDPR Art.22 / AI-Act status assessed and disclosed.
-- [b] **H1.8 Security-questionnaire machinery [R6].**
-  - [b] CAIQ/SIG answered; trust portal hosts SOC2, pen-test summary, sub-processor list, DPA.
+- [d] **H1.8 Security-questionnaire machinery [R6].**
+  - [d] docs/compliance/security-questionnaire.md: standing CAIQ/SIG answers kept in sync with the product + trust-portal index; gaps stated honestly. [ ] the hosted trust portal + the SOC2/pen-test artifacts it links are [e].
 - [b] **H1.9 Right-to-erasure + four-eyes [4][G].**
   - [b] Erasure removes payloads without breaking the append-only log; four-eyes/dual-control on key rotation, PII export, prod policy change.
 
