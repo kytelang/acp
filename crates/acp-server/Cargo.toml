@@ -3,9 +3,18 @@ name = "acp-server"
 version = "0.0.0"
 edition.workspace = true
 license.workspace = true
-description = "Agent Control Plane: control service - policy, approvals, evidence ledger, export."
+description = "Agent Control Plane: control service - approval inbox, policy endpoint, verify, reporting."
 
 [dependencies]
 acp-core = { path = "../acp-core" }
 acp-policy = { path = "../acp-policy" }
-# to wire: axum, sqlx, reqwest, maud, cedar-policy (M2/M3/M4)
+acp-ledger = { path = "../acp-ledger" }
+acp-approvals = { path = "../acp-approvals" }
+tokio = { workspace = true }
+axum = { workspace = true }
+maud = { workspace = true }
+serde_json.workspace = true
+
+[dev-dependencies]
+reqwest.workspace = true
+tokio = { workspace = true }

@@ -94,7 +94,7 @@ criteria are checked.
 - [x] **M2.1 YAML->Cedar loader + engine wiring.**
   - [x] Valid policy compiles, loads, evaluates via `cedar-policy`; malformed policies (bad YAML, unsupported matcher, bad Cedar) fail with a precise error.
 - [~] **M2.2 Policy content hashing + versioning.**
-  - [x] Same source -> same hash; edit -> new hash (tested). [ ] `/policy/current` endpoint lands with acp-server (M3/M4).
+  - [x] Same source -> same hash; edit -> new hash (tested); `/policy/current` served by acp-server (with max_staleness).
 - [x] **M2.3 `decide()` + namespaced context (D9).**
   - [x] Args under `context.args`; injected fields under `env`/`impact`/`derived`; an arg named `env`/`body_class` cannot spoof them (tested).
 - [x] **M2.4 Typed fail-closed guards + safe entity ids + regex bounds (D9).**
@@ -133,11 +133,11 @@ criteria are checked.
 - [x] **M4.2 Caller-bound + canonical-byte binding (D8).**
   - [x] Bound to id+session+principal (wrong caller denied); id includes canonical arg_hash, so changed arguments open a new hold, not ride the approval (tested end-to-end).
 - [~] **M4.3 Slack app + web inbox.**
-  - [x] Approve/Deny via `acp approve`/`acp deny` (CLI channel); approver+channel+timestamp recorded. [ ] Slack app + web inbox land with acp-server (axum, M5+).
+  - [x] Approve/Deny via the acp-server **web inbox** (maud, auto-escaped) and `acp approve`/`acp deny`; approver+channel+timestamp recorded. [ ] Slack app is next.
 - [x] **M4.4 Presented-context + acknowledgement (D8).**
   - [x] Presented-context snapshot stored at request; approver identity + timestamp recorded on resolve (the acknowledgement).
 - [~] **M4.5 Injection-safe rendering (R1).**
-  - [x] CSV/spreadsheet formula injection neutralised (`csv_safe`, tested). [ ] Slack Block Kit escaping + untrusted-content demarcation land with the inbox.
+  - [x] CSV formula injection neutralised (`csv_safe`); web inbox auto-escapes untrusted content (maud). [ ] Slack Block Kit escaping.
 - [~] **M4.6 `-32001` re-issue + host retry shim + clock-safe TTL.**
   - [x] `-32001` re-issue flow works; TTL is an absolute expiry in the single-authority store (skew-safe). [ ] host retry shim (tiny helper) deferred.
 - [ ] **M4.7 Approver operations baseline (R1).** (deferred: reminders, queue caps, notify-driver land with the inbox/server)
@@ -207,7 +207,7 @@ criteria are checked.
 
 ### v1.1 Multi-tenant control plane
 
-- [ ] **v1.1.1 Postgres + tenancy.**
+- [~] **v1.1.1 Postgres + tenancy.** (single-tenant acp-server control service built: web inbox, /policy/current, /verify, /report; Postgres + tenancy next)
   - [ ] Ledger on Postgres; tenants isolated in store and API; an isolation test suite proves no cross-tenant read/write.
 - [ ] **v1.1.2 Per-tenant keys + SSO [1.1].**
   - [ ] Per-tenant signing keys behind KMS; one tenant's key compromise cannot touch another's evidence; SSO/OIDC for the console.
