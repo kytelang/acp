@@ -364,8 +364,8 @@ was not actually performed.
   - [b] Proxy releases signed + SBOM published; customers can verify what they run; dependency scanning in CI.
 - [b] **H0.10 Third-party pen test [8].**
   - [b] Pen test of proxy/server/console complete; findings remediated.
-- [b] **H0.11 Fuzzing + E2E + load [12][9].**
-  - [b] Framing + policy compiler fuzzed; end-to-end MCP integration tests; load run holds the latency budget.
+- [~] **H0.11 Fuzzing + E2E + load [12][9].**
+  - [x] Framing + policy compiler fuzzed: deterministic 10k-input corpora assert no panic on hostile input, and the happy path still compiles (fuzz_robustness.rs, fuzz_frames.rs). [ ] full cargo-fuzz + E2E MCP + load run remain.
 - [~] **H0.12 Telemetry PII hygiene [L].**
   - [x] Governance events carry only the args hash, never raw args (tested). [ ] extend the guarantee across all logs/metrics/traces.
 - [~] **H0.13 Observability + runbooks [6].**
