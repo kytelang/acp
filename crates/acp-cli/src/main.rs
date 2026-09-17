@@ -39,6 +39,7 @@ fn main() -> ExitCode {
         "diagnose" => cmd_diagnose(&args[2..]),
         "sign-artifact" => cmd_sign_artifact(&args[2..]),
         "verify-artifact" => cmd_verify_artifact(&args[2..]),
+        "bench-ledger" => cmd_bench_ledger(&args[2..]),
         _ => usage("acp [init|verify|verify-pack|export|policy-compile|policy-test|approve|deny|approvals|canary|learn|replay|purge|classify-eval]"),
     }
 }
@@ -672,4 +673,40 @@ fn cmd_verify_artifact(rest: &[String]) -> ExitCode {
         println!("INVALID: {file} signature does not verify");
         ExitCode::from(1)
     }
+}
+
+
+/// H2.1: load-run tooling. Append N decision records to a fresh ledger and time append + verify, so
+/// the large-ledger cost model can be measured on real hardware (the 100M run is the same command
+/// with a bigger N on a load box).
+fn cmd_bench_ledger(rest: &[String]) -> ExitCode {
+    use acp_core::sign::Ed25519Signer;
+    use acp_ledger::Ledger;
+    use std::time::Instant;
+    let n: u64 = rest.first().and_then(|s| s.parse().ok()).unwrap_or(10_000);
+    let path = std::env::temp_dir().join(format!("acp-bench-{}.db", std::process::id()));
+    let _ = std::fs::remove_file(&path);
+    let mut l = match Ledger::open(path.to_str().unwrap(), Box::new(Ed25519Signer::generate())) {
+        Ok(l) => l,
+        Err(e) => {
+            eprintln!("acp: {e}");
+            return ExitCode::from(1);
+        }
+    };
+    let rec = |i: u64| serde_json::json!({"schema":1,"type":"decision","tool":"payments.charge","verdict":"deny","n":i});
+    let t0 = Instant::now();
+    for i in 0..n {
+        let _ = l.append(&format!("d{i}"), "decision", &rec(i), None);
+    }
+    let append_s = t0.elapsed().as_secs_f64();
+    let t1 = Instant::now();
+    let ok = l.verify().is_ok();
+    let verify_s = t1.elapsed().as_secs_f64();
+    let _ = std::fs::remove_file(&path);
+    println!(
+        "bench-ledger n={n}: append {append_s:.3}s ({:.0} rec/s), verify {verify_s:.3}s ({:.0} rec/s), verified={ok}",
+        n as f64 / append_s.max(1e-9),
+        n as f64 / verify_s.max(1e-9)
+    );
+    if ok { ExitCode::SUCCESS } else { ExitCode::from(1) }
 }
