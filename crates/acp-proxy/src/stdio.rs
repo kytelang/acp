@@ -4,10 +4,13 @@
 //! Non-decision frames pass through; `tools/call` is gated by the policy engine when one is
 //! loaded; other client-to-server requests are classified by `intercept::decide`.
 
+use crate::approvals::Step;
 use crate::evidence::Evidence;
 use crate::intercept::{decide, Action, CODE_BLOCKED};
 use crate::limits;
 use crate::policy::{self, Enforce};
+use acp_approvals::ApprovalStore;
+use acp_core::types::Verdict;
 use acp_jsonrpc::{classify, error_response, inspect, ParsedFrame};
 use acp_policy::PolicyEngine;
 use serde_json::Value;
@@ -23,9 +26,11 @@ pub async fn run(
     engine: Option<Arc<PolicyEngine>>,
     env: String,
     mut evidence: Option<Evidence>,
+    approvals: Option<ApprovalStore>,
 ) -> anyhow::Result<i32> {
     let agent = "stdio-client".to_string();
     let session = "stdio-session".to_string();
+    let principal = "unknown".to_string();
     let mut child = Command::new(cmd)
         .args(args)
         .stdin(Stdio::piped())
@@ -108,6 +113,63 @@ pub async fn run(
                 if let Some(eng) = &engine {
                     if let ParsedFrame::ToolCall(tc) = classify(raw) {
                         let a = policy::assess(eng, &env, &tc);
+
+                        // Step-up with an approval store: run the D8 approval flow (M4).
+                        if a.outcome.verdict == Verdict::StepUp {
+                            if let Some(store) = &approvals {
+                                match crate::approvals::handle(
+                                    store, &session, &principal, &tc, a.impact,
+                                ) {
+                                    Step::Forward(_view) => {
+                                        let did = evidence.as_mut().map(|ev| {
+                                            ev.record_decision(
+                                                &agent,
+                                                &session,
+                                                &tc,
+                                                &a.outcome,
+                                                a.impact,
+                                                eng.hash(),
+                                            )
+                                        });
+                                        let ok = to_child.send(line).await.is_ok();
+                                        if let (Some(ev), Some(did)) =
+                                            (evidence.as_mut(), did.as_ref())
+                                        {
+                                            ev.record_outcome(
+                                                did,
+                                                if ok { "forwarded" } else { "not_executed" },
+                                            );
+                                        }
+                                        if !ok {
+                                            break;
+                                        }
+                                    }
+                                    Step::Held(json) => {
+                                        let _ = c2s_out.send(json).await;
+                                    }
+                                    Step::Denied(json) => {
+                                        let did = evidence.as_mut().map(|ev| {
+                                            ev.record_decision(
+                                                &agent,
+                                                &session,
+                                                &tc,
+                                                &a.outcome,
+                                                a.impact,
+                                                eng.hash(),
+                                            )
+                                        });
+                                        let _ = c2s_out.send(json).await;
+                                        if let (Some(ev), Some(did)) =
+                                            (evidence.as_mut(), did.as_ref())
+                                        {
+                                            ev.record_outcome(did, "not_executed");
+                                        }
+                                    }
+                                }
+                                continue;
+                            }
+                        }
+
                         // record-before-forward (durable spool fsync happens inside record_decision)
                         let did = evidence.as_mut().map(|ev| {
                             ev.record_decision(

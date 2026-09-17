@@ -3,6 +3,7 @@
 //!
 //! `acp-proxy stdio [--policy <file.yaml>] [--env <env>] -- <mcp-server-cmd> [args...]`
 
+mod approvals;
 mod evidence;
 mod intercept;
 mod limits;
@@ -40,6 +41,7 @@ async fn main() -> ExitCode {
     let mut policy_path: Option<String> = None;
     let mut ledger_path: Option<String> = None;
     let mut key_path: Option<String> = None;
+    let mut approvals_path: Option<String> = None;
     let mut env = "prod".to_string();
     let mut it = opts.iter();
     while let Some(o) = it.next() {
@@ -47,6 +49,7 @@ async fn main() -> ExitCode {
             "--policy" => policy_path = it.next().cloned(),
             "--ledger" => ledger_path = it.next().cloned(),
             "--key" => key_path = it.next().cloned(),
+            "--approvals" => approvals_path = it.next().cloned(),
             "--env" => {
                 if let Some(v) = it.next() {
                     env = v.clone();
@@ -59,6 +62,7 @@ async fn main() -> ExitCode {
         }
     }
 
+    let approvals_default = ledger_path.as_ref().map(|l| format!("{l}.approvals"));
     let engine = match policy_path {
         Some(p) => {
             let src = match std::fs::read_to_string(&p) {
@@ -102,7 +106,30 @@ async fn main() -> ExitCode {
         None => None,
     };
 
-    match stdio::run(&cmd_args[0], &cmd_args[1..], engine, env, evidence).await {
+    let approvals = match approvals_path.or(approvals_default) {
+        Some(ap) => match acp_approvals::ApprovalStore::open(&ap) {
+            Ok(s) => {
+                eprintln!("acp-proxy: approvals store {ap}");
+                Some(s)
+            }
+            Err(e) => {
+                eprintln!("acp-proxy: cannot open approvals {ap}: {e}");
+                return ExitCode::from(1);
+            }
+        },
+        None => None,
+    };
+
+    match stdio::run(
+        &cmd_args[0],
+        &cmd_args[1..],
+        engine,
+        env,
+        evidence,
+        approvals,
+    )
+    .await
+    {
         Ok(code) => ExitCode::from(code as u8),
         Err(e) => {
             eprintln!("acp-proxy: {e}");

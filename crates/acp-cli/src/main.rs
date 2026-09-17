@@ -24,6 +24,12 @@ fn main() -> ExitCode {
             Some(p) => cmd_export(p),
             None => usage("acp export <ledger.db>"),
         },
+        "approve" => cmd_resolve(&args[2..], true),
+        "deny" => cmd_resolve(&args[2..], false),
+        "approvals" => match args.get(2) {
+            Some(p) => cmd_list_approvals(p),
+            None => usage("acp approvals <approvals.db>"),
+        },
         _ => usage("acp [init|verify|export|policy-compile|policy-test]"),
     }
 }
@@ -199,6 +205,59 @@ fn cmd_export(path: &str) -> ExitCode {
         }
         Err(e) => {
             eprintln!("acp: export failed: {e}");
+            ExitCode::from(1)
+        }
+    }
+}
+
+fn cmd_resolve(rest: &[String], approve: bool) -> ExitCode {
+    if rest.len() < 2 {
+        return usage("acp approve|deny <approvals.db> <id> [approver]");
+    }
+    let store = match acp_approvals::ApprovalStore::open(&rest[0]) {
+        Ok(s) => s,
+        Err(e) => {
+            eprintln!("acp: cannot open approvals {}: {e}", rest[0]);
+            return ExitCode::from(1);
+        }
+    };
+    let approver = rest.get(2).map(String::as_str).unwrap_or("cli-user");
+    match store.resolve(&rest[1], approve, approver, "cli") {
+        Ok(()) => {
+            println!(
+                "{} {}",
+                if approve { "approved" } else { "denied" },
+                rest[1]
+            );
+            ExitCode::SUCCESS
+        }
+        Err(e) => {
+            eprintln!("acp: {e}");
+            ExitCode::from(1)
+        }
+    }
+}
+
+fn cmd_list_approvals(path: &str) -> ExitCode {
+    let store = match acp_approvals::ApprovalStore::open(path) {
+        Ok(s) => s,
+        Err(e) => {
+            eprintln!("acp: cannot open approvals {path}: {e}");
+            return ExitCode::from(1);
+        }
+    };
+    match store.list_pending() {
+        Ok(list) => {
+            if list.is_empty() {
+                println!("(no pending approvals)");
+            }
+            for v in list {
+                println!("{}  tool={}  presented={}", v.id, v.tool, v.presented);
+            }
+            ExitCode::SUCCESS
+        }
+        Err(e) => {
+            eprintln!("acp: {e}");
             ExitCode::from(1)
         }
     }

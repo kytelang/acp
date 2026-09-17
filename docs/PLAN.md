@@ -128,21 +128,21 @@ criteria are checked.
 
 ### M4: Step-up approval (D8, R1)
 
-- [ ] **M4.1 Approvals API + single-use consume (D8).**
-  - [ ] Approval atomically consumed; a second re-issue is denied; two concurrent re-issues do not both forward.
-- [ ] **M4.2 Caller-bound + canonical-byte binding (D8).**
-  - [ ] Approval bound to approvalId+session+principal (cross-session reuse denied); a re-issue whose bytes do not canonicalise to the approved request is rejected, not relayed.
-- [ ] **M4.3 Slack app + web inbox.**
-  - [ ] Approve/Deny works on both; Slack webhook signature verified; approver identity+channel+timestamp recorded.
-- [ ] **M4.4 Presented-context + acknowledgement (D8).**
-  - [ ] The record stores the exact context the approver saw plus an explicit acknowledgement.
-- [ ] **M4.5 Injection-safe rendering (R1).**
-  - [ ] Slack Block Kit/`mrkdwn` escaped (no fake buttons/link/@here spoofing); CSV export escapes formula-prefixed fields; untrusted content demarcated.
-- [ ] **M4.6 `-32001` re-issue + host retry shim + clock-safe TTL.**
-  - [ ] An unmodified agent using the shim transparently waits through an approval; TTL evaluated against a single authority / signed absolute expiry (skew-safe).
-- [ ] **M4.7 Approver operations baseline (R1).**
+- [x] **M4.1 Approvals API + single-use consume (D8).**
+  - [x] Atomic single-use consume; second re-issue denied; concurrent consume: exactly one wins (tested).
+- [x] **M4.2 Caller-bound + canonical-byte binding (D8).**
+  - [x] Bound to id+session+principal (wrong caller denied); id includes canonical arg_hash, so changed arguments open a new hold, not ride the approval (tested end-to-end).
+- [~] **M4.3 Slack app + web inbox.**
+  - [x] Approve/Deny via `acp approve`/`acp deny` (CLI channel); approver+channel+timestamp recorded. [ ] Slack app + web inbox land with acp-server (axum, M5+).
+- [x] **M4.4 Presented-context + acknowledgement (D8).**
+  - [x] Presented-context snapshot stored at request; approver identity + timestamp recorded on resolve (the acknowledgement).
+- [~] **M4.5 Injection-safe rendering (R1).**
+  - [x] CSV/spreadsheet formula injection neutralised (`csv_safe`, tested). [ ] Slack Block Kit escaping + untrusted-content demarcation land with the inbox.
+- [~] **M4.6 `-32001` re-issue + host retry shim + clock-safe TTL.**
+  - [x] `-32001` re-issue flow works; TTL is an absolute expiry in the single-authority store (skew-safe). [ ] host retry shim (tiny helper) deferred.
+- [ ] **M4.7 Approver operations baseline (R1).** (deferred: reminders, queue caps, notify-driver land with the inbox/server)
   - [ ] No-response behaviour defined; reminders; the human driving the agent is notified on hold/drop; queue caps + retryAfter jitter under a step_up burst.
-- [ ] **Gate:** approve/deny/expire on both channels; one approval = exactly one action; every outcome is a verifiable record.
+- [~] **Gate:** one approval = exactly one action (met, tested); every outcome is a verifiable record (met). Approve/deny/expire via the CLI channel; Slack/web channels deferred to acp-server.
 
 ### M5: HTTP transport, shadow, anti-bypass, polish
 
