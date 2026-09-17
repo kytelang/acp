@@ -5,6 +5,7 @@
 //! reverts when the TTL passes, and is designed to be written to the tamper-evident meta-audit
 //! log (see `metaaudit`). `EmergencyBypass` forwards a call that would otherwise be held.
 
+use crate::metaaudit::{MetaEvent, MetaKind};
 use crate::types::Verdict;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -67,6 +68,61 @@ impl BreakGlass {
     }
 }
 
+/// Tracks active break-glass grants and ties every engage/revert to the meta-audit log (F2).
+/// A grant auto-reverts when its TTL passes; `sweep` produces the revert meta-events to record.
+#[derive(Debug, Default)]
+pub struct BreakGlassRegistry {
+    grants: Vec<(BreakGlass, String)>,
+}
+
+impl BreakGlassRegistry {
+    pub fn new() -> Self {
+        Self::default()
+    }
+
+    /// Engage a mode. Returns the meta-audit event the caller must append to the tamper-evident
+    /// log, so there is no way to engage break-glass without an auditable record.
+    pub fn engage(
+        &mut self,
+        mode: Mode,
+        reason: &str,
+        actor: &str,
+        now_ms: u64,
+        ttl_ms: u64,
+    ) -> Result<MetaEvent, String> {
+        let bg = BreakGlass::engage(mode, reason, now_ms, ttl_ms)?;
+        let ev = MetaEvent::new(MetaKind::BreakGlassEngage, actor, reason, now_ms)?
+            .transition(None, Some(&format!("{mode:?}")));
+        self.grants.push((bg, actor.to_string()));
+        Ok(ev)
+    }
+
+    /// The verdict after applying every currently-active grant to a base verdict.
+    pub fn effective(&self, base: Verdict, now_ms: u64) -> Verdict {
+        self.grants
+            .iter()
+            .filter(|(g, _)| g.active(now_ms))
+            .fold(base, |acc, (g, _)| g.apply(acc, now_ms))
+    }
+
+    /// Drop expired grants and return a revert meta-event for each, for the meta-audit log.
+    pub fn sweep(&mut self, now_ms: u64) -> Vec<MetaEvent> {
+        let mut reverts = Vec::new();
+        let mut kept = Vec::new();
+        for (g, actor) in std::mem::take(&mut self.grants) {
+            if g.active(now_ms) {
+                kept.push((g, actor));
+            } else if let Ok(ev) =
+                MetaEvent::new(MetaKind::BreakGlassRevert, &actor, "ttl expired", now_ms)
+            {
+                reverts.push(ev.transition(Some(&format!("{:?}", g.mode)), None));
+            }
+        }
+        self.grants = kept;
+        reverts
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -96,5 +152,41 @@ mod tests {
     fn lockdown_denies_everything_while_active() {
         let bg = BreakGlass::engage(Mode::LockdownAll, "breach", 0, 1000).unwrap();
         assert_eq!(bg.apply(Verdict::Allow, 10), Verdict::Deny);
+    }
+}
+
+#[cfg(test)]
+mod registry_tests {
+    use super::*;
+
+    #[test]
+    fn engage_emits_a_meta_event_and_takes_effect() {
+        let mut reg = BreakGlassRegistry::new();
+        let ev = reg
+            .engage(Mode::EmergencyBypass, "pager-42", "oncall", 0, 1000)
+            .unwrap();
+        assert_eq!(format!("{:?}", ev.kind), "BreakGlassEngage");
+        // A would-hold call is forwarded while the grant is active.
+        assert_eq!(reg.effective(Verdict::StepUp, 500), Verdict::Allow);
+    }
+
+    #[test]
+    fn expired_grants_auto_revert_with_a_meta_event() {
+        let mut reg = BreakGlassRegistry::new();
+        reg.engage(Mode::EmergencyBypass, "pager", "oncall", 0, 1000)
+            .unwrap();
+        // After the TTL, the grant no longer applies and sweep yields a revert record.
+        assert_eq!(reg.effective(Verdict::StepUp, 2000), Verdict::StepUp);
+        let reverts = reg.sweep(2000);
+        assert_eq!(reverts.len(), 1);
+        assert_eq!(format!("{:?}", reverts[0].kind), "BreakGlassRevert");
+        // Sweeping again yields nothing (already removed).
+        assert!(reg.sweep(3000).is_empty());
+    }
+
+    #[test]
+    fn a_reason_is_still_mandatory_through_the_registry() {
+        let mut reg = BreakGlassRegistry::new();
+        assert!(reg.engage(Mode::LockdownAll, "", "actor", 0, 1000).is_err());
     }
 }
