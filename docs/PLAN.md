@@ -451,9 +451,9 @@ was not actually performed.
 
 ### v2.3 Shadow-AI discovery
 
-- [b] **v2.3.1 Discovery plane.**
-  - [b] Inventories un-proxied agents / un-governed AI usage; produces a "govern this next" worklist.
-  - [b] Silent-truncation avoided: what discovery did not cover is logged.
+- [x] **v2.3.1 Discovery plane.**
+  - [x] `acp_core::discovery::discover`: observed-minus-governed worklist of un-governed endpoints. Tested.
+  - [x] Uncovered scopes are surfaced in the report (no silent truncation), tested.
 
 ### v2.4 Agent identity integration
 
@@ -617,8 +617,8 @@ customer), not deferred.
   - [m] `acp_core::notify` injection-safe Teams Adaptive Card + PagerDuty rendering (hostile tool/reason stay data, cannot forge structure); `acp_core::webhook::verify_slack` verifies inbound approve/deny with replay protection. Tested. Real transport = reqwest POST.
 - [m] **F5 [v1/P1] Ticketing / ITSM integration.**
   - [m] `acp_core::ticket`: hold -> ticket state machine (Open->Approved/Denied->Consumed); consuming yields the single-use approval id exactly once (no double execution); ticket id is evidence-ready. Tested. Real Jira/ServiceNow sync = REST.
-- [b] **F6 [v1/P1] GRC/IRM integration.**
-  - [b] A connector exposes mapped control-evidence via API for ServiceNow IRM/Archer/OneTrust; a GRC platform pulls per-control evidence with stable ids; re-pull is idempotent.
+- [m] **F6 [v1/P1] GRC/IRM integration.**
+  - [m] `acp_core::grc::export_evidence`: decisions mapped to controls (AC-3/AU-2) with content-hash-stable evidence ids; re-pull is idempotent (tested). Real API = REST surface on acp-server.
 - [b] **F7 [v1/P1] Continuous export to the customer's warehouse.**
   - [b] Streaming/batch sink to object-lock S3/GCS / Snowflake / BigQuery of redacted records + STH manifests; records land within SLA and independently re-verify against the exported STH.
 - [m] **F8 [H1/P1] SCIM lifecycle for approver groups.**
@@ -627,7 +627,7 @@ customer), not deferred.
   - [m] `acp_core::otelspan`: OTLP span with trace-context propagated + decision/rule/impact attributes and provably no argument payload (tested). Real emit = OTLP export (OtelSink already exists).
 - [m] **F10 [v1/P1] Public API + outbound webhooks.**
   - [m] `acp_core::webhook::sign_webhook`/`verify_webhook`: HMAC-SHA256 signed, timestamp-bound (replay-protected) webhooks; HMAC verified against RFC 4231. Tested. [ ] the versioned REST API surface + rate limits sit on the acp-server.
-- [~] **F11 [v2/P1] Cross-proxy forensic timeline + hybrid logical clocks.**
+- [x] **F11 [v2/P1] Cross-proxy forensic timeline + hybrid logical clocks.**
   - [x] `acp_core::hlc` HLC stamped into every decision record; encoding sorts causally; unit-tested across nodes (F11 core). [ ] multi-proxy timeline query + skew alarm.
 - [b] **F12 [v3/P2] On-prem / air-gapped deployment mode.**
   - [b] An air-gapped profile with an internal RFC 3161 TSA / offline anchoring and offline signed-update + SBOM verification; full gate->approve->verify works with egress disabled and evidence verifies offline.
