@@ -10,9 +10,9 @@ rules:
   - id: block-prod-deletes
     when:
       tool: "db.*"
+      env: { eq: "prod" }
       arg:
         operation: { in: ["delete", "drop", "truncate"] }
-        env: { eq: "prod" }
     verdict: step_up
     approvers: ["oncall-platform"]
     reason: "Destructive prod DB operation"

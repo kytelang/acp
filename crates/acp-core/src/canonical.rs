@@ -24,8 +24,10 @@ fn sort_value(v: serde_json::Value) -> serde_json::Value {
     match v {
         serde_json::Value::Object(map) => {
             // BTreeMap sorts keys; recurse into values.
-            let sorted: std::collections::BTreeMap<String, serde_json::Value> =
-                map.into_iter().map(|(k, val)| (k, sort_value(val))).collect();
+            let sorted: std::collections::BTreeMap<String, serde_json::Value> = map
+                .into_iter()
+                .map(|(k, val)| (k, sort_value(val)))
+                .collect();
             serde_json::to_value(sorted).expect("serialisable")
         }
         serde_json::Value::Array(arr) => {

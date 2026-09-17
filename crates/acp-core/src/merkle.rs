@@ -132,13 +132,7 @@ fn subproof(m: usize, leaves: &[Hash], b: bool) -> Vec<Hash> {
 }
 
 /// Verify an inclusion proof: does `leaf` at `index` in a tree of `size` produce `root`?
-pub fn verify_inclusion(
-    leaf: Hash,
-    index: usize,
-    size: usize,
-    proof: &[Hash],
-    root: Hash,
-) -> bool {
+pub fn verify_inclusion(leaf: Hash, index: usize, size: usize, proof: &[Hash], root: Hash) -> bool {
     if index >= size {
         return false;
     }

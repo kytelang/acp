@@ -1,0 +1,495 @@
+//! The evidence ledger (decisions D3/D6/D7/D11): a durable, append-only, RFC 6962-verifiable log.
+//!
+//! Records are leaves in a Merkle tree; the head is signed with Ed25519 (never per-record). The
+//! SQLite store enforces append-only on `records` and `tree_heads` via triggers; `args_blob` is
+//! separately purgeable so payloads can be dropped while the signed decisions stay verifiable.
+//! `append` is idempotent by `decision_id` (retried batches never create duplicate leaves), and
+//! `verify` catches both an edited leaf (named by seq) and a history rewrite (unsigned root).
+
+pub mod spool;
+
+use acp_core::canonical::{canonical_bytes, sha256_hex};
+use acp_core::merkle::{leaf_hash, Hash, MerkleLog};
+use acp_core::sign::{sign_sth, verify_sth, SignedTreeHead, Signer};
+use rusqlite::{params, Connection, OpenFlags, OptionalExtension};
+use serde_json::{json, Value};
+use std::time::{SystemTime, UNIX_EPOCH};
+
+const SCHEMA: &str = r#"
+CREATE TABLE IF NOT EXISTS records (
+  seq         INTEGER PRIMARY KEY AUTOINCREMENT,
+  decision_id TEXT NOT NULL UNIQUE,
+  kind        TEXT NOT NULL,
+  canonical   BLOB NOT NULL,
+  leaf_hash   BLOB NOT NULL,
+  args_hash   TEXT,
+  created_ms  INTEGER NOT NULL
+);
+CREATE TABLE IF NOT EXISTS args_blob ( args_hash TEXT PRIMARY KEY, blob BLOB NOT NULL );
+CREATE TABLE IF NOT EXISTS tree_heads ( size INTEGER PRIMARY KEY, root BLOB NOT NULL, ts_ms INTEGER NOT NULL, sig BLOB NOT NULL );
+CREATE TABLE IF NOT EXISTS meta ( k TEXT PRIMARY KEY, v TEXT NOT NULL );
+CREATE TRIGGER IF NOT EXISTS records_no_update BEFORE UPDATE ON records
+  BEGIN SELECT RAISE(ABORT,'records are append-only'); END;
+CREATE TRIGGER IF NOT EXISTS records_no_delete BEFORE DELETE ON records
+  BEGIN SELECT RAISE(ABORT,'records are append-only'); END;
+CREATE TRIGGER IF NOT EXISTS heads_no_update BEFORE UPDATE ON tree_heads
+  BEGIN SELECT RAISE(ABORT,'tree heads are append-only'); END;
+"#;
+
+pub struct Ledger {
+    conn: Connection,
+    merkle: MerkleLog,
+    signer: Box<dyn Signer + Send>,
+    public_key: Vec<u8>,
+    algorithm: String,
+}
+
+fn now_ms() -> u64 {
+    SystemTime::now()
+        .duration_since(UNIX_EPOCH)
+        .unwrap()
+        .as_millis() as u64
+}
+
+impl Ledger {
+    /// Open (or create) a ledger at `path`, signing tree heads with `signer`. Exclusive locking
+    /// gives the single-writer guarantee (D6): a second writer on the same file cannot extend it.
+    pub fn open(path: &str, signer: Box<dyn Signer + Send>) -> Result<Ledger, String> {
+        let conn = Connection::open(path).map_err(|e| e.to_string())?;
+        conn.pragma_update(None, "journal_mode", "WAL").ok();
+        conn.pragma_update(None, "locking_mode", "EXCLUSIVE").ok();
+        conn.execute_batch(SCHEMA).map_err(|e| e.to_string())?;
+
+        let public_key = signer.public_key();
+        let algorithm = signer.algorithm().to_string();
+        // Pin the public key + algorithm on first open; refuse a mismatched key thereafter.
+        let stored_pk: Option<String> = conn
+            .query_row("SELECT v FROM meta WHERE k='public_key'", [], |r| r.get(0))
+            .optional()
+            .map_err(|e| e.to_string())?;
+        match stored_pk {
+            None => {
+                conn.execute(
+                    "INSERT INTO meta(k,v) VALUES('public_key',?)",
+                    params![hex::encode(&public_key)],
+                )
+                .map_err(|e| e.to_string())?;
+                conn.execute(
+                    "INSERT INTO meta(k,v) VALUES('algorithm',?)",
+                    params![algorithm],
+                )
+                .map_err(|e| e.to_string())?;
+            }
+            Some(pk) if pk != hex::encode(&public_key) => {
+                return Err("ledger public key does not match the provided signer".into());
+            }
+            _ => {}
+        }
+
+        // Rebuild the Merkle tree from stored leaves (persisted state, R4).
+        let mut merkle = MerkleLog::new();
+        {
+            let mut stmt = conn
+                .prepare("SELECT canonical FROM records ORDER BY seq")
+                .map_err(|e| e.to_string())?;
+            let rows = stmt
+                .query_map([], |r| r.get::<_, Vec<u8>>(0))
+                .map_err(|e| e.to_string())?;
+            for row in rows {
+                merkle.append(&row.map_err(|e| e.to_string())?);
+            }
+        }
+        Ok(Ledger {
+            conn,
+            merkle,
+            signer,
+            public_key,
+            algorithm,
+        })
+    }
+
+    fn existing(&self, decision_id: &str) -> Result<Option<u64>, String> {
+        self.conn
+            .query_row(
+                "SELECT seq FROM records WHERE decision_id=?",
+                params![decision_id],
+                |r| r.get::<_, i64>(0),
+            )
+            .optional()
+            .map(|o| o.map(|v| v as u64))
+            .map_err(|e| e.to_string())
+    }
+
+    /// Append a record. Idempotent by `decision_id`: a repeat returns the existing seq and does
+    /// NOT extend the log (no duplicate leaves, D11). Extends the Merkle head and signs a new STH.
+    pub fn append(
+        &mut self,
+        decision_id: &str,
+        kind: &str,
+        record: &Value,
+        args: Option<&Value>,
+    ) -> Result<u64, String> {
+        if let Some(seq) = self.existing(decision_id)? {
+            return Ok(seq);
+        }
+        let canonical = canonical_bytes(record);
+        let leaf = leaf_hash(&canonical);
+        let args_hash = args.map(sha256_hex);
+        if let (Some(a), Some(h)) = (args, &args_hash) {
+            self.conn
+                .execute(
+                    "INSERT OR IGNORE INTO args_blob(args_hash,blob) VALUES(?,?)",
+                    params![h, serde_json::to_vec(a).unwrap()],
+                )
+                .map_err(|e| e.to_string())?;
+        }
+        let ts = now_ms();
+        self.conn
+            .execute(
+                "INSERT INTO records(decision_id,kind,canonical,leaf_hash,args_hash,created_ms) VALUES(?,?,?,?,?,?)",
+                params![decision_id, kind, canonical, leaf.to_vec(), args_hash, ts as i64],
+            )
+            .map_err(|e| e.to_string())?;
+        let seq = self.conn.last_insert_rowid() as u64;
+
+        self.merkle.append(&canonical);
+        let sth = SignedTreeHead {
+            tree_size: self.merkle.size() as u64,
+            root_hash: self.merkle.root(),
+            timestamp_ms: ts,
+        };
+        let sig = sign_sth(&*self.signer, &sth);
+        self.conn
+            .execute(
+                "INSERT INTO tree_heads(size,root,ts_ms,sig) VALUES(?,?,?,?)",
+                params![sth.tree_size as i64, sth.root_hash.to_vec(), ts as i64, sig],
+            )
+            .map_err(|e| e.to_string())?;
+        Ok(seq)
+    }
+
+    /// Append a linked outcome record for an earlier decision (D11): forwarded / not_executed /
+    /// eval_error, so the ledger never implies an action happened.
+    pub fn outcome(
+        &mut self,
+        outcome_id: &str,
+        ref_seq: u64,
+        kind: &str,
+        detail: Option<&str>,
+    ) -> Result<u64, String> {
+        let rec = json!({ "schema": 1, "type": "outcome", "ref_seq": ref_seq, "kind": kind, "detail": detail });
+        self.append(outcome_id, "outcome", &rec, None)
+    }
+
+    pub fn size(&self) -> usize {
+        self.merkle.size()
+    }
+
+    pub fn root(&self) -> Hash {
+        self.merkle.root()
+    }
+
+    /// Verify the whole ledger. Returns the first problem, or Ok. Catches an edited leaf (named by
+    /// seq) and a rewrite (a stored head whose root no longer matches the current leaves, which the
+    /// attacker cannot re-sign without the key).
+    pub fn verify(&self) -> Result<(), String> {
+        let mut merkle = MerkleLog::new();
+        let mut stmt = self
+            .conn
+            .prepare("SELECT seq,canonical,leaf_hash FROM records ORDER BY seq")
+            .map_err(|e| e.to_string())?;
+        let rows = stmt
+            .query_map([], |r| {
+                Ok((
+                    r.get::<_, i64>(0)?,
+                    r.get::<_, Vec<u8>>(1)?,
+                    r.get::<_, Vec<u8>>(2)?,
+                ))
+            })
+            .map_err(|e| e.to_string())?;
+        for row in rows {
+            let (seq, canonical, stored_leaf) = row.map_err(|e| e.to_string())?;
+            let leaf = leaf_hash(&canonical);
+            if leaf.to_vec() != stored_leaf {
+                return Err(format!("evidence tampered: leaf mismatch at seq {seq}"));
+            }
+            merkle.append(&canonical);
+        }
+        // Every stored head must match the current leaves at its size and carry a valid signature.
+        let mut hs = self
+            .conn
+            .prepare("SELECT size,root,ts_ms,sig FROM tree_heads ORDER BY size")
+            .map_err(|e| e.to_string())?;
+        let heads = hs
+            .query_map([], |r| {
+                Ok((
+                    r.get::<_, i64>(0)?,
+                    r.get::<_, Vec<u8>>(1)?,
+                    r.get::<_, i64>(2)?,
+                    r.get::<_, Vec<u8>>(3)?,
+                ))
+            })
+            .map_err(|e| e.to_string())?;
+        let mut any = false;
+        for head in heads {
+            any = true;
+            let (size, root, ts, sig) = head.map_err(|e| e.to_string())?;
+            let size = size as usize;
+            if size > merkle.size() {
+                return Err(format!(
+                    "tree head size {size} exceeds record count {}",
+                    merkle.size()
+                ));
+            }
+            let recomputed = acp_core::merkle::root_of(
+                &(0..size)
+                    .map(|i| merkle.leaf(i).unwrap())
+                    .collect::<Vec<_>>(),
+            );
+            if recomputed.to_vec() != root {
+                return Err(format!(
+                    "history rewrite: root at size {size} does not match signed head"
+                ));
+            }
+            let sth = SignedTreeHead {
+                tree_size: size as u64,
+                root_hash: recomputed,
+                timestamp_ms: ts as u64,
+            };
+            if !verify_sth(&self.public_key, &sth, &sig) {
+                return Err(format!("invalid signature on tree head at size {size}"));
+            }
+        }
+        if !any && merkle.size() > 0 {
+            return Err("records exist but no signed tree head".into());
+        }
+        Ok(())
+    }
+
+    /// Retention purge: drop argument payloads older than `before_ms`. The signed decisions stay
+    /// verifiable because the leaf commits to the record (which holds only the args hash).
+    pub fn purge_args(&self, before_ms: u64) -> Result<usize, String> {
+        self.conn
+            .execute(
+                "DELETE FROM args_blob WHERE args_hash IN (SELECT args_hash FROM records WHERE created_ms < ? AND args_hash IS NOT NULL)",
+                params![before_ms as i64],
+            )
+            .map_err(|e| e.to_string())
+    }
+
+    /// Build a signed, self-verifying export pack (D3/M3.7). Verifiable on a clean machine with
+    /// only the public key inside the pack.
+    pub fn export(&self) -> Result<Value, String> {
+        let mut stmt = self
+            .conn
+            .prepare("SELECT seq,decision_id,kind,canonical FROM records ORDER BY seq")
+            .map_err(|e| e.to_string())?;
+        let recs: Vec<Value> = stmt
+            .query_map([], |r| {
+                Ok(json!({
+                    "seq": r.get::<_, i64>(0)?,
+                    "decision_id": r.get::<_, String>(1)?,
+                    "kind": r.get::<_, String>(2)?,
+                    "canonical": hex::encode(r.get::<_, Vec<u8>>(3)?),
+                }))
+            })
+            .map_err(|e| e.to_string())?
+            .collect::<Result<_, _>>()
+            .map_err(|e| e.to_string())?;
+        let (size, root, ts, sig): (i64, Vec<u8>, i64, Vec<u8>) = self
+            .conn
+            .query_row(
+                "SELECT size,root,ts_ms,sig FROM tree_heads ORDER BY size DESC LIMIT 1",
+                [],
+                |r| Ok((r.get(0)?, r.get(1)?, r.get(2)?, r.get(3)?)),
+            )
+            .map_err(|e| e.to_string())?;
+        Ok(json!({
+            "algorithm": self.algorithm,
+            "public_key": hex::encode(&self.public_key),
+            "sth": { "tree_size": size, "root": hex::encode(&root), "timestamp_ms": ts, "sig": hex::encode(&sig) },
+            "records": recs,
+        }))
+    }
+}
+
+/// Verify an export pack standalone, using only the public key inside it (no database, M3.7).
+pub fn verify_pack(pack: &Value) -> Result<(), String> {
+    let public_key = hex::decode(pack["public_key"].as_str().ok_or("missing public_key")?)
+        .map_err(|e| e.to_string())?;
+    let mut merkle = MerkleLog::new();
+    for r in pack["records"].as_array().ok_or("missing records")? {
+        let canonical = hex::decode(r["canonical"].as_str().ok_or("missing canonical")?)
+            .map_err(|e| e.to_string())?;
+        merkle.append(&canonical);
+    }
+    let size = pack["sth"]["tree_size"]
+        .as_i64()
+        .ok_or("missing tree_size")? as usize;
+    let root = hex::decode(pack["sth"]["root"].as_str().ok_or("missing root")?)
+        .map_err(|e| e.to_string())?;
+    let sig = hex::decode(pack["sth"]["sig"].as_str().ok_or("missing sig")?)
+        .map_err(|e| e.to_string())?;
+    let ts = pack["sth"]["timestamp_ms"]
+        .as_i64()
+        .ok_or("missing timestamp")? as u64;
+    if merkle.size() != size {
+        return Err(format!(
+            "record count {} does not match tree size {size}",
+            merkle.size()
+        ));
+    }
+    if merkle.root().to_vec() != root {
+        return Err("recomputed root does not match the signed tree head".into());
+    }
+    let sth = SignedTreeHead {
+        tree_size: size as u64,
+        root_hash: merkle.root(),
+        timestamp_ms: ts,
+    };
+    if !verify_sth(&public_key, &sth, &sig) {
+        return Err("tree head signature invalid".into());
+    }
+    Ok(())
+}
+
+/// Verify a ledger file read-only, using only the public key stored inside it (no private key,
+/// no write access). This is what `acp verify` runs.
+pub fn verify_file(path: &str) -> Result<(), String> {
+    let conn = Connection::open_with_flags(path, OpenFlags::SQLITE_OPEN_READ_ONLY)
+        .map_err(|e| e.to_string())?;
+    let pk_hex: String = conn
+        .query_row("SELECT v FROM meta WHERE k='public_key'", [], |r| r.get(0))
+        .map_err(|e| e.to_string())?;
+    let public_key = hex::decode(&pk_hex).map_err(|e| e.to_string())?;
+
+    let mut merkle = MerkleLog::new();
+    let mut stmt = conn
+        .prepare("SELECT seq,canonical,leaf_hash FROM records ORDER BY seq")
+        .map_err(|e| e.to_string())?;
+    let rows = stmt
+        .query_map([], |r| {
+            Ok((
+                r.get::<_, i64>(0)?,
+                r.get::<_, Vec<u8>>(1)?,
+                r.get::<_, Vec<u8>>(2)?,
+            ))
+        })
+        .map_err(|e| e.to_string())?;
+    for row in rows {
+        let (seq, canonical, stored_leaf) = row.map_err(|e| e.to_string())?;
+        if leaf_hash(&canonical).to_vec() != stored_leaf {
+            return Err(format!("evidence tampered: leaf mismatch at seq {seq}"));
+        }
+        merkle.append(&canonical);
+    }
+    let mut hs = conn
+        .prepare("SELECT size,root,ts_ms,sig FROM tree_heads ORDER BY size")
+        .map_err(|e| e.to_string())?;
+    let heads = hs
+        .query_map([], |r| {
+            Ok((
+                r.get::<_, i64>(0)?,
+                r.get::<_, Vec<u8>>(1)?,
+                r.get::<_, i64>(2)?,
+                r.get::<_, Vec<u8>>(3)?,
+            ))
+        })
+        .map_err(|e| e.to_string())?;
+    for head in heads {
+        let (size, root, ts, sig) = head.map_err(|e| e.to_string())?;
+        let size = size as usize;
+        if size > merkle.size() {
+            return Err(format!(
+                "tree head size {size} exceeds record count {}",
+                merkle.size()
+            ));
+        }
+        let recomputed = acp_core::merkle::root_of(
+            &(0..size)
+                .map(|i| merkle.leaf(i).unwrap())
+                .collect::<Vec<_>>(),
+        );
+        if recomputed.to_vec() != root {
+            return Err(format!(
+                "history rewrite: root at size {size} does not match signed head"
+            ));
+        }
+        let sth = SignedTreeHead {
+            tree_size: size as u64,
+            root_hash: recomputed,
+            timestamp_ms: ts as u64,
+        };
+        if !verify_sth(&public_key, &sth, &sig) {
+            return Err(format!("invalid signature on tree head at size {size}"));
+        }
+    }
+    Ok(())
+}
+
+/// Build an export pack from a ledger file read-only. This is what `acp export` runs.
+pub fn export_file(path: &str) -> Result<Value, String> {
+    let conn = Connection::open_with_flags(path, OpenFlags::SQLITE_OPEN_READ_ONLY)
+        .map_err(|e| e.to_string())?;
+    let public_key: String = conn
+        .query_row("SELECT v FROM meta WHERE k='public_key'", [], |r| r.get(0))
+        .map_err(|e| e.to_string())?;
+    let algorithm: String = conn
+        .query_row("SELECT v FROM meta WHERE k='algorithm'", [], |r| r.get(0))
+        .map_err(|e| e.to_string())?;
+    let mut stmt = conn
+        .prepare("SELECT seq,decision_id,kind,canonical FROM records ORDER BY seq")
+        .map_err(|e| e.to_string())?;
+    let recs: Vec<Value> = stmt
+        .query_map([], |r| {
+            Ok(json!({
+                "seq": r.get::<_, i64>(0)?,
+                "decision_id": r.get::<_, String>(1)?,
+                "kind": r.get::<_, String>(2)?,
+                "canonical": hex::encode(r.get::<_, Vec<u8>>(3)?),
+            }))
+        })
+        .map_err(|e| e.to_string())?
+        .collect::<Result<_, _>>()
+        .map_err(|e| e.to_string())?;
+    let (size, root, ts, sig): (i64, Vec<u8>, i64, Vec<u8>) = conn
+        .query_row(
+            "SELECT size,root,ts_ms,sig FROM tree_heads ORDER BY size DESC LIMIT 1",
+            [],
+            |r| Ok((r.get(0)?, r.get(1)?, r.get(2)?, r.get(3)?)),
+        )
+        .map_err(|e| e.to_string())?;
+    Ok(json!({
+        "algorithm": algorithm,
+        "public_key": public_key,
+        "sth": {"tree_size": size, "root": hex::encode(&root), "timestamp_ms": ts, "sig": hex::encode(&sig)},
+        "records": recs,
+    }))
+}
+
+/// Read a single record (and its args, if not purged) by seq, read-only. Used by `acp replay`.
+pub fn read_record(path: &str, seq: u64) -> Result<(Value, Option<Value>), String> {
+    let conn = Connection::open_with_flags(path, OpenFlags::SQLITE_OPEN_READ_ONLY)
+        .map_err(|e| e.to_string())?;
+    let (canonical, args_hash): (Vec<u8>, Option<String>) = conn
+        .query_row(
+            "SELECT canonical,args_hash FROM records WHERE seq=?",
+            params![seq as i64],
+            |r| Ok((r.get(0)?, r.get(1)?)),
+        )
+        .map_err(|e| e.to_string())?;
+    let record: Value = serde_json::from_slice(&canonical).map_err(|e| e.to_string())?;
+    let args = match args_hash {
+        Some(h) => conn
+            .query_row(
+                "SELECT blob FROM args_blob WHERE args_hash=?",
+                params![h],
+                |r| r.get::<_, Vec<u8>>(0),
+            )
+            .optional()
+            .map_err(|e| e.to_string())?
+            .and_then(|b| serde_json::from_slice(&b).ok()),
+        None => None,
+    };
+    Ok((record, args))
+}

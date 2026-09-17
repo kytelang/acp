@@ -8,7 +8,7 @@
 forbid(principal, action, resource)
 when {
     context.tool like "db.*" &&
-    context.args has env && context.args.env == "prod" &&
+    context.env == "prod" &&
     context.args has operation && context.args.operation in ["delete", "drop", "truncate"]
 };
 
@@ -27,7 +27,7 @@ when {
 forbid(principal, action, resource)
 when {
     context.tool == "email.send" &&
-    context.args has body_class && context.args.body_class == "pii"
+    context.derived has body_class && context.derived.body_class == "pii"
 };
 
 @id("allow-readonly")

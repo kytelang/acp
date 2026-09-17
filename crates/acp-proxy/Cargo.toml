@@ -5,7 +5,25 @@ edition.workspace = true
 license.workspace = true
 description = "Agent Control Plane: transparent MCP interception proxy (stdio + HTTP)."
 
+[[bin]]
+name = "acp-proxy"
+path = "src/main.rs"
+
+[[bin]]
+name = "mock-mcp-server"
+path = "src/bin/mock_mcp_server.rs"
+
 [dependencies]
 acp-core = { path = "../acp-core" }
 acp-jsonrpc = { path = "../acp-jsonrpc" }
-# to wire: tokio, hyper (M1/M5)
+acp-policy = { path = "../acp-policy" }
+acp-ledger = { path = "../acp-ledger" }
+acp-approvals = { path = "../acp-approvals" }
+tokio = { workspace = true }
+serde_json.workspace = true
+anyhow.workspace = true
+axum.workspace = true
+reqwest.workspace = true
+
+[dev-dependencies]
+tokio = { workspace = true }

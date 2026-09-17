@@ -7,4 +7,6 @@
 
 pub mod message;
 
-pub use message::{ParsedFrame, ToolCall};
+pub use message::{
+    classify, error_response, inspect, is_request, Inspected, ParsedFrame, ToolCall,
+};

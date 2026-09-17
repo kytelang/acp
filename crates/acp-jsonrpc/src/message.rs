@@ -40,5 +40,63 @@ pub fn classify(raw: &[u8]) -> ParsedFrame {
         .and_then(|p| p.get("arguments"))
         .cloned()
         .unwrap_or(Value::Object(Default::default()));
-    ParsedFrame::ToolCall(ToolCall { id, name, arguments })
+    ParsedFrame::ToolCall(ToolCall {
+        id,
+        name,
+        arguments,
+    })
+}
+
+/// A lightweight structural read of a frame, used by the proxy to route without re-serialising.
+#[derive(Debug, Clone, PartialEq)]
+pub struct Inspected {
+    /// The JSON-RPC method, if present (absent for responses).
+    pub method: Option<String>,
+    /// The request id, if present (absent for notifications and some responses).
+    pub id: Option<Value>,
+    /// True when the frame parsed as JSON at all.
+    pub valid_json: bool,
+    /// True when method == "tools/call".
+    pub is_tool_call: bool,
+}
+
+/// Inspect a frame: extract method and id without mutating anything.
+pub fn inspect(raw: &[u8]) -> Inspected {
+    match serde_json::from_slice::<Value>(raw) {
+        Ok(v) => {
+            let method = v
+                .get("method")
+                .and_then(Value::as_str)
+                .map(|s| s.to_string());
+            let id = v.get("id").cloned();
+            let is_tool_call = method.as_deref() == Some("tools/call");
+            Inspected {
+                method,
+                id,
+                valid_json: true,
+                is_tool_call,
+            }
+        }
+        Err(_) => Inspected {
+            method: None,
+            id: None,
+            valid_json: false,
+            is_tool_call: false,
+        },
+    }
+}
+
+/// A request has both a method and an id (as opposed to a notification, which has no id).
+pub fn is_request(insp: &Inspected) -> bool {
+    insp.method.is_some() && insp.id.is_some()
+}
+
+/// Build a single-line JSON-RPC error response for a given request id.
+pub fn error_response(id: &Value, code: i64, message: &str) -> String {
+    serde_json::json!({
+        "jsonrpc": "2.0",
+        "id": id,
+        "error": { "code": code, "message": message }
+    })
+    .to_string()
 }

@@ -1,19 +1,16 @@
-//! Compile the YAML policy DSL to Cedar policy text (decision D2).
+//! Compile the YAML policy DSL to Cedar policy text (decision D2), with D9 namespacing.
 //!
-//! Mapping:
-//!   verdict     -> `@verdict(...)` annotation; `allow` -> `permit`, else -> `forbid`
-//!   approvers   -> `@approvers("a,b")` annotation
-//!   reason      -> `@reason("...")` annotation
-//!   tool        -> `context.tool == "x"` / `like "x.*"` / omitted for `*`
-//!   arg matcher -> guarded `context.args has k && <cond>` using Cedar operators
+//! Namespaces in the Cedar `context`:
+//!   context.args.*     agent-supplied arguments (untrusted; the only place agent data lands)
+//!   context.env        proxy-injected environment (trusted)
+//!   context.impact     proxy-derived impact level (trusted)
+//!   context.derived.*  proxy-derived flags such as data-class (trusted; un-spoofable by args)
 //!
-//! At evaluation time (M2) the engine returns the determining policy id; its `@verdict`
-//! resolves the four-way outcome.
+//! The four-way verdict rides on a `@verdict` annotation read back from the determining policy.
 
 use crate::dsl::{Matcher, Policy, Rule};
 use acp_core::types::Verdict;
 
-/// Compile a whole policy set to Cedar text.
 pub fn compile_to_cedar(policy: &Policy) -> String {
     policy
         .rules
@@ -29,7 +26,10 @@ fn compile_rule(rule: &Rule) -> String {
     out.push_str(&format!("@id(\"{}\")\n", esc(&rule.id)));
     out.push_str(&format!("@verdict(\"{}\")\n", verdict_str(rule.verdict)));
     if !rule.approvers.is_empty() {
-        out.push_str(&format!("@approvers(\"{}\")\n", esc(&rule.approvers.join(","))));
+        out.push_str(&format!(
+            "@approvers(\"{}\")\n",
+            esc(&rule.approvers.join(","))
+        ));
     }
     if let Some(reason) = &rule.reason {
         out.push_str(&format!("@reason(\"{}\")\n", esc(reason)));
@@ -45,6 +45,12 @@ fn compile_rule(rule: &Rule) -> String {
     let mut conds: Vec<String> = Vec::new();
     if let Some(tc) = tool_cond(&rule.when.tool) {
         conds.push(tc);
+    }
+    if let Some(m) = &rule.when.env {
+        conds.push(trusted_cond("context.env", m));
+    }
+    if let Some(m) = &rule.when.impact {
+        conds.push(trusted_cond("context.impact", m));
     }
     for (key, matcher) in &rule.when.arg {
         conds.push(arg_cond(key, matcher));
@@ -68,6 +74,16 @@ fn tool_cond(tool: &str) -> Option<String> {
     }
 }
 
+/// A matcher on a trusted top-level field (env, impact). These fields are always present in the
+/// context, so no `has` guard is needed.
+fn trusted_cond(path: &str, m: &Matcher) -> String {
+    let (op, val) = match m.op() {
+        Some(p) => p,
+        None => return "true".into(),
+    };
+    cmp(path, op, val)
+}
+
 fn arg_cond(key: &str, m: &Matcher) -> String {
     let base = format!("context.args.{key}");
     let has = format!("context.args has {key}");
@@ -75,36 +91,35 @@ fn arg_cond(key: &str, m: &Matcher) -> String {
         Some(pair) => pair,
         None => return format!("{has} /* empty matcher */"),
     };
+    if op == "contains_class" {
+        // Data class lives in the un-spoofable derived namespace, never under agent args (D9).
+        return format!(
+            "context.derived has {key}_class && context.derived.{key}_class == \"{}\"",
+            esc(str_of(val))
+        );
+    }
+    format!("{has} && {}", cmp(&base, op, val))
+}
+
+/// Render a comparator against a fully-qualified path.
+fn cmp(path: &str, op: &str, val: &serde_yaml::Value) -> String {
     match op {
         "in" => {
             let items = val
                 .as_sequence()
                 .map(|s| s.iter().map(lit).collect::<Vec<_>>().join(", "))
                 .unwrap_or_default();
-            format!("{has} && {base} in [{items}]")
+            format!("{path} in [{items}]")
         }
-        "eq" => format!("{has} && {base} == {}", lit(val)),
-        "ne" => format!("{has} && {base} != {}", lit(val)),
-        "gt" => format!("{has} && {base} > {}", num(val)),
-        "gte" => format!("{has} && {base} >= {}", num(val)),
-        "lt" => format!("{has} && {base} < {}", num(val)),
-        "lte" => format!("{has} && {base} <= {}", num(val)),
-        "contains" => format!("{has} && {base} like \"*{}*\"", esc(str_of(val))),
-        // Cedar has no regex; the proxy enforces it and sets a match flag in context.
-        "regex" => format!("{has} /* regex enforced in proxy */"),
-        "exists" => {
-            if val.as_bool().unwrap_or(true) {
-                has
-            } else {
-                format!("!({has})")
-            }
-        }
-        // Data-class: the proxy classifies the value and sets `<key>_class` in context.
-        "contains_class" => format!(
-            "context.args has {key}_class && context.args.{key}_class == \"{}\"",
-            esc(str_of(val))
-        ),
-        other => format!("{has} /* unknown matcher '{other}' */"),
+        "eq" => format!("{path} == {}", lit(val)),
+        "ne" => format!("{path} != {}", lit(val)),
+        "gt" => format!("{path} > {}", num(val)),
+        "gte" => format!("{path} >= {}", num(val)),
+        "lt" => format!("{path} < {}", num(val)),
+        "lte" => format!("{path} <= {}", num(val)),
+        "contains" => format!("{path} like \"*{}*\"", esc(str_of(val))),
+        "exists" => path.to_string(), // presence handled by the caller's `has`
+        other => format!("false /* unknown matcher '{other}' */"),
     }
 }
 
@@ -117,7 +132,6 @@ fn verdict_str(v: Verdict) -> &'static str {
     }
 }
 
-/// Render a YAML scalar as a Cedar literal.
 fn lit(v: &serde_yaml::Value) -> String {
     match v {
         serde_yaml::Value::String(s) => format!("\"{}\"", esc(s)),

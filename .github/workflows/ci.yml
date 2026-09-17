@@ -17,7 +17,7 @@ jobs:
       - name: test
         run: cargo test --workspace
       - name: transparency (M1 golden)
-        run: cargo test -p acp-proxy -- --include-ignored
+        run: make test-transparency
   audit:
     runs-on: ubuntu-latest
     steps:
