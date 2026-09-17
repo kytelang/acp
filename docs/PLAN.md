@@ -333,16 +333,16 @@ was not actually performed.
 
 ### v0 exit gate (unlocks v1)
 
-- [b] **V0.G1** Two design partners run real agents through the proxy over MCP.
-- [b] **V0.G2** One auditor/security reviewer accepts an exported evidence pack as verifiable.
-- [b] **V0.G3** Approval + evidence survive an `acp-server` outage with no ledger gap.
+- [e] **V0.G1** Two design partners run real agents through the proxy over MCP. (external: design-partner engagement)
+- [e] **V0.G2** One auditor/security reviewer accepts an exported evidence pack as verifiable. (external: auditor sign-off; the pack + `acp verify-pack` are built)
+- [x] **V0.G3** Approval + evidence survive an outage with no ledger gap: spooled decisions replay on restart, no loss, idempotent (ledger_tests).
 - [b] **V0.G4** All M1-M5 gates green; the D8-D11 acceptance tests (build-spec section 11) pass.
 
 ---
 
 ## H0: Hardening gate (parallel to v1.1; REQUIRED before first production customer)
 
-- [b] **H0.1 Independent crypto/log review [1].**
+- [e] **H0.1 Independent crypto/log review [1].** (external: reviewer sign-off; known-answer vectors + acp-core::merkle are built)
   - [b] Third-party review (or adoption of a vetted CT lib) signed off; findings remediated.
   - [b] `acp verify` has known-answer test vectors against reference CT vectors.
 - [m] **H0.2 External transparency anchoring [1][D].**
@@ -362,7 +362,7 @@ was not actually performed.
   - [m] `acp-auth`: Entra ID OIDC verify (iss/aud/exp/sig via JWKS) + RBAC for edit-policy/approve/export/see-args, mock Entra IdP, 8 tests. Real Entra = JWKS URL swap. [ ] mTLS proxy<->server + Slack signature verify still open.
 - [~] **H0.9 Supply chain: signed releases + SBOM [7].**
   - [x] CycloneDX SBOM generated offline from the resolved graph (scripts/sbom.sh + `make sbom`, 360 components incl. our crates); cargo-audit dependency scan in CI. [ ] release signing (cosign/sigstore) needs a signing key = deploy step.
-- [b] **H0.10 Third-party pen test [8].**
+- [e] **H0.10 Third-party pen test [8].** (external: pen-test vendor; the fuzz/robustness suites are built)
   - [b] Pen test of proxy/server/console complete; findings remediated.
 - [~] **H0.11 Fuzzing + E2E + load [12][9].**
   - [x] Framing + policy compiler fuzzed: deterministic 10k-input corpora assert no panic on hostile input, and the happy path still compiles (fuzz_robustness.rs, fuzz_frames.rs). [ ] full cargo-fuzz + E2E MCP + load run remain.
@@ -391,8 +391,8 @@ was not actually performed.
 
 - [d] **v1.2.1 Control-framework mappings.**
   - [d] docs/compliance/control-mappings.md maps ACP controls + evidence to EU AI Act, ISO 42001, NIST AI RMF, and SOC2/800-53, each row naming the ledger field/module that evidences it (grc export is the machine form). [ ] compliance/legal expert review is the open leg.
-- [b] **v1.2.2 Sector minimum-retention enforcement [R6].**
-  - [b] Per-vertical minimum-retention (SEC 17a-4/FINRA/MiFID) enforced; purge cannot violate a mandated minimum.
+- [x] **v1.2.2 Sector minimum-retention enforcement [R6].**
+  - [x] `acp_core::retention`: purge is fail-closed below the mandated floor (floor overrides a shorter tenant setting); tested.
 - [b] **v1.2.3 Auditor access + attestation [R6].**
   - [b] Scoped, revocable, non-operator read-only auditor access; third-party attestation of the tamper-evidence mechanism obtainable.
 
@@ -412,7 +412,7 @@ was not actually performed.
   - [~] SBOM + pinned Cargo.lock give the build inputs (H0.9); `--locked` builds are deterministic. [ ] SLSA provenance attestation + signed update channel need the release/signing infra.
 - [~] **H1.4 Full JCS + LTV operational [1][C].**
   - [~] Canonicalisation is sorted-key + integer-normalised (1.0==1), with a conformance test pinning the record value domain so a leaf-hash-changing regression is caught (H1.4). [ ] arbitrary-precision float JCS + re-anchoring of old heads still open.
-- [b] **H1.5 Certifications started [10].**
+- [e] **H1.5 Certifications started [10].** (external: SOC2/ISO auditor; control-mappings + questionnaire are built)
   - [b] SOC 2 Type II and ISO 27001 programmes underway with evidence collection running (clock started).
 - [d] **H1.6 Commercial + continuity [10][E].**
   - [d] docs/commercial/sla-and-continuity.md: SLA/SLO posture (fail-safe not fail-available), support-without-args, continuity (escrow/self-host), verifiable-export portability. [ ] contract-level SLA%/liability + status page remain.
@@ -420,14 +420,14 @@ was not actually performed.
   - [b] Transfer mechanism (SCCs/IDTA/TIA); the product's own GDPR Art.22 / AI-Act status assessed and disclosed.
 - [d] **H1.8 Security-questionnaire machinery [R6].**
   - [d] docs/compliance/security-questionnaire.md: standing CAIQ/SIG answers kept in sync with the product + trust-portal index; gaps stated honestly. [ ] the hosted trust portal + the SOC2/pen-test artifacts it links are [e].
-- [b] **H1.9 Right-to-erasure + four-eyes [4][G].**
-  - [b] Erasure removes payloads without breaking the append-only log; four-eyes/dual-control on key rotation, PII export, prod policy change.
+- [~] **H1.9 Right-to-erasure + four-eyes [4][G].**
+  - [x] `Ledger::erase_args_for(id)` removes a subject's payload; the record + hash remain so the ledger still verifies (tested). [ ] four-eyes/dual-control on key rotation still to wire.
 
 ### v1 GA gate
 
 - [b] **V1.G1** All v1.1-v1.3 tasks + H0 + H1 complete.
 - [b] **V1.G2** SOC 2 Type II / ISO 27001 evidence collection running; DPA + trust portal live.
-- [b] **V1.G3** At least one paying customer live in production with a clean incident record.
+- [e] **V1.G3** At least one paying customer live in production with a clean incident record. (external: a sale)
 
 ---
 
@@ -467,7 +467,7 @@ was not actually performed.
   - [b] Merkle proof + query cost validated at hundreds of millions of records; archival/compaction strategy in place.
 - [b] **H2.2 Multi-region / residency [3][4].**
   - [b] Multi-region deployment + data-residency controls where required.
-- [b] **H2.3 Sector attestations [10].**
+- [e] **H2.3 Sector attestations [10].** (external: HIPAA/sector assessor)
   - [b] HIPAA posture (and other vertical attestations) as demanded by target verticals.
 - [~] **H2.4 Chaos + property tests [12].**
   - [x] Exhaustive Merkle invariant tests (inclusion over sizes 1-64 every index; consistency 1-48; tamper changes root) in merkle_invariants.rs. [ ] failure-injection chaos harness over outage/replay/failover still open.
@@ -481,7 +481,7 @@ was not actually performed.
 
 ## v3: Scale & assurance (enterprise-scale, production-ready GA at scale)
 
-- [b] **v3.1 Certifications complete.**
+- [e] **v3.1 Certifications complete.** (external: SOC2 Type II report issued, ISO 27001 certified)
   - [b] SOC 2 Type II report issued; ISO 27001 certified; reliance/assurance-letter framework (bridge letter, sub-service-org method) available [R6].
 - [d] **v3.2 Enterprise procurement readiness.**
   - [d] docs/commercial/procurement.md: audit rights, DORA register fields, pooled audits, government-access/transparency position, export-control classification. [ ] binding versions need legal review.
@@ -585,7 +585,7 @@ customer), not deferred.
   - [x] An evasion corpus (reversal/spacing/zero-width) runs in CI and measures the bypass rate; the baseline secret must be caught (tested). Classifiers stay advisory on deny paths.
 - [b] **D8 [H2/P2] Staged / shadow evaluation of classifier changes on live traffic.**
   - [b] A new classifier version runs in shadow against live traffic, producing a per-tenant fire-rate diff; promotion is gated on that diff.
-- [b] **D9 [H2/P2] External benchmark of the classifiers.**
+- [e] **D9 [H2/P2] External benchmark of the classifiers.** (external: a named public reference corpus)
   - [b] A reproducible comparison against a named public reference corpus, with methodology and limits documented in the model card.
 
 ### Block E: Governance analytics & posture (prove the control works)

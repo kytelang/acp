@@ -270,6 +270,18 @@ impl Ledger {
 
     /// Retention purge: drop argument payloads older than `before_ms`. The signed decisions stay
     /// verifiable because the leaf commits to the record (which holds only the args hash).
+    /// Right-to-erasure for a single decision (H1.9): remove the argument payload for one record
+    /// without touching the leaf. The leaf hash is over the canonical record (not the args blob),
+    /// so the ledger still verifies after erasure; only the recoverable value is gone.
+    pub fn erase_args_for(&self, decision_id: &str) -> Result<usize, String> {
+        self.conn
+            .execute(
+                "DELETE FROM args_blob WHERE args_hash IN (SELECT args_hash FROM records WHERE decision_id = ? AND args_hash IS NOT NULL)",
+                params![decision_id],
+            )
+            .map_err(|e| e.to_string())
+    }
+
     pub fn purge_args(&self, before_ms: u64) -> Result<usize, String> {
         self.conn
             .execute(

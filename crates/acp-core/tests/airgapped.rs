@@ -25,7 +25,11 @@ fn gate_evidence_and_verify_work_fully_offline() {
 
     // 2. Evidence: sign the tree head with the KMS seam (LocalKms = internal signer, no cloud).
     let km = KeyManager::new(LocalKms::new());
-    let sth = SignedTreeHead { tree_size: log.size() as u64, root_hash: root, timestamp_ms: 1_700 };
+    let sth = SignedTreeHead {
+        tree_size: log.size() as u64,
+        root_hash: root,
+        timestamp_ms: 1_700,
+    };
     let signed = km.sign_sth(&sth);
 
     // 3. Anchor: submit the head to an internal (offline) transparency anchor.
@@ -33,17 +37,36 @@ fn gate_evidence_and_verify_work_fully_offline() {
     let receipt = anchor.submit(&sth, 1_700);
 
     // 4. Verify the whole chain offline: signature, an inclusion proof, and the anchor receipt.
-    assert!(km.verify_sth(&sth, &signed), "STH signature verifies offline");
+    assert!(
+        km.verify_sth(&sth, &signed),
+        "STH signature verifies offline"
+    );
 
     let idx = 2;
     let proof = log.inclusion_proof(idx).unwrap();
     let leaf = log.leaf(idx).unwrap();
-    assert!(verify_inclusion(leaf, idx, log.size(), &proof, root), "inclusion verifies offline");
+    assert!(
+        verify_inclusion(leaf, idx, log.size(), &proof, root),
+        "inclusion verifies offline"
+    );
 
-    assert!(anchor.verify(&sth, &receipt), "anchor receipt verifies offline");
+    assert!(
+        anchor.verify(&sth, &receipt),
+        "anchor receipt verifies offline"
+    );
 
     // A tampered head must fail every check, proving the chain is load-bearing, not decorative.
-    let bad = SignedTreeHead { tree_size: sth.tree_size, root_hash: [9u8; 32], timestamp_ms: sth.timestamp_ms };
-    assert!(!km.verify_sth(&bad, &signed), "tampered head fails signature");
-    assert!(!anchor.verify(&bad, &receipt), "tampered head fails the anchor");
+    let bad = SignedTreeHead {
+        tree_size: sth.tree_size,
+        root_hash: [9u8; 32],
+        timestamp_ms: sth.timestamp_ms,
+    };
+    assert!(
+        !km.verify_sth(&bad, &signed),
+        "tampered head fails signature"
+    );
+    assert!(
+        !anchor.verify(&bad, &receipt),
+        "tampered head fails the anchor"
+    );
 }

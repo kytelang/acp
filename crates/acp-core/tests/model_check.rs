@@ -19,7 +19,12 @@ struct Model {
 
 impl Model {
     fn new() -> Self {
-        Model { consumed: false, read: [None, None], won: [false, false], forwards: 0 }
+        Model {
+            consumed: false,
+            read: [None, None],
+            won: [false, false],
+            forwards: 0,
+        }
     }
 }
 
@@ -81,12 +86,20 @@ fn max_forwards(atomic: bool) -> u32 {
 
 #[test]
 fn atomic_consume_forwards_at_most_once_on_every_interleaving() {
-    assert_eq!(max_forwards(true), 1, "atomic consume: at most one forward per approval");
+    assert_eq!(
+        max_forwards(true),
+        1,
+        "atomic consume: at most one forward per approval"
+    );
 }
 
 #[test]
 fn the_checker_catches_a_broken_non_atomic_consume() {
     // The read-then-write consume admits an interleaving where both workers read "not consumed"
     // and both forward. If this assertion ever fails, the model checker itself is broken.
-    assert_eq!(max_forwards(false), 2, "non-atomic consume double-forwards; the check must see it");
+    assert_eq!(
+        max_forwards(false),
+        2,
+        "non-atomic consume double-forwards; the check must see it"
+    );
 }

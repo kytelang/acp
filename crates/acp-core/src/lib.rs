@@ -29,6 +29,7 @@ pub mod otelspan;
 pub mod posture;
 pub mod redact;
 pub mod render;
+pub mod retention;
 pub mod scim;
 pub mod sign;
 pub mod ticket;

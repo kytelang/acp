@@ -304,3 +304,59 @@ fn backup_and_restore_drill_reverifies_the_ledger() {
     // Restore = point at the backup, and it must still verify end to end.
     acp_ledger::verify_file(&backup).expect("restored ledger reverifies after DR");
 }
+
+#[test]
+fn right_to_erasure_removes_the_payload_but_keeps_the_ledger_verifiable() {
+    // H1.9: erase one decision's arguments. The record and its hash remain, so verify() still
+    // passes; only the recoverable argument value is gone.
+    let p = tmp("l-erase.db");
+    let mut l = open(&p);
+    l.append("d1", "decision", &rec(1), Some(&json!({"pii": "erase-me"}))).unwrap();
+    l.append("d2", "decision", &rec(2), Some(&json!({"ok": "keep"}))).unwrap();
+    l.verify().unwrap();
+
+    let removed = l.erase_args_for("d1").unwrap();
+    assert_eq!(removed, 1, "one args blob erased");
+
+    // The ledger still verifies (leaf hashes are over the canonical record, not the args blob).
+    l.verify().expect("ledger still verifies after erasure");
+
+    // d1's args are gone; d2's remain.
+    drop(l);
+    let (_rec1, args1) = acp_ledger::read_record(&p, 1).unwrap();
+    let (_rec2, args2) = acp_ledger::read_record(&p, 2).unwrap();
+    assert!(args1.is_none(), "erased subject's args are gone");
+    assert!(args2.is_some(), "other subject's args are untouched");
+}
+
+#[test]
+fn approval_and_evidence_survive_a_crash_with_no_ledger_gap() {
+    // V0.G3: a decision is durably spooled before forward; if the process dies before the ledger
+    // write, the spool replays on restart with no lost or duplicated record.
+    let p = tmp("l-outage.db");
+    let spool_path = format!("{p}.spool");
+    let _ = std::fs::remove_file(&p);
+    let _ = std::fs::remove_file(&spool_path);
+
+    // Simulate the pre-crash state: records were fsync'd to the spool but never reached the ledger.
+    {
+        let spool = Spool::open(&spool_path);
+        for i in 0..4 {
+            spool
+                .append(&json!({"decision_id": format!("d{i}"), "kind": "decision", "record": rec(i), "args": {"n": i}}))
+                .unwrap();
+        }
+    }
+
+    // Restart: a fresh ledger drains the spool. Nothing is lost.
+    let mut l = open(&p);
+    let report = Spool::open(&spool_path).drain_into(&mut l).unwrap();
+    assert_eq!(report.ingested, 4, "all spooled decisions replay after the crash");
+    assert_eq!(l.size(), 4, "no ledger gap");
+    l.verify().expect("recovered ledger verifies");
+
+    // Draining again is idempotent: replay must not duplicate leaves.
+    let report2 = Spool::open(&spool_path).drain_into(&mut l).unwrap();
+    let _ = report2;
+    assert_eq!(l.size(), 4, "idempotent replay, no duplicates");
+}
