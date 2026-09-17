@@ -483,18 +483,18 @@ was not actually performed.
 
 - [b] **v3.1 Certifications complete.**
   - [b] SOC 2 Type II report issued; ISO 27001 certified; reliance/assurance-letter framework (bridge letter, sub-service-org method) available [R6].
-- [b] **v3.2 Enterprise procurement readiness.**
-  - [b] Contractual audit rights / DORA ICT-third-party register / pooled-audit support; government-access/transparency reporting; export-control classification (EAR/EU dual-use) done [R6].
+- [d] **v3.2 Enterprise procurement readiness.**
+  - [d] docs/commercial/procurement.md: audit rights, DORA register fields, pooled audits, government-access/transparency position, export-control classification. [ ] binding versions need legal review.
 - [b] **v3.3 Long-term evidence validity operational [C].**
   - [b] Re-timestamping/re-anchoring runs on schedule; crypto-agility exercised (a second hash/sig scheme introduced without invalidating old evidence).
 - [b] **v3.4 Advanced governance maturity.**
   - [b] Data-boundary + discovery + IdP identity all GA and integrated; policy change-management with blast-radius preview, canary, staged rollout, rollback [R7]; multi-environment (dev/staging/prod) policy lifecycle [R7].
-- [b] **v3.5 Accessibility + i18n conformance.**
-  - [b] Console + approval inbox meet WCAG 2.1 AA / EN 301 549 / Section 508; VPAT published [R6].
+- [d] **v3.5 Accessibility + i18n conformance.**
+  - [d] docs/compliance/accessibility.md: WCAG 2.1 AA target + approach baked into the server-rendered inbox (semantic HTML, not colour-only, named actions). [ ] VPAT sign-off by an accessibility reviewer is the [e] leg.
 - [b] **v3.6 Tenant offboarding at scale.**
   - [b] Secure, verifiable deletion or archive handover on contract end; certificate of destruction where required; no impact to other tenants [N].
-- [b] **v3.7 Scale SLOs.**
-  - [b] SLOs + error budgets (incl. approval-resolution latency) defined and met at enterprise volume [R7].
+- [d] **v3.7 Scale SLOs.**
+  - [d] docs/ops/slos.md: SLOs + error budgets (latency, durability, verify time, approval p95, anchoring freshness), all measured from the verifiable log. [ ] 'met at enterprise volume' needs the load run.
 - [b] **V3.G1 (enterprise-scale GA gate)** All v3 tasks complete; certifications issued; multi-region live; large-ledger perf sustained.
 
 ---
@@ -631,8 +631,8 @@ customer), not deferred.
   - [x] `acp_core::hlc` HLC stamped into every decision record; encoding sorts causally; unit-tested across nodes (F11 core). [ ] multi-proxy timeline query + skew alarm.
 - [~] **F12 [v3/P2] On-prem / air-gapped deployment mode.**
   - [x] Full gate->evidence->verify chain (Merkle + KMS-seam signing + internal anchor) verifies with zero network calls; tampered head fails every check (airgapped.rs). [ ] offline signed-update + SBOM verification packaging remain.
-- [b] **F13 [v3/P2] Customer change-management & adoption kit.**
-  - [b] RACI template, policy-author certification, staged posture-maturity playbook; the console shows a tenant's posture stage with a defined next step.
+- [d] **F13 [v3/P2] Customer change-management & adoption kit.**
+  - [d] docs/adoption/change-management-kit.md: shadow->partial->default-deny playbook (matches acp_core::posture), RACI mapped to the RBAC roles, policy-author certification path, in-product posture stage + next step.
 
 ### Gate additions from the deep review
 
