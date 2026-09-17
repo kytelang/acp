@@ -140,3 +140,22 @@ fn hash_stable_and_changes_on_edit() {
     assert_eq!(a.hash(), b.hash(), "same source -> same hash");
     assert_ne!(a.hash(), c.hash(), "edited source -> new hash");
 }
+
+#[test]
+fn allow_path_latency_budget() {
+    // M5.5: the common allow path must be well under the 10 ms p95 budget. This is a coarse
+    // guard (a full criterion perf-regression gate is the hardening track); it catches gross
+    // regressions in policy evaluation.
+    let e = engine("version: 1\ndefault: allow\nrules:\n  - id: cap\n    when: { tool: \"payments.charge\", arg: { amount_cents: { gt: 50000 } } }\n    verdict: deny\n");
+    let c = ctx("db.read", json!({"operation": "read"}), "prod", json!({}));
+    let n = 2000;
+    let start = std::time::Instant::now();
+    for _ in 0..n {
+        let _ = e.evaluate(c.clone());
+    }
+    let per = start.elapsed().as_secs_f64() * 1000.0 / n as f64;
+    assert!(
+        per < 5.0,
+        "allow-path eval averaged {per:.3} ms, over budget"
+    );
+}

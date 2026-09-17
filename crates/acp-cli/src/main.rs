@@ -30,7 +30,8 @@ fn main() -> ExitCode {
             Some(p) => cmd_list_approvals(p),
             None => usage("acp approvals <approvals.db>"),
         },
-        _ => usage("acp [init|verify|export|policy-compile|policy-test]"),
+        "init" => cmd_init(args.get(2).map(String::as_str).unwrap_or("acp-demo")),
+        _ => usage("acp [init|verify|verify-pack|export|policy-compile|policy-test|approve|deny|approvals]"),
     }
 }
 
@@ -208,6 +209,50 @@ fn cmd_export(path: &str) -> ExitCode {
             ExitCode::from(1)
         }
     }
+}
+
+const SAMPLE_POLICY: &str = "\
+version: 1
+default: allow
+rules:
+  - id: cap-spend
+    when: { tool: \"payments.charge\", arg: { amount_cents: { gt: 50000 } } }
+    verdict: step_up
+    approvers: [\"finance\"]
+  - id: no-prod-delete
+    when:
+      tool: \"db.*\"
+      env: { eq: \"prod\" }
+      arg:
+        operation: { in: [\"delete\", \"drop\", \"truncate\"] }
+    verdict: deny
+";
+
+fn cmd_init(dir: &str) -> ExitCode {
+    if let Err(e) = std::fs::create_dir_all(dir) {
+        eprintln!("acp: cannot create {dir}: {e}");
+        return ExitCode::from(1);
+    }
+    let policy = format!("{dir}/policy.yaml");
+    if let Err(e) = std::fs::write(&policy, SAMPLE_POLICY) {
+        eprintln!("acp: cannot write {policy}: {e}");
+        return ExitCode::from(1);
+    }
+    println!("Initialised an ACP workspace in {dir}/");
+    println!("  policy:   {policy}");
+    println!("  ledger:   {dir}/ledger.db      (created on first run)");
+    println!();
+    println!("Run the proxy in front of your MCP server:");
+    println!(
+        "  acp-proxy stdio --policy {policy} --ledger {dir}/ledger.db -- <your-mcp-server> [args]"
+    );
+    println!();
+    println!("Then, after a step-up hold:");
+    println!("  acp approvals {dir}/ledger.db.approvals        # list pending");
+    println!("  acp approve   {dir}/ledger.db.approvals <id>   # approve one");
+    println!("  acp verify    {dir}/ledger.db                  # verify the evidence");
+    println!("  acp export    {dir}/ledger.db > pack.json      # regulator-ready pack");
+    ExitCode::SUCCESS
 }
 
 fn cmd_resolve(rest: &[String], approve: bool) -> ExitCode {

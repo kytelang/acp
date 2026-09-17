@@ -25,6 +25,36 @@ it to Cedar (`fixtures/policies/sample.generated.cedar`), which the formally-ver
 cargo run -p acp-cli -- policy-compile fixtures/policies/sample.yaml
 ```
 
+
+## Quickstart (worked example)
+
+```
+# 1. Install (build from source)
+sh install.sh                       # puts acp + acp-proxy in ~/.acp/bin
+
+# 2. Scaffold a workspace with a sample policy
+acp init demo                       # writes demo/policy.yaml (a step-up + a prod-delete deny)
+
+# 3. Run the proxy in front of your MCP server, recording evidence
+acp-proxy stdio --policy demo/policy.yaml --ledger demo/ledger.db -- <your-mcp-server>
+
+# The sample policy holds `payments.charge > 500.00` for human approval. When the agent hits it,
+# it gets `-32001 approval required`. A human approves out of band:
+acp approvals demo/ledger.db.approvals            # list pending, copy the id
+acp approve   demo/ledger.db.approvals <id>       # approve (Slack/web inbox is v1)
+
+# The agent re-issues the identical call and it is now forwarded, exactly once.
+
+# 4. Prove it to an auditor, from the public key alone
+acp verify demo/ledger.db                         # OK: verifies
+acp export demo/ledger.db > pack.json             # signed, self-verifying evidence pack
+acp verify-pack pack.json                          # OK: verifies standalone
+```
+
+HTTP transport: `acp-proxy http --policy demo/policy.yaml --addr 127.0.0.1:8080 --upstream https://your-mcp-endpoint`.
+
+Safe rollout: add `--shadow` to record what *would* be blocked while enforcing nothing, until you trust the policy.
+
 ## Build and test
 ```
 cargo build --workspace
