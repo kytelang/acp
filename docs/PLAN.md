@@ -359,7 +359,7 @@ was not actually performed.
 - [~] **H0.7 Self-governance meta-audit [G].**
   - [x] `acp_core::metaaudit::MetaEvent` (policy/key/RBAC/approver/break-glass) appends to the same RFC 6962 ledger and keeps it verifiable + exportable (ledger integration test). [ ] emit on live admin actions once SSO/RBAC (H0.8) lands.
 - [m] **H0.8 Auth hardening + RBAC [8].**
-  - [m] `acp-auth`: Entra ID OIDC verify (iss/aud/exp/sig via JWKS) + RBAC for edit-policy/approve/export/see-args, mock Entra IdP, 8 tests. Real Entra = JWKS URL swap. [ ] mTLS proxy<->server + Slack signature verify still open.
+  - [m] `acp-auth` Entra OIDC verify + RBAC (mock IdP, 8 tests); `acp_core::webhook::verify_slack` Slack signature verify; `acp-mtls` mutual TLS proxy<->server (rustls, client-cert REQUIRED, real in-memory handshake test: valid client completes mutual auth, rogue client rejected). Real Entra/certs = config.
 - [~] **H0.9 Supply chain: signed releases + SBOM [7].**
   - [x] CycloneDX SBOM generated offline from the resolved graph (scripts/sbom.sh + `make sbom`, 360 components incl. our crates); cargo-audit dependency scan in CI. [ ] release signing (cosign/sigstore) needs a signing key = deploy step.
 - [e] **H0.10 Third-party pen test [8].** (external: pen-test vendor; the fuzz/robustness suites are built)
