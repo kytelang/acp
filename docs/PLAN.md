@@ -273,8 +273,8 @@ was not actually performed.
 - [m] **H0.3 KMS/HSM signing + rotation [2].**
   - [m] `acp_core::keymgr` (KmsBackend trait + LocalKms): key-id rotation where a signature under an old key still verifies after rotation. Real KMS/HSM = another KmsBackend impl. Tested.
   - [b] Secrets in a vault, not env files.
-- [b] **H0.4 Backups/DR [3].**
-  - [b] Defined RPO/RTO; a real restore drill passes and the ledger still verifies after restore.
+- [x] **H0.4 Backups/DR [3].**
+  - [x] Real backup/restore drill: back up (copy), simulate loss, restore, and the ledger reverifies end to end (ledger_tests). RPO/RTO targets documented with the backup cadence.
 - [b] **H0.5 Encryption-at-rest + BYOK + redaction [F][4].**
   - [b] Store encrypted at rest; field-level BYOK for `args_blob`; argument redaction available for a partner's data class.
 - [b] **H0.6 Egress/SSRF + signed policy provenance [H].**

@@ -274,3 +274,28 @@ fn meta_audit_events_append_to_the_same_verifiable_log() {
     let pack = l.export().expect("export");
     verify_pack(&pack).expect("exported pack with meta records self-verifies");
 }
+
+#[test]
+fn backup_and_restore_drill_reverifies_the_ledger() {
+    // H0.4: a real restore drill. Write a ledger, back it up by copying the store, simulate loss
+    // by removing the original, restore from the backup, and confirm it still verifies. The Merkle
+    // log plus signed heads are self-contained, so a restored copy verifies with no live service.
+    let p = tmp("l-dr.db");
+    let backup = tmp("l-dr-backup.db");
+    let _ = std::fs::remove_file(&backup);
+    {
+        let mut l = open(&p);
+        for i in 0..8 {
+            l.append(&format!("d{i}"), "decision", &rec(i), Some(&json!({"n": i})))
+                .unwrap();
+        }
+        l.verify().expect("live ledger verifies");
+    }
+    // Back up (file copy) then lose the original.
+    std::fs::copy(&p, &backup).expect("backup copy");
+    std::fs::remove_file(&p).expect("simulate data loss");
+    assert!(std::fs::metadata(&p).is_err(), "original is gone");
+
+    // Restore = point at the backup, and it must still verify end to end.
+    acp_ledger::verify_file(&backup).expect("restored ledger reverifies after DR");
+}
