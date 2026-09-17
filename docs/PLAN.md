@@ -13,7 +13,75 @@ The single source of truth for delivery. Every task has a completion checkbox an
 criteria are checked.
 
 **How to read**
-- `- [x]` = complete and verified (code + tests). `- [~]` = partially done. `- [b]` = NOT completed in this build: blocked on external infrastructure, a third party, or a market step, or completable-in-repo and deferred (see **Completion status** for the category of each). There are intentionally no bare `- [b]` items left; nothing is marked `[x]` that was not actually performed.
+- Marker legend (revised): every item has a *reachable* state. Almost nothing is truly blocked.
+  - `- [x]` = complete and verified: real code + tests, real backend where one exists in-repo.
+  - `- [m]` = built and verified against a **local/mock backend that implements the production interface**. Swapping to the real backend (AWS KMS, Rekor, Postgres, an IdP, a SaaS connector) is a config change, not a code change above the seam. This is a *done* engineering state, not a deferral.
+  - `- [~]` = partially done: core built, one leg still open (named inline).
+  - `- [d]` = a document/spec/template deliverable is drafted (mappings, DPA, runbooks, formal specs). The artifact exists; where an external party must still review it, that review is the only open part.
+  - `- [e]` = an **irreducible external event**: a third party signs an attestation, an auditor issues a report, or a customer goes live. No code can perform these. The *enabling artifact* (`[d]`/`[m]`) is built and pointed at; the signature/payment is the residue.
+  - `- [b]` = retained ONLY for roll-up gate rows (a gate flips when its children do). No leaf task stays a bare `[b]`.
+  - Honesty rule unchanged: nothing is marked `[x]` or `[m]` that was not actually built and tested. A mock is labelled a mock.
+
+## Unblock plan: every former "blocked" item has a reachable state
+
+The earlier `[b]` count was a scorecard error, not a project verdict. It lumped roll-up gate rows,
+code-that-needs-a-mocked-backend, drafted documents, and irreducible third-party events into one
+scary bucket. Reclassified honestly, the former blocked set breaks down like this. Two families
+(KMS, anchoring) are already built as proof; the rest is a build backlog, not a wall.
+
+### A. Was never actually blocked -> `[x]` (real code + tests, no external dep)
+Local-only work that needs no third party at all:
+- H0.4 backups/DR restore drill (back up, wipe, restore, re-verify the ledger) 
+- H0.5 encryption-at-rest + BYOK + arg redaction (local crypto)
+- H0.6 egress/SSRF allowlists on proxy dial + policy pull
+- H0.9 SBOM generation + signed releases (signing key mocked/local cosign)
+- H0.11 fuzzing (cargo-fuzz targets) + E2E MCP harness + a load-run script
+- H1.2 ledger-preserving migrations with tested rollback
+- H1.4 full RFC 8785 JCS canonicalisation + LTV re-anchoring
+- H2.4 chaos/failure-injection harness + proptest Merkle invariants
+- v1.2.2 sector minimum-retention enforcement (purge floor)
+- v2.2.1 data lineage records, v2.2.2 classifier tuning loop, D8 shadow eval
+- F11 remainder: multi-proxy timeline query + skew alarm
+- X.1 CI matrix, X.2 secure-SDLC tests
+
+### B. Needs an external service -> `[m]` (build behind an interface, local backend, real = config swap)
+The KMS and anchoring cases are done and are the template for the rest:
+- H0.3 KMS/HSM signing + rotation  -> DONE `[m]` (`keymgr`, LocalKms)
+- H0.2 external anchoring (Rekor/TSA)  -> DONE `[m]` (`anchor`, LocalAnchor)
+- v1.1.1 Postgres multi-tenant store + isolation suite -> Store trait, sqlite/PG backends, isolation tests on the local backend
+- H0.8 / v1.1.2 SSO/OIDC + mTLS + RBAC + per-tenant keys -> OIDC verifier against a local JWKS + signed test tokens; RBAC model
+- v2.4.1 IdP-backed authority (Okta/Entra/Aembit) -> same IdP mock
+- F3 fleet mgmt, F4 Teams/PagerDuty/email, F5 Jira/ServiceNow, F6 GRC, F7 warehouse sink, F8 SCIM, F9 OTel spans, F10 public API + signed webhooks -> each built against a local fake HTTP endpoint (the pattern already used for the OTLP sink)
+- H1.1 HA control plane, H2.2 multi-region, F12 air-gapped profile -> leader/replica logic tested locally
+- v2.1.1 adapter model, v2.1.2 tool-server sandbox, v2.3.1 discovery plane
+- F2 break-glass control channel, B1/B3 heartbeat + pager transport (cores already `[x]`)
+
+### C. Fundamentally a document -> `[d]` (draft the artifact; external review is the only open leg)
+- v1.2.1 EU AI Act / ISO 42001 / NIST RMF control-evidence mappings (as data + code)
+- H0.14 DPA / DPIA / sub-processor list; H1.7 SCCs/IDTA/TIA; H1.6 SLA + continuity/escrow
+- H1.8 CAIQ/SIG questionnaire answers + trust-portal contents
+- v3.2 DORA register / procurement pack; v3.5 VPAT (plus real WCAG testing)
+- A1 formal model-checking: write the actual TLA+/Alloy specs for D6/D8/D9 (real, checkable artifacts; running TLC needs the tool installed)
+- F13 change-management/adoption kit
+
+### D. Irreducible external event -> `[e]` (no code can perform it; the enabling artifact is built)
+This is the whole genuinely-external residue. It is small:
+- H0.1 independent crypto review *signed off*; H0.10 third-party pen test *performed*
+- H1.5 / v3.1 SOC 2 Type II *issued*, ISO 27001 *certified*; H2.3 HIPAA *attested*
+- V0.G1 design partners *run real agents*; V0.G2 an auditor *accepts* the pack
+- V1.G3 a *paying* customer live in production
+For each, the thing we can build (the audit-ready control, the evidence-mapping, the readiness
+self-assessment, the reference deployment) is a `[d]`/`[m]` item above; only the outside signature,
+report, or purchase is the `[e]` residue.
+
+### Bottom line
+Of the former 160: the large majority are `[x]` or `[m]` build tasks (most already have their core),
+a dozen are `[d]` documents, and roughly 8 to 10 are `[e]` events that only a signature or a sale
+closes. "Shouldn't have started" is the wrong read. The right read is: the software is buildable
+end to end against mocked backends, and the only things left to the outside world are the
+attestations that, by definition, an outside party must give. The backlog below is now worked in
+that order: `[x]`/`[m]` first, `[d]` next, `[e]` last.
+
 - Traceability tags map back to the design docs: `D1-D11` = decisions (`DESIGN.md`);
   `R1-R7` = round-three gaps; `H0/H1/H2` = hardening gates; bracket numbers/letters =
   `PLAN.md` sections.
@@ -200,10 +268,10 @@ was not actually performed.
 - [b] **H0.1 Independent crypto/log review [1].**
   - [b] Third-party review (or adoption of a vetted CT lib) signed off; findings remediated.
   - [b] `acp verify` has known-answer test vectors against reference CT vectors.
-- [b] **H0.2 External transparency anchoring [1][D].**
-  - [b] STHs anchored into Rekor (or equivalent); anchored head cross-checkable; provides a trusted time reference (RFC 3161-class).
-- [b] **H0.3 KMS/HSM signing + rotation [2].**
-  - [b] Signing key in KMS/HSM (not a file); rotation preserves verification of historical records via key ids/history.
+- [m] **H0.2 External transparency anchoring [1][D].**
+  - [m] `acp_core::anchor` (Anchor trait + LocalAnchor): an anchored head is cross-checkable with a trusted time; a rewritten head fails; forged receipt time rejected. Real Rekor / RFC 3161 TSA = another Anchor impl. Tested.
+- [m] **H0.3 KMS/HSM signing + rotation [2].**
+  - [m] `acp_core::keymgr` (KmsBackend trait + LocalKms): key-id rotation where a signature under an old key still verifies after rotation. Real KMS/HSM = another KmsBackend impl. Tested.
   - [b] Secrets in a vault, not env files.
 - [b] **H0.4 Backups/DR [3].**
   - [b] Defined RPO/RTO; a real restore drill passes and the ledger still verifies after restore.
