@@ -613,20 +613,20 @@ customer), not deferred.
   - [x] `acp_core::breakglass`: scoped modes with mandatory reason + TTL that auto-revert; emergency-bypass forwards a would-hold; unit-tested. Meta-log record shape = H0.7. [ ] wire the engage/revert control channel into the proxy.
 - [b] **F3 [H1/P1] Fleet management for many proxies.**
   - [b] Proxy registration/heartbeat, targeted policy+config channels, cohort/canary version rollout; a policy bound to cohort "prod-eu" reaches only those proxies; a proxy missing heartbeats raises an "ungoverned surface" alert.
-- [b] **F4 [v1/P1] Notification channels beyond Slack.**
-  - [b] Pluggable notifier (Teams Adaptive Cards, email, PagerDuty, signed webhook) sharing the injection-safe rendering contract; approve/deny works from Teams with signature verification; PagerDuty pages on an ageing step_up.
+- [m] **F4 [v1/P1] Notification channels beyond Slack.**
+  - [m] `acp_core::notify` injection-safe Teams Adaptive Card + PagerDuty rendering (hostile tool/reason stay data, cannot forge structure); `acp_core::webhook::verify_slack` verifies inbound approve/deny with replay protection. Tested. Real transport = reqwest POST.
 - [b] **F5 [v1/P1] Ticketing / ITSM integration.**
   - [b] Bi-directional connector materialises a hold as a Jira/ServiceNow ticket and syncs the outcome; approving the ticket consumes the single-use approval; the ticket id is stored in the presented-context record.
 - [b] **F6 [v1/P1] GRC/IRM integration.**
   - [b] A connector exposes mapped control-evidence via API for ServiceNow IRM/Archer/OneTrust; a GRC platform pulls per-control evidence with stable ids; re-pull is idempotent.
 - [b] **F7 [v1/P1] Continuous export to the customer's warehouse.**
   - [b] Streaming/batch sink to object-lock S3/GCS / Snowflake / BigQuery of redacted records + STH manifests; records land within SLA and independently re-verify against the exported STH.
-- [b] **F8 [H1/P1] SCIM lifecycle for approver groups.**
-  - [b] A SCIM 2.0 endpoint syncs approver groups/roles from the IdP; deprovisioning a user removes approval authority within the sync window and writes a meta-log entry.
+- [m] **F8 [H1/P1] SCIM lifecycle for approver groups.**
+  - [m] `acp_core::scim::ApproverDirectory`: provision/deprovision/reprovision transitions; deprovisioning removes approval authority (fail-closed), changes are meta-log-ready. Tested. Real SCIM REST endpoint drives these transitions.
 - [b] **F9 [v1/P1] OpenTelemetry governance spans.**
   - [b] OTel spans/events (trace-context propagated, args redacted) for classify/decide/hold/forward; a gated call shows a linked ACP span in the customer's collector with decision + rule id and no payload.
-- [b] **F10 [v1/P1] Public API + outbound webhooks.**
-  - [b] Versioned REST API + signed, replay-protected webhooks (decision.made, approval.requested/resolved, policy.changed) with API-key/OIDC auth + rate limits, covered by the deprecation policy.
+- [m] **F10 [v1/P1] Public API + outbound webhooks.**
+  - [m] `acp_core::webhook::sign_webhook`/`verify_webhook`: HMAC-SHA256 signed, timestamp-bound (replay-protected) webhooks; HMAC verified against RFC 4231. Tested. [ ] the versioned REST API surface + rate limits sit on the acp-server.
 - [~] **F11 [v2/P1] Cross-proxy forensic timeline + hybrid logical clocks.**
   - [x] `acp_core::hlc` HLC stamped into every decision record; encoding sorts causally; unit-tested across nodes (F11 core). [ ] multi-proxy timeline query + skew alarm.
 - [b] **F12 [v3/P2] On-prem / air-gapped deployment mode.**

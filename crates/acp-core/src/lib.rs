@@ -19,10 +19,13 @@ pub mod liveness;
 pub mod merkle;
 pub mod metaaudit;
 pub mod metering;
+pub mod notify;
 pub mod posture;
 pub mod redact;
 pub mod render;
+pub mod scim;
 pub mod sign;
 pub mod types;
+pub mod webhook;
 
 pub use types::{ActionContext, BlastRadius, Decision, Record, Verdict};
