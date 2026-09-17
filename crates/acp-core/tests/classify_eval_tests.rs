@@ -56,7 +56,7 @@ fn adversarial_evasion_corpus_is_measured() {
         secret.to_string(),                             // baseline (should be caught)
         secret.chars().rev().collect::<String>(),       // reversed
         secret.split("").collect::<Vec<_>>().join(" "), // spaced
-        "s\u{200b}k_live_abcdefgh12345678".to_string(),    // zero-width split
+        "s\u{200b}k_live_abcdefgh12345678".to_string(), // zero-width split
     ];
     let bypassed = evasions.iter().filter(|e| classify(e).is_none()).count();
     let rate = bypassed as f64 / evasions.len() as f64;
@@ -68,5 +68,44 @@ fn adversarial_evasion_corpus_is_measured() {
     assert!(
         rate < 1.0,
         "at least the baseline is caught; measured evasion bypass rate = {rate:.2}"
+    );
+}
+
+#[test]
+fn pii_recall_is_balanced_across_locales() {
+    // D5 fairness slice: PII recall must not collapse for non-US formats.
+    let cohorts: [(&str, Vec<&str>); 2] = [
+        (
+            "us",
+            vec![
+                "reach jane@example.com",
+                "call 415-555-0132",
+                "ssn 123-45-6789",
+            ],
+        ),
+        (
+            "intl",
+            vec![
+                "email maria.garcia@correo.es",
+                "call +91 98765 43210",
+                "ping john@team.co.uk",
+            ],
+        ),
+    ];
+    let mut recalls = Vec::new();
+    for (name, samples) in &cohorts {
+        let hits = samples
+            .iter()
+            .filter(|s| classify(s) == Some("pii"))
+            .count();
+        let recall = hits as f64 / samples.len() as f64;
+        assert!(recall >= 0.66, "{name} PII recall {recall:.2} too low");
+        recalls.push(recall);
+    }
+    let disparity = recalls.iter().cloned().fold(f64::MIN, f64::max)
+        - recalls.iter().cloned().fold(f64::MAX, f64::min);
+    assert!(
+        disparity <= 0.34,
+        "cross-locale recall disparity {disparity:.2} too high"
     );
 }

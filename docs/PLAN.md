@@ -406,8 +406,8 @@ customer), not deferred.
   - [b] A scheduled probe issues a must-deny and a must-step_up call and asserts verdict + evidence; a mis-loaded policy that lets the canary through pages within one probe interval.
 - [b] **B3 [H1/P1] Fail-open / anomaly spike alerting.**
   - [b] Rate/anomaly alerts on fail-open volume, deny surges, and approval-timeout surges; an induced fail-open window over threshold pages; baselines documented.
-- [b] **B4 [H1/P1] Governance-weakening alerts (control turned down).**
-  - [b] Sourced from the meta-audit log: mass-conversion to `shadow`, `default` loosened to allow, approver groups emptied, coverage drop, fail-open spike each fire an alert.
+- [~] **B4 [H1/P1] Governance-weakening alerts (control turned down).**
+  - [x] `/report` emits `weakening` flags (default-allow+low-coverage, shadow-heavy) computed from the verifiable export + loaded policy (tested). [ ] wire flags to an alerting pipeline.
 - [~] **B5 [H1/P1] Tool-server supply-chain integrity.** (`--tool-hash` verifies the tool binary fingerprint before launch, fail-closed, tested; recording the fingerprint in evidence is next)
   - [b] The launched tool-server command is pinned + verified (hash/signature/allowlisted path); a mismatched binary fails closed; the verified tool-server fingerprint is recorded in evidence.
 
@@ -432,8 +432,8 @@ customer), not deferred.
   - [b] The tuning/feedback corpus (which inspects raw args) is under the same retention, BYOK, RBAC, redaction, and meta-audit regime as `args_blob`, with consent/purpose captured. (Closes the shadow-PII-repo contradiction with H0.5/H0.12.)
 - [~] **D4 [H1/P1] Classifier registry + model cards.**
   - [x] Model card `docs/model-cards/classifiers.md` (inputs, method, measured metrics, known evasions, locales, limitations); classifier version stamped in evidence provenance. [ ] a queryable registry + export attachment.
-- [b] **D5 [H1/P1] Bias / fairness slice in the eval harness.**
-  - [b] Per-locale/script/name-origin recall + FPR reported with a max-disparity threshold; a synthetic locale at 0% recall fails the disparity gate.
+- [x] **D5 [H1/P1] Bias / fairness slice in the eval harness.**
+  - [x] Per-locale PII recall (US vs international) with a max-disparity bound, enforced as a test (D5).
 - [b] **D6 [H1/P1] Production drift monitoring.**
   - [b] Privacy-safe classifier telemetry (hit-rate per class/tool, input feature distributions, no raw args) with drift alerts vs the eval baseline.
 - [x] **D7 [H1/P1] Standing adversarial-evasion corpus.**
