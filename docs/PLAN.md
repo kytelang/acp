@@ -416,8 +416,8 @@ was not actually performed.
   - [b] SOC 2 Type II and ISO 27001 programmes underway with evidence collection running (clock started).
 - [d] **H1.6 Commercial + continuity [10][E].**
   - [d] docs/commercial/sla-and-continuity.md: SLA/SLO posture (fail-safe not fail-available), support-without-args, continuity (escrow/self-host), verifiable-export portability. [ ] contract-level SLA%/liability + status page remain.
-- [b] **H1.7 Cross-border + product AI status [R6].**
-  - [b] Transfer mechanism (SCCs/IDTA/TIA); the product's own GDPR Art.22 / AI-Act status assessed and disclosed.
+- [d] **H1.7 Cross-border + product AI status [R6].**
+  - [d] docs/compliance/cross-border.md: transfer mechanism (SCCs/IDTA/TIA) + the product's own GDPR Art.22 / EU AI Act self-assessment. [ ] legal review.
 - [d] **H1.8 Security-questionnaire machinery [R6].**
   - [d] docs/compliance/security-questionnaire.md: standing CAIQ/SIG answers kept in sync with the product + trust-portal index; gaps stated honestly. [ ] the hosted trust portal + the SOC2/pen-test artifacts it links are [e].
 - [~] **H1.9 Right-to-erasure + four-eyes [4][G].**
@@ -437,8 +437,8 @@ was not actually performed.
 
 - [m] **v2.1.1 Adapter model.**
   - [m] `acp_core::adapter`: raw HTTP + framework invocations normalise to one call shape (HTTP `POST /v1/payments/charge` == MCP `payments.charge`), so the decision + evidence path does not branch on the surface. Tested. Real HTTP front-end wires onto acp-server.
-- [b] **v2.1.2 Tool-server sandboxing.**
-  - [b] Sandbox/isolation (seccomp/cgroups/netns ideas ported to Rust) available for launched tool servers.
+- [~] **v2.1.2 Tool-server sandboxing.**
+  - [~] `acp_core::sandbox::SandboxProfile`: portable default-deny syscall + read-path profile (baseline denies execve/socket); tested. [ ] Linux seccomp/landlock/cgroups enforcement of the profile.
 - [x] **v2.1.3 MCP-version-drift ownership [R3].**
   - [x] `acp_core::mcpdrift::MethodRegistry`: any observed method not in the governed set is surfaced as drift (a worklist), never silently bypassed (tested).
 
@@ -465,8 +465,8 @@ was not actually performed.
 
 - [b] **H2.1 Large-ledger performance [9].**
   - [b] Merkle proof + query cost validated at hundreds of millions of records; archival/compaction strategy in place.
-- [b] **H2.2 Multi-region / residency [3][4].**
-  - [b] Multi-region deployment + data-residency controls where required.
+- [m] **H2.2 Multi-region / residency [3][4].**
+  - [m] `acp_core::residency::ResidencyPolicy`: default-deny placement restricted to a tenant's allowed regions; out-of-region placement refused (tested). [ ] the multi-region deployment topology.
 - [e] **H2.3 Sector attestations [10].** (external: HIPAA/sector assessor)
   - [b] HIPAA posture (and other vertical attestations) as demanded by target verticals.
 - [~] **H2.4 Chaos + property tests [12].**
@@ -503,8 +503,8 @@ was not actually performed.
 
 - [x] **X.1 CI/CD gates always green.** (.github/workflows/ci.yml: fmt/clippy -D warnings/build/test/transparency/audit)
   - [b] build/test/clippy/fmt/audit + transparency + trust-suite + `acp verify` on every merge.
-- [b] **X.2 Secure SDLC + threat-model upkeep [8].**
-  - [b] Mandatory review; security tests in CI; threat model updated each release; vuln-disclosure/bug-bounty live from GA.
+- [d] **X.2 Secure SDLC + threat-model upkeep [8].**
+  - [d] docs/ops/secure-sdlc.md: CI gates (clippy-Dwarnings, trust-core assurance, fuzz, transparency self-test, cargo-audit, SBOM), review discipline, threat-model upkeep, vuln-disclosure. [ ] public disclosure/bug-bounty go live at GA.
 - [x] **X.3 Billing/metering without touching evidence [R7].**
   - [x] `acp_core::metering::Meter` counts one unit/decision, never reads args, overage is BillOverage (never stops gating); /report exposes billable_units. Unit-tested.
 - [x] **X.4 Support without seeing args [R7].**
@@ -564,8 +564,8 @@ customer), not deferred.
   - [x] Offline std-time perf gate (criterion unavailable in this build) on allow-path decide + engine build with committed budgets; an order-of-magnitude regression fails CI (perf_gate_tests).
 - [~] **C3 [H2/P1] Evidence capacity + cost + tiering model.**
   - [x] Capacity/cost/tiering model + retention-floor rule documented in docs/ops/cost-and-tiering.md. [ ] the archive-only verify/export test is a named H2.1 prerequisite.
-- [b] **C4 [H1/P1] KMS + anchoring cost / rate-limit model.**
-  - [b] Projected KMS calls/sec and Rekor submissions/sec at target tenant count sit within provisioned quotas; anchoring degrades gracefully (queues, never drops) under throttling; self-hosted Rekor fallback documented.
+- [d] **C4 [H1/P1] KMS + anchoring cost / rate-limit model.**
+  - [d] docs/ops/kms-anchoring-cost.md: signing/anchoring scale with the checkpoint rate (not decision rate), degrade by queueing never dropping, self-hosted Rekor fallback. [ ] confirm quota numbers at deployment.
 
 ### Block D: Classifier ML lifecycle (they gate real verdicts, so this is not v2 work)
 
@@ -573,8 +573,8 @@ customer), not deferred.
   - [x] `acp classify-eval` + `acp_core::classify::evaluate` over a checked-in labelled dataset report per-class precision/recall/FPR; published targets exist (tested).
 - [x] **D2 [H0/P0] Regression gate on classifier/heuristic changes.**
   - [x] `classify_eval_tests.rs` fails if accuracy/recall drop below the frozen baseline (runs in `cargo test`, i.e. CI); a weakened regex fails the gate. Override = edit the baseline in review.
-- [b] **D3 [H0/P0] Feedback-loop data governance.**
-  - [b] The tuning/feedback corpus (which inspects raw args) is under the same retention, BYOK, RBAC, redaction, and meta-audit regime as `args_blob`, with consent/purpose captured. (Closes the shadow-PII-repo contradiction with H0.5/H0.12.)
+- [d] **D3 [H0/P0] Feedback-loop data governance.**
+  - [d] docs/compliance/feedback-data-governance.md: the feedback/tuning corpus is bound to the same retention/BYOK/RBAC/redaction/meta-audit regime as args_blob (tuning + shadow-eval code already use labels/counts, not raw args). [ ] wire the corpus lifecycle into the meta-audit log.
 - [~] **D4 [H1/P1] Classifier registry + model cards.**
   - [x] Model card `docs/model-cards/classifiers.md` (inputs, method, measured metrics, known evasions, locales, limitations); classifier version stamped in evidence provenance. [ ] a queryable registry + export attachment.
 - [x] **D5 [H1/P1] Bias / fairness slice in the eval harness.**
