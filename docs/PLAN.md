@@ -398,14 +398,14 @@ was not actually performed.
 
 ### v1.3 Reporting dashboard (kyte candidate, conditions apply)
 
-- [b] **v1.3.1 Read-only reporting.**
-  - [b] Dashboards over the verifiable log; every figure re-derivable from an independently verifiable export (UI carries no trust).
+- [m] **v1.3.1 Read-only reporting.**
+  - [m] acp-server `/report` serves verdict/outcome/coverage/posture/weakening figures re-derivable from the verifiable export; `/metrics` Prometheus. [ ] richer dashboards on top.
   - [b] Approval inbox stays in Rust (enforcement path); reporting may use kyte only if the above holds.
 
 ### H1: Hardening gate (parallel to v1.2/v1.3; REQUIRED before GA)
 
-- [b] **H1.1 HA + isolation + quotas [3][5].**
-  - [b] HA control plane (no SPOF); per-tenant rate limits/quota; noisy-neighbour protection.
+- [m] **H1.1 HA + isolation + quotas [3][5].**
+  - [m] `acp_core::ha::LeaseManager`: leader lease with a monotonic fencing token; at most one valid leader, a resumed old leader is fenced out (tested). Per-tenant quota = metering (X.3). [ ] deploy as a replicated control plane.
 - [~] **H1.2 Safe migrations + config audit [6].**
   - [x] `acp_ledger::migrate`: ordered, transactional, reversible migrations; up preserves existing evidence, rollback returns cleanly keeping data (tested). Config-change audit = metaaudit (H0.7).
 - [~] **H1.3 Reproducible builds + provenance + proxy auto-update [7][K].**
@@ -439,8 +439,8 @@ was not actually performed.
   - [m] `acp_core::adapter`: raw HTTP + framework invocations normalise to one call shape (HTTP `POST /v1/payments/charge` == MCP `payments.charge`), so the decision + evidence path does not branch on the surface. Tested. Real HTTP front-end wires onto acp-server.
 - [b] **v2.1.2 Tool-server sandboxing.**
   - [b] Sandbox/isolation (seccomp/cgroups/netns ideas ported to Rust) available for launched tool servers.
-- [b] **v2.1.3 MCP-version-drift ownership [R3].**
-  - [b] A tracked process keeps the interception surface current with MCP; new action-bearing methods are governed, not bypassed.
+- [x] **v2.1.3 MCP-version-drift ownership [R3].**
+  - [x] `acp_core::mcpdrift::MethodRegistry`: any observed method not in the governed set is surfaced as drift (a worklist), never silently bypassed (tested).
 
 ### v2.2 Data-boundary governance
 
@@ -487,8 +487,8 @@ was not actually performed.
   - [d] docs/commercial/procurement.md: audit rights, DORA register fields, pooled audits, government-access/transparency position, export-control classification. [ ] binding versions need legal review.
 - [x] **v3.3 Long-term evidence validity operational [C].**
   - [x] `acp_core::agility::AgileVerifier`: verification dispatches on the record's stamped algorithm id, so a second scheme is additive and old records keep verifying; unknown alg fails closed (tested). [ ] scheduled re-anchoring is an ops job.
-- [b] **v3.4 Advanced governance maturity.**
-  - [b] Data-boundary + discovery + IdP identity all GA and integrated; policy change-management with blast-radius preview, canary, staged rollout, rollback [R7]; multi-environment (dev/staging/prod) policy lifecycle [R7].
+- [x] **v3.4 Advanced governance maturity.**
+  - [x] `acp_core::rollout`: blast-radius preview (exactly what would newly block) + staged rollout state machine (preview->canary->partial->full) with rollback (tested). Data-boundary (lineage), discovery, IdP identity all built above.
 - [d] **v3.5 Accessibility + i18n conformance.**
   - [d] docs/compliance/accessibility.md: WCAG 2.1 AA target + approach baked into the server-rendered inbox (semantic HTML, not colour-only, named actions). [ ] VPAT sign-off by an accessibility reviewer is the [e] leg.
 - [b] **v3.6 Tenant offboarding at scale.**
