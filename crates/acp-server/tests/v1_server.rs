@@ -147,4 +147,14 @@ async fn control_service_inbox_and_endpoints() {
     let view = store.get("appr-1").unwrap().unwrap();
     assert_eq!(view.state, "approved");
     assert_eq!(view.approver.as_deref(), Some("web-user"));
+
+    // B1: before any heartbeat, liveness is healthy (no enrolled proxies to be silent).
+    let live0: serde_json::Value = c.get(format!("{base}/liveness")).send().await.unwrap().json().await.unwrap();
+    assert_eq!(live0["healthy"], true);
+
+    // A proxy heartbeats, then liveness still healthy (it is fresh).
+    let hb = c.post(format!("{base}/heartbeat/proxy-eu")).send().await.unwrap();
+    assert!(hb.status().is_success());
+    let live1: serde_json::Value = c.get(format!("{base}/liveness")).send().await.unwrap().json().await.unwrap();
+    assert_eq!(live1["healthy"], true, "a freshly-heartbeating proxy is healthy: {live1}");
 }

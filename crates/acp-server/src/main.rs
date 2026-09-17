@@ -18,6 +18,8 @@ struct AppState {
     approvals: Option<String>,
     policy: Option<(String, String)>, // (hash, yaml body)
     ledger: Option<String>,
+    // B1: server-side liveness of enrolled proxies (dead-man's-switch).
+    liveness: std::sync::Mutex<acp_core::liveness::GapDetector>,
 }
 
 #[tokio::main]
@@ -58,6 +60,7 @@ async fn main() {
         approvals,
         policy,
         ledger,
+        liveness: std::sync::Mutex::new(acp_core::liveness::GapDetector::new()),
     });
     let app = Router::new()
         .route("/", get(inbox))
@@ -68,6 +71,8 @@ async fn main() {
         .route("/verify", get(verify))
         .route("/report", get(report))
         .route("/metrics", get(metrics))
+        .route("/heartbeat/:proxy", post(heartbeat))
+        .route("/liveness", get(liveness))
         .with_state(state);
 
     let listener = tokio::net::TcpListener::bind(&addr).await.expect("bind");
@@ -245,6 +250,31 @@ async fn report(State(st): State<Arc<AppState>>) -> impl IntoResponse {
         }
         None => (axum::http::StatusCode::NOT_FOUND, "no ledger configured").into_response(),
     }
+}
+
+fn now_ms() -> u64 {
+    std::time::SystemTime::now()
+        .duration_since(std::time::UNIX_EPOCH)
+        .map(|d| d.as_millis() as u64)
+        .unwrap_or(0)
+}
+
+/// B1: an enrolled proxy posts a heartbeat (and, implicitly, that it is serving governed traffic).
+async fn heartbeat(State(st): State<Arc<AppState>>, Path(proxy): Path<String>) -> impl IntoResponse {
+    // A heartbeat asserts liveness only. Decision-stall detection (traffic expected but no
+    // decisions) is driven separately by the evidence stream, so a freshly-enrolled proxy that has
+    // not yet gated a call is not falsely flagged.
+    st.liveness.lock().unwrap().heartbeat(&proxy, now_ms());
+    Json(serde_json::json!({"ok": true, "proxy": proxy}))
+}
+
+/// B1: report proxies that have gone silent (no heartbeat within the window). A gap here is the
+/// dead-man's-switch firing: an enrolled proxy that was killed or silenced.
+async fn liveness(State(st): State<Arc<AppState>>) -> impl IntoResponse {
+    const WINDOW_MS: u64 = 30_000;
+    let gaps = st.liveness.lock().unwrap().scan(now_ms(), WINDOW_MS);
+    let gaps: Vec<String> = gaps.iter().map(|g| format!("{g:?}")).collect();
+    Json(serde_json::json!({"window_ms": WINDOW_MS, "gaps": gaps, "healthy": gaps.is_empty()}))
 }
 
 /// Resolve when the process is asked to stop, so the server can drain rather than drop.

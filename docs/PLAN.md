@@ -545,8 +545,8 @@ customer), not deferred.
 
 ### Block B: Detection of the product's own compromise (absence-of-evidence alarms)
 
-- [~] **B1 [H0/P0] Proxy dead-man's-switch.**
-  - [x] `acp_core::liveness::GapDetector`: silence + decision-stall detection within a bounded window, unit-tested (B1 core). [ ] wire heartbeat transport into acp-server.
+- [x] **B1 [H0/P0] Proxy dead-man's-switch.**
+  - [x] `acp_core::liveness::GapDetector` (silence + decision-stall) wired into acp-server: `POST /heartbeat/:proxy` records liveness, `GET /liveness` reports silent proxies within a 30s window (integration-tested). Killing/silencing an enrolled proxy surfaces as a gap.
 - [x] **B2 [H1/P1] Canary / synthetic decisions prove the gate is live.**
   - [x] `acp canary <policy> <probes>` asserts must-deny/must-step_up verdicts and exits non-zero (pages) when a mis-loaded policy lets a probe through; 2 integration tests.
 - [~] **B3 [H1/P1] Fail-open / anomaly spike alerting.**
