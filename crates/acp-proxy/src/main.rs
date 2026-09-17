@@ -35,6 +35,7 @@ struct Opts {
     events: Option<String>,
     otel: Option<String>,
     tool_hash: Option<String>,
+    impact: Option<String>,
     cef: Option<String>,
     ocsf: Option<String>,
 }
@@ -59,6 +60,7 @@ fn parse_opts(items: &[String]) -> Result<(Opts, Vec<String>), String> {
             "--events" => o.events = it.next().cloned(),
             "--otel" => o.otel = it.next().cloned(),
             "--tool-hash" => o.tool_hash = it.next().cloned(),
+            "--impact" => o.impact = it.next().cloned(),
             "--cef" => o.cef = it.next().cloned(),
             "--ocsf" => o.ocsf = it.next().cloned(),
             "--shadow" => o.shadow = true,
@@ -125,6 +127,17 @@ fn build_controller(o: &Opts) -> Result<Arc<Controller>, String> {
         ));
         eprintln!("acp-proxy: OCSF governance events -> {op}");
     }
+    let impact_tax = match &o.impact {
+        Some(ip) => {
+            let src = std::fs::read_to_string(ip)
+                .map_err(|e| format!("cannot read impact taxonomy {ip}: {e}"))?;
+            let tax = acp_core::impact::ImpactTaxonomy::from_yaml(&src)
+                .map_err(|e| format!("invalid impact taxonomy {ip}: {e}"))?;
+            eprintln!("acp-proxy: impact taxonomy {} loaded", tax.version);
+            tax
+        }
+        None => acp_core::impact::ImpactTaxonomy::default(),
+    };
     let env = o.env.clone().unwrap_or_else(|| "prod".to_string());
     if o.shadow {
         eprintln!("acp-proxy: SHADOW MODE (recording would-blocks, enforcing nothing)");
@@ -137,6 +150,7 @@ fn build_controller(o: &Opts) -> Result<Arc<Controller>, String> {
         approvals,
         sinks,
         o.fail_open,
+        impact_tax,
     )))
 }
 

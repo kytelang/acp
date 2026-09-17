@@ -67,6 +67,7 @@ async fn main() {
         .route("/policy/current", get(policy_current))
         .route("/verify", get(verify))
         .route("/report", get(report))
+        .route("/metrics", get(metrics))
         .with_state(state);
 
     let listener = tokio::net::TcpListener::bind(&addr).await.expect("bind");
@@ -139,6 +140,50 @@ async fn verify(State(st): State<Arc<AppState>>) -> impl IntoResponse {
         },
         None => (axum::http::StatusCode::NOT_FOUND, "no ledger configured").into_response(),
     }
+}
+
+async fn metrics(State(st): State<Arc<AppState>>) -> impl IntoResponse {
+    let pack = st
+        .ledger
+        .as_ref()
+        .and_then(|l| acp_ledger::export_file(l).ok());
+    let recs = pack
+        .as_ref()
+        .and_then(|p| p["records"].as_array().cloned())
+        .unwrap_or_default();
+    let mut decisions = 0u64;
+    let mut verdicts = std::collections::BTreeMap::<String, u64>::new();
+    for r in &recs {
+        if let Some(j) = r["canonical"]
+            .as_str()
+            .and_then(|h| hex::decode(h).ok())
+            .and_then(|b| serde_json::from_slice::<serde_json::Value>(&b).ok())
+        {
+            if j["type"] == "decision" {
+                decisions += 1;
+                *verdicts
+                    .entry(
+                        j["decision"]["verdict"]
+                            .as_str()
+                            .unwrap_or("unknown")
+                            .to_string(),
+                    )
+                    .or_default() += 1;
+            }
+        }
+    }
+    let mut out = String::new();
+    out.push_str("# HELP acp_records_total Evidence records in the ledger.\n# TYPE acp_records_total counter\n");
+    out.push_str(&format!("acp_records_total {}\n", recs.len()));
+    out.push_str("# HELP acp_decisions_total Policy decisions recorded.\n# TYPE acp_decisions_total counter\n");
+    out.push_str(&format!("acp_decisions_total {decisions}\n"));
+    out.push_str("# HELP acp_decisions_by_verdict Decisions by verdict.\n# TYPE acp_decisions_by_verdict counter\n");
+    for (v, n) in &verdicts {
+        out.push_str(&format!(
+            "acp_decisions_by_verdict{{verdict=\"{v}\"}} {n}\n"
+        ));
+    }
+    ([("content-type", "text/plain; version=0.0.4")], out)
 }
 
 async fn report(State(st): State<Arc<AppState>>) -> impl IntoResponse {

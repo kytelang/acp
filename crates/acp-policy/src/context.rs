@@ -1,8 +1,8 @@
 //! Building the namespaced Cedar context from a tool call (decision D9), shared by the proxy and
 //! the CLI so enforcement and offline testing use exactly the same derivation.
 
-use acp_core::blast_radius;
 use acp_core::classify::classify;
+use acp_core::impact::ImpactTaxonomy;
 use acp_core::types::BlastRadius;
 use serde_json::{json, Map, Value};
 
@@ -27,6 +27,11 @@ fn level_str(b: BlastRadius) -> &'static str {
 /// Build the namespaced context: agent data under `args`, proxy-derived impact and class flags in
 /// the trusted `impact`/`derived` namespaces the agent cannot populate.
 pub fn build_context(tool: &str, args: &Value, env: &str) -> Value {
+    build_context_with(tool, args, env, &ImpactTaxonomy::default())
+}
+
+/// Build the namespaced context using a specific (per-tenant, versioned) impact taxonomy (E4).
+pub fn build_context_with(tool: &str, args: &Value, env: &str, tax: &ImpactTaxonomy) -> Value {
     let mut derived = Map::new();
     if let Some(obj) = args.as_object() {
         for (k, v) in obj {
@@ -37,12 +42,12 @@ pub fn build_context(tool: &str, args: &Value, env: &str) -> Value {
             }
         }
     }
-    let impact = level_str(blast_radius::score(tool, args));
     json!({
         "tool": tool,
         "args": args,
         "env": env,
-        "impact": impact,
+        "impact": level_str(tax.score(tool, args)),
+        "impact_taxonomy": tax.version,
         "principal_scopes": [],
         "derived": Value::Object(derived),
     })

@@ -24,7 +24,10 @@ fn run(args: &[&str], reqs: &[String]) -> (bool, Vec<Value>) {
     let out = child.stdout.take().unwrap();
     let mut v = Vec::new();
     for line in BufReader::new(out).lines() {
-        let l = match line { Ok(l) => l, Err(_) => break };
+        let l = match line {
+            Ok(l) => l,
+            Err(_) => break,
+        };
         if !l.trim().is_empty() {
             if let Ok(j) = serde_json::from_str(&l) {
                 v.push(j);

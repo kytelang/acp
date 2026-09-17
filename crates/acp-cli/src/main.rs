@@ -33,6 +33,8 @@ fn main() -> ExitCode {
         "init" => cmd_init(args.get(2).map(String::as_str).unwrap_or("acp-demo")),
         "replay" => cmd_replay(&args[2..]),
         "purge" => cmd_purge(&args[2..]),
+        "learn" => cmd_learn(args.get(2).map(String::as_str)),
+        "classify-eval" => cmd_classify_eval(args.get(2).map(String::as_str)),
         _ => usage("acp [init|verify|verify-pack|export|policy-compile|policy-test|approve|deny|approvals]"),
     }
 }
@@ -254,6 +256,94 @@ fn cmd_init(dir: &str) -> ExitCode {
     println!("  acp approve   {dir}/ledger.db.approvals <id>   # approve one");
     println!("  acp verify    {dir}/ledger.db                  # verify the evidence");
     println!("  acp export    {dir}/ledger.db > pack.json      # regulator-ready pack");
+    ExitCode::SUCCESS
+}
+
+fn cmd_classify_eval(path: Option<&str>) -> ExitCode {
+    let path = match path {
+        Some(p) => p,
+        None => return usage("acp classify-eval <dataset.jsonl>"),
+    };
+    let text = match std::fs::read_to_string(path) {
+        Ok(t) => t,
+        Err(e) => {
+            eprintln!("acp: cannot read {path}: {e}");
+            return ExitCode::from(1);
+        }
+    };
+    let mut samples = Vec::new();
+    for line in text.lines() {
+        if line.trim().is_empty() {
+            continue;
+        }
+        let v: Value = match serde_json::from_str(line) {
+            Ok(v) => v,
+            Err(e) => {
+                eprintln!("acp: bad dataset line: {e}");
+                return ExitCode::from(1);
+            }
+        };
+        samples.push((
+            v["text"].as_str().unwrap_or("").to_string(),
+            v["label"].as_str().unwrap_or("none").to_string(),
+        ));
+    }
+    let r = acp_core::classify::evaluate(&samples);
+    println!(
+        "classifier evaluation over {} samples (accuracy {:.3})",
+        r.total, r.accuracy
+    );
+    println!(
+        "  pii    precision {:.3}  recall {:.3}  fpr {:.3}  support {}",
+        r.pii.precision, r.pii.recall, r.pii.fpr, r.pii.support
+    );
+    println!(
+        "  secret precision {:.3}  recall {:.3}  fpr {:.3}  support {}",
+        r.secret.precision, r.secret.recall, r.secret.fpr, r.secret.support
+    );
+    ExitCode::SUCCESS
+}
+
+fn cmd_learn(ledger: Option<&str>) -> ExitCode {
+    let ledger = match ledger {
+        Some(l) => l,
+        None => return usage("acp learn <ledger.db>"),
+    };
+    let tools = match acp_ledger::observed_tools(ledger) {
+        Ok(t) => t,
+        Err(e) => {
+            eprintln!("acp: {e}");
+            return ExitCode::from(1);
+        }
+    };
+    if tools.is_empty() {
+        eprintln!("acp: no decision records observed in {ledger}; run the proxy in --shadow first");
+        return ExitCode::from(1);
+    }
+    // Emit a compilable draft policy: high/medium-impact tools get a step-up gate; the rest default-allow.
+    println!("# Draft policy proposed by `acp learn` from observed traffic in {ledger}.");
+    println!(
+        "# Review before enforcing. Tools observed: {}",
+        tools
+            .iter()
+            .map(|(t, i)| format!("{t}({i})"))
+            .collect::<Vec<_>>()
+            .join(", ")
+    );
+    println!("version: 1");
+    println!("default: allow");
+    println!("rules:");
+    for (tool, impact) in &tools {
+        if impact == "high" || impact == "medium" {
+            println!("  - id: review-{}", tool.replace(['.', '/'], "-"));
+            println!("    when: {{ tool: \"{tool}\" }}");
+            println!("    verdict: step_up");
+            println!("    approvers: [\"review\"]");
+            println!(
+                "    reason: \"{impact}-impact tool seen in traffic; review before allowing\""
+            );
+        }
+    }
     ExitCode::SUCCESS
 }
 

@@ -101,6 +101,7 @@ impl Evidence {
         impact: &str,
         env: &str,
         policy_hash: &str,
+        impact_taxonomy: &str,
     ) -> (String, bool) {
         let did = self.next_id();
         let record = json!({
@@ -110,9 +111,10 @@ impl Evidence {
             "session_id": session,
             "action": {"tool": tc.name, "args_hash": sha256_hex(&tc.arguments), "impact": impact, "env": env},
             "decision": {"verdict": verdict_str(outcome.verdict), "rule_id": outcome.rule_id,
-                         "policy_hash": policy_hash, "reason": outcome.reason},
+                         "matched": outcome.reason, "policy_hash": policy_hash, "reason": outcome.reason},
             "provenance": {"algo": {"hash": "sha256", "sig": "ed25519"},
-                           "evaluator": "cedar-policy", "compiler": "acp-policy"}
+                           "evaluator": "cedar-policy", "compiler": "acp-policy",
+                           "impact_taxonomy": impact_taxonomy}
         });
         // Record-before-forward: the durable spool write (fsync) happens before the caller forwards.
         // `durable` is whether that write succeeded; the caller fails closed if not (D5).
