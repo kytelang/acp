@@ -361,7 +361,7 @@ was not actually performed.
 - [m] **H0.8 Auth hardening + RBAC [8].**
   - [m] `acp-auth` Entra OIDC verify + RBAC (mock IdP, 8 tests); `acp_core::webhook::verify_slack` Slack signature verify; `acp-mtls` mutual TLS proxy<->server (rustls, client-cert REQUIRED, real in-memory handshake test: valid client completes mutual auth, rogue client rejected). Real Entra/certs = config.
 - [~] **H0.9 Supply chain: signed releases + SBOM [7].**
-  - [x] CycloneDX SBOM generated offline from the resolved graph (scripts/sbom.sh + `make sbom`, 360 components incl. our crates); cargo-audit dependency scan in CI. [ ] release signing (cosign/sigstore) needs a signing key = deploy step.
+  - [x] CycloneDX SBOM generated offline (scripts/sbom.sh, 360 components) AND signed: `acp sign-artifact`/`verify-artifact` (Ed25519) sign the SBOM/release and detect tampering (round-trip tested); cargo-audit in CI. Real release uses a KMS-held key (config).
 - [e] **H0.10 Third-party pen test [8].** (external: pen-test vendor; the fuzz/robustness suites are built)
   - [b] Pen test of proxy/server/console complete; findings remediated.
 - [~] **H0.11 Fuzzing + E2E + load [12][9].**
@@ -409,7 +409,7 @@ was not actually performed.
 - [~] **H1.2 Safe migrations + config audit [6].**
   - [x] `acp_ledger::migrate`: ordered, transactional, reversible migrations; up preserves existing evidence, rollback returns cleanly keeping data (tested). Config-change audit = metaaudit (H0.7).
 - [~] **H1.3 Reproducible builds + provenance + proxy auto-update [7][K].**
-  - [~] SBOM + pinned Cargo.lock give the build inputs (H0.9); `--locked` builds are deterministic. [ ] SLSA provenance attestation + signed update channel need the release/signing infra.
+  - [~] SBOM + pinned Cargo.lock + `--locked` deterministic builds + Ed25519 artifact signing (`acp sign-artifact`) give signed, verifiable build outputs. [ ] SLSA in-toto provenance format + a hosted signed update channel need release infra.
 - [~] **H1.4 Full JCS + LTV operational [1][C].**
   - [~] Canonicalisation is sorted-key + integer-normalised (1.0==1), with a conformance test pinning the record value domain so a leaf-hash-changing regression is caught (H1.4). [ ] arbitrary-precision float JCS + re-anchoring of old heads still open.
 - [e] **H1.5 Certifications started [10].** (external: SOC2/ISO auditor; control-mappings + questionnaire are built)

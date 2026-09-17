@@ -37,6 +37,8 @@ fn main() -> ExitCode {
         "classify-eval" => cmd_classify_eval(args.get(2).map(String::as_str)),
         "canary" => cmd_canary(&args[2..]),
         "diagnose" => cmd_diagnose(&args[2..]),
+        "sign-artifact" => cmd_sign_artifact(&args[2..]),
+        "verify-artifact" => cmd_verify_artifact(&args[2..]),
         _ => usage("acp [init|verify|verify-pack|export|policy-compile|policy-test|approve|deny|approvals|canary|learn|replay|purge|classify-eval]"),
     }
 }
@@ -606,4 +608,68 @@ fn cmd_diagnose(rest: &[String]) -> ExitCode {
     });
     println!("{}", serde_json::to_string_pretty(&bundle).unwrap());
     ExitCode::SUCCESS
+}
+
+
+/// H0.9: sign a release artifact (SBOM, binary, manifest) with an Ed25519 key. Writes <file>.sig
+/// (hex signature) and <keyfile>.pub (hex public key). Generates the key if it does not exist.
+fn cmd_sign_artifact(rest: &[String]) -> ExitCode {
+    use acp_core::sign::{Ed25519Signer, Signer};
+    let (file, keyfile) = match (rest.first(), rest.get(1)) {
+        (Some(f), Some(k)) => (f, k),
+        _ => return usage("acp sign-artifact <file> <keyfile>"),
+    };
+    let signer = match std::fs::read(keyfile) {
+        Ok(b) if b.len() == 32 => {
+            let mut s = [0u8; 32];
+            s.copy_from_slice(&b);
+            Ed25519Signer::from_seed(&s)
+        }
+        _ => {
+            let s = Ed25519Signer::generate();
+            if std::fs::write(keyfile, s.seed()).is_err() {
+                eprintln!("acp: cannot write key {keyfile}");
+                return ExitCode::from(1);
+            }
+            s
+        }
+    };
+    let data = match std::fs::read(file) {
+        Ok(d) => d,
+        Err(e) => {
+            eprintln!("acp: cannot read {file}: {e}");
+            return ExitCode::from(1);
+        }
+    };
+    let sig = signer.sign(&data);
+    let _ = std::fs::write(format!("{file}.sig"), hex::encode(&sig));
+    let _ = std::fs::write(format!("{keyfile}.pub"), hex::encode(signer.public_key()));
+    println!("signed {file} -> {file}.sig (public key {keyfile}.pub)");
+    ExitCode::SUCCESS
+}
+
+/// H0.9: verify a release artifact's signature under a public key.
+fn cmd_verify_artifact(rest: &[String]) -> ExitCode {
+    use acp_core::sign::verify_ed25519;
+    let (file, pubfile, sigfile) = match (rest.first(), rest.get(1), rest.get(2)) {
+        (Some(f), Some(p), Some(s)) => (f, p, s),
+        _ => return usage("acp verify-artifact <file> <keyfile.pub> <file.sig>"),
+    };
+    let read_hex = |path: &str| -> Option<Vec<u8>> {
+        std::fs::read_to_string(path).ok().and_then(|s| hex::decode(s.trim()).ok())
+    };
+    let (pk, sig, data) = match (read_hex(pubfile), read_hex(sigfile), std::fs::read(file).ok()) {
+        (Some(p), Some(s), Some(d)) => (p, s, d),
+        _ => {
+            eprintln!("acp: cannot read inputs");
+            return ExitCode::from(1);
+        }
+    };
+    if verify_ed25519(&pk, &data, &sig) {
+        println!("VERIFIED: {file} signature is valid");
+        ExitCode::SUCCESS
+    } else {
+        println!("INVALID: {file} signature does not verify");
+        ExitCode::from(1)
+    }
 }

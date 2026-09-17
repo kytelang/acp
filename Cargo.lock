@@ -29,6 +29,7 @@ dependencies = [
  "acp-core",
  "acp-ledger",
  "acp-policy",
+ "hex",
  "serde_json",
 ]
 
