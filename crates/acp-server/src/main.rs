@@ -72,7 +72,12 @@ async fn main() {
 
     let listener = tokio::net::TcpListener::bind(&addr).await.expect("bind");
     eprintln!("acp-server: listening on http://{addr}");
-    axum::serve(listener, app).await.expect("serve");
+    // X.7: drain in-flight requests on SIGTERM/Ctrl-C instead of dropping them. The evidence
+    // ledger is durable per-append, so a clean drain loses no decision and double-executes none.
+    axum::serve(listener, app)
+        .with_graceful_shutdown(shutdown_signal())
+        .await
+        .expect("serve");
 }
 
 async fn inbox(State(st): State<Arc<AppState>>) -> Html<String> {
@@ -231,6 +236,7 @@ async fn report(State(st): State<Arc<AppState>>) -> impl IntoResponse {
             Json(serde_json::json!({
                 "records": recs.len(),
                 "decisions": decisions,
+                "billable_units": decisions,
                 "verdicts": verdicts,
                 "outcomes": outcomes,
                 "policy_coverage": (coverage * 1000.0).round() / 1000.0
@@ -239,4 +245,26 @@ async fn report(State(st): State<Arc<AppState>>) -> impl IntoResponse {
         }
         None => (axum::http::StatusCode::NOT_FOUND, "no ledger configured").into_response(),
     }
+}
+
+/// Resolve when the process is asked to stop, so the server can drain rather than drop.
+async fn shutdown_signal() {
+    let ctrl_c = async {
+        let _ = tokio::signal::ctrl_c().await;
+    };
+    #[cfg(unix)]
+    let terminate = async {
+        if let Ok(mut sig) =
+            tokio::signal::unix::signal(tokio::signal::unix::SignalKind::terminate())
+        {
+            sig.recv().await;
+        }
+    };
+    #[cfg(not(unix))]
+    let terminate = std::future::pending::<()>();
+    tokio::select! {
+        _ = ctrl_c => {},
+        _ = terminate => {},
+    }
+    eprintln!("acp-server: shutdown signal received, draining in-flight requests");
 }

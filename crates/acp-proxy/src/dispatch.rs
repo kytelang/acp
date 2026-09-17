@@ -275,8 +275,17 @@ impl Controller {
                     FrameAction::Forward
                 }
                 Enforce::Reply(json) => {
+                    // A4: a policy-evaluation error is fail-closed to deny, but it must be
+                    // recorded and alarmed as a distinct outcome, never folded into a normal
+                    // deny (a silent eval-error deny hides a broken policy).
+                    let eval_error = a.outcome.rule_id.as_deref() == Some("eval-error");
+                    let outcome = if eval_error {
+                        "eval_error"
+                    } else {
+                        "not_executed"
+                    };
                     if let (Some(ev), Some(did)) = (st.evidence.as_mut(), did.as_ref()) {
-                        ev.record_outcome(did, "not_executed");
+                        ev.record_outcome(did, outcome);
                     }
                     drop(st);
                     self.emit_event(
@@ -284,7 +293,7 @@ impl Controller {
                         verdict_s,
                         a.outcome.rule_id.as_deref(),
                         a.impact,
-                        "denied",
+                        if eval_error { "eval_error" } else { "denied" },
                     );
                     FrameAction::Reply(json)
                 }

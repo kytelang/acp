@@ -6,6 +6,7 @@
 //! record so the ledger never implies an action happened.
 
 use acp_core::canonical::sha256_hex;
+use acp_core::hlc::Hlc;
 use acp_core::sign::{Ed25519Signer, Signer};
 use acp_core::types::Verdict;
 use acp_jsonrpc::ToolCall;
@@ -19,6 +20,7 @@ pub struct Evidence {
     spool: Spool,
     run: String,
     counter: u64,
+    hlc: Hlc,
 }
 
 fn now_ms() -> u64 {
@@ -80,8 +82,9 @@ impl Evidence {
         Ok(Evidence {
             ledger,
             spool,
-            run,
+            run: run.clone(),
             counter: 0,
+            hlc: Hlc::new(run),
         })
     }
 
@@ -104,8 +107,10 @@ impl Evidence {
         impact_taxonomy: &str,
     ) -> (String, bool) {
         let did = self.next_id();
+        let ts = now_ms();
+        let hlc = self.hlc.tick(ts).encode();
         let record = json!({
-            "schema": 1, "type": "decision", "ts_ms": now_ms(),
+            "schema": 1, "type": "decision", "ts_ms": ts, "hlc": hlc,
             "agent_id": agent,
             "principal": {"id": "unknown", "verified": false},
             "session_id": session,

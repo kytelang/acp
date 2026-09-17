@@ -35,7 +35,9 @@ fn main() -> ExitCode {
         "purge" => cmd_purge(&args[2..]),
         "learn" => cmd_learn(args.get(2).map(String::as_str)),
         "classify-eval" => cmd_classify_eval(args.get(2).map(String::as_str)),
-        _ => usage("acp [init|verify|verify-pack|export|policy-compile|policy-test|approve|deny|approvals]"),
+        "canary" => cmd_canary(&args[2..]),
+        "diagnose" => cmd_diagnose(&args[2..]),
+        _ => usage("acp [init|verify|verify-pack|export|policy-compile|policy-test|approve|deny|approvals|canary|learn|replay|purge|classify-eval]"),
     }
 }
 
@@ -503,4 +505,105 @@ fn label(ctx: &Value) -> String {
         .and_then(Value::as_str)
         .unwrap_or("?")
         .to_string()
+}
+
+/// B2: canary / synthetic decisions prove the gate is actually live.
+/// `acp canary <policy.yaml> <canaries.json>` evaluates a set of probe calls, each declaring the
+/// verdict it must produce. Any mismatch exits non-zero so a scheduler pages: a mis-loaded policy
+/// that lets a must-deny probe through is caught within one probe interval.
+fn cmd_canary(rest: &[String]) -> ExitCode {
+    let (policy, probes) = match (rest.first(), rest.get(1)) {
+        (Some(p), Some(c)) => (p, c),
+        _ => return usage("acp canary <policy.yaml> <canaries.json>"),
+    };
+    let engine = match load(policy) {
+        Ok(e) => e,
+        Err(c) => return c,
+    };
+    let raw = match std::fs::read_to_string(probes) {
+        Ok(s) => s,
+        Err(e) => {
+            eprintln!("acp: cannot read {probes}: {e}");
+            return ExitCode::from(1);
+        }
+    };
+    let cases: Vec<serde_json::Value> = match serde_json::from_str(&raw) {
+        Ok(v) => v,
+        Err(e) => {
+            eprintln!("acp: invalid canaries file: {e}");
+            return ExitCode::from(1);
+        }
+    };
+    let mut failures = 0;
+    for (i, case) in cases.iter().enumerate() {
+        let tool = case["tool"].as_str().unwrap_or("");
+        let expect = case["expect"].as_str().unwrap_or("");
+        let env = case["env"].as_str().unwrap_or("prod");
+        let args = case.get("args").cloned().unwrap_or(serde_json::json!({}));
+        let out = engine.evaluate(build_context(tool, &args, env));
+        let got = match out.verdict {
+            acp_core::types::Verdict::Allow => "allow",
+            acp_core::types::Verdict::Deny => "deny",
+            acp_core::types::Verdict::StepUp => "step_up",
+            acp_core::types::Verdict::Shadow => "shadow",
+        };
+        if got == expect {
+            println!("CANARY OK  #{i} {tool}: {got}");
+        } else {
+            failures += 1;
+            println!("CANARY FAIL #{i} {tool}: expected '{expect}', got '{got}'");
+        }
+    }
+    if failures == 0 {
+        println!(
+            "canary: all {} probes passed; the gate is live",
+            cases.len()
+        );
+        ExitCode::SUCCESS
+    } else {
+        eprintln!("canary: {failures} probe(s) failed; policy may be mis-loaded (PAGE)");
+        ExitCode::from(1)
+    }
+}
+
+/// X.4: support without seeing arguments. `acp diagnose <ledger.db> <seq>` prints a redacted
+/// bundle a support engineer can use to explain a deny/hold, decision id, tool, verdict, rule,
+/// impact, hlc, and the args HASH, but never the raw arguments. Redaction is never disabled.
+fn cmd_diagnose(rest: &[String]) -> ExitCode {
+    let (ledger, seq_s) = match (rest.first(), rest.get(1)) {
+        (Some(l), Some(s)) => (l, s),
+        _ => return usage("acp diagnose <ledger.db> <seq>"),
+    };
+    let seq: u64 = match seq_s.parse() {
+        Ok(n) => n,
+        Err(_) => {
+            eprintln!("acp: seq must be a number");
+            return ExitCode::from(2);
+        }
+    };
+    // Deliberately ignore the args half of the tuple: the support bundle never carries payloads.
+    let (record, _args) = match acp_ledger::read_record(ledger, seq) {
+        Ok(v) => v,
+        Err(e) => {
+            eprintln!("acp: cannot read record #{seq}: {e}");
+            return ExitCode::from(1);
+        }
+    };
+    let action = &record["action"];
+    let decision = &record["decision"];
+    let bundle = serde_json::json!({
+        "seq": seq,
+        "hlc": record["hlc"],
+        "tool": action["tool"],
+        "env": action["env"],
+        "impact": action["impact"],
+        "args_hash": action["args_hash"],
+        "verdict": decision["verdict"],
+        "rule_id": decision["rule_id"],
+        "matched": decision["matched"],
+        "policy_hash": decision["policy_hash"],
+        "redacted": true
+    });
+    println!("{}", serde_json::to_string_pretty(&bundle).unwrap());
+    ExitCode::SUCCESS
 }

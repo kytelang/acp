@@ -11,3 +11,8 @@ acp-policy = { path = "../acp-policy" }
 acp-ledger = { path = "../acp-ledger" }
 acp-approvals = { path = "../acp-approvals" }
 serde_json.workspace = true
+
+[dev-dependencies]
+acp-ledger = { path = "../acp-ledger" }
+acp-core = { path = "../acp-core" }
+serde_json.workspace = true
