@@ -1,39 +1,90 @@
-//! acp-proxy: sits between an MCP client and the tool server(s), decides on every
-//! `tools/call`, and (from M3) streams a signed evidence record for each decision.
+//! acp-proxy: sits between an MCP client and the tool server(s), gates every `tools/call`, and
+//! (from M3) streams a signed evidence record for each decision.
 //!
-//! M1: the transparent stdio shim. `acp-proxy stdio -- <mcp-server-cmd> [args...]`.
+//! `acp-proxy stdio [--policy <file.yaml>] [--env <env>] -- <mcp-server-cmd> [args...]`
 
 mod intercept;
 mod limits;
+mod policy;
 mod stdio;
 
+use acp_policy::PolicyEngine;
 use std::process::ExitCode;
+use std::sync::Arc;
 
 #[tokio::main]
 async fn main() -> ExitCode {
     let args: Vec<String> = std::env::args().collect();
-    match args.get(1).map(String::as_str) {
-        Some("stdio") => {
-            let rest: Vec<String> = args.iter().skip(2).cloned().collect();
-            let cmd_args: Vec<String> = match rest.iter().position(|a| a == "--") {
-                Some(i) => rest[i + 1..].to_vec(),
-                None => rest,
-            };
-            if cmd_args.is_empty() {
-                eprintln!("usage: acp-proxy stdio -- <mcp-server-cmd> [args...]");
+    if args.get(1).map(String::as_str) != Some("stdio") {
+        eprintln!(
+            "usage: acp-proxy stdio [--policy <file>] [--env <env>] -- <mcp-server-cmd> [args...]"
+        );
+        return ExitCode::SUCCESS;
+    }
+
+    // Split options (before `--`) from the child command (after `--`).
+    let after: Vec<String> = args.iter().skip(2).cloned().collect();
+    let split = after.iter().position(|a| a == "--");
+    let (opts, cmd_args) = match split {
+        Some(i) => (after[..i].to_vec(), after[i + 1..].to_vec()),
+        None => (Vec::new(), after),
+    };
+    if cmd_args.is_empty() {
+        eprintln!(
+            "usage: acp-proxy stdio [--policy <file>] [--env <env>] -- <mcp-server-cmd> [args...]"
+        );
+        return ExitCode::from(2);
+    }
+
+    let mut policy_path: Option<String> = None;
+    let mut env = "prod".to_string();
+    let mut it = opts.iter();
+    while let Some(o) = it.next() {
+        match o.as_str() {
+            "--policy" => policy_path = it.next().cloned(),
+            "--env" => {
+                if let Some(v) = it.next() {
+                    env = v.clone();
+                }
+            }
+            other => {
+                eprintln!("acp-proxy: unknown option '{other}'");
                 return ExitCode::from(2);
             }
-            match stdio::run(&cmd_args[0], &cmd_args[1..]).await {
-                Ok(code) => ExitCode::from(code as u8),
+        }
+    }
+
+    let engine = match policy_path {
+        Some(p) => {
+            let src = match std::fs::read_to_string(&p) {
+                Ok(s) => s,
                 Err(e) => {
-                    eprintln!("acp-proxy: {e}");
-                    ExitCode::from(1)
+                    eprintln!("acp-proxy: cannot read policy {p}: {e}");
+                    return ExitCode::from(1);
+                }
+            };
+            match PolicyEngine::from_yaml(&src) {
+                Ok(e) => {
+                    eprintln!(
+                        "acp-proxy: policy loaded ({} ...)",
+                        &e.hash()[..12.min(e.hash().len())]
+                    );
+                    Some(Arc::new(e))
+                }
+                Err(e) => {
+                    eprintln!("acp-proxy: invalid policy {p}: {e}");
+                    return ExitCode::from(1);
                 }
             }
         }
-        _ => {
-            eprintln!("usage: acp-proxy stdio -- <mcp-server-cmd> [args...]");
-            ExitCode::SUCCESS
+        None => None,
+    };
+
+    match stdio::run(&cmd_args[0], &cmd_args[1..], engine, env).await {
+        Ok(code) => ExitCode::from(code as u8),
+        Err(e) => {
+            eprintln!("acp-proxy: {e}");
+            ExitCode::from(1)
         }
     }
 }

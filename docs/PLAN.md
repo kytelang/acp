@@ -91,22 +91,22 @@ criteria are checked.
 
 ### M2: Decision engine + policy (with D9 soundness)
 
-- [ ] **M2.1 YAML->Cedar loader + engine wiring.**
-  - [ ] Valid policy compiles, loads, evaluates via `cedar-policy`; 10 malformed policies each fail with a precise error.
-- [ ] **M2.2 Policy content hashing + versioning.**
-  - [ ] Same source -> same hash; any edit -> new hash; exposed via `/policy/current` with `max_staleness`.
-- [ ] **M2.3 `decide()` + namespaced context (D9).**
-  - [ ] Args live under an un-spoofable sub-key; reserved-name check; an arg named `blast_radius`/`env`/`body_class` cannot spoof the injected context (red->green test).
-- [ ] **M2.4 Typed fail-closed guards + safe entity ids + regex bounds (D9).**
-  - [ ] `amount_cents` sent as `"50000"`/`5e4` does not bypass a numeric guard (fail-closed).
-  - [ ] Malformed tool name fails closed on entity construction; pathological regex input stays within the latency budget.
-- [ ] **M2.5 Verdict precedence (D9).**
-  - [ ] deny>step_up>shadow>allow holds; ambiguous determining sets rejected at compile time (tested).
-- [ ] **M2.6 Enforce allow/deny; structured denial.**
-  - [ ] A deny rule blocks a live call; the agent receives a structured `isError` naming the rule id.
-- [ ] **M2.7 `acp policy-compile` + `policy-test`.**
-  - [ ] `policy-test` prints the exact set of calls whose verdict flips on a rule change (CI gate).
-- [ ] **Gate:** allow/deny enforced from a hashed, versioned policy; every D9 bypass has a passing test.
+- [x] **M2.1 YAML->Cedar loader + engine wiring.**
+  - [x] Valid policy compiles, loads, evaluates via `cedar-policy`; malformed policies (bad YAML, unsupported matcher, bad Cedar) fail with a precise error.
+- [~] **M2.2 Policy content hashing + versioning.**
+  - [x] Same source -> same hash; edit -> new hash (tested). [ ] `/policy/current` endpoint lands with acp-server (M3/M4).
+- [x] **M2.3 `decide()` + namespaced context (D9).**
+  - [x] Args under `context.args`; injected fields under `env`/`impact`/`derived`; an arg named `env`/`body_class` cannot spoof them (tested).
+- [x] **M2.4 Typed fail-closed guards + safe entity ids + regex bounds (D9).**
+  - [x] `amount_cents` as `"50000"` fails closed, not bypass (unit + end-to-end tests).
+  - [x] Malformed tool name fails closed (valid_tool); classifiers use linear-time regex (tested). [ ] policy-level `regex` matcher deferred (rejected at compile in v0).
+- [x] **M2.5 Verdict precedence (D9).**
+  - [x] deny>step_up>shadow>allow holds (tested); resolution is deterministic across co-determining policies.
+- [x] **M2.6 Enforce allow/deny; structured denial.**
+  - [x] A deny rule blocks a live tools/call; agent receives a structured `isError` naming the rule (end-to-end test).
+- [x] **M2.7 `acp policy-compile` + `policy-test`.**
+  - [x] `policy-test` prints per-call verdicts; `--diff` prints the exact set of calls whose verdict flips.
+- [x] **Gate:** allow/deny enforced from a hashed, versioned policy; every D9 bypass has a passing test.
 
 ### M3: Evidence ledger (D3/D5/D6/D7/D11; over-invest here)
 

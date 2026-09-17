@@ -6,6 +6,7 @@
 
 pub mod blast_radius;
 pub mod canonical;
+pub mod classify;
 pub mod merkle;
 pub mod sign;
 pub mod types;

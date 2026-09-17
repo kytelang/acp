@@ -8,4 +8,4 @@ description = "Agent Control Plane: acp CLI - init, verify, export, policy-compi
 [dependencies]
 acp-core = { path = "../acp-core" }
 acp-policy = { path = "../acp-policy" }
-# to wire: clap (M3/M5)
+serde_json.workspace = true

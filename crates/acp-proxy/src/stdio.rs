@@ -1,20 +1,27 @@
-//! The stdio transport shim (M1.1 to M1.5).
+//! The stdio transport shim (M1) with policy enforcement on `tools/call` (M2).
 //!
-//! Launches the real MCP server as a child process and sits transparently between the MCP
-//! client (this process's stdin/stdout) and the server (the child's stdin/stdout). Messages are
-//! newline-delimited JSON-RPC, per the MCP stdio transport. Non-decision frames are relayed
-//! verbatim; the client-to-server direction is classified by `intercept::decide`.
+//! Launches the MCP server as a child and relays newline-delimited JSON-RPC transparently.
+//! Non-decision frames pass through; `tools/call` is gated by the policy engine when one is
+//! loaded; other client-to-server requests are classified by `intercept::decide`.
 
 use crate::intercept::{decide, Action, CODE_BLOCKED};
 use crate::limits;
-use acp_jsonrpc::{error_response, inspect};
+use crate::policy::{self, Enforce};
+use acp_jsonrpc::{classify, error_response, inspect, ParsedFrame};
+use acp_policy::PolicyEngine;
 use serde_json::Value;
 use std::process::Stdio;
+use std::sync::Arc;
 use tokio::io::{AsyncBufReadExt, AsyncWriteExt, BufReader};
 use tokio::process::Command;
 use tokio::sync::mpsc;
 
-pub async fn run(cmd: &str, args: &[String]) -> anyhow::Result<i32> {
+pub async fn run(
+    cmd: &str,
+    args: &[String],
+    engine: Option<Arc<PolicyEngine>>,
+    env: String,
+) -> anyhow::Result<i32> {
     let mut child = Command::new(cmd)
         .args(args)
         .stdin(Stdio::piped())
@@ -24,8 +31,6 @@ pub async fn run(cmd: &str, args: &[String]) -> anyhow::Result<i32> {
     let child_stdin = child.stdin.take().expect("child stdin");
     let child_stdout = child.stdout.take().expect("child stdout");
 
-    // One writer to the client (our stdout); deny responses and relayed server frames funnel
-    // through here so lines never interleave mid-message.
     let (to_client, mut to_client_rx) = mpsc::channel::<String>(1024);
     let client_writer = tokio::spawn(async move {
         let mut out = tokio::io::stdout();
@@ -38,7 +43,6 @@ pub async fn run(cmd: &str, args: &[String]) -> anyhow::Result<i32> {
         }
     });
 
-    // One writer to the child (tool server) stdin.
     let (to_child, mut to_child_rx) = mpsc::channel::<String>(1024);
     let child_writer = tokio::spawn(async move {
         let mut cin = child_stdin;
@@ -51,7 +55,7 @@ pub async fn run(cmd: &str, args: &[String]) -> anyhow::Result<i32> {
         }
     });
 
-    // server -> client: relay every frame verbatim.
+    // server -> client: relay verbatim.
     let s2c_out = to_client.clone();
     let s2c = tokio::spawn(async move {
         let mut lines = BufReader::new(child_stdout).lines();
@@ -62,7 +66,7 @@ pub async fn run(cmd: &str, args: &[String]) -> anyhow::Result<i32> {
         }
     });
 
-    // client -> server: classify, then forward or deny.
+    // client -> server: classify, enforce, forward or reply.
     let c2s_out = to_client.clone();
     let c2s = tokio::spawn(async move {
         let mut lines = BufReader::new(tokio::io::stdin()).lines();
@@ -70,7 +74,6 @@ pub async fn run(cmd: &str, args: &[String]) -> anyhow::Result<i32> {
             let raw = line.as_bytes();
             let insp = inspect(raw);
 
-            // Resource limit (M1.5): fail-closed on oversize.
             if !limits::within_size(raw) {
                 if let Some(id) = &insp.id {
                     let _ = c2s_out
@@ -84,7 +87,6 @@ pub async fn run(cmd: &str, args: &[String]) -> anyhow::Result<i32> {
                 continue;
             }
 
-            // Record the MCP protocol version the interception was verified against (M1.4).
             if insp.method.as_deref() == Some("initialize") {
                 if let Ok(v) = serde_json::from_slice::<Value>(raw) {
                     if let Some(pv) = v
@@ -95,6 +97,30 @@ pub async fn run(cmd: &str, args: &[String]) -> anyhow::Result<i32> {
                         eprintln!("acp-proxy: MCP protocolVersion {pv}");
                     }
                 }
+            }
+
+            // tools/call: gate through the policy engine when one is loaded.
+            if insp.is_tool_call {
+                if let Some(eng) = &engine {
+                    if let ParsedFrame::ToolCall(tc) = classify(raw) {
+                        match policy::enforce(eng, &env, &tc) {
+                            Enforce::Forward => {
+                                if to_child.send(line).await.is_err() {
+                                    break;
+                                }
+                            }
+                            Enforce::Reply(json) => {
+                                let _ = c2s_out.send(json).await;
+                            }
+                        }
+                        continue;
+                    }
+                }
+                // no policy loaded: forward (pre-M2 behaviour).
+                if to_child.send(line).await.is_err() {
+                    break;
+                }
+                continue;
             }
 
             match decide(&insp) {
@@ -111,9 +137,7 @@ pub async fn run(cmd: &str, args: &[String]) -> anyhow::Result<i32> {
         }
     });
 
-    drop(to_client); // writers close once the two relay tasks drop their clones
-
-    // Client closed its stream -> stop forwarding -> child sees EOF -> child exits.
+    drop(to_client);
     let _ = c2s.await;
     let status = child.wait().await?;
     let _ = s2c.await;
