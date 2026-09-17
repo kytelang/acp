@@ -7,6 +7,7 @@
 pub mod blast_radius;
 pub mod canonical;
 pub mod classify;
+pub mod impact;
 pub mod merkle;
 pub mod render;
 pub mod sign;

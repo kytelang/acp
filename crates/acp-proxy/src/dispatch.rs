@@ -13,6 +13,7 @@ use crate::intercept::{decide, Action, CODE_BLOCKED};
 use crate::limits;
 use crate::policy::{self, Enforce};
 use acp_approvals::ApprovalStore;
+use acp_core::impact::ImpactTaxonomy;
 use acp_core::types::Verdict;
 use acp_jsonrpc::{classify, error_response, inspect, ParsedFrame};
 use acp_policy::PolicyEngine;
@@ -42,9 +43,11 @@ pub struct Controller {
     principal: String,
     sinks: Vec<Box<dyn Sink>>,
     fail_open: bool,
+    impact_tax: ImpactTaxonomy,
 }
 
 impl Controller {
+    #[allow(clippy::too_many_arguments)]
     pub fn new(
         engine: Option<Arc<PolicyEngine>>,
         env: String,
@@ -53,6 +56,7 @@ impl Controller {
         approvals: Option<ApprovalStore>,
         sinks: Vec<Box<dyn Sink>>,
         fail_open: bool,
+        impact_tax: ImpactTaxonomy,
     ) -> Controller {
         Controller {
             engine,
@@ -67,6 +71,7 @@ impl Controller {
             principal: "unknown".to_string(),
             sinks,
             fail_open,
+            impact_tax,
         }
     }
 
@@ -129,7 +134,7 @@ impl Controller {
                 ParsedFrame::ToolCall(tc) => tc,
                 _ => return FrameAction::Forward,
             };
-            let a = policy::assess(&eng, &self.env, &tc);
+            let a = policy::assess(&eng, &self.env, &tc, &self.impact_tax);
             let verdict_s = match a.outcome.verdict {
                 Verdict::Allow => "allow",
                 Verdict::Deny => "deny",
@@ -149,6 +154,7 @@ impl Controller {
                         a.impact,
                         &self.env,
                         eng.hash(),
+                        &a.impact_taxonomy,
                     );
                     ev.record_outcome(&did, "would_block");
                 }
@@ -172,6 +178,7 @@ impl Controller {
                                 a.impact,
                                 &self.env,
                                 eng.hash(),
+                                &a.impact_taxonomy,
                             );
                             ev.record_outcome(&did, "forwarded");
                         }
@@ -206,6 +213,7 @@ impl Controller {
                                 a.impact,
                                 &self.env,
                                 eng.hash(),
+                                &a.impact_taxonomy,
                             );
                             ev.record_outcome(&did, "not_executed");
                         }
@@ -232,6 +240,7 @@ impl Controller {
                     a.impact,
                     &self.env,
                     eng.hash(),
+                    &a.impact_taxonomy,
                 )
             });
             let did = rec.as_ref().map(|(d, _)| d.clone());

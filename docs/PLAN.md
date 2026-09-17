@@ -451,7 +451,7 @@ customer), not deferred.
   - [x] `/report` computes `policy_coverage` = % of decisions matched by an explicit rule vs default (tested). [ ] per-tool no-rule worklist.
 - [b] **E3 [v1/P1] Decision explainability to the agent/user.**
   - [b] Deny/step-up responses carry a redaction-safe rationale (matched condition, triggering signal, "to pass, X") without leaking raw argument values.
-- [b] **E4 [v1/P1] Configurable impact taxonomy (replaces the fixed blast-radius heuristic).**
+- [x] **E4 [v1/P1] Configurable impact taxonomy (replaces the fixed blast-radius heuristic).**
   - [b] A declarative, per-tenant, versioned impact config (factors, weights, thresholds, data classes) evaluated into the un-spoofable context; two tenants score the same call differently; the taxonomy version is stamped into evidence.
 - [b] **E5 [v1/P1] Learn-mode / policy bootstrapping from observed traffic.**
   - [b] After a shadow window, emits a compilable draft policy covering all observed action methods + suggested step_up thresholds, diffed against current.

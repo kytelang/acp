@@ -9,6 +9,7 @@ description = "Agent Control Plane: trust core (types, verifiable log, signing, 
 sha2.workspace = true
 serde.workspace = true
 serde_json.workspace = true
+serde_yaml.workspace = true
 hex.workspace = true
 regex.workspace = true
 ed25519-dalek.workspace = true
