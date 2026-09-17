@@ -13,3 +13,6 @@ hex.workspace = true
 regex.workspace = true
 ed25519-dalek.workspace = true
 getrandom.workspace = true
+
+[dev-dependencies]
+hex.workspace = true

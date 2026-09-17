@@ -93,3 +93,20 @@ fn consistency_proof_confirms_append_only() {
         old_size, new_size, &proof, old_root, bad
     ));
 }
+
+#[test]
+fn rfc6962_known_answers() {
+    use acp_core::merkle::{leaf_hash, root_of};
+    // MTH of the empty tree is SHA-256("") per RFC 6962.
+    assert_eq!(
+        hex::encode(root_of(&[])),
+        "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    );
+    // Leaf hash uses the 0x00 domain prefix: leaf_hash("") == SHA-256(0x00).
+    assert_eq!(
+        hex::encode(leaf_hash(b"")),
+        "6e340b9cffb37a989ca544e6bb780a2c78901d3fb33738768511a30617afa01d"
+    );
+    // A one-leaf tree's root is that leaf's hash.
+    assert_eq!(root_of(&[leaf_hash(b"")]), leaf_hash(b""));
+}

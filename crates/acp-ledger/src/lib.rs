@@ -466,3 +466,30 @@ pub fn export_file(path: &str) -> Result<Value, String> {
         "records": recs,
     }))
 }
+
+/// Read a single record (and its args, if not purged) by seq, read-only. Used by `acp replay`.
+pub fn read_record(path: &str, seq: u64) -> Result<(Value, Option<Value>), String> {
+    let conn = Connection::open_with_flags(path, OpenFlags::SQLITE_OPEN_READ_ONLY)
+        .map_err(|e| e.to_string())?;
+    let (canonical, args_hash): (Vec<u8>, Option<String>) = conn
+        .query_row(
+            "SELECT canonical,args_hash FROM records WHERE seq=?",
+            params![seq as i64],
+            |r| Ok((r.get(0)?, r.get(1)?)),
+        )
+        .map_err(|e| e.to_string())?;
+    let record: Value = serde_json::from_slice(&canonical).map_err(|e| e.to_string())?;
+    let args = match args_hash {
+        Some(h) => conn
+            .query_row(
+                "SELECT blob FROM args_blob WHERE args_hash=?",
+                params![h],
+                |r| r.get::<_, Vec<u8>>(0),
+            )
+            .optional()
+            .map_err(|e| e.to_string())?
+            .and_then(|b| serde_json::from_slice(&b).ok()),
+        None => None,
+    };
+    Ok((record, args))
+}

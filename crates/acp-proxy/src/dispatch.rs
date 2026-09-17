@@ -109,6 +109,7 @@ impl Controller {
                         &tc,
                         &a.outcome,
                         a.impact,
+                        &self.env,
                         eng.hash(),
                     );
                     ev.record_outcome(&did, "would_block");
@@ -131,6 +132,7 @@ impl Controller {
                                 &tc,
                                 &a.outcome,
                                 a.impact,
+                                &self.env,
                                 eng.hash(),
                             );
                             ev.record_outcome(&did, "forwarded");
@@ -146,6 +148,7 @@ impl Controller {
                                 &tc,
                                 &a.outcome,
                                 a.impact,
+                                &self.env,
                                 eng.hash(),
                             );
                             ev.record_outcome(&did, "not_executed");
@@ -163,6 +166,7 @@ impl Controller {
                     &tc,
                     &a.outcome,
                     a.impact,
+                    &self.env,
                     eng.hash(),
                 )
             });

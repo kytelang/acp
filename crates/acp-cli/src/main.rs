@@ -31,6 +31,7 @@ fn main() -> ExitCode {
             None => usage("acp approvals <approvals.db>"),
         },
         "init" => cmd_init(args.get(2).map(String::as_str).unwrap_or("acp-demo")),
+        "replay" => cmd_replay(&args[2..]),
         _ => usage("acp [init|verify|verify-pack|export|policy-compile|policy-test|approve|deny|approvals]"),
     }
 }
@@ -253,6 +254,67 @@ fn cmd_init(dir: &str) -> ExitCode {
     println!("  acp verify    {dir}/ledger.db                  # verify the evidence");
     println!("  acp export    {dir}/ledger.db > pack.json      # regulator-ready pack");
     ExitCode::SUCCESS
+}
+
+fn cmd_replay(rest: &[String]) -> ExitCode {
+    if rest.len() < 3 {
+        return usage("acp replay <ledger.db> <seq> <policy.yaml>");
+    }
+    let seq: u64 = match rest[1].parse() {
+        Ok(n) => n,
+        Err(_) => {
+            eprintln!("acp: seq must be a number");
+            return ExitCode::from(2);
+        }
+    };
+    let (record, args) = match acp_ledger::read_record(&rest[0], seq) {
+        Ok(v) => v,
+        Err(e) => {
+            eprintln!("acp: {e}");
+            return ExitCode::from(1);
+        }
+    };
+    let action = &record["action"];
+    let tool = action["tool"].as_str().unwrap_or("");
+    let env = action["env"].as_str().unwrap_or("prod");
+    let recorded = record["decision"]["verdict"].as_str().unwrap_or("");
+    let policy_hash = record["decision"]["policy_hash"].as_str().unwrap_or("");
+    if tool.is_empty() {
+        eprintln!("acp: record #{seq} is not a decision (nothing to replay)");
+        return ExitCode::from(1);
+    }
+    let args = match args {
+        Some(a) => a,
+        None => {
+            eprintln!("acp: args for record #{seq} were purged; cannot replay");
+            return ExitCode::from(1);
+        }
+    };
+    let engine = match load(&rest[2]) {
+        Ok(e) => e,
+        Err(c) => return c,
+    };
+    if engine.hash() != policy_hash {
+        eprintln!("WARNING: supplied policy hash {} differs from the recorded {} (policy changed since the decision)", &engine.hash()[..12], policy_hash.chars().take(12).collect::<String>());
+    }
+    let out = engine.evaluate(build_context(tool, &args, env));
+    let replayed = match out.verdict {
+        acp_core::types::Verdict::Allow => "allow",
+        acp_core::types::Verdict::Deny => "deny",
+        acp_core::types::Verdict::StepUp => "step_up",
+        acp_core::types::Verdict::Shadow => "shadow",
+    };
+    if replayed == recorded {
+        println!(
+            "REPRODUCED: record #{seq} ({tool}) re-evaluates to '{replayed}', matching the ledger"
+        );
+        ExitCode::SUCCESS
+    } else {
+        println!(
+            "DRIFT: record #{seq} ({tool}) recorded '{recorded}' but now evaluates to '{replayed}'"
+        );
+        ExitCode::from(1)
+    }
 }
 
 fn cmd_resolve(rest: &[String], approve: bool) -> ExitCode {

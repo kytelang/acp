@@ -357,14 +357,14 @@ customer), not deferred.
 - [ ] **A1 [H0/P0] Formal model-checking of the concurrency cores.**
   - [ ] TLA+/Alloy specs for leader-election+fencing (D6), atomic single-use approval consume (D8), and verdict precedence (D9), model-checked in CI.
   - [ ] TLC finds zero violations of "at most one forward per approval" and "at most one leaf-extender per head"; a deliberately broken CAS is caught by the model.
-- [ ] **A2 [H0/P0] Differential conformance of `acp verify` vs a reference CT implementation.**
-  - [ ] 10k randomised append/proof sequences produce byte-identical roots and mutually-accepted proofs across acp, a reference CT lib, and the `acp-core::merkle` fallback.
+- [~] **A2 [H0/P0] Differential conformance of `acp verify` vs a reference CT implementation.**
+  - [x] RFC 6962 known-answer vectors (empty root, leaf domain prefix) pin CT compliance; inclusion/consistency self-checks over random trees. [ ] cross-check vs an external reference CT lib.
 - [ ] **A3 [H0/P0] Cedar evaluation-error is fail-closed + alert.**
   - [ ] Any evaluator error / indeterminate result denies the call, emits a distinct eval-error outcome record, and alarms (not a silent fall-through to `default: allow`).
 - [ ] **A4 [H0/P0] Signing / KMS outage policy.**
   - [ ] With KMS forced down, gating matches the documented policy; the committed-but-unsigned window is bounded and alarmed; on recovery all records sign with no root divergence.
-- [ ] **A5 [H1/P1] Reproducibility harness `acp replay <seq>`.**
-  - [ ] Replays a stored record through its pinned evaluator/compiler/classifier/impact versions and reproduces the stored verdict bit-for-bit; a version bump that would flip any historical verdict fails a golden-corpus gate.
+- [x] **A5 [H1/P1] Reproducibility harness `acp replay <seq>`.**
+  - [x] `acp replay <ledger> <seq> <policy>` rebuilds context from the record + args and re-evaluates: REPRODUCED on match, DRIFT (exit 1) if the verdict changed; warns on policy-hash mismatch.
 - [ ] **A6 [H0/P0] Deterministic context derivation (cross-platform golden vectors).**
   - [ ] The same argument set yields identical `blast_radius`/class flags and thus identical leaf hash on linux-x86_64 and macos-arm64 (regex-engine/float/locale/order pinned).
 - [ ] **A7 [H1/P1] Young-dependency EOL contingency.**

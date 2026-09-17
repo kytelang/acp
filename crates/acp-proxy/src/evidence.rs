@@ -91,6 +91,7 @@ impl Evidence {
     }
 
     /// Write a decision record, durably (spool fsync) then to the ledger. Returns the decision id.
+    #[allow(clippy::too_many_arguments)]
     pub fn record_decision(
         &mut self,
         agent: &str,
@@ -98,6 +99,7 @@ impl Evidence {
         tc: &ToolCall,
         outcome: &PolicyOutcome,
         impact: &str,
+        env: &str,
         policy_hash: &str,
     ) -> String {
         let did = self.next_id();
@@ -106,7 +108,7 @@ impl Evidence {
             "agent_id": agent,
             "principal": {"id": "unknown", "verified": false},
             "session_id": session,
-            "action": {"tool": tc.name, "args_hash": sha256_hex(&tc.arguments), "impact": impact},
+            "action": {"tool": tc.name, "args_hash": sha256_hex(&tc.arguments), "impact": impact, "env": env},
             "decision": {"verdict": verdict_str(outcome.verdict), "rule_id": outcome.rule_id,
                          "policy_hash": policy_hash, "reason": outcome.reason},
             "provenance": {"algo": {"hash": "sha256", "sig": "ed25519"},
