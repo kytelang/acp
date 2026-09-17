@@ -435,7 +435,7 @@ customer), not deferred.
 ### Block F: Enterprise integration & ecosystem
 
 - [~] **F1 [H0/P0] SIEM/SOAR event streaming.**
-  - [x] Canonical governance-event seam: one redacted JSONL event per decision (verdict/rule/outcome, no raw args; tested). `--events <file>`. [ ] OCSF/CEF + Splunk/Sentinel/Datadog sinks plug into the seam.
+  - [x] Multi-sink governance-event seam (`Sink` trait): a redacted JSONL file sink (`--events`) and an **OTLP/HTTP OpenTelemetry sink** (`--otel`, off-reactor, no raw args; tested against a mock collector). [ ] OCSF/CEF + vendor sinks plug into the same trait.
 - [ ] **F2 [H0/P0] Break-glass / emergency controls.**
   - [ ] Scoped modes (disable-enforce, lockdown-all, emergency-bypass) with mandatory reason, TTL, optional dual-control, each a tamper-evident meta-log record; emergency-bypass forwards a would-hold call and auto-reverts at TTL.
 - [ ] **F3 [H1/P1] Fleet management for many proxies.**

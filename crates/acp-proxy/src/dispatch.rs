@@ -7,7 +7,7 @@
 //! are identical across transports.
 
 use crate::approvals::Step;
-use crate::events::EventSink;
+use crate::events::{Event, Sink};
 use crate::evidence::Evidence;
 use crate::intercept::{decide, Action, CODE_BLOCKED};
 use crate::limits;
@@ -30,7 +30,6 @@ pub enum FrameAction {
 struct State {
     evidence: Option<Evidence>,
     approvals: Option<ApprovalStore>,
-    events: Option<EventSink>,
 }
 
 pub struct Controller {
@@ -41,6 +40,7 @@ pub struct Controller {
     agent: String,
     session: String,
     principal: String,
+    sinks: Vec<Box<dyn Sink>>,
 }
 
 impl Controller {
@@ -50,7 +50,7 @@ impl Controller {
         shadow: bool,
         evidence: Option<Evidence>,
         approvals: Option<ApprovalStore>,
-        events: Option<EventSink>,
+        sinks: Vec<Box<dyn Sink>>,
     ) -> Controller {
         Controller {
             engine,
@@ -59,11 +59,36 @@ impl Controller {
             state: Mutex::new(State {
                 evidence,
                 approvals,
-                events,
             }),
             agent: "acp-client".to_string(),
             session: "acp-session".to_string(),
             principal: "unknown".to_string(),
+            sinks,
+        }
+    }
+
+    fn emit_event(
+        &self,
+        tool: &str,
+        verdict: &str,
+        rule_id: Option<&str>,
+        impact: &str,
+        outcome: &str,
+    ) {
+        if self.sinks.is_empty() {
+            return;
+        }
+        let ev = Event {
+            agent: &self.agent,
+            session: &self.session,
+            tool,
+            verdict,
+            rule_id,
+            impact,
+            outcome,
+        };
+        for sink in &self.sinks {
+            sink.emit(&ev);
         }
     }
 
@@ -185,34 +210,28 @@ impl Controller {
                     if let (Some(ev), Some(did)) = (st.evidence.as_mut(), did.as_ref()) {
                         ev.record_outcome(did, "forwarded");
                     }
-                    if let Some(ev) = st.events.as_mut() {
-                        ev.emit(
-                            &self.agent,
-                            &self.session,
-                            &tc.name,
-                            verdict_s,
-                            a.outcome.rule_id.as_deref(),
-                            a.impact,
-                            "forwarded",
-                        );
-                    }
+                    drop(st);
+                    self.emit_event(
+                        &tc.name,
+                        verdict_s,
+                        a.outcome.rule_id.as_deref(),
+                        a.impact,
+                        "forwarded",
+                    );
                     FrameAction::Forward
                 }
                 Enforce::Reply(json) => {
                     if let (Some(ev), Some(did)) = (st.evidence.as_mut(), did.as_ref()) {
                         ev.record_outcome(did, "not_executed");
                     }
-                    if let Some(ev) = st.events.as_mut() {
-                        ev.emit(
-                            &self.agent,
-                            &self.session,
-                            &tc.name,
-                            verdict_s,
-                            a.outcome.rule_id.as_deref(),
-                            a.impact,
-                            "denied",
-                        );
-                    }
+                    drop(st);
+                    self.emit_event(
+                        &tc.name,
+                        verdict_s,
+                        a.outcome.rule_id.as_deref(),
+                        a.impact,
+                        "denied",
+                    );
                     FrameAction::Reply(json)
                 }
             }

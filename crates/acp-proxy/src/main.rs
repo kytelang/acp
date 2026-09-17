@@ -32,6 +32,7 @@ struct Opts {
     addr: Option<String>,
     upstream: Option<String>,
     events: Option<String>,
+    otel: Option<String>,
 }
 
 fn parse_opts(items: &[String]) -> Result<(Opts, Vec<String>), String> {
@@ -52,6 +53,7 @@ fn parse_opts(items: &[String]) -> Result<(Opts, Vec<String>), String> {
             "--addr" => o.addr = it.next().cloned(),
             "--upstream" => o.upstream = it.next().cloned(),
             "--events" => o.events = it.next().cloned(),
+            "--otel" => o.otel = it.next().cloned(),
             "--shadow" => o.shadow = true,
             other => return Err(format!("unknown option '{other}'")),
         }
@@ -92,22 +94,23 @@ fn build_controller(o: &Opts) -> Result<Arc<Controller>, String> {
         }
         None => None,
     };
-    let events = match &o.events {
-        Some(ep) => match events::EventSink::open(ep) {
-            Ok(s) => {
-                eprintln!("acp-proxy: governance events -> {ep}");
-                Some(s)
-            }
-            Err(e) => return Err(format!("cannot open events {ep}: {e}")),
-        },
-        None => None,
-    };
+    let mut sinks: Vec<Box<dyn events::Sink>> = Vec::new();
+    if let Some(ep) = &o.events {
+        sinks.push(Box::new(
+            events::FileSink::open(ep).map_err(|e| format!("cannot open events {ep}: {e}"))?,
+        ));
+        eprintln!("acp-proxy: governance events -> {ep}");
+    }
+    if let Some(url) = &o.otel {
+        sinks.push(Box::new(events::OtelSink::new(url.clone())));
+        eprintln!("acp-proxy: OTLP governance events -> {url}");
+    }
     let env = o.env.clone().unwrap_or_else(|| "prod".to_string());
     if o.shadow {
         eprintln!("acp-proxy: SHADOW MODE (recording would-blocks, enforcing nothing)");
     }
     Ok(Arc::new(Controller::new(
-        engine, env, o.shadow, evidence, approvals, events,
+        engine, env, o.shadow, evidence, approvals, sinks,
     )))
 }
 
