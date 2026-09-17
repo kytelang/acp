@@ -360,8 +360,8 @@ was not actually performed.
   - [x] `acp_core::metaaudit::MetaEvent` (policy/key/RBAC/approver/break-glass) appends to the same RFC 6962 ledger and keeps it verifiable + exportable (ledger integration test). [ ] emit on live admin actions once SSO/RBAC (H0.8) lands.
 - [m] **H0.8 Auth hardening + RBAC [8].**
   - [m] `acp-auth`: Entra ID OIDC verify (iss/aud/exp/sig via JWKS) + RBAC for edit-policy/approve/export/see-args, mock Entra IdP, 8 tests. Real Entra = JWKS URL swap. [ ] mTLS proxy<->server + Slack signature verify still open.
-- [b] **H0.9 Supply chain: signed releases + SBOM [7].**
-  - [b] Proxy releases signed + SBOM published; customers can verify what they run; dependency scanning in CI.
+- [~] **H0.9 Supply chain: signed releases + SBOM [7].**
+  - [x] CycloneDX SBOM generated offline from the resolved graph (scripts/sbom.sh + `make sbom`, 360 components incl. our crates); cargo-audit dependency scan in CI. [ ] release signing (cosign/sigstore) needs a signing key = deploy step.
 - [b] **H0.10 Third-party pen test [8].**
   - [b] Pen test of proxy/server/console complete; findings remediated.
 - [~] **H0.11 Fuzzing + E2E + load [12][9].**
@@ -408,8 +408,8 @@ was not actually performed.
   - [b] HA control plane (no SPOF); per-tenant rate limits/quota; noisy-neighbour protection.
 - [~] **H1.2 Safe migrations + config audit [6].**
   - [x] `acp_ledger::migrate`: ordered, transactional, reversible migrations; up preserves existing evidence, rollback returns cleanly keeping data (tested). Config-change audit = metaaudit (H0.7).
-- [b] **H1.3 Reproducible builds + provenance + proxy auto-update [7][K].**
-  - [b] Proxy build reproducible; SLSA-style provenance; signed, verifiable proxy update channel; deployed-version visibility.
+- [~] **H1.3 Reproducible builds + provenance + proxy auto-update [7][K].**
+  - [~] SBOM + pinned Cargo.lock give the build inputs (H0.9); `--locked` builds are deterministic. [ ] SLSA provenance attestation + signed update channel need the release/signing infra.
 - [~] **H1.4 Full JCS + LTV operational [1][C].**
   - [~] Canonicalisation is sorted-key + integer-normalised (1.0==1), with a conformance test pinning the record value domain so a leaf-hash-changing regression is caught (H1.4). [ ] arbitrary-precision float JCS + re-anchoring of old heads still open.
 - [b] **H1.5 Certifications started [10].**

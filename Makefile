@@ -17,3 +17,6 @@ clippy:
 	cargo clippy --workspace --all-targets -- -D warnings
 
 check: fmt clippy build test
+
+sbom: ## generate CycloneDX SBOM (offline)
+	bash scripts/sbom.sh
