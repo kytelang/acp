@@ -112,3 +112,36 @@ fn a_policy_admin_can_edit_policy_only() {
     assert!(!p.can(Capability::Approve));
     assert!(!p.can(Capability::SeeArgs));
 }
+
+#[test]
+fn an_auditor_has_scoped_read_only_access() {
+    // v1.2.3: a non-operator auditor can export evidence but cannot edit policy, approve, or see
+    // raw args. Access is scoped by the Entra role, and revoking the role (a token without it)
+    // removes it.
+    let idp = idp();
+    let tok = idp.issue(
+        "oid-aud",
+        "auditor@contoso.com",
+        "contoso-tenant",
+        &["Auditor"],
+        NOW,
+        3600,
+    );
+    let p = verify(&tok, &idp.jwks(), &idp.config(), NOW).unwrap();
+    assert!(p.can(Capability::Export), "auditor can export evidence");
+    assert!(!p.can(Capability::EditPolicy), "auditor is non-operator");
+    assert!(!p.can(Capability::Approve));
+    assert!(!p.can(Capability::SeeArgs), "auditor cannot see raw args");
+
+    // Revocation: a token issued without the role confers nothing.
+    let revoked = idp.issue(
+        "oid-aud",
+        "auditor@contoso.com",
+        "contoso-tenant",
+        &[],
+        NOW,
+        3600,
+    );
+    let p2 = verify(&revoked, &idp.jwks(), &idp.config(), NOW).unwrap();
+    assert!(!p2.can(Capability::Export), "revoked auditor loses access");
+}

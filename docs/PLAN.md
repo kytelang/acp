@@ -393,8 +393,8 @@ was not actually performed.
   - [d] docs/compliance/control-mappings.md maps ACP controls + evidence to EU AI Act, ISO 42001, NIST AI RMF, and SOC2/800-53, each row naming the ledger field/module that evidences it (grc export is the machine form). [ ] compliance/legal expert review is the open leg.
 - [x] **v1.2.2 Sector minimum-retention enforcement [R6].**
   - [x] `acp_core::retention`: purge is fail-closed below the mandated floor (floor overrides a shorter tenant setting); tested.
-- [b] **v1.2.3 Auditor access + attestation [R6].**
-  - [b] Scoped, revocable, non-operator read-only auditor access; third-party attestation of the tamper-evidence mechanism obtainable.
+- [~] **v1.2.3 Auditor access + attestation [R6].**
+  - [x] Scoped, revocable, non-operator auditor access: the Entra `Auditor` role grants Export only (not edit-policy/approve/see-args); revoking the role removes it (acp-auth test). [ ] third-party attestation of the mechanism is [e].
 
 ### v1.3 Reporting dashboard (kyte candidate, conditions apply)
 
@@ -491,8 +491,8 @@ was not actually performed.
   - [x] `acp_core::rollout`: blast-radius preview (exactly what would newly block) + staged rollout state machine (preview->canary->partial->full) with rollback (tested). Data-boundary (lineage), discovery, IdP identity all built above.
 - [d] **v3.5 Accessibility + i18n conformance.**
   - [d] docs/compliance/accessibility.md: WCAG 2.1 AA target + approach baked into the server-rendered inbox (semantic HTML, not colour-only, named actions). [ ] VPAT sign-off by an accessibility reviewer is the [e] leg.
-- [b] **v3.6 Tenant offboarding at scale.**
-  - [b] Secure, verifiable deletion or archive handover on contract end; certificate of destruction where required; no impact to other tenants [N].
+- [m] **v3.6 Tenant offboarding at scale.**
+  - [m] `acp_core::offboarding`: final verifiable manifest (last root + record count) + deterministic, tenant-specific certificate of destruction; other-tenant isolation is FORCE RLS (acp-pgstore). Tested. [ ] wire the archive/delete job.
 - [d] **v3.7 Scale SLOs.**
   - [d] docs/ops/slos.md: SLOs + error budgets (latency, durability, verify time, approval p95, anchoring freshness), all measured from the verifiable log. [ ] 'met at enterprise volume' needs the load run.
 - [b] **V3.G1 (enterprise-scale GA gate)** All v3 tasks complete; certifications issued; multi-region live; large-ledger perf sustained.
@@ -509,8 +509,8 @@ was not actually performed.
   - [x] `acp_core::metering::Meter` counts one unit/decision, never reads args, overage is BillOverage (never stops gating); /report exposes billable_units. Unit-tested.
 - [x] **X.4 Support without seeing args [R7].**
   - [x] `acp diagnose <ledger> <seq>` emits a redacted bundle (verdict/rule/impact/args-hash, never raw args); test proves a secret arg does not leak (X.4).
-- [b] **X.5 Host-shim/SDK distribution [R7].**
-  - [b] `-32001` retry shim distributed + versioned with a host-compat matrix; graceful behaviour on hosts that will not retry.
+- [m] **X.5 Host-shim/SDK distribution [R7].**
+  - [m] `acp_core::hostshim`: -32001 step-up retry policy (bounded linear backoff, graceful give-up on hosts that will not retry) (tested). [ ] package + version the shim + host-compat matrix.
 - [~] **X.6 Docs + deprecation policy [R7].**
   - [x] Deprecation/support-window policy for DSL, record format, and APIs documented in docs/ops/deprecation-policy.md (record readers never removed). [ ] hosted versioned docs site + trial/sandbox are infra.
 - [~] **X.7 Graceful shutdown/drain everywhere [R5].**
