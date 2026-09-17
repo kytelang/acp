@@ -34,6 +34,7 @@ struct Opts {
     upstream: Option<String>,
     events: Option<String>,
     otel: Option<String>,
+    tool_hash: Option<String>,
     cef: Option<String>,
     ocsf: Option<String>,
 }
@@ -57,6 +58,7 @@ fn parse_opts(items: &[String]) -> Result<(Opts, Vec<String>), String> {
             "--upstream" => o.upstream = it.next().cloned(),
             "--events" => o.events = it.next().cloned(),
             "--otel" => o.otel = it.next().cloned(),
+            "--tool-hash" => o.tool_hash = it.next().cloned(),
             "--cef" => o.cef = it.next().cloned(),
             "--ocsf" => o.ocsf = it.next().cloned(),
             "--shadow" => o.shadow = true,
@@ -171,6 +173,26 @@ async fn main() -> ExitCode {
             if cmd.is_empty() {
                 eprintln!("usage: acp-proxy stdio [opts] -- <mcp-server-cmd> [args...]");
                 return ExitCode::from(2);
+            }
+            // B5/D10: verify the tool-server binary's fingerprint before launching it.
+            if let Some(expected) = &opts.tool_hash {
+                match std::fs::read(&cmd[0]) {
+                    Ok(bytes) => {
+                        let got = acp_core::canonical::sha256_hex_bytes(&bytes);
+                        if &got != expected {
+                            eprintln!("acp-proxy: tool binary {} fingerprint {} != expected {}; refusing to launch", cmd[0], &got[..16], &expected[..16.min(expected.len())]);
+                            return ExitCode::from(1);
+                        }
+                        eprintln!("acp-proxy: tool binary verified ({}...)", &got[..16]);
+                    }
+                    Err(e) => {
+                        eprintln!(
+                            "acp-proxy: cannot read tool binary {} for verification: {e}",
+                            cmd[0]
+                        );
+                        return ExitCode::from(1);
+                    }
+                }
             }
             match stdio::run(&cmd[0], &cmd[1..], controller).await {
                 Ok(code) => ExitCode::from(code as u8),

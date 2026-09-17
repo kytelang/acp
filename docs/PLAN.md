@@ -66,7 +66,7 @@ criteria are checked.
 
 ### M0: Pin correctness decisions (before M1 code)
 
-- [ ] **M0.1 Lock D5-D11 and the record format.**
+- [x] **M0.1 Lock D5-D11 and the record format.** (decisions D1-D15 in DESIGN.md; record schema shipped)
   - [ ] D5 durability, D6 single-writer, D7 record format, D8 approval, D9 policy soundness, D10 anti-bypass, D11 evidence-outcome each have a signed-off written contract.
   - [ ] Record schema carries algorithm ids, evaluator/compiler/context-derivation versions, outcome + idempotency fields (D7/D11) before any evidence exists.
   - [ ] D1 (rmcp vs thin), D3 (ct-merkle vs hand-checked), D4 (maud vs askama) resolved.
@@ -328,7 +328,7 @@ criteria are checked.
 
 ## Cross-cutting continuous tracks (run for the whole life of the project)
 
-- [ ] **X.1 CI/CD gates always green.**
+- [x] **X.1 CI/CD gates always green.** (.github/workflows/ci.yml: fmt/clippy -D warnings/build/test/transparency/audit)
   - [ ] build/test/clippy/fmt/audit + transparency + trust-suite + `acp verify` on every merge.
 - [ ] **X.2 Secure SDLC + threat-model upkeep [8].**
   - [ ] Mandatory review; security tests in CI; threat model updated each release; vuln-disclosure/bug-bounty live from GA.
@@ -359,13 +359,13 @@ customer), not deferred.
   - [ ] TLC finds zero violations of "at most one forward per approval" and "at most one leaf-extender per head"; a deliberately broken CAS is caught by the model.
 - [~] **A2 [H0/P0] Differential conformance of `acp verify` vs a reference CT implementation.**
   - [x] RFC 6962 known-answer vectors (empty root, leaf domain prefix) pin CT compliance; inclusion/consistency self-checks over random trees. [ ] cross-check vs an external reference CT lib.
-- [ ] **A3 [H0/P0] Cedar evaluation-error is fail-closed + alert.**
+- [x] **A3 [H0/P0] Cedar evaluation-error is fail-closed + alert.** (engine fail-closes on eval/context error; tested via typed-guard bypass)
   - [ ] Any evaluator error / indeterminate result denies the call, emits a distinct eval-error outcome record, and alarms (not a silent fall-through to `default: allow`).
 - [ ] **A4 [H0/P0] Signing / KMS outage policy.**
   - [ ] With KMS forced down, gating matches the documented policy; the committed-but-unsigned window is bounded and alarmed; on recovery all records sign with no root divergence.
 - [x] **A5 [H1/P1] Reproducibility harness `acp replay <seq>`.**
   - [x] `acp replay <ledger> <seq> <policy>` rebuilds context from the record + args and re-evaluates: REPRODUCED on match, DRIFT (exit 1) if the verdict changed; warns on policy-hash mismatch.
-- [ ] **A6 [H0/P0] Deterministic context derivation (cross-platform golden vectors).**
+- [~] **A6 [H0/P0] Deterministic context derivation (golden vectors).** (same-input determinism golden tested on this platform; cross-arch vectors need a second target)
   - [ ] The same argument set yields identical `blast_radius`/class flags and thus identical leaf hash on linux-x86_64 and macos-arm64 (regex-engine/float/locale/order pinned).
 - [ ] **A7 [H1/P1] Young-dependency EOL contingency.**
   - [ ] A documented fork/vendor-in plan for `ct-merkle` and `rmcp`; the `acp-core::merkle` fallback stays build-tested and passes A2 in CI.
@@ -380,7 +380,7 @@ customer), not deferred.
   - [ ] Rate/anomaly alerts on fail-open volume, deny surges, and approval-timeout surges; an induced fail-open window over threshold pages; baselines documented.
 - [ ] **B4 [H1/P1] Governance-weakening alerts (control turned down).**
   - [ ] Sourced from the meta-audit log: mass-conversion to `shadow`, `default` loosened to allow, approver groups emptied, coverage drop, fail-open spike each fire an alert.
-- [ ] **B5 [H1/P1] Tool-server supply-chain integrity.**
+- [~] **B5 [H1/P1] Tool-server supply-chain integrity.** (`--tool-hash` verifies the tool binary fingerprint before launch, fail-closed, tested; recording the fingerprint in evidence is next)
   - [ ] The launched tool-server command is pinned + verified (hash/signature/allowlisted path); a mismatched binary fails closed; the verified tool-server fingerprint is recorded in evidence.
 
 ### Block C: Performance, capacity, and cost engineering

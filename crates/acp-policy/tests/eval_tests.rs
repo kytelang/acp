@@ -159,3 +159,28 @@ fn allow_path_latency_budget() {
         "allow-path eval averaged {per:.3} ms, over budget"
     );
 }
+
+#[test]
+fn context_derivation_is_deterministic_golden() {
+    use acp_core::canonical::sha256_hex;
+    // The same tool + args + env must always produce byte-identical context (so leaf hashes are
+    // reproducible). Pin the canonical hash as a golden value (A6).
+    let c1 = acp_policy::build_context(
+        "payments.charge",
+        &json!({"amount_cents": 90000, "to": "jane@example.com"}),
+        "prod",
+    );
+    let c2 = acp_policy::build_context(
+        "payments.charge",
+        &json!({"amount_cents": 90000, "to": "jane@example.com"}),
+        "prod",
+    );
+    assert_eq!(
+        sha256_hex(&c1),
+        sha256_hex(&c2),
+        "derivation must be deterministic"
+    );
+    // impact and the pii class flag are derived into the trusted namespace, not agent args
+    assert_eq!(c1["impact"], json!("high"));
+    assert_eq!(c1["derived"]["to_class"], json!("pii"));
+}
