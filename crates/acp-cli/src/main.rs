@@ -35,7 +35,8 @@ fn main() -> ExitCode {
         "purge" => cmd_purge(&args[2..]),
         "learn" => cmd_learn(args.get(2).map(String::as_str)),
         "classify-eval" => cmd_classify_eval(args.get(2).map(String::as_str)),
-        _ => usage("acp [init|verify|verify-pack|export|policy-compile|policy-test|approve|deny|approvals]"),
+        "canary" => cmd_canary(&args[2..]),
+        _ => usage("acp [init|verify|verify-pack|export|policy-compile|policy-test|approve|deny|approvals|canary|learn|replay|purge|classify-eval]"),
     }
 }
 
@@ -503,4 +504,63 @@ fn label(ctx: &Value) -> String {
         .and_then(Value::as_str)
         .unwrap_or("?")
         .to_string()
+}
+
+/// B2: canary / synthetic decisions prove the gate is actually live.
+/// `acp canary <policy.yaml> <canaries.json>` evaluates a set of probe calls, each declaring the
+/// verdict it must produce. Any mismatch exits non-zero so a scheduler pages: a mis-loaded policy
+/// that lets a must-deny probe through is caught within one probe interval.
+fn cmd_canary(rest: &[String]) -> ExitCode {
+    let (policy, probes) = match (rest.first(), rest.get(1)) {
+        (Some(p), Some(c)) => (p, c),
+        _ => return usage("acp canary <policy.yaml> <canaries.json>"),
+    };
+    let engine = match load(policy) {
+        Ok(e) => e,
+        Err(c) => return c,
+    };
+    let raw = match std::fs::read_to_string(probes) {
+        Ok(s) => s,
+        Err(e) => {
+            eprintln!("acp: cannot read {probes}: {e}");
+            return ExitCode::from(1);
+        }
+    };
+    let cases: Vec<serde_json::Value> = match serde_json::from_str(&raw) {
+        Ok(v) => v,
+        Err(e) => {
+            eprintln!("acp: invalid canaries file: {e}");
+            return ExitCode::from(1);
+        }
+    };
+    let mut failures = 0;
+    for (i, case) in cases.iter().enumerate() {
+        let tool = case["tool"].as_str().unwrap_or("");
+        let expect = case["expect"].as_str().unwrap_or("");
+        let env = case["env"].as_str().unwrap_or("prod");
+        let args = case.get("args").cloned().unwrap_or(serde_json::json!({}));
+        let out = engine.evaluate(build_context(tool, &args, env));
+        let got = match out.verdict {
+            acp_core::types::Verdict::Allow => "allow",
+            acp_core::types::Verdict::Deny => "deny",
+            acp_core::types::Verdict::StepUp => "step_up",
+            acp_core::types::Verdict::Shadow => "shadow",
+        };
+        if got == expect {
+            println!("CANARY OK  #{i} {tool}: {got}");
+        } else {
+            failures += 1;
+            println!("CANARY FAIL #{i} {tool}: expected '{expect}', got '{got}'");
+        }
+    }
+    if failures == 0 {
+        println!(
+            "canary: all {} probes passed; the gate is live",
+            cases.len()
+        );
+        ExitCode::SUCCESS
+    } else {
+        eprintln!("canary: {failures} probe(s) failed; policy may be mis-loaded (PAGE)");
+        ExitCode::from(1)
+    }
 }
