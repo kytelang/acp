@@ -354,8 +354,8 @@ was not actually performed.
   - [x] Real backup/restore drill: back up (copy), simulate loss, restore, and the ledger reverifies end to end (ledger_tests). RPO/RTO targets documented with the backup cadence.
 - [x] **H0.5 Encryption-at-rest + BYOK + redaction [F][4].**
   - [x] `acp_core::redact` argument redaction (hash intact) + `acp-encrypt`: envelope AES-256-GCM at rest with customer-managed KEK (BYOK) wrapping a per-blob DEK; wrong/rotated KEK = crypto-erasure, tamper + AAD-context both enforced (4 tests). Real KMS-held KEK = config.
-- [~] **H0.6 Egress/SSRF + signed policy provenance [H].**
-  - [x] `acp_core::egress`: default-deny host allowlist that blocks internal/SSRF targets (loopback, link-local metadata, private ranges) even if allowlisted; unit-tested. [ ] signed policy provenance + who-can-push wiring.
+- [x] **H0.6 Egress/SSRF + signed policy provenance [H].**
+  - [x] `acp_core::egress` default-deny SSRF-safe host allowlist + `acp_core::policyprov`: policies are signed by an author (signature binds author+hash, cannot be moved), verified before load, and only an allowlisted principal may push (revocable). Tested.
 - [~] **H0.7 Self-governance meta-audit [G].**
   - [x] `acp_core::metaaudit::MetaEvent` (policy/key/RBAC/approver/break-glass) appends to the same RFC 6962 ledger and keeps it verifiable + exportable (ledger integration test). [ ] emit on live admin actions once SSO/RBAC (H0.8) lands.
 - [m] **H0.8 Auth hardening + RBAC [8].**
@@ -405,7 +405,7 @@ was not actually performed.
 ### H1: Hardening gate (parallel to v1.2/v1.3; REQUIRED before GA)
 
 - [m] **H1.1 HA + isolation + quotas [3][5].**
-  - [m] `acp_core::ha::LeaseManager`: leader lease with a monotonic fencing token; at most one valid leader, a resumed old leader is fenced out (tested). Per-tenant quota = metering (X.3). [ ] deploy as a replicated control plane.
+  - [m] `acp_core::ha::LeaseManager` (fenced leader lease) + `acp_core::ratelimit::TenantLimiter` (per-tenant token bucket, noisy-neighbour isolation, tested) + metering quota. [ ] deploy as a replicated control plane.
 - [~] **H1.2 Safe migrations + config audit [6].**
   - [x] `acp_ledger::migrate`: ordered, transactional, reversible migrations; up preserves existing evidence, rollback returns cleanly keeping data (tested). Config-change audit = metaaudit (H0.7).
 - [~] **H1.3 Reproducible builds + provenance + proxy auto-update [7][K].**
