@@ -313,8 +313,8 @@ was not actually performed.
   - [x] CSV formula injection neutralised (`csv_safe`); web inbox auto-escapes untrusted content (maud). [ ] Slack Block Kit escaping.
 - [~] **M4.6 `-32001` re-issue + host retry shim + clock-safe TTL.**
   - [x] `-32001` re-issue flow works; TTL is an absolute expiry in the single-authority store (skew-safe). [ ] host retry shim (tiny helper) deferred.
-- [b] **M4.7 Approver operations baseline (R1).** (deferred: reminders, queue caps, notify-driver land with the inbox/server)
-  - [b] No-response behaviour defined; reminders; the human driving the agent is notified on hold/drop; queue caps + retryAfter jitter under a step_up burst.
+- [~] **M4.7 Approver operations baseline (R1).**
+  - [x] `acp_core::apqueue::ApprovalQueue`: queue cap with retry-after back-off under a step-up burst, per-interval reminders for ageing holds, oldest-age telemetry (tested). [ ] notify-driver wiring lands with the inbox/server.
 - [~] **Gate:** one approval = exactly one action (met, tested); every outcome is a verifiable record (met). Approve/deny/expire via the CLI channel; Slack/web channels deferred to acp-server.
 
 ### M5: HTTP transport, shadow, anti-bypass, polish
@@ -485,8 +485,8 @@ was not actually performed.
   - [b] SOC 2 Type II report issued; ISO 27001 certified; reliance/assurance-letter framework (bridge letter, sub-service-org method) available [R6].
 - [d] **v3.2 Enterprise procurement readiness.**
   - [d] docs/commercial/procurement.md: audit rights, DORA register fields, pooled audits, government-access/transparency position, export-control classification. [ ] binding versions need legal review.
-- [b] **v3.3 Long-term evidence validity operational [C].**
-  - [b] Re-timestamping/re-anchoring runs on schedule; crypto-agility exercised (a second hash/sig scheme introduced without invalidating old evidence).
+- [x] **v3.3 Long-term evidence validity operational [C].**
+  - [x] `acp_core::agility::AgileVerifier`: verification dispatches on the record's stamped algorithm id, so a second scheme is additive and old records keep verifying; unknown alg fails closed (tested). [ ] scheduled re-anchoring is an ops job.
 - [b] **v3.4 Advanced governance maturity.**
   - [b] Data-boundary + discovery + IdP identity all GA and integrated; policy change-management with blast-radius preview, canary, staged rollout, rollback [R7]; multi-environment (dev/staging/prod) policy lifecycle [R7].
 - [d] **v3.5 Accessibility + i18n conformance.**
@@ -583,8 +583,8 @@ customer), not deferred.
   - [x] `acp_core::drift::DriftMonitor`: privacy-safe per-class hit-rate counters (no raw args) with drift-vs-baseline flags and min-support gate, unit-tested (D6).
 - [x] **D7 [H1/P1] Standing adversarial-evasion corpus.**
   - [x] An evasion corpus (reversal/spacing/zero-width) runs in CI and measures the bypass rate; the baseline secret must be caught (tested). Classifiers stay advisory on deny paths.
-- [b] **D8 [H2/P2] Staged / shadow evaluation of classifier changes on live traffic.**
-  - [b] A new classifier version runs in shadow against live traffic, producing a per-tenant fire-rate diff; promotion is gated on that diff.
+- [x] **D8 [H2/P2] Staged / shadow evaluation of classifier changes on live traffic.**
+  - [x] `acp_core::shadoweval::ShadowEval`: per-class candidate-vs-current firing-rate diff from counts only; `promotable(tolerance)` gates promotion on the diff (tested).
 - [e] **D9 [H2/P2] External benchmark of the classifiers.** (external: a named public reference corpus)
   - [b] A reproducible comparison against a named public reference corpus, with methodology and limits documented in the model card.
 

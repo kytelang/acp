@@ -5,8 +5,10 @@
 //! RFC 6962-style verifiable log, and the signing seam.
 
 pub mod adapter;
+pub mod agility;
 pub mod anchor;
 pub mod anomaly;
+pub mod apqueue;
 pub mod blast_radius;
 pub mod breakglass;
 pub mod canonical;
@@ -31,6 +33,7 @@ pub mod redact;
 pub mod render;
 pub mod retention;
 pub mod scim;
+pub mod shadoweval;
 pub mod sign;
 pub mod ticket;
 pub mod timeline;
