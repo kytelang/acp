@@ -12,6 +12,16 @@ dependencies = [
 ]
 
 [[package]]
+name = "acp-auth"
+version = "0.0.0"
+dependencies = [
+ "acp-core",
+ "base64 0.22.1",
+ "serde",
+ "serde_json",
+]
+
+[[package]]
 name = "acp-cli"
 version = "0.0.0"
 dependencies = [
