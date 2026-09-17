@@ -281,8 +281,8 @@ was not actually performed.
   - [b] Egress allowlists on proxy dial + policy git pull; policy provenance signed/verified; who-can-push-policy controlled.
 - [~] **H0.7 Self-governance meta-audit [G].**
   - [x] `acp_core::metaaudit::MetaEvent` (policy/key/RBAC/approver/break-glass) appends to the same RFC 6962 ledger and keeps it verifiable + exportable (ledger integration test). [ ] emit on live admin actions once SSO/RBAC (H0.8) lands.
-- [b] **H0.8 Auth hardening + RBAC [8].**
-  - [b] SSO/OIDC console; mTLS proxy<->server; Slack signatures verified; RBAC for edit-policy/approve/export/see-args.
+- [m] **H0.8 Auth hardening + RBAC [8].**
+  - [m] `acp-auth`: Entra ID OIDC verify (iss/aud/exp/sig via JWKS) + RBAC for edit-policy/approve/export/see-args, mock Entra IdP, 8 tests. Real Entra = JWKS URL swap. [ ] mTLS proxy<->server + Slack signature verify still open.
 - [b] **H0.9 Supply chain: signed releases + SBOM [7].**
   - [b] Proxy releases signed + SBOM published; customers can verify what they run; dependency scanning in CI.
 - [b] **H0.10 Third-party pen test [8].**
@@ -304,9 +304,9 @@ was not actually performed.
 ### v1.1 Multi-tenant control plane
 
 - [~] **v1.1.1 Postgres + tenancy.** (single-tenant acp-server control service built: web inbox, /policy/current, /verify, /report; Postgres + tenancy next)
-  - [b] Ledger on Postgres; tenants isolated in store and API; an isolation test suite proves no cross-tenant read/write.
-- [b] **v1.1.2 Per-tenant keys + SSO [1.1].**
-  - [b] Per-tenant signing keys behind KMS; one tenant's key compromise cannot touch another's evidence; SSO/OIDC for the console.
+  - [x] `acp-pgstore`: real Postgres tenant isolation via FORCE row-level security; isolation suite proves no cross-tenant read/write against live PG (v1.1.1). API-layer tenanting follows.
+- [~] **v1.1.2 Per-tenant keys + SSO [1.1].**
+  - [~] SSO/OIDC for the console DONE via `acp-auth` (Entra). Per-tenant signing keys = one `keymgr::KeyManager` per tenant (LocalKms now, KMS later); wiring per-tenant key selection remains.
 - [~] **v1.1.3 Retention + purge per tenant.**
   - [x] `acp purge <ledger> <days>` drops arg payloads; signed decisions still verify after purge (tested). [ ] per-tenant config.
 
@@ -380,8 +380,8 @@ was not actually performed.
 
 ### v2.4 Agent identity integration
 
-- [b] **v2.4.1 IdP-backed authority.**
-  - [b] Principal/scopes backed by an IdP (Okta/Entra Agent ID/Aembit-class); authority checks enforced, not demonstrated; delegation chains supported.
+- [m] **v2.4.1 IdP-backed authority.**
+  - [m] Principal + roles come from a verified Entra token (`acp-auth`), not a self-asserted header; capability checks enforced. [ ] delegation chains + Agent-ID specifics.
   - [b] `X-ACP-Principal` is now verified and may be signed as verified attribution (supersedes D10 v0 stance).
 
 ### H2: Hardening gate (parallel to v2; REQUIRED before scale)
