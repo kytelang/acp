@@ -35,6 +35,13 @@ impl Mode {
             _ => None,
         }
     }
+    /// Whether this mode persists until explicitly cleared, rather than auto-reverting on its TTL.
+    /// A kill-switch (LockdownAll) must FAIL SAFE: once tripped it stays locked until an operator
+    /// clears the grant, so an unresolved incident never silently reopens the gate when a timer
+    /// lapses. Elevation/observe modes auto-revert (fail-safe = re-lock).
+    pub fn persists(&self) -> bool {
+        matches!(self, Mode::LockdownAll)
+    }
 }
 
 /// On-disk break-glass grant: the local channel between an operator (or the control server) and a
@@ -95,11 +102,16 @@ impl BreakGlass {
     }
 
     pub fn active(&self, now_ms: u64) -> bool {
+        // Lockdown persists until explicitly cleared (fail-safe: stay locked). Other modes bound
+        // themselves by their TTL and auto-revert.
+        if self.mode.persists() {
+            return true;
+        }
         now_ms < self.engaged_ms.saturating_add(self.ttl_ms)
     }
 
-    /// Apply the mode to a base verdict at `now_ms`. Once the TTL passes, the base verdict is
-    /// returned unchanged: the override auto-reverts with no operator action.
+    /// Apply the mode to a base verdict at `now_ms`. A time-bounded override auto-reverts once its
+    /// TTL passes; a persisting mode (lockdown) stays in force until the grant is cleared.
     pub fn apply(&self, base: Verdict, now_ms: u64) -> Verdict {
         if !self.active(now_ms) {
             return base;
@@ -211,6 +223,17 @@ mod tests {
     fn lockdown_denies_everything_while_active() {
         let bg = BreakGlass::engage(Mode::LockdownAll, "breach", 0, 1000).unwrap();
         assert_eq!(bg.apply(Verdict::Allow, 10), Verdict::Deny);
+    }
+
+    #[test]
+    fn lockdown_persists_past_its_ttl_until_cleared() {
+        // The kill-switch must NOT auto-reopen the gate when its timer lapses (fail-safe).
+        let bg = BreakGlass::engage(Mode::LockdownAll, "breach", 0, 1000).unwrap();
+        assert!(bg.active(1_000_000), "lockdown stays active well past its ttl");
+        assert_eq!(bg.apply(Verdict::Allow, 1_000_000), Verdict::Deny);
+        // An elevation, by contrast, auto-reverts on its ttl.
+        let bp = BreakGlass::engage(Mode::EmergencyBypass, "pager", 0, 1000).unwrap();
+        assert!(!bp.active(2000), "bypass reverts after ttl");
     }
 }
 
