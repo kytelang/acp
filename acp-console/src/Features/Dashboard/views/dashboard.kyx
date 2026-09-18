@@ -101,15 +101,17 @@ pub fn evidencePanel(rows: list.List<EvidenceRow>): Html {
             <p class="empty">No decisions recorded yet.</p>
         } else {
             <table class="tbl">
-                <thead><tr><th>Seq</th><th>Tool</th><th>Verdict</th><th>Agent</th></tr></thead>
+                <thead><tr><th>Seq</th><th>Tool</th><th>Resource</th><th>Verdict</th><th>Agent</th><th>Principal</th></tr></thead>
                 <tbody>
                     {for (i in 0..rows.size()) {
-                        let r = rows.get(i) ?? EvidenceRow("", "", "", "");
+                        let r = rows.get(i) ?? EvidenceRow("", "", "", "", "", "");
                         <tr>
                             <td class="mono dim">{r.seq}</td>
                             <td class="strong">{r.tool}</td>
+                            <td>{scopeCell(r.resource, "ok")}</td>
                             <td>{verdictBadge(r.verdict)}</td>
                             <td class="mono dim">{r.agent}</td>
+                            <td>{scopeCell(r.principal, "warn")}</td>
                         </tr>
                     }}
                 </tbody>
@@ -121,7 +123,9 @@ pub fn evidencePanel(rows: list.List<EvidenceRow>): Html {
 
 // A scoping cell: "any" shown muted, else a coloured badge. Used for agent/principal/resource.
 fn scopeCell(val: string, cls: string): Html {
-    if (string.eql(val, "any")) { return <span class="dim">any</span>; }
+    if (string.eql(val, "any") || string.eql(val, "-") || string.eql(val, "")) {
+        return <span class="dim">any</span>;
+    }
     return <span class={"badge " + cls}>{val}</span>;
 }
 

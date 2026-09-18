@@ -360,6 +360,9 @@ impl Controller {
             let (app_id, agent_id, principal) = self.identity.lock().unwrap().clone();
             // Record the verified agent id when present, else the transport default.
             let rec_agent = if agent_id.is_empty() { self.agent.clone() } else { agent_id.clone() };
+            // Trusted, proxy-derived facts stamped into evidence alongside the verdict.
+            let (ev_rc, ev_oc) = self.resource_tax.classify(&tc.name);
+            let (ev_res, ev_op) = (ev_rc.as_str(), ev_oc.as_str());
             let mut a = policy::assess(&eng, &self.env, &tc, &self.impact_tax, &self.resource_tax, &agent_id, &app_id, &principal);
             // F2: apply any active break-glass grant to the verdict, then re-derive enforcement.
             // With no grant this is the identity, so the normal path is untouched.
@@ -453,6 +456,7 @@ impl Controller {
                         &self.env,
                         eng.hash(),
                         &a.impact_taxonomy,
+                                &principal, ev_res, ev_op,
                     );
                     ev.record_outcome(&did, "would_block");
                 }
@@ -477,6 +481,7 @@ impl Controller {
                                 &self.env,
                                 eng.hash(),
                                 &a.impact_taxonomy,
+                                &principal, ev_res, ev_op,
                             );
                             ev.record_outcome(&did, "forwarded");
                         }
@@ -512,6 +517,7 @@ impl Controller {
                                 &self.env,
                                 eng.hash(),
                                 &a.impact_taxonomy,
+                                &principal, ev_res, ev_op,
                             );
                             ev.record_outcome(&did, "not_executed");
                         }
@@ -539,6 +545,7 @@ impl Controller {
                     &self.env,
                     eng.hash(),
                     &a.impact_taxonomy,
+                                &principal, ev_res, ev_op,
                 )
             });
             let did = rec.as_ref().map(|(d, _)| d.clone());

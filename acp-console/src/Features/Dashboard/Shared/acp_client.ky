@@ -40,9 +40,13 @@ pub struct AgentRow {
 pub struct EvidenceRow {
     pub seq: string,
     pub tool: string,
+    pub resource: string,
     pub verdict: string,
     pub agent: string,
-    init(seq: string, tool: string, verdict: string, agent: string) { self.seq = seq; self.tool = tool; self.verdict = verdict; self.agent = agent; }
+    pub principal: string,
+    init(seq: string, tool: string, resource: string, verdict: string, agent: string, principal: string) {
+        self.seq = seq; self.tool = tool; self.resource = resource; self.verdict = verdict; self.agent = agent; self.principal = principal;
+    }
 }
 
 pub struct ApprovalRow {
@@ -220,8 +224,10 @@ pub struct AcpClient {
             rows.push(EvidenceRow(
                 `${seqN}`,
                 json.asString(json.get(item, "tool")) ?? "?",
+                json.asString(json.get(item, "resource")) ?? "-",
                 json.asString(json.get(item, "verdict")) ?? "?",
-                json.asString(json.get(item, "agent")) ?? ""));
+                json.asString(json.get(item, "agent")) ?? "",
+                json.asString(json.get(item, "principal")) ?? "-"));
             i = i + 1;
         }
         return rows;

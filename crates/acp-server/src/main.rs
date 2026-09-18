@@ -403,8 +403,12 @@ async fn evidence_recent(State(st): State<Arc<AppState>>) -> impl IntoResponse {
         out.push(serde_json::json!({
             "seq": r.get("seq"),
             "tool": rec.pointer("/action/tool"),
+            "resource": rec.pointer("/action/resource"),
+            "operation": rec.pointer("/action/operation"),
             "verdict": rec.pointer("/decision/verdict"),
             "agent": rec.get("agent_id"),
+            "principal": rec.pointer("/principal/id"),
+            "principal_verified": rec.pointer("/principal/verified"),
             "hlc": rec.get("hlc"),
         }));
         if out.len() >= 25 { break; }

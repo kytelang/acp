@@ -105,6 +105,9 @@ impl Evidence {
         env: &str,
         policy_hash: &str,
         impact_taxonomy: &str,
+        principal: &str,
+        resource: &str,
+        operation: &str,
     ) -> (String, bool) {
         let did = self.next_id();
         let ts = now_ms();
@@ -112,9 +115,10 @@ impl Evidence {
         let record = json!({
             "schema": 1, "type": "decision", "ts_ms": ts, "hlc": hlc,
             "agent_id": agent,
-            "principal": {"id": "unknown", "verified": false},
+            "principal": {"id": principal, "verified": !principal.is_empty() && principal != "unattributed"},
             "session_id": session,
-            "action": {"tool": tc.name, "args_hash": sha256_hex(&tc.arguments), "impact": impact, "env": env},
+            "action": {"tool": tc.name, "args_hash": sha256_hex(&tc.arguments), "impact": impact, "env": env,
+                       "resource": resource, "operation": operation},
             "decision": {"verdict": verdict_str(outcome.verdict), "rule_id": outcome.rule_id,
                          "matched": outcome.reason, "policy_hash": policy_hash, "reason": outcome.reason},
             "provenance": {"algo": {"hash": "sha256", "sig": "ed25519"},
