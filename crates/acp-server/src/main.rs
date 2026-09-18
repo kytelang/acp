@@ -6,11 +6,13 @@
 //! Multi-tenant Postgres, per-tenant keys, and SSO are the next layer (v1.1.1-1.1.3 / H1).
 
 use axum::{
-    extract::{Path, State},
-    response::{Html, IntoResponse, Redirect},
+    extract::{Path, Query, State},
+    http::{HeaderMap, StatusCode},
+    response::{Html, IntoResponse, Redirect, Response},
     routing::{get, post},
     Json, Router,
 };
+use std::collections::HashMap as StdHashMap;
 use maud::{html, DOCTYPE};
 use std::sync::Arc;
 
@@ -28,6 +30,32 @@ struct AppState {
     policy_store: Option<String>,
     break_glass_file: Option<String>,
     break_glass_seed: Option<[u8; 32]>,
+    auth: Option<Auth>,
+}
+
+/// Optional control-plane RBAC. When present, mutating endpoints require a verified bearer token
+/// with the right capability. `dev` is an in-memory mock issuer for local use (issues test tokens);
+/// production sets jwks+cfg from the org IdP and leaves dev None.
+struct Auth {
+    jwks: acp_auth::Jwks,
+    cfg: acp_auth::EntraConfig,
+    dev: Option<acp_auth::MockEntra>,
+}
+
+/// Authorise a request for a capability. RBAC disabled (auth None) allows everything (local demo).
+fn authorize(auth: &Option<Auth>, headers: &HeaderMap, cap: acp_auth::Capability) -> Result<(), Response> {
+    let a = match auth { Some(a) => a, None => return Ok(()) };
+    let token = headers
+        .get("authorization")
+        .and_then(|v| v.to_str().ok())
+        .and_then(|s| s.strip_prefix("Bearer "))
+        .ok_or_else(|| (StatusCode::UNAUTHORIZED, Json(serde_json::json!({"ok":false,"error":"missing bearer token"}))).into_response())?;
+    let p = acp_auth::verify(token, &a.jwks, &a.cfg, now_ms())
+        .map_err(|e| (StatusCode::UNAUTHORIZED, Json(serde_json::json!({"ok":false,"error":format!("invalid token: {e:?}")}))).into_response())?;
+    if !p.can(cap) {
+        return Err((StatusCode::FORBIDDEN, Json(serde_json::json!({"ok":false,"error":format!("principal lacks {cap:?}")}))).into_response());
+    }
+    Ok(())
 }
 
 #[tokio::main]
@@ -40,6 +68,10 @@ async fn main() {
     let mut policy_store: Option<String> = None;
     let mut break_glass_file: Option<String> = None;
     let mut break_glass_seed: Option<[u8; 32]> = None;
+    let mut oidc_jwks: Option<String> = None;
+    let mut oidc_issuer: Option<String> = None;
+    let mut oidc_audience: Option<String> = None;
+    let mut dev_auth = false;
     let mut it = args.iter().skip(1);
     while let Some(a) = it.next() {
         match a.as_str() {
@@ -50,6 +82,10 @@ async fn main() {
             "--meta-ledger" => meta_ledger = it.next().cloned(),
             "--registry" => registry = it.next().cloned(),
             "--policy-store" => policy_store = it.next().cloned(),
+            "--oidc-jwks" => oidc_jwks = it.next().cloned(),
+            "--oidc-issuer" => oidc_issuer = it.next().cloned(),
+            "--oidc-audience" => oidc_audience = it.next().cloned(),
+            "--dev-auth" => dev_auth = true,
             "--break-glass-file" => break_glass_file = it.next().cloned(),
             "--break-glass-key" => {
                 if let Some(h) = it.next() {
@@ -112,6 +148,23 @@ async fn main() {
         }
     });
 
+    // Control-plane RBAC (opt-in). --dev-auth spins an in-memory mock issuer for local use; real
+    // deployments pass --oidc-jwks (Entra JWKS file) + --oidc-issuer + --oidc-audience.
+    let auth: Option<Auth> = if dev_auth {
+        let mock = acp_auth::MockEntra::new("common", "acp-app");
+        eprintln!("acp-server: DEV auth enabled (mock issuer); GET /auth/dev-token?role=PolicyAdmin");
+        Some(Auth { jwks: mock.jwks(), cfg: mock.config(), dev: Some(mock) })
+    } else if let (Some(jf), Some(iss), Some(aud)) = (&oidc_jwks, &oidc_issuer, &oidc_audience) {
+        match std::fs::read_to_string(jf).ok().and_then(|s| acp_auth::Jwks::from_jwks_json(&s).ok()) {
+            Some(jwks) => {
+                eprintln!("acp-server: OIDC RBAC enabled (issuer {iss})");
+                Some(Auth { jwks, cfg: acp_auth::EntraConfig { issuer: iss.clone(), audience: aud.clone() }, dev: None })
+            }
+            None => { eprintln!("acp-server: could not load JWKS {jf}; RBAC disabled"); None }
+        }
+    } else {
+        None
+    };
     let state = Arc::new(AppState {
         approvals,
         policy,
@@ -123,6 +176,7 @@ async fn main() {
         policy_store,
         break_glass_file,
         break_glass_seed,
+        auth,
     });
     let app = Router::new()
         .route("/", get(inbox))
@@ -150,6 +204,7 @@ async fn main() {
         .route("/break-glass", get(break_glass_status))
         .route("/break-glass/engage", post(break_glass_engage))
         .route("/break-glass/clear", post(break_glass_clear))
+        .route("/auth/dev-token", get(dev_token))
         .with_state(state);
 
     let listener = tokio::net::TcpListener::bind(&addr).await.expect("bind");
@@ -548,11 +603,15 @@ async fn policy_store_rules(State(st): State<Arc<AppState>>) -> impl IntoRespons
 /// hot-reloads the new version only after verifying the signature.
 async fn policy_store_deploy(
     State(st): State<Arc<AppState>>,
+    headers: HeaderMap,
     Json(body): Json<serde_json::Value>,
-) -> impl IntoResponse {
+) -> Response {
+    if let Err(r) = authorize(&st.auth, &headers, acp_auth::Capability::EditPolicy) {
+        return r;
+    }
     let store = match &st.policy_store {
         Some(s) => s.clone(),
-        None => return Json(serde_json::json!({"ok": false, "error": "no policy store configured"})),
+        None => return Json(serde_json::json!({"ok": false, "error": "no policy store configured"})).into_response(),
     };
     let src = body.get("policy").and_then(|v| v.as_str()).unwrap_or("");
     let author = body
@@ -562,12 +621,12 @@ async fn policy_store_deploy(
         .filter(|s| !s.is_empty())
         .unwrap_or("console");
     if src.trim().is_empty() {
-        return Json(serde_json::json!({"ok": false, "error": "policy source is empty"}));
+        return Json(serde_json::json!({"ok": false, "error": "policy source is empty"})).into_response();
     }
     let signer = deploy_signer(&store);
     match acp_policy::store::deploy(src, &store, &signer, author) {
-        Ok(d) => Json(serde_json::json!({"ok": true, "version": d.version, "hash": d.hash})),
-        Err(e) => Json(serde_json::json!({"ok": false, "error": e})),
+        Ok(d) => Json(serde_json::json!({"ok": true, "version": d.version, "hash": d.hash})).into_response(),
+        Err(e) => Json(serde_json::json!({"ok": false, "error": e})).into_response(),
     }
 }
 
@@ -589,21 +648,25 @@ async fn break_glass_status(State(st): State<Arc<AppState>>) -> impl IntoRespons
 /// watches. This is a controlled action; the proxy applies it on its next decision.
 async fn break_glass_engage(
     State(st): State<Arc<AppState>>,
+    headers: HeaderMap,
     Json(body): Json<serde_json::Value>,
-) -> impl IntoResponse {
+) -> Response {
+    if let Err(r) = authorize(&st.auth, &headers, acp_auth::Capability::BreakGlass) {
+        return r;
+    }
     use acp_core::breakglass::{GrantFile, Mode, Scope};
     let file = match &st.break_glass_file {
         Some(f) => f.clone(),
-        None => return Json(serde_json::json!({"ok": false, "error": "no break-glass file configured"})),
+        None => return Json(serde_json::json!({"ok": false, "error": "no break-glass file configured"})).into_response(),
     };
     let mode = match body.get("mode").and_then(|v| v.as_str()).and_then(Mode::parse) {
         Some(m) => m,
-        None => return Json(serde_json::json!({"ok": false, "error": "invalid mode (lockdown_all|disable_enforce|emergency_bypass)"})),
+        None => return Json(serde_json::json!({"ok": false, "error": "invalid mode (lockdown_all|disable_enforce|emergency_bypass)"})).into_response(),
     };
     let scope = Scope::parse(body.get("scope").and_then(|v| v.as_str()).unwrap_or("global"));
     let reason = body.get("reason").and_then(|v| v.as_str()).unwrap_or("").trim().to_string();
     if reason.is_empty() {
-        return Json(serde_json::json!({"ok": false, "error": "reason is required"}));
+        return Json(serde_json::json!({"ok": false, "error": "reason is required"})).into_response();
     }
     let actor = body.get("actor").and_then(|v| v.as_str()).filter(|s| !s.is_empty()).unwrap_or("console").to_string();
     let ttl_ms = body
@@ -617,17 +680,33 @@ async fn break_glass_engage(
     }
     let json = serde_json::to_string_pretty(&grant).unwrap();
     if std::fs::write(&file, json).is_err() {
-        return Json(serde_json::json!({"ok": false, "error": "cannot write grant file"}));
+        return Json(serde_json::json!({"ok": false, "error": "cannot write grant file"})).into_response();
     }
-    Json(serde_json::json!({"ok": true, "mode": grant.mode, "scope": grant.scope, "signed": !grant.sig.is_empty()}))
+    Json(serde_json::json!({"ok": true, "mode": grant.mode, "scope": grant.scope, "signed": !grant.sig.is_empty()})).into_response()
 }
 
 /// Clear break-glass: remove the grant file (the proxy reverts to normal on its next decision).
-async fn break_glass_clear(State(st): State<Arc<AppState>>) -> impl IntoResponse {
+async fn break_glass_clear(State(st): State<Arc<AppState>>, headers: HeaderMap) -> Response {
+    if let Err(r) = authorize(&st.auth, &headers, acp_auth::Capability::BreakGlass) {
+        return r;
+    }
     if let Some(f) = &st.break_glass_file {
         let _ = std::fs::remove_file(f);
     }
-    Json(serde_json::json!({"ok": true}))
+    Json(serde_json::json!({"ok": true})).into_response()
+}
+
+/// DEV ONLY: issue a mock bearer token for a role, so the console can authenticate without real
+/// Entra during local use. Present only when --dev-auth is set.
+async fn dev_token(State(st): State<Arc<AppState>>, Query(q): Query<StdHashMap<String, String>>) -> impl IntoResponse {
+    match st.auth.as_ref().and_then(|a| a.dev.as_ref()) {
+        Some(mock) => {
+            let role = q.get("role").map(String::as_str).unwrap_or("PolicyAdmin");
+            let tok = mock.issue("dev-oid", "dev@local", "common", &[role], now_ms(), 3600);
+            Json(serde_json::json!({"token": tok, "role": role}))
+        }
+        None => Json(serde_json::json!({"error": "dev auth not enabled"})),
+    }
 }
 
 fn now_ms() -> u64 {

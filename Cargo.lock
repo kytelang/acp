@@ -151,6 +151,7 @@ name = "acp-server"
 version = "0.0.0"
 dependencies = [
  "acp-approvals",
+ "acp-auth",
  "acp-core",
  "acp-ledger",
  "acp-policy",

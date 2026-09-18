@@ -127,6 +127,8 @@ pub enum Capability {
     Approve,
     Export,
     SeeArgs,
+    /// Engage or clear the emergency kill-switch (break-glass).
+    BreakGlass,
 }
 
 impl Principal {
@@ -146,6 +148,9 @@ impl Principal {
                 }
                 "SecurityOfficer" => {
                     caps.insert(Capability::SeeArgs);
+                }
+                "BreakGlassOperator" => {
+                    caps.insert(Capability::BreakGlass);
                 }
                 _ => {}
             }

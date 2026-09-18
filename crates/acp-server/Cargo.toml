@@ -7,6 +7,7 @@ description = "Agent Control Plane: control service - approval inbox, policy end
 
 [dependencies]
 acp-core = { path = "../acp-core" }
+acp-auth = { path = "../acp-auth" }
 acp-policy = { path = "../acp-policy" }
 acp-registry = { path = "../acp-registry" }
 acp-ledger = { path = "../acp-ledger" }
