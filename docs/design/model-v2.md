@@ -1,7 +1,7 @@
 # ACP domain model v2
 
 Date: 2026-09-18
-Status: design spec. This is the model the policy DSL, the enforcement path, and the console are all built from. It supersedes the thin `App / Agent / Rule / When` model. It is anchored to `docs/positioning.md` and informed by `docs/research/policy-model-study.md`.
+Status: LANDED. All five phases are built, tested, and on `main` (see the git log for the per-phase commits). This is the model the policy DSL, the enforcement path, and the console are all built from. It supersedes the thin `App / Agent / Rule / When` model. Anchored to `docs/positioning.md`; informed by `docs/research/policy-model-study.md`; enforcement guarantees in `docs/design/enforcement.md`.
 
 ## 0. Why v1 was too thin
 
@@ -198,7 +198,7 @@ Exactly one namespace is agent-controlled and therefore untrusted: `arg` (the to
 | break-glass: global, unsigned, lockdown auto-reverts | scoped, signed, mode-aware TTL |
 | console: Apps + Agents | Subjects (agent + human), Resources, richer policy authoring, kill-switch |
 
-## 5. Phased build order
+## 5. Phased build order (all landed)
 
 1. Model types and taxonomy (this spec, in code): `HumanPrincipal`, `Delegation`, `Resource`, `Operation`, the tool -> (resource, operation) taxonomy; registry made agent-standalone with delegation. Unit-tested, no behaviour change yet.
 2. Policy DSL and evaluation: extend `Match` and `Effect`, compile resource/operation/principal conditions, stamp the trusted context, keep default-deny + deny-overrides. Obligations parsed and represented (execution comes in phase 3).
