@@ -251,11 +251,14 @@ impl Controller {
             // With no grant this is the identity, so the normal path is untouched.
             self.refresh_break_glass();
             {
-                let eff = self
-                    .breakglass
-                    .lock()
-                    .unwrap()
-                    .effective(a.outcome.verdict, dispatch_now_ms());
+                let (bg_res, _bg_op) = self.resource_tax.classify(&tc.name);
+                let eff = self.breakglass.lock().unwrap().effective(
+                    a.outcome.verdict,
+                    dispatch_now_ms(),
+                    &agent_id,
+                    bg_res.as_str(),
+                    &tc.name,
+                );
                 if eff != a.outcome.verdict {
                     a.outcome.verdict = eff;
                     a.enforce = policy::enforce_for(eff, &tc, &a.outcome, a.impact);

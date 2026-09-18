@@ -718,11 +718,12 @@ fn cmd_bench_ledger(rest: &[String]) -> ExitCode {
 
 
 /// F2 channel: write (or clear) the break-glass grant file the proxy watches.
-///   acp break-glass engage <file> <mode> <reason> <actor> <ttl_ms>
+///   acp break-glass engage <file> <mode> <reason> <actor> <ttl_ms> [--scope <scope>]
+///   scope: global | agent:<id> | resource:<class> | tool:<name>  (default global)
 ///   acp break-glass clear  <file>
 /// Modes: lockdown_all | disable_enforce | emergency_bypass. Prints a meta-audit line to record.
 fn cmd_break_glass(rest: &[String]) -> ExitCode {
-    use acp_core::breakglass::{GrantFile, Mode};
+    use acp_core::breakglass::{GrantFile, Mode, Scope};
     match rest.first().map(String::as_str) {
         Some("clear") => {
             let Some(file) = rest.get(1) else { return usage("acp break-glass clear <file>"); };
@@ -756,13 +757,27 @@ fn cmd_break_glass(rest: &[String]) -> ExitCode {
                 eprintln!("acp: break-glass requires a reason");
                 return ExitCode::from(2);
             }
-            let grant = GrantFile::new(mode, reason, actor, now, ttl_ms);
+            // Optional --scope aims the grant: global | agent:<id> | resource:<class> | tool:<name>.
+            let mut scope = Scope::Global;
+            let mut i = 6;
+            while i < rest.len() {
+                if rest[i] == "--scope" {
+                    if let Some(v) = rest.get(i + 1) {
+                        scope = Scope::parse(v);
+                    }
+                    i += 2;
+                } else {
+                    i += 1;
+                }
+            }
+            let scope_s = scope.as_str();
+            let grant = GrantFile::new_scoped(mode, scope, reason, actor, now, ttl_ms);
             let json = serde_json::to_string_pretty(&grant).unwrap();
             if std::fs::write(file, json).is_err() {
                 eprintln!("acp: cannot write {file}");
                 return ExitCode::from(1);
             }
-            println!("break-glass ENGAGED: mode={mode_s} actor={actor} ttl_ms={ttl_ms} -> {file}");
+            println!("break-glass ENGAGED: mode={mode_s} scope={scope_s} actor={actor} ttl_ms={ttl_ms} -> {file}");
             // Meta-audit line the operator/server should append to the tamper-evident log.
             println!("META-AUDIT: {{\"kind\":\"break_glass_engage\",\"actor\":\"{actor}\",\"reason\":\"{reason}\",\"after\":\"{mode_s}\"}}");
             ExitCode::SUCCESS

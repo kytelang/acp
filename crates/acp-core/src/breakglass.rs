@@ -44,6 +44,57 @@ impl Mode {
     }
 }
 
+/// The blast radius of a grant. A kill-switch can be aimed: freeze one resource class or one agent
+/// without taking the whole fleet offline. Matched against the proxy-derived, trusted call facts.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum Scope {
+    Global,
+    Agent(String),
+    Resource(String),
+    Tool(String),
+}
+
+impl Scope {
+    pub fn parse(s: &str) -> Scope {
+        if s.is_empty() || s == "global" {
+            return Scope::Global;
+        }
+        if let Some(v) = s.strip_prefix("agent:") {
+            return Scope::Agent(v.to_string());
+        }
+        if let Some(v) = s.strip_prefix("resource:") {
+            return Scope::Resource(v.to_string());
+        }
+        if let Some(v) = s.strip_prefix("tool:") {
+            return Scope::Tool(v.to_string());
+        }
+        // Unknown prefix: widen to Global. The dominant use is lockdown, where the broadest
+        // containment is the fail-safe reading of an operator typo.
+        Scope::Global
+    }
+    pub fn as_str(&self) -> String {
+        match self {
+            Scope::Global => "global".to_string(),
+            Scope::Agent(a) => format!("agent:{a}"),
+            Scope::Resource(r) => format!("resource:{r}"),
+            Scope::Tool(t) => format!("tool:{t}"),
+        }
+    }
+    /// Does this grant apply to a call with these (trusted, proxy-derived) facts?
+    pub fn matches(&self, agent: &str, resource: &str, tool: &str) -> bool {
+        match self {
+            Scope::Global => true,
+            Scope::Agent(a) => a == agent,
+            Scope::Resource(r) => r == resource,
+            Scope::Tool(t) => t == tool,
+        }
+    }
+}
+
+fn default_scope() -> String {
+    "global".to_string()
+}
+
 /// On-disk break-glass grant: the local channel between an operator (or the control server) and a
 /// proxy. The operator writes this file (via `acp break-glass`), the proxy watches it and applies
 /// the grant. Local-file based so it works for both the stdio and HTTP transports and needs no
@@ -51,6 +102,8 @@ impl Mode {
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct GrantFile {
     pub mode: String,
+    #[serde(default = "default_scope")]
+    pub scope: String,
     pub reason: String,
     pub actor: String,
     pub engaged_ms: u64,
@@ -59,8 +112,12 @@ pub struct GrantFile {
 
 impl GrantFile {
     pub fn new(mode: Mode, reason: &str, actor: &str, now_ms: u64, ttl_ms: u64) -> Self {
+        Self::new_scoped(mode, Scope::Global, reason, actor, now_ms, ttl_ms)
+    }
+    pub fn new_scoped(mode: Mode, scope: Scope, reason: &str, actor: &str, now_ms: u64, ttl_ms: u64) -> Self {
         GrantFile {
             mode: mode.as_str().to_string(),
+            scope: scope.as_str(),
             reason: reason.to_string(),
             actor: actor.to_string(),
             engaged_ms: now_ms,
@@ -70,7 +127,8 @@ impl GrantFile {
     /// Parse into a live grant, or None if the mode is unknown or the grant is invalid.
     pub fn to_break_glass(&self) -> Option<(BreakGlass, String)> {
         let mode = Mode::parse(&self.mode)?;
-        let bg = BreakGlass::engage(mode, &self.reason, self.engaged_ms, self.ttl_ms).ok()?;
+        let mut bg = BreakGlass::engage(mode, &self.reason, self.engaged_ms, self.ttl_ms).ok()?;
+        bg.scope = Scope::parse(&self.scope);
         Some((bg, self.actor.clone()))
     }
 }
@@ -79,6 +137,7 @@ impl GrantFile {
 #[derive(Debug, Clone)]
 pub struct BreakGlass {
     pub mode: Mode,
+    pub scope: Scope,
     pub reason: String,
     pub engaged_ms: u64,
     pub ttl_ms: u64,
@@ -95,6 +154,7 @@ impl BreakGlass {
         }
         Ok(BreakGlass {
             mode,
+            scope: Scope::Global,
             reason: reason.to_string(),
             engaged_ms: now_ms,
             ttl_ms,
@@ -168,11 +228,19 @@ impl BreakGlassRegistry {
         Ok(ev)
     }
 
-    /// The verdict after applying every currently-active grant to a base verdict.
-    pub fn effective(&self, base: Verdict, now_ms: u64) -> Verdict {
+    /// The verdict after applying every active grant whose scope matches this call to a base
+    /// verdict. `agent`/`resource`/`tool` are the trusted, proxy-derived facts of the call.
+    pub fn effective(
+        &self,
+        base: Verdict,
+        now_ms: u64,
+        agent: &str,
+        resource: &str,
+        tool: &str,
+    ) -> Verdict {
         self.grants
             .iter()
-            .filter(|(g, _)| g.active(now_ms))
+            .filter(|(g, _)| g.active(now_ms) && g.scope.matches(agent, resource, tool))
             .fold(base, |acc, (g, _)| g.apply(acc, now_ms))
     }
 
@@ -249,7 +317,7 @@ mod registry_tests {
             .unwrap();
         assert_eq!(format!("{:?}", ev.kind), "BreakGlassEngage");
         // A would-hold call is forwarded while the grant is active.
-        assert_eq!(reg.effective(Verdict::StepUp, 500), Verdict::Allow);
+        assert_eq!(reg.effective(Verdict::StepUp, 500, "a", "database", "db.q"), Verdict::Allow);
     }
 
     #[test]
@@ -258,7 +326,7 @@ mod registry_tests {
         reg.engage(Mode::EmergencyBypass, "pager", "oncall", 0, 1000)
             .unwrap();
         // After the TTL, the grant no longer applies and sweep yields a revert record.
-        assert_eq!(reg.effective(Verdict::StepUp, 2000), Verdict::StepUp);
+        assert_eq!(reg.effective(Verdict::StepUp, 2000, "a", "database", "db.q"), Verdict::StepUp);
         let reverts = reg.sweep(2000);
         assert_eq!(reverts.len(), 1);
         assert_eq!(format!("{:?}", reverts[0].kind), "BreakGlassRevert");
@@ -270,5 +338,17 @@ mod registry_tests {
     fn a_reason_is_still_mandatory_through_the_registry() {
         let mut reg = BreakGlassRegistry::new();
         assert!(reg.engage(Mode::LockdownAll, "", "actor", 0, 1000).is_err());
+    }
+
+    #[test]
+    fn a_resource_scoped_lockdown_only_bites_that_resource() {
+        // Freeze the database resource fleet-wide, via the file channel (which carries the scope).
+        let gf = GrantFile::new_scoped(Mode::LockdownAll, Scope::Resource("database".into()), "breach", "oncall", 0, 1000);
+        let mut reg = BreakGlassRegistry::new();
+        reg.replace_all(gf.to_break_glass());
+        // A database call is denied even far past the ttl (lockdown persists).
+        assert_eq!(reg.effective(Verdict::Allow, 1_000_000, "any", "database", "db.query"), Verdict::Deny);
+        // A filesystem call is untouched.
+        assert_eq!(reg.effective(Verdict::Allow, 10, "any", "filesystem", "read_file"), Verdict::Allow);
     }
 }
