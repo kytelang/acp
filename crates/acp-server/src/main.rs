@@ -122,6 +122,7 @@ async fn main() {
         .route("/agents", get(agents))
         .route("/policy-store", get(policy_store_current))
         .route("/approvals/pending", get(approvals_pending))
+        .route("/evidence/recent", get(evidence_recent))
         .with_state(state);
 
     let listener = tokio::net::TcpListener::bind(&addr).await.expect("bind");
@@ -358,6 +359,30 @@ async fn meta_audit(State(st): State<Arc<AppState>>) -> impl IntoResponse {
         }
         None => Json(serde_json::json!({"configured": false})),
     }
+}
+
+/// Recent governed decisions (tool, verdict, agent, hlc) for the console evidence view.
+async fn evidence_recent(State(st): State<Arc<AppState>>) -> impl IntoResponse {
+    let recs = match st.ledger.as_ref().and_then(|p| acp_ledger::export_file(p).ok()) {
+        Some(pack) => pack.get("records").and_then(|r| r.as_array()).cloned().unwrap_or_default(),
+        None => vec![],
+    };
+    let mut out: Vec<serde_json::Value> = Vec::new();
+    for r in recs.iter().rev() {
+        let canon = r.get("canonical").and_then(|c| c.as_str()).unwrap_or("");
+        let bytes = match hex::decode(canon) { Ok(b) => b, Err(_) => continue };
+        let rec: serde_json::Value = match serde_json::from_slice(&bytes) { Ok(v) => v, Err(_) => continue };
+        if rec.get("type").and_then(|t| t.as_str()) != Some("decision") { continue; }
+        out.push(serde_json::json!({
+            "seq": r.get("seq"),
+            "tool": rec.pointer("/action/tool"),
+            "verdict": rec.pointer("/decision/verdict"),
+            "agent": rec.get("agent_id"),
+            "hlc": rec.get("hlc"),
+        }));
+        if out.len() >= 25 { break; }
+    }
+    Json(serde_json::json!({"evidence": out}))
 }
 
 /// Pending approvals as JSON (for the console).

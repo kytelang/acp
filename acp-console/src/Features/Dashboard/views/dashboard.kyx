@@ -80,3 +80,34 @@ pub fn policyPanel(version: string, author: string): Html {
         <span class="dim">deployed by</span> <span class="strong">{author}</span>
     </div>;
 }
+
+fn verdictBadge(v: string): Html {
+    if (string.eql(v, "deny")) { return <span class="badge bad">deny</span>; }
+    if (string.eql(v, "step_up")) { return <span class="badge warn">step-up</span>; }
+    if (string.eql(v, "shadow")) { return <span class="badge ver">shadow</span>; }
+    return <span class="badge ok">{v}</span>;
+}
+
+// Recent governed decisions (evidence timeline).
+pub fn evidencePanel(rows: list.List<EvidenceRow>): Html {
+    return <div id="evidence">
+        {if (rows.size() == 0) {
+            <p class="empty">No decisions recorded yet.</p>
+        } else {
+            <table class="tbl">
+                <thead><tr><th>#</th><th>Tool</th><th>Verdict</th><th>Agent</th></tr></thead>
+                <tbody>
+                    {for (i in 0..rows.size()) {
+                        let r = rows.get(i) ?? EvidenceRow("", "", "", "");
+                        <tr>
+                            <td class="mono dim">{r.seq}</td>
+                            <td class="strong">{r.tool}</td>
+                            <td>{verdictBadge(r.verdict)}</td>
+                            <td class="mono dim">{r.agent}</td>
+                        </tr>
+                    }}
+                </tbody>
+            </table>
+        }}
+    </div>;
+}

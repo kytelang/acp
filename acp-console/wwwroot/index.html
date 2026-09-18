@@ -10,14 +10,22 @@
       --bg:#0a0e1a; --panel:#111726; --panel2:#0d1320; --line:#1e2740; --line2:#28324f;
       --txt:#e5eaf5; --dim:#8892ab; --muted:#5c6685;
       --accent:#6366f1; --ok:#10b981; --warn:#f59e0b; --bad:#ef4444;
+      --sidebar:linear-gradient(180deg,#0c1120,#0a0e1a); --topbar:#0d1320;
     }
+    body.light{
+      --bg:#eef1f7; --panel:#ffffff; --panel2:#f4f6fb; --line:#e2e7f0; --line2:#d3dae7;
+      --txt:#161d2e; --dim:#586182; --muted:#9098ad;
+      --sidebar:linear-gradient(180deg,#ffffff,#f4f6fb); --topbar:#ffffff;
+    }
+    body.light .sidebar,body.light .topbar{border-color:var(--line)}
+    body.light .brand-t,body.light .logo{color:#fff}
     *{box-sizing:border-box}
     body{margin:0;background:var(--bg);color:var(--txt);font:14px/1.5 -apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,sans-serif;-webkit-font-smoothing:antialiased}
     a{color:inherit;text-decoration:none}
     .app{display:grid;grid-template-columns:236px 1fr;min-height:100vh}
 
     /* Sidebar */
-    .sidebar{background:linear-gradient(180deg,#0c1120,#0a0e1a);border-right:1px solid var(--line);padding:1.25rem 0;position:sticky;top:0;height:100vh}
+    .sidebar{background:var(--sidebar);border-right:1px solid var(--line);padding:1.25rem 0;position:sticky;top:0;height:100vh}
     .brand{display:flex;align-items:center;gap:.6rem;padding:0 1.25rem 1.25rem;border-bottom:1px solid var(--line)}
     .logo{width:34px;height:34px;border-radius:9px;background:linear-gradient(135deg,var(--accent),#8b5cf6);display:grid;place-items:center;font-weight:800;color:#fff;font-size:1rem;box-shadow:0 2px 12px rgba(99,102,241,.4)}
     .brand-t{font-weight:700;letter-spacing:.2px} .brand-s{font-size:.7rem;color:var(--muted)}
@@ -29,7 +37,7 @@
 
     /* Main */
     .main{display:flex;flex-direction:column;min-width:0}
-    .topbar{height:60px;border-bottom:1px solid var(--line);display:flex;align-items:center;justify-content:space-between;padding:0 1.75rem;background:var(--panel2);position:sticky;top:0;z-index:5}
+    .topbar{height:60px;border-bottom:1px solid var(--line);display:flex;align-items:center;justify-content:space-between;padding:0 1.75rem;background:var(--topbar);position:sticky;top:0;z-index:5}
     .topbar h1{font-size:1.05rem;font-weight:650;margin:0}
     .pill{display:flex;align-items:center;gap:.5rem;font-size:.8rem;color:var(--dim);background:var(--panel);border:1px solid var(--line);padding:.35rem .75rem;border-radius:999px}
     .live{width:.55rem;height:.55rem;border-radius:50%;background:var(--ok);box-shadow:0 0 0 0 rgba(16,185,129,.5);animation:pulse 2s infinite}
@@ -73,9 +81,11 @@
     .btn.ok{background:var(--ok);color:#052e22} .btn.ok:hover{background:#0ea371}
     .btn.no{background:rgba(239,68,68,.15);color:#f87171;border:1px solid rgba(239,68,68,.35)} .btn.no:hover{background:rgba(239,68,68,.25)}
     .polrow{display:flex;align-items:center;gap:.6rem}
+    .tbtn{background:var(--panel);border:1px solid var(--line);color:var(--txt);width:36px;height:36px;border-radius:9px;cursor:pointer;font-size:1rem;display:grid;place-items:center;transition:.15s} .tbtn:hover{background:var(--panel2)}
+    .tright{display:flex;align-items:center;gap:.85rem}
   </style>
 </head>
-<body>
+<body data-signals="{theme: 'dark'}" data-class-light="$theme === 'light'" data-persist>
   <div class="app">
     <aside class="sidebar">
       <div class="brand">
@@ -86,18 +96,24 @@
         <div class="nav-l">Governance</div>
         <a class="nav-i" href="#sec-overview"><span class="ic">📊</span> Overview</a>
         <a class="nav-i" href="#sec-approvals"><span class="ic">✋</span> Approvals</a>
+        <a class="nav-i" href="#sec-evidence"><span class="ic">📜</span> Evidence</a>
         <div class="nav-l">Identity</div>
         <a class="nav-i" href="#sec-apps"><span class="ic">📦</span> Apps</a>
         <a class="nav-i" href="#sec-agents"><span class="ic">🤖</span> Agents</a>
         <div class="nav-l">Policy</div>
-        <a class="nav-i" href="#sec-policy"><span class="ic">📜</span> Deployed policy</a>
+        <a class="nav-i" href="#sec-policy"><span class="ic">🔏</span> Deployed policy</a>
       </nav>
     </aside>
 
     <div class="main">
       <div class="topbar">
         <h1>Governance overview</h1>
-        <div class="pill"><span class="live"></span> live</div>
+        <div class="tright">
+          <button class="tbtn" data-on:click="$theme = $theme === 'dark' ? 'light' : 'dark'" title="Toggle theme">
+            <span data-text="$theme === 'dark' ? '☀' : '☾'"></span>
+          </button>
+          <div class="pill"><span class="live"></span> live</div>
+        </div>
       </div>
       <!-- One SSE stream, opened on load, patches every fragment below. -->
       <div class="content" data-on-load="@get('/sse/metrics')">
@@ -107,13 +123,16 @@
         <div class="card" id="sec-approvals"><div class="card-h"><span class="ic">✋</span> Pending approvals</div>
           <div class="card-b"><div id="approvals"><p class="empty">…</p></div></div></div>
 
+        <div class="card" id="sec-evidence"><div class="card-h"><span class="ic">📜</span> Evidence timeline</div>
+          <div class="card-b"><div id="evidence"><p class="empty">…</p></div></div></div>
+
         <div class="card" id="sec-apps"><div class="card-h"><span class="ic">📦</span> Registered apps</div>
           <div class="card-b"><div id="apps"><p class="empty">…</p></div></div></div>
 
         <div class="card" id="sec-agents"><div class="card-h"><span class="ic">🤖</span> Registered agents</div>
           <div class="card-b"><div id="agents"><p class="empty">…</p></div></div></div>
 
-        <div class="card" id="sec-policy"><div class="card-h"><span class="ic">📜</span> Deployed policy</div>
+        <div class="card" id="sec-policy"><div class="card-h"><span class="ic">🔏</span> Deployed policy</div>
           <div class="card-b"><div id="policy"><p class="empty">…</p></div></div></div>
       </div>
     </div>

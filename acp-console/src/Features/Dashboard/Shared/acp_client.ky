@@ -33,6 +33,14 @@ pub struct AgentRow {
     init(name: string, app: string, active: bool) { self.name = name; self.app = app; self.active = active; }
 }
 
+pub struct EvidenceRow {
+    pub seq: string,
+    pub tool: string,
+    pub verdict: string,
+    pub agent: string,
+    init(seq: string, tool: string, verdict: string, agent: string) { self.seq = seq; self.tool = tool; self.verdict = verdict; self.agent = agent; }
+}
+
 pub struct ApprovalRow {
     pub id: string,
     pub tool: string,
@@ -126,6 +134,28 @@ pub struct AcpClient {
             let id = json.asString(json.get(item, "id")) ?? "";
             let tool = json.asString(json.get(item, "tool")) ?? "";
             rows.push(ApprovalRow(id, tool));
+            i = i + 1;
+        }
+        return rows;
+    }
+
+    // Recent governed decisions for the evidence table.
+    pub fn evidenceRows(self: AcpClient): list.List<EvidenceRow> {
+        let rows = list.List<EvidenceRow>();
+        let resp = client.Http.get(self.base + "/evidence/recent");
+        if (resp.status.toCode() != 200) { return rows; }
+        let ev = json.get(json.parse(resp.body), "evidence");
+        let arr = json.asArray(ev);
+        if (arr == undefined) { return rows; }
+        let i = 0;
+        while (i < arr.size()) {
+            let item = json.at(ev, i);
+            let seqN = json.asNumber(json.get(item, "seq")) ?? 0;
+            rows.push(EvidenceRow(
+                `${seqN}`,
+                json.asString(json.get(item, "tool")) ?? "?",
+                json.asString(json.get(item, "verdict")) ?? "?",
+                json.asString(json.get(item, "agent")) ?? ""));
             i = i + 1;
         }
         return rows;
