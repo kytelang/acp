@@ -14,11 +14,18 @@ use axum::{
     routing::post, Router,
 };
 use std::sync::Arc;
+use std::time::Duration;
+
+/// M5.4: bound in-flight upstream requests so a burst backs off (429-style) rather than exhausting
+/// the proxy, and time out a slow upstream so a hung tool server does not pin a connection forever.
+const MAX_CONCURRENT: usize = 256;
+const UPSTREAM_TIMEOUT_S: u64 = 30;
 
 struct HttpState {
     controller: Arc<Controller>,
     client: reqwest::Client,
     upstream: String,
+    sem: Arc<tokio::sync::Semaphore>,
 }
 
 pub async fn run(addr: &str, upstream: String, controller: Arc<Controller>) -> anyhow::Result<()> {
@@ -33,8 +40,12 @@ pub async fn run(addr: &str, upstream: String, controller: Arc<Controller>) -> a
     }
     let state = Arc::new(HttpState {
         controller,
-        client: reqwest::Client::builder().https_only(false).build()?,
+        client: reqwest::Client::builder()
+            .https_only(false)
+            .timeout(Duration::from_secs(UPSTREAM_TIMEOUT_S))
+            .build()?,
         upstream,
+        sem: Arc::new(tokio::sync::Semaphore::new(MAX_CONCURRENT)),
     });
     let app = Router::new().route("/", post(handle)).with_state(state);
     let listener = tokio::net::TcpListener::bind(addr).await?;
@@ -44,6 +55,18 @@ pub async fn run(addr: &str, upstream: String, controller: Arc<Controller>) -> a
 }
 
 async fn handle(State(st): State<Arc<HttpState>>, body: Bytes) -> Response {
+    // Concurrency cap: acquire a permit or shed load with 503 + Retry-After (no unbounded queueing).
+    let _permit = match st.sem.clone().try_acquire_owned() {
+        Ok(p) => p,
+        Err(_) => {
+            return (
+                StatusCode::SERVICE_UNAVAILABLE,
+                [("retry-after", "1")],
+                "proxy at capacity, retry shortly",
+            )
+                .into_response();
+        }
+    };
     match st.controller.decide_frame(&body) {
         FrameAction::Reply(json) => ([("content-type", "application/json")], json).into_response(),
         FrameAction::Forward => match st

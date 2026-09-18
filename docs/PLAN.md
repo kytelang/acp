@@ -257,7 +257,7 @@ was not actually performed.
   - [x] Every `tools/call` parsed; unknown action-bearing requests denied by default (-32001).
   - [x] MCP protocolVersion recorded at initialize (logged; persisted in evidence from M3).
 - [~] **M1.5 Resource limits (D5/J).**
-  - [x] Max message size, fail-closed on breach (unit-tested). [ ] per-connection timeout + concurrency cap land with the HTTP transport (M5).
+  - [x] Max message size, fail-closed on breach (unit-tested). [x] concurrency cap (503 + Retry-After back-pressure) + upstream request timeout on the HTTP transport (http.rs); m5_http still green.
 - [x] **M1.6 Golden transparency harness.**
   - [x] `make test-transparency` green (in CI); reused by later milestones.
 - [x] **Gate:** zero observable behavioural change to the agent; unknown methods denied.
