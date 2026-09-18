@@ -40,7 +40,7 @@ fn approval_required(id: &Value, rule: &str) -> String {
 }
 
 use acp_core::impact::ImpactTaxonomy;
-use acp_policy::{build_context_with, PolicyOutcome};
+use acp_policy::{build_context_identified, PolicyOutcome};
 
 /// The full assessment of a tool call: the proxy action plus the fields needed to build an
 /// evidence record (M3). `gated` is true for deny/step_up (which must fail closed on a write
@@ -61,7 +61,14 @@ fn impact_str(tax: &ImpactTaxonomy, tool: &str, args: &Value) -> &'static str {
 }
 
 /// Evaluate a tool call and return both the enforcement action and the evidence fields.
-pub fn assess(engine: &PolicyEngine, env: &str, tc: &ToolCall, tax: &ImpactTaxonomy) -> Assessment {
+pub fn assess(
+    engine: &PolicyEngine,
+    env: &str,
+    tc: &ToolCall,
+    tax: &ImpactTaxonomy,
+    agent: &str,
+    app: &str,
+) -> Assessment {
     let impact = impact_str(tax, &tc.name, &tc.arguments);
     if !valid_tool(&tc.name) {
         return Assessment {
@@ -81,7 +88,14 @@ pub fn assess(engine: &PolicyEngine, env: &str, tc: &ToolCall, tax: &ImpactTaxon
             impact_taxonomy: tax.version.clone(),
         };
     }
-    let outcome = engine.evaluate(build_context_with(&tc.name, &tc.arguments, env, tax));
+    let outcome = engine.evaluate(build_context_identified(
+        &tc.name,
+        &tc.arguments,
+        env,
+        agent,
+        app,
+        tax,
+    ));
     let enforce = enforce_for(outcome.verdict, tc, &outcome, impact);
     Assessment {
         enforce,

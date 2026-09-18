@@ -49,6 +49,8 @@ pub struct Controller {
     // F2 channel: an optional on-disk grant file the proxy watches (operator/server writes it).
     bg_file: Mutex<Option<String>>,
     bg_mtime: Mutex<Option<std::time::SystemTime>>,
+    // Verified caller identity (app_id, agent_id) from the registry; empty when unregistered.
+    identity: Mutex<(String, String)>,
 }
 
 impl Controller {
@@ -80,7 +82,15 @@ impl Controller {
             breakglass: Mutex::new(acp_core::breakglass::BreakGlassRegistry::new()),
             bg_file: Mutex::new(None),
             bg_mtime: Mutex::new(None),
+            identity: Mutex::new((String::new(), String::new())),
         }
+    }
+
+    /// Set the proxy's verified caller identity (app_id, agent_id). The proxy stamps this into the
+    /// policy context (so per-app/per-agent rules apply) and into evidence. It is set once at
+    /// startup after the registry verifies the presented agent token.
+    pub fn set_identity(&self, app_id: String, agent_id: String) {
+        *self.identity.lock().unwrap() = (app_id, agent_id);
     }
 
     /// F2 channel: watch a break-glass grant file. The operator (or control server) writes the file
@@ -188,7 +198,10 @@ impl Controller {
                 ParsedFrame::ToolCall(tc) => tc,
                 _ => return FrameAction::Forward,
             };
-            let mut a = policy::assess(&eng, &self.env, &tc, &self.impact_tax);
+            let (app_id, agent_id) = self.identity.lock().unwrap().clone();
+            // Record the verified agent id when present, else the transport default.
+            let rec_agent = if agent_id.is_empty() { self.agent.clone() } else { agent_id.clone() };
+            let mut a = policy::assess(&eng, &self.env, &tc, &self.impact_tax, &agent_id, &app_id);
             // F2: apply any active break-glass grant to the verdict, then re-derive enforcement.
             // With no grant this is the identity, so the normal path is untouched.
             self.refresh_break_glass();
@@ -215,7 +228,7 @@ impl Controller {
             if self.shadow && a.outcome.verdict != Verdict::Allow {
                 if let Some(ev) = st.evidence.as_mut() {
                     let (did, _) = ev.record_decision(
-                        &self.agent,
+                        &rec_agent,
                         &self.session,
                         &tc,
                         &a.outcome,
@@ -239,7 +252,7 @@ impl Controller {
                     Step::Forward(_view) => {
                         if let Some(ev) = st.evidence.as_mut() {
                             let (did, _) = ev.record_decision(
-                                &self.agent,
+                                &rec_agent,
                                 &self.session,
                                 &tc,
                                 &a.outcome,
@@ -274,7 +287,7 @@ impl Controller {
                     Step::Denied(json) => {
                         if let Some(ev) = st.evidence.as_mut() {
                             let (did, _) = ev.record_decision(
-                                &self.agent,
+                                &rec_agent,
                                 &self.session,
                                 &tc,
                                 &a.outcome,
@@ -301,7 +314,7 @@ impl Controller {
             // Allow / deny / (step_up without a store): enforce and record.
             let rec = st.evidence.as_mut().map(|ev| {
                 ev.record_decision(
-                    &self.agent,
+                    &rec_agent,
                     &self.session,
                     &tc,
                     &a.outcome,

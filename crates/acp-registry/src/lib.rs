@@ -40,6 +40,9 @@ pub struct Agent {
 pub struct Identity {
     pub agent_id: String,
     pub app_id: String,
+    /// Human-friendly names, what policy authors reference (`when: { agent: "triage" }`).
+    pub agent_name: String,
+    pub app_name: String,
 }
 
 #[derive(Debug, Default, Clone, Serialize, Deserialize)]
@@ -87,8 +90,13 @@ impl Registry {
         if agent.token_sha256 != sha256_hex_bytes(token.as_bytes()) {
             return None;
         }
-        self.apps.get(&agent.app_id)?;
-        Some(Identity { agent_id: agent.id.clone(), app_id: agent.app_id.clone() })
+        let app = self.apps.get(&agent.app_id)?;
+        Some(Identity {
+            agent_id: agent.id.clone(),
+            app_id: agent.app_id.clone(),
+            agent_name: agent.name.clone(),
+            app_name: app.name.clone(),
+        })
     }
 
     /// Revoke an agent (deprovision). Its calls stop verifying immediately.

@@ -39,6 +39,9 @@ struct Opts {
     cef: Option<String>,
     ocsf: Option<String>,
     break_glass: Option<String>,
+    registry: Option<String>,
+    agent_id: Option<String>,
+    agent_token: Option<String>,
 }
 
 fn parse_opts(items: &[String]) -> Result<(Opts, Vec<String>), String> {
@@ -65,6 +68,9 @@ fn parse_opts(items: &[String]) -> Result<(Opts, Vec<String>), String> {
             "--cef" => o.cef = it.next().cloned(),
             "--ocsf" => o.ocsf = it.next().cloned(),
             "--break-glass-file" => o.break_glass = it.next().cloned(),
+            "--registry" => o.registry = it.next().cloned(),
+            "--agent-id" => o.agent_id = it.next().cloned(),
+            "--agent-token" => o.agent_token = it.next().cloned(),
             "--shadow" => o.shadow = true,
             "--fail-open" => o.fail_open = true,
             other => return Err(format!("unknown option '{other}'")),
@@ -157,6 +163,28 @@ fn build_controller(o: &Opts) -> Result<Arc<Controller>, String> {
     if let Some(bg) = &o.break_glass {
         controller.set_break_glass_file(bg.clone());
         eprintln!("acp-proxy: watching break-glass grant file {bg}");
+    }
+    // Verified caller identity: when a registry is configured, the presented (agent-id, token) MUST
+    // verify. Fail closed on a missing/invalid/revoked credential so a mis-enrolled agent cannot run
+    // un-governed. Without a registry the proxy runs unidentified (agent/app rules simply do not match).
+    if let Some(reg_path) = &o.registry {
+        let reg = acp_registry::Registry::load(reg_path)
+            .map_err(|e| format!("cannot load registry {reg_path}: {e}"))?;
+        let (aid, tok) = match (&o.agent_id, &o.agent_token) {
+            (Some(a), Some(t)) => (a.clone(), t.clone()),
+            _ => return Err("--registry requires --agent-id and --agent-token".to_string()),
+        };
+        match reg.verify(&aid, &tok) {
+            Some(id) => {
+                eprintln!(
+                    "acp-proxy: verified identity app={} ({}) agent={} ({})",
+                    id.app_name, id.app_id, id.agent_name, id.agent_id
+                );
+                // Policy rules reference the human names; evidence-friendly ids remain in the registry.
+                controller.set_identity(id.app_name, id.agent_name);
+            }
+            None => return Err(format!("agent {aid} failed registry verification (unknown, revoked, or bad token)")),
+        }
     }
     Ok(controller)
 }

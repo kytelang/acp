@@ -15,6 +15,7 @@ path = "src/bin/mock_mcp_server.rs"
 
 [dependencies]
 acp-core = { path = "../acp-core" }
+acp-registry = { path = "../acp-registry" }
 acp-jsonrpc = { path = "../acp-jsonrpc" }
 acp-policy = { path = "../acp-policy" }
 acp-ledger = { path = "../acp-ledger" }

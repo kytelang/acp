@@ -468,7 +468,7 @@ was not actually performed.
 ### v2.4 Agent identity integration
 
 - [m] **v2.4.1 IdP-backed authority + app/agent registry.**
-  - [m] Principal + roles from a verified Entra token (`acp-auth`); NEW `acp-registry`: apps + agents registered, agents issued a one-time token, `verify(agent_id, token)` gives an un-spoofable Identity (revocation immediate, JSON-persisted); policy DSL gains `app`/`agent` matchers so rules scope per-app/per-agent (tested). CLI `acp app/agent/registry`. [ ] wire the proxy to verify the presented agent token against the registry and stamp the verified identity into the context.
+  - [x] Principal + roles from a verified Entra token (`acp-auth`); `acp-registry` (apps/agents, one-time token, immediate revocation) WIRED into the proxy: `--registry/--agent-id/--agent-token` verify the presented credential (fail-closed: a bad/revoked token refuses to start), stamp the verified app/agent NAME into the trusted policy context, and record the verified agent in evidence. Policy DSL `app`/`agent` matchers enforce per-app/per-agent LIVE (E2E: triage denied charge_card, analytics allowed, bad token fails closed). CLI `acp app/agent/registry`. Addresses the D10 self-asserted-identity gap for agents.
   - [b] `X-ACP-Principal` is now verified and may be signed as verified attribution (supersedes D10 v0 stance).
 
 ### H2: Hardening gate (parallel to v2; REQUIRED before scale)
