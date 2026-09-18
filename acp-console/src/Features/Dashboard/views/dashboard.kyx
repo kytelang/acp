@@ -95,7 +95,7 @@ pub fn evidencePanel(rows: list.List<EvidenceRow>): Html {
             <p class="empty">No decisions recorded yet.</p>
         } else {
             <table class="tbl">
-                <thead><tr><th>#</th><th>Tool</th><th>Verdict</th><th>Agent</th></tr></thead>
+                <thead><tr><th>Seq</th><th>Tool</th><th>Verdict</th><th>Agent</th></tr></thead>
                 <tbody>
                     {for (i in 0..rows.size()) {
                         let r = rows.get(i) ?? EvidenceRow("", "", "", "");

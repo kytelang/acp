@@ -116,7 +116,7 @@
         </div>
       </div>
       <!-- One SSE stream, opened on load, patches every fragment below. -->
-      <div class="content" data-on-load="@get('/sse/metrics')">
+      <div class="content" data-on-intersect="@get('/sse/metrics')">
         <div class="card" id="sec-overview"><div class="card-h"><span class="ic">📊</span> Overview</div>
           <div class="card-b"><div id="metrics" class="stats"><p class="empty">connecting to acp-server…</p></div></div></div>
 
