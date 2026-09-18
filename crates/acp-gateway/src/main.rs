@@ -1,0 +1,200 @@
+//! acp-gateway: the LLM gateway PEP (phase C, C2). A reverse proxy in front of model APIs. Every
+//! request is classified and evaluated by the shared policy engine before it may reach a model, and
+//! the gateway holds the upstream model credential so a caller cannot bypass it (credential
+//! brokering): the app authenticates to the gateway, the gateway authenticates to the model.
+
+use acp_core::modelclass::ModelTaxonomy;
+use acp_core::types::Verdict;
+use acp_gateway::decide;
+use acp_policy::PolicyEngine;
+use axum::{
+    body::Bytes,
+    extract::State,
+    http::{HeaderMap, StatusCode},
+    response::{IntoResponse, Response},
+    routing::any,
+    Json, Router,
+};
+use serde_json::json;
+use std::sync::Arc;
+
+struct GwState {
+    engine: PolicyEngine,
+    tax: ModelTaxonomy,
+    upstream: String,
+    upstream_key: Option<String>,
+    env: String,
+    oidc: Option<(acp_auth::Jwks, acp_auth::EntraConfig)>,
+    client: reqwest::Client,
+}
+
+#[tokio::main]
+async fn main() -> std::process::ExitCode {
+    let args: Vec<String> = std::env::args().collect();
+    let mut addr = "127.0.0.1:8799".to_string();
+    let (mut policy, mut upstream, mut upstream_key, mut env) = (None, None, None, "prod".to_string());
+    let (mut entra_tenant, mut entra_audience): (Option<String>, Option<String>) = (None, None);
+    let mut it = args.iter().skip(1);
+    while let Some(a) = it.next() {
+        match a.as_str() {
+            "--addr" => addr = it.next().cloned().unwrap_or(addr),
+            "--policy" => policy = it.next().cloned(),
+            "--upstream" => upstream = it.next().cloned(),
+            "--upstream-key" => upstream_key = it.next().cloned(),
+            "--env" => env = it.next().cloned().unwrap_or(env),
+            "--entra-tenant" => entra_tenant = it.next().cloned(),
+            "--entra-audience" => entra_audience = it.next().cloned(),
+            other => {
+                eprintln!("acp-gateway: unknown option '{other}'");
+                return std::process::ExitCode::from(2);
+            }
+        }
+    }
+    let engine = match policy.as_ref().map(|p| std::fs::read_to_string(p)) {
+        Some(Ok(src)) => match PolicyEngine::from_yaml(&src) {
+            Ok(e) => e,
+            Err(e) => {
+                eprintln!("acp-gateway: bad policy: {e}");
+                return std::process::ExitCode::from(1);
+            }
+        },
+        _ => {
+            eprintln!("acp-gateway: --policy <file> is required");
+            return std::process::ExitCode::from(2);
+        }
+    };
+    let upstream = match upstream {
+        Some(u) => u,
+        None => {
+            eprintln!("acp-gateway: --upstream <base-url> is required");
+            return std::process::ExitCode::from(2);
+        }
+    };
+    let oidc = match (entra_tenant, entra_audience) {
+        (Some(tid), Some(aud)) => {
+            let url = format!("https://login.microsoftonline.com/{tid}/discovery/v2.0/keys");
+            match reqwest::get(&url).await.ok() {
+                Some(r) => match r.text().await.ok().and_then(|s| acp_auth::Jwks::from_jwks_json(&s).ok()) {
+                    Some(jwks) => {
+                        eprintln!("acp-gateway: per-request human identity enabled");
+                        Some((jwks, acp_auth::EntraConfig {
+                            issuer: format!("https://login.microsoftonline.com/{tid}/v2.0"),
+                            audience: aud,
+                        }))
+                    }
+                    None => None,
+                },
+                None => None,
+            }
+        }
+        _ => None,
+    };
+    let st = Arc::new(GwState {
+        engine,
+        tax: ModelTaxonomy::default(),
+        upstream,
+        upstream_key,
+        env,
+        oidc,
+        client: reqwest::Client::new(),
+    });
+    let upstream_log = st.upstream.clone();
+    let app = Router::new().route("/*path", any(handle)).with_state(st);
+    let listener = match tokio::net::TcpListener::bind(&addr).await {
+        Ok(l) => l,
+        Err(e) => {
+            eprintln!("acp-gateway: bind {addr}: {e}");
+            return std::process::ExitCode::from(1);
+        }
+    };
+    eprintln!("acp-gateway: governing model calls on http://{addr} -> {upstream_log}");
+    let _ = axum::serve(listener, app).await;
+    std::process::ExitCode::SUCCESS
+}
+
+fn now_ms() -> u64 {
+    std::time::SystemTime::now()
+        .duration_since(std::time::UNIX_EPOCH)
+        .map(|d| d.as_millis() as u64)
+        .unwrap_or(0)
+}
+
+async fn handle(
+    State(st): State<Arc<GwState>>,
+    axum::extract::Path(path): axum::extract::Path<String>,
+    headers: HeaderMap,
+    body: Bytes,
+) -> Response {
+    // The model is in the request body (OpenAI/Anthropic style). No model -> nothing to govern here.
+    let parsed: serde_json::Value = serde_json::from_slice(&body).unwrap_or(json!({}));
+    let model = parsed.get("model").and_then(|v| v.as_str()).unwrap_or("");
+
+    // Subject: the calling app (an id header the caller cannot forge for policy is a future hardening;
+    // for now an explicit header) and the verified human principal from the bearer.
+    let app = headers.get("x-acp-app").and_then(|v| v.to_str().ok()).unwrap_or("unknown-app");
+    let principal = resolve_principal(&st, &headers).unwrap_or_else(|| "unattributed".to_string());
+
+    // A small, non-sensitive summary for policy matching. Never the prompt (that is a scan obligation).
+    let argsum = json!({
+        "model": model,
+        "stream": parsed.get("stream").and_then(|v| v.as_bool()).unwrap_or(false),
+        "max_tokens": parsed.get("max_tokens").and_then(|v| v.as_u64()).unwrap_or(0),
+    });
+
+    let d = decide(&st.engine, &st.tax, model, app, &principal, &argsum, &st.env);
+    eprintln!(
+        "acp-gateway: {} model={} class={} op={} app={} principal={} -> {:?}",
+        path, model, d.resource, d.operation, app, principal, d.verdict
+    );
+
+    match d.verdict {
+        Verdict::Deny => (
+            StatusCode::FORBIDDEN,
+            Json(json!({"error": {"message": format!("blocked by ACP rule '{}': {}", d.rule_id.unwrap_or_default(), d.reason.unwrap_or_else(|| "policy".into())), "type": "acp_policy_denied"}})),
+        )
+            .into_response(),
+        Verdict::StepUp => (
+            StatusCode::PAYMENT_REQUIRED,
+            Json(json!({"error": {"message": "human approval required (step-up) by ACP policy", "type": "acp_step_up"}})),
+        )
+            .into_response(),
+        Verdict::Allow | Verdict::Shadow => forward(&st, &path, body).await,
+    }
+}
+
+/// Verify the request bearer against the org IdP and return the human principal, if configured.
+fn resolve_principal(st: &GwState, headers: &HeaderMap) -> Option<String> {
+    let (jwks, cfg) = st.oidc.as_ref()?;
+    let token = headers
+        .get("authorization")
+        .and_then(|v| v.to_str().ok())
+        .and_then(|s| s.strip_prefix("Bearer "))?;
+    match acp_auth::verify(token, jwks, cfg, now_ms()) {
+        Ok(p) => Some(if p.username.is_empty() { p.oid } else { p.username }),
+        Err(_) => None,
+    }
+}
+
+/// Forward the (allowed) call to the model provider, attaching the gateway's upstream credential so
+/// the caller never holds it. Credential brokering: the gateway is the only path to the model.
+async fn forward(st: &GwState, path: &str, body: Bytes) -> Response {
+    let url = format!("{}/{}", st.upstream.trim_end_matches('/'), path);
+    let mut req = st.client.post(&url).header("content-type", "application/json").body(body);
+    if let Some(key) = &st.upstream_key {
+        req = req.header("authorization", format!("Bearer {key}"));
+    }
+    match req.send().await {
+        Ok(resp) => {
+            let status = StatusCode::from_u16(resp.status().as_u16()).unwrap_or(StatusCode::OK);
+            let ctype = resp
+                .headers()
+                .get(reqwest::header::CONTENT_TYPE)
+                .and_then(|v| v.to_str().ok())
+                .unwrap_or("application/json")
+                .to_string();
+            let bytes = resp.bytes().await.unwrap_or_default();
+            (status, [("content-type", ctype)], bytes).into_response()
+        }
+        Err(e) => (StatusCode::BAD_GATEWAY, format!("upstream error: {e}")).into_response(),
+    }
+}
