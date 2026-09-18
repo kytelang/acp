@@ -46,6 +46,12 @@ multipass exec acp-linux -- bash -lc 'mkdir -p ~/acp && tar xzf ~/acp-src.tar.gz
 multipass exec acp-linux -- bash -lc 'cd ~/acp && source ~/.cargo/env && bash scripts/pentest.sh && bash scripts/shakedown.sh'
 ```
 
+Verified on Linux aarch64 (Multipass, Ubuntu 24.04, rustc 1.98): the trust core and policy engine
+build and pass, `acp-core` + `acp-jsonrpc` + `acp-ledger` (15 tests) + `acp-policy` (cedar) all green.
+Low-RAM tip: linking the cedar-policy test binary in debug can OOM a small VM (`ld ... signal 9`);
+build those with `RUSTFLAGS="-C debuginfo=0"` and `-j 1`, or give the VM >= 6 GB. The CI
+ubuntu-latest leg runs the full workspace with normal resources.
+
 To exercise the env-gated backends on Linux too: `apt-get install -y softhsm2 postgresql`, create the
 `acp_app` Postgres role, init a SoftHSM token, and export the same env vars as above.
 
