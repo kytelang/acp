@@ -358,7 +358,7 @@ was not actually performed.
 - [m] **H0.2 External transparency anchoring [1][D].**
   - [m] `acp_core::anchor` (Anchor trait + LocalAnchor): an anchored head is cross-checkable with a trusted time; a rewritten head fails; forged receipt time rejected. Real Rekor / RFC 3161 TSA = another Anchor impl. Tested.
 - [x] **H0.3 KMS/HSM signing + rotation [2].**
-  - [x] `acp_core::keymgr` (LocalKms rotation, tested) + `acp-hsm`: real PKCS#11 HSM Ed25519 signer, VERIFIED against SoftHSM (HSM signature verifies with the ledger's verify_ed25519 path, raw 32B pubkey / 64B sig). Real HSM = ACP_PKCS11_MODULE swap. [ ] thread-bound Session needs a signing-thread wrapper for the ledger's Send bound.
+  - [x] `acp_core::keymgr` (LocalKms rotation, tested) + `acp-hsm`: real PKCS#11 HSM Ed25519 signer, VERIFIED against SoftHSM (HSM signature verifies with the ledger's verify_ed25519 path, raw 32B pubkey / 64B sig). Real HSM = ACP_PKCS11_MODULE swap. `acp_hsm::ThreadedPkcs11Signer` is the Send handle (dedicated signing thread) the ledger takes; verified against SoftHSM (signs across a thread boundary as Box<dyn Signer + Send>).
   - [b] Secrets in a vault, not env files.
 - [x] **H0.4 Backups/DR [3].**
   - [x] Real backup/restore drill: back up (copy), simulate loss, restore, and the ledger reverifies end to end (ledger_tests). RPO/RTO targets documented with the backup cadence.

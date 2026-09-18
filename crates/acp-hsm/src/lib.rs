@@ -123,3 +123,69 @@ impl Signer for Pkcs11Signer {
         "ed25519"
     }
 }
+
+use std::sync::mpsc;
+use std::thread;
+
+/// A `Send` handle to a PKCS#11 signer that lives on its own thread.
+///
+/// A `cryptoki` Session is thread-bound and not `Send`, but the ledger needs `Box<dyn Signer + Send>`.
+/// This owns a dedicated thread that holds the session and services sign requests over a channel;
+/// the handle carries only the channel and the cached public key, so it is `Send`. This is the piece
+/// that lets the ledger sign every tree head directly on the HSM.
+pub struct ThreadedPkcs11Signer {
+    tx: mpsc::Sender<SignReq>,
+    public_key: Vec<u8>,
+}
+
+struct SignReq {
+    msg: Vec<u8>,
+    reply: mpsc::Sender<Vec<u8>>,
+}
+
+impl ThreadedPkcs11Signer {
+    /// Open the HSM on a dedicated signing thread. The public key is read once, up front, so the
+    /// handle can answer `public_key()` without touching the session.
+    pub fn open(module: &str, slot_id: u64, pin: &str, label: &str) -> Result<Self, String> {
+        let (ready_tx, ready_rx) = mpsc::channel::<Result<Vec<u8>, String>>();
+        let (tx, rx) = mpsc::channel::<SignReq>();
+        let (module, pin, label) = (module.to_string(), pin.to_string(), label.to_string());
+        thread::spawn(move || {
+            let signer = match Pkcs11Signer::open(&module, slot_id, &pin, &label) {
+                Ok(s) => s,
+                Err(e) => {
+                    let _ = ready_tx.send(Err(e));
+                    return;
+                }
+            };
+            if ready_tx.send(Ok(signer.public_key())).is_err() {
+                return;
+            }
+            // Service sign requests until the handle is dropped (channel closes).
+            while let Ok(req) = rx.recv() {
+                let sig = signer.sign(&req.msg);
+                let _ = req.reply.send(sig);
+            }
+        });
+        let public_key = ready_rx
+            .recv()
+            .map_err(|_| "signing thread died before init".to_string())??;
+        Ok(ThreadedPkcs11Signer { tx, public_key })
+    }
+}
+
+impl Signer for ThreadedPkcs11Signer {
+    fn sign(&self, msg: &[u8]) -> Vec<u8> {
+        let (reply_tx, reply_rx) = mpsc::channel();
+        if self.tx.send(SignReq { msg: msg.to_vec(), reply: reply_tx }).is_err() {
+            return Vec::new();
+        }
+        reply_rx.recv().unwrap_or_default()
+    }
+    fn public_key(&self) -> Vec<u8> {
+        self.public_key.clone()
+    }
+    fn algorithm(&self) -> &'static str {
+        "ed25519"
+    }
+}

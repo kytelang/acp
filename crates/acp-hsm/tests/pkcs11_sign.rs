@@ -34,3 +34,25 @@ fn hsm_signature_verifies_with_the_ledger_ed25519_path() {
     // A tampered message must fail.
     assert!(!verify_ed25519(&pk, b"tampered", &sig));
 }
+
+#[test]
+fn threaded_signer_is_send_and_signs_on_the_hsm() {
+    let Some((module, slot, pin, label)) = env() else {
+        eprintln!("ACP_PKCS11_MODULE not set; skipping HSM test");
+        return;
+    };
+    use acp_hsm::ThreadedPkcs11Signer;
+    // As a boxed Send signer, exactly what the ledger takes.
+    let signer: Box<dyn Signer + Send> =
+        Box::new(ThreadedPkcs11Signer::open(&module, slot, &pin, &label).expect("open"));
+    // Move it across a thread boundary to prove Send, then sign there.
+    let handle = std::thread::spawn(move || {
+        let msg = b"threaded HSM tree head";
+        let sig = signer.sign(msg);
+        (signer.public_key(), msg.to_vec(), sig)
+    });
+    let (pk, msg, sig) = handle.join().unwrap();
+    assert_eq!(pk.len(), 32);
+    assert_eq!(sig.len(), 64);
+    assert!(verify_ed25519(&pk, &msg, &sig), "HSM-thread signature must verify");
+}

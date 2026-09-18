@@ -18,12 +18,13 @@ ACP_PKCS11_SLOT=<reassigned-slot-id> ACP_PKCS11_PIN=5678 ACP_PKCS11_LABEL=acp \
   cargo test -p acp-hsm
 ```
 
-The test signs a message with the HSM key and asserts it verifies with `acp_core::sign::verify_ed25519`
-(the ledger's path). Gated on `ACP_PKCS11_MODULE`, so CI without a module skips cleanly.
+Run HSM tests single-threaded (PKCS#11 `C_Initialize` is once-per-process): `cargo test -p acp-hsm
+-- --test-threads=1`. Gated on `ACP_PKCS11_MODULE`, so CI without a module skips cleanly.
 
-## Ledger integration (remaining deploy wiring)
+## Ledger integration
 
-A `cryptoki` Session is thread-bound, so plugging `Pkcs11Signer` directly into the ledger's
-`Box<dyn Signer + Send>` needs a small dedicated-signing-thread + channel wrapper (open the session on
-that thread, send it sign requests). The signer itself is complete and verified; that wrapper is the
-one deploy-time piece. Production points `ACP_PKCS11_MODULE` at the real HSM's module.
+`ThreadedPkcs11Signer` is the `Send` handle the ledger takes: it owns a dedicated thread holding the
+(thread-bound) PKCS#11 session and services sign requests over a channel, so it satisfies
+`Box<dyn Signer + Send>` and the ledger signs every tree head directly on the HSM. Verified against
+SoftHSM (moved across a thread boundary and signs). Production points `ACP_PKCS11_MODULE` at the real
+HSM's module; no cloud.
