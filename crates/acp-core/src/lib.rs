@@ -38,6 +38,7 @@ pub mod posture;
 pub mod ratelimit;
 pub mod redact;
 pub mod render;
+pub mod resource;
 pub mod residency;
 pub mod retention;
 pub mod rollout;
