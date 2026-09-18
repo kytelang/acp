@@ -13,11 +13,16 @@ use tokio::process::Command;
 use tokio::sync::mpsc;
 
 pub async fn run(cmd: &str, args: &[String], controller: Arc<Controller>) -> anyhow::Result<i32> {
+    // R5: never orphan the child tool server. kill_on_drop guarantees it is torn down on every
+    // exit path from run() (normal return, early error, or panic), so a proxy shutdown does not
+    // leave a tool server running un-governed. Held approvals are parked durably in the SQLite
+    // approval store, so they survive a restart independently of the child process.
     let mut child = Command::new(cmd)
         .args(args)
         .stdin(Stdio::piped())
         .stdout(Stdio::piped())
         .stderr(Stdio::inherit())
+        .kill_on_drop(true)
         .spawn()?;
     let child_stdin = child.stdin.take().expect("child stdin");
     let child_stdout = child.stdout.take().expect("child stdout");

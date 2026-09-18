@@ -514,7 +514,7 @@ was not actually performed.
 - [~] **X.6 Docs + deprecation policy [R7].**
   - [x] Deprecation/support-window policy for DSL, record format, and APIs documented in docs/ops/deprecation-policy.md (record readers never removed). [ ] hosted versioned docs site + trial/sandbox are infra.
 - [~] **X.7 Graceful shutdown/drain everywhere [R5].**
-  - [x] acp-server drains in-flight requests on SIGTERM/Ctrl-C (graceful shutdown); spool is durable per-append so no decision is lost/double-executed. [ ] child-process teardown + approval parking in the proxy path.
+  - [x] acp-server drains in-flight requests on SIGTERM/Ctrl-C (graceful shutdown); spool is durable per-append so no decision is lost/double-executed. [x] child-process teardown via kill_on_drop (no orphaned tool server on any exit path); approval parking = durable SQLite approval store (survives restart) (stdio.rs).
 
 ---
 
