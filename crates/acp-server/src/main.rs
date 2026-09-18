@@ -121,6 +121,7 @@ async fn main() {
         .route("/apps", get(apps))
         .route("/agents", get(agents))
         .route("/policy-store", get(policy_store_current))
+        .route("/approvals/pending", get(approvals_pending))
         .with_state(state);
 
     let listener = tokio::net::TcpListener::bind(&addr).await.expect("bind");
@@ -357,6 +358,16 @@ async fn meta_audit(State(st): State<Arc<AppState>>) -> impl IntoResponse {
         }
         None => Json(serde_json::json!({"configured": false})),
     }
+}
+
+/// Pending approvals as JSON (for the console).
+async fn approvals_pending(State(st): State<Arc<AppState>>) -> impl IntoResponse {
+    let items = match &st.approvals {
+        Some(p) => acp_approvals::ApprovalStore::open(p).and_then(|s| s.list_pending()).unwrap_or_default(),
+        None => vec![],
+    };
+    let list: Vec<_> = items.iter().map(|a| serde_json::json!({"id": a.id, "tool": a.tool})).collect();
+    Json(serde_json::json!({"pending": list}))
 }
 
 /// Registered apps (read-only view for the console).

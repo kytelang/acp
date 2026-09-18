@@ -12,6 +12,7 @@ import data.migrate;
 import migrations;
 import Features.Dashboard.Shared.acp_client;
 import Features.Dashboard.Sse.metrics_sse;
+import Features.Dashboard.Approvals.handler;
 
 fn buildApp(): App {
     let app = App();
@@ -23,6 +24,9 @@ fn buildApp(): App {
     // the live metrics fragment into #metrics. No trust lives in the UI.
     let acp = AcpClient("http://127.0.0.1:8787");
     app.sse("/sse/metrics", MetricsSse(acp));
+    let srv = "http://127.0.0.1:8787";
+    app.post("/approve/{id}", ResolveHandler(acp, srv, true));
+    app.post("/deny/{id}", ResolveHandler(acp, srv, false));
 
     // Serve static assets (wwwroot/) for any unmatched GET.
     app.useStatic("/", "./wwwroot");

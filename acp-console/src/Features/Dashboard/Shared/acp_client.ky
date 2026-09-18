@@ -4,6 +4,7 @@
 import web.client;
 import web.response;
 import serde.json;
+import list;
 
 pub struct AcpReport {
     pub reachable: bool,
@@ -16,6 +17,12 @@ pub struct AcpReport {
         self.reachable = false; self.postureScore = 0.0; self.decisions = 0;
         self.coverage = 0.0; self.denies = 0; self.stepUps = 0;
     }
+}
+
+pub struct ApprovalRow {
+    pub id: string,
+    pub tool: string,
+    init(id: string, tool: string) { self.id = id; self.tool = tool; }
 }
 
 pub struct AcpClient {
@@ -94,5 +101,26 @@ pub struct AcpClient {
         if (ver == 0) { return "no signed policy deployed"; }
         let author = json.asString(json.get(root, "author")) ?? "?";
         return `v${ver} deployed by ${author}`;
+    }
+
+    // Pending approvals (holds awaiting a human decision).
+    pub fn pendingApprovals(self: AcpClient): list.List<ApprovalRow> {
+        let rows = list.List<ApprovalRow>();
+        let resp = client.Http.get(self.base + "/approvals/pending");
+        if (resp.status.toCode() != 200) { return rows; }
+        let root = json.parse(resp.body);
+        let pv = json.get(root, "pending");
+        let arr = json.asArray(pv);
+        if (arr == undefined) { return rows; }
+        let n = arr.size();
+        let i = 0;
+        while (i < n) {
+            let item = json.at(pv, i);
+            let id = json.asString(json.get(item, "id")) ?? "";
+            let tool = json.asString(json.get(item, "tool")) ?? "";
+            rows.push(ApprovalRow(id, tool));
+            i = i + 1;
+        }
+        return rows;
     }
 }

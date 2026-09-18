@@ -27,3 +27,26 @@ pub fn agentsPanel(text: string): Html {
 pub fn policyPanel(text: string): Html {
     return <div id="policy" class="card wide"><div class="k">Deployed policy</div><div class="line">{text}</div></div>;
 }
+
+// Pending-approvals inbox: one row per hold with Approve / Deny buttons. datastar posts the action
+// to the console, which forwards it to acp-server and patches this fragment back.
+pub fn approvalsPanel(rows: list.List<ApprovalRow>): Html {
+    return <div id="approvals" class="card wide">
+        <div class="k">Pending approvals</div>
+        {if (rows.size() == 0) {
+            <p class="line sub">no pending approvals</p>
+        } else {
+            <div class="line">
+                {for (i in 0..rows.size()) {
+                    let r = rows.get(i) ?? ApprovalRow("", "");
+                    <div class="arow">
+                        <span class="atool">{r.tool}</span>
+                        <span class="aid sub">{r.id}</span>
+                        <button class="btn ok" data-on:click={"@post('/approve/" + r.id + "')"}>Approve</button>
+                        <button class="btn no" data-on:click={"@post('/deny/" + r.id + "')"}>Deny</button>
+                    </div>
+                }}
+            </div>
+        }}
+    </div>;
+}

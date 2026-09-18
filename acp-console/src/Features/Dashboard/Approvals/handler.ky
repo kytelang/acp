@@ -1,0 +1,23 @@
+import web.routing;
+import web.response;
+import web.client;
+import ds_response;
+import Features.Dashboard.Shared.acp_client;
+import Features.Dashboard.views.dashboard;
+
+// POST /approve/{id} and /deny/{id}: forward the human decision to acp-server (the trust store),
+// then patch the refreshed approvals inbox back to the browser via datastar.
+pub struct ResolveHandler impl RouteHandler {
+    acp: AcpClient,
+    base: string,
+    approve: bool,
+    init(acp: AcpClient, base: string, approve: bool) { self.acp = acp; self.base = base; self.approve = approve; }
+
+    async fn serve(self: ResolveHandler, ctx: Context): Response {
+        let id = ctx.param("id");
+        let verb = self.approve ? "approve" : "deny";
+        let _ = client.Http.post(self.base + "/approvals/" + id + "/" + verb, "");
+        let frag = approvalsPanel(self.acp.pendingApprovals());
+        return await ds_response.patch(frag);
+    }
+}

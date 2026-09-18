@@ -16,7 +16,7 @@
     .card.wide{grid-column:1/-1}
     .k{font-size:.72rem;color:#94a3b8;text-transform:uppercase;letter-spacing:.06em}
     .v{font-size:2rem;font-weight:700;margin-top:.35rem} .line{margin-top:.5rem;font-size:.95rem}
-    .dot{display:inline-block;width:.6rem;height:.6rem;border-radius:50%;margin-right:.4rem}
+    .arow{display:flex;align-items:center;gap:.75rem;padding:.4rem 0;border-bottom:1px solid #263143} .arow:last-child{border-bottom:0} .atool{font-weight:600} .btn{padding:.35rem .8rem;border:0;border-radius:8px;cursor:pointer;font-size:.85rem} .btn.ok{background:#059669;color:#fff} .btn.no{background:#7f1d1d;color:#fca5a5} .dot{display:inline-block;width:.6rem;height:.6rem;border-radius:50%;margin-right:.4rem}
     .on{background:#34d399} .off{background:#f87171}
   </style>
 </head>
@@ -34,6 +34,10 @@
       <div class="grid">
         <div id="apps" class="card wide"><div class="k">Registered apps</div><div class="line sub">…</div></div>
         <div id="agents" class="card wide"><div class="k">Registered agents</div><div class="line sub">…</div></div>
+      </div>
+      <h2 class="sec">Approvals</h2>
+      <div class="grid">
+        <div id="approvals" class="card wide"><div class="k">Pending approvals</div><div class="line sub">…</div></div>
       </div>
       <h2 class="sec">Policy</h2>
       <div class="grid">
