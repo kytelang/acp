@@ -36,4 +36,63 @@ pub struct AcpClient {
         r.stepUps = json.asNumber(json.get(verdicts, "step_up")) ?? 0;
         return r;
     }
+
+    // A comma-joined summary of registered apps ("portal (team), billing (ops)").
+    pub fn appsSummary(self: AcpClient): string {
+        let resp = client.Http.get(self.base + "/apps");
+        if (resp.status.toCode() != 200) { return "unavailable"; }
+        let root = json.parse(resp.body);
+        let av = json.get(root, "apps");
+        let arr = json.asArray(av);
+        if (arr == undefined) { return "none"; }
+        let n = arr.size();
+        if (n == 0) { return "none registered"; }
+        let out = "";
+        let i = 0;
+        while (i < n) {
+            let item = json.at(av, i);
+            let name = json.asString(json.get(item, "name")) ?? "?";
+            let owner = json.asString(json.get(item, "owner")) ?? "";
+            let one = name + " (" + owner + ")";
+            out = (i == 0) ? one : out + ", " + one;
+            i = i + 1;
+        }
+        return `${n} app(s): ` + out;
+    }
+
+    // A summary of registered agents, marking revoked ones.
+    pub fn agentsSummary(self: AcpClient): string {
+        let resp = client.Http.get(self.base + "/agents");
+        if (resp.status.toCode() != 200) { return "unavailable"; }
+        let root = json.parse(resp.body);
+        let av = json.get(root, "agents");
+        let arr = json.asArray(av);
+        if (arr == undefined) { return "none"; }
+        let n = arr.size();
+        if (n == 0) { return "none registered"; }
+        let out = "";
+        let active = 0;
+        let i = 0;
+        while (i < n) {
+            let item = json.at(av, i);
+            let name = json.asString(json.get(item, "name")) ?? "?";
+            let isActive = json.asBool(json.get(item, "active")) ?? false;
+            if (isActive) { active = active + 1; }
+            let one = name + (isActive ? "" : " (revoked)");
+            out = (i == 0) ? one : out + ", " + one;
+            i = i + 1;
+        }
+        return `${n} agent(s), ${active} active: ` + out;
+    }
+
+    // The current deployed signed policy version + author.
+    pub fn policySummary(self: AcpClient): string {
+        let resp = client.Http.get(self.base + "/policy-store");
+        if (resp.status.toCode() != 200) { return "unavailable"; }
+        let root = json.parse(resp.body);
+        let ver = json.asNumber(json.get(root, "version")) ?? 0;
+        if (ver == 0) { return "no signed policy deployed"; }
+        let author = json.asString(json.get(root, "author")) ?? "?";
+        return `v${ver} deployed by ${author}`;
+    }
 }

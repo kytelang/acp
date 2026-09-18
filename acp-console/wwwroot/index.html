@@ -7,23 +7,38 @@
   <script type="module" src="https://cdn.jsdelivr.net/gh/starfederation/datastar@v1.0.0/bundles/datastar.js"></script>
   <style>
     body{font-family:system-ui,-apple-system,sans-serif;margin:0;background:#0f172a;color:#e2e8f0}
-    .wrap{max-width:960px;margin:0 auto;padding:2.5rem 1.5rem}
-    h1{font-weight:600;margin:0} .sub{color:#94a3b8;margin:.4rem 0 0}
-    .grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(150px,1fr));gap:1rem;margin-top:1.75rem}
+    .wrap{max-width:1000px;margin:0 auto;padding:2.5rem 1.5rem}
+    header{display:flex;align-items:baseline;gap:1rem;border-bottom:1px solid #1e293b;padding-bottom:1rem}
+    h1{font-weight:600;margin:0;font-size:1.4rem} .sub{color:#94a3b8;margin:.4rem 0 0;font-size:.9rem}
+    h2.sec{font-size:.8rem;color:#7c8aa5;text-transform:uppercase;letter-spacing:.08em;margin:2rem 0 .75rem}
+    .grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(150px,1fr));gap:1rem}
     .card{background:#1e293b;border:1px solid #334155;border-radius:12px;padding:1.25rem}
+    .card.wide{grid-column:1/-1}
     .k{font-size:.72rem;color:#94a3b8;text-transform:uppercase;letter-spacing:.06em}
-    .v{font-size:2rem;font-weight:700;margin-top:.35rem}
+    .v{font-size:2rem;font-weight:700;margin-top:.35rem} .line{margin-top:.5rem;font-size:.95rem}
     .dot{display:inline-block;width:.6rem;height:.6rem;border-radius:50%;margin-right:.4rem}
     .on{background:#34d399} .off{background:#f87171}
   </style>
 </head>
 <body>
   <div class="wrap">
-    <h1>Agent Control Plane</h1>
-    <p class="sub">Live governance console. Read-only view over the verifiable evidence.</p>
-    <!-- On load, datastar opens the SSE stream; the server patches #metrics every couple of seconds. -->
-    <div id="metrics" data-on-load="@get('/sse/metrics')">
-      <p class="sub">connecting to acp-server…</p>
+    <header>
+      <h1>Agent Control Plane</h1>
+      <span class="sub">live governance console</span>
+    </header>
+    <!-- One SSE stream (opened on load) patches every section below. -->
+    <div data-on-load="@get('/sse/metrics')">
+      <h2 class="sec">Overview</h2>
+      <div id="metrics" class="grid"><p class="sub">connecting to acp-server…</p></div>
+      <h2 class="sec">Identity</h2>
+      <div class="grid">
+        <div id="apps" class="card wide"><div class="k">Registered apps</div><div class="line sub">…</div></div>
+        <div id="agents" class="card wide"><div class="k">Registered agents</div><div class="line sub">…</div></div>
+      </div>
+      <h2 class="sec">Policy</h2>
+      <div class="grid">
+        <div id="policy" class="card wide"><div class="k">Deployed policy</div><div class="line sub">…</div></div>
+      </div>
     </div>
   </div>
 </body>

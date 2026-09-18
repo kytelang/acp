@@ -24,6 +24,8 @@ struct AppState {
     spikes: std::sync::Mutex<std::collections::HashMap<String, acp_core::anomaly::SpikeDetector>>,
     // H0.7: tamper-evident self-governance meta-audit log (None if not configured).
     meta: Option<std::sync::Mutex<acp_ledger::Ledger>>,
+    registry: Option<String>,
+    policy_store: Option<String>,
 }
 
 #[tokio::main]
@@ -32,6 +34,8 @@ async fn main() {
     let mut addr = "127.0.0.1:8787".to_string();
     let (mut approvals, mut policy_path, mut ledger) = (None, None, None);
     let mut meta_ledger: Option<String> = None;
+    let mut registry: Option<String> = None;
+    let mut policy_store: Option<String> = None;
     let mut it = args.iter().skip(1);
     while let Some(a) = it.next() {
         match a.as_str() {
@@ -40,6 +44,8 @@ async fn main() {
             "--policy" => policy_path = it.next().cloned(),
             "--ledger" => ledger = it.next().cloned(),
             "--meta-ledger" => meta_ledger = it.next().cloned(),
+            "--registry" => registry = it.next().cloned(),
+            "--policy-store" => policy_store = it.next().cloned(),
             other => {
                 eprintln!("acp-server: unknown option '{other}'");
                 std::process::exit(2);
@@ -93,6 +99,8 @@ async fn main() {
         liveness: std::sync::Mutex::new(acp_core::liveness::GapDetector::new()),
         spikes: std::sync::Mutex::new(std::collections::HashMap::new()),
         meta,
+        registry,
+        policy_store,
     });
     let app = Router::new()
         .route("/", get(inbox))
@@ -110,6 +118,9 @@ async fn main() {
         .route("/admin/meta", post(record_meta))
         .route("/meta-audit", get(meta_audit))
         .route("/timeline", get(timeline))
+        .route("/apps", get(apps))
+        .route("/agents", get(agents))
+        .route("/policy-store", get(policy_store_current))
         .with_state(state);
 
     let listener = tokio::net::TcpListener::bind(&addr).await.expect("bind");
@@ -345,6 +356,36 @@ async fn meta_audit(State(st): State<Arc<AppState>>) -> impl IntoResponse {
             Json(serde_json::json!({"configured": true, "size": l.size(), "verified": l.verify().is_ok()}))
         }
         None => Json(serde_json::json!({"configured": false})),
+    }
+}
+
+/// Registered apps (read-only view for the console).
+async fn apps(State(st): State<Arc<AppState>>) -> impl IntoResponse {
+    match st.registry.as_ref().map(|p| acp_registry::Registry::load(p)) {
+        Some(Ok(reg)) => {
+            let list: Vec<_> = reg.apps().into_iter().map(|a| serde_json::json!({"id":a.id,"name":a.name,"owner":a.owner})).collect();
+            Json(serde_json::json!({"apps": list}))
+        }
+        _ => Json(serde_json::json!({"apps": []})),
+    }
+}
+
+/// Registered agents (read-only).
+async fn agents(State(st): State<Arc<AppState>>) -> impl IntoResponse {
+    match st.registry.as_ref().map(|p| acp_registry::Registry::load(p)) {
+        Some(Ok(reg)) => {
+            let list: Vec<_> = reg.agents().into_iter().map(|a| serde_json::json!({"id":a.id,"name":a.name,"app_id":a.app_id,"active":a.active})).collect();
+            Json(serde_json::json!({"agents": list}))
+        }
+        _ => Json(serde_json::json!({"agents": []})),
+    }
+}
+
+/// Current deployed signed policy (version/hash/author) from the policy store.
+async fn policy_store_current(State(st): State<Arc<AppState>>) -> impl IntoResponse {
+    match st.policy_store.as_ref().map(|p| acp_policy::store::current_info(p)) {
+        Some(Ok(v)) => Json(v),
+        _ => Json(serde_json::json!({"version": 0})),
     }
 }
 

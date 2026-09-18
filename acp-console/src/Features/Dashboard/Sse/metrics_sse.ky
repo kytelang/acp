@@ -23,6 +23,13 @@ pub class MetricsSse impl SseHandler {
                 `${r.denies}`, `${r.stepUps}`);
             let w = await ds.patchElementsSimple(frag);
             if (w < 0) { alive = false; }
+            // Identity + policy sections, same stream.
+            let w2 = await ds.patchElementsSimple(appsPanel(self.acp.appsSummary()));
+            if (w2 < 0) { alive = false; }
+            let w3 = await ds.patchElementsSimple(agentsPanel(self.acp.agentsSummary()));
+            if (w3 < 0) { alive = false; }
+            let w4 = await ds.patchElementsSimple(policyPanel(self.acp.policySummary()));
+            if (w4 < 0) { alive = false; }
             if (alive) { await aio.delay(2000); }
         }
     }

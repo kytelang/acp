@@ -409,7 +409,7 @@ was not actually performed.
 ### v1.3 Reporting dashboard (kyte candidate, conditions apply)
 
 - [x] **v1.3.1 Read-only reporting.**
-  - [x] `acp-console`: a Kyte + datastar web console (live SSE) over acp-server's read-only API; the shell opens an SSE stream that patches live governance metrics every ~2s. Kyte kept out of the trust path (UI/reporting only); every figure re-derives from the verifiable export. Proven end-to-end (datastar-patch-elements frames with live data).
+  - [x] `acp-console`: a Kyte + datastar web console over acp-server's read-only API, live via one SSE stream that patches a multi-section dashboard: Overview metrics, Registered apps, Registered agents (active/revoked), and the Deployed policy version. acp-server exposes `/apps` `/agents` `/policy-store` (read-only). Kyte kept out of the trust path; every figure re-derives from the verifiable API. Proven end-to-end.
   - [b] Approval inbox stays in Rust (enforcement path); reporting may use kyte only if the above holds.
 
 ### H1: Hardening gate (parallel to v1.2/v1.3; REQUIRED before GA)

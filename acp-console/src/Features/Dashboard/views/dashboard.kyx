@@ -12,3 +12,18 @@ pub fn metricsPanel(reachable: string, posture: string, decisions: string, cover
         </div>
     </div>;
 }
+
+// Registered apps section (live-patched fragment).
+pub fn appsPanel(text: string): Html {
+    return <div id="apps" class="card wide"><div class="k">Registered apps</div><div class="line">{text}</div></div>;
+}
+
+// Registered agents section.
+pub fn agentsPanel(text: string): Html {
+    return <div id="agents" class="card wide"><div class="k">Registered agents</div><div class="line">{text}</div></div>;
+}
+
+// Current signed policy section.
+pub fn policyPanel(text: string): Html {
+    return <div id="policy" class="card wide"><div class="k">Deployed policy</div><div class="line">{text}</div></div>;
+}
