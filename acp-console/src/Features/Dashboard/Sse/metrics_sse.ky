@@ -1,0 +1,29 @@
+import web.app;
+import web.request;
+import net.aio;
+import datastar;
+import Features.Dashboard.Shared.acp_client;
+import Features.Dashboard.views.dashboard;
+
+// Live governance metrics over one SSE connection (decision v1.3.1 + datastar). Every ~2s it
+// re-reads acp-server's /report and patches the #metrics fragment; the browser morphs it in place.
+pub class MetricsSse impl SseHandler {
+    acp: AcpClient,
+    init(acp: AcpClient) { self.acp = acp; }
+
+    async fn stream(self: MetricsSse, req: request.Request, io: aio.AsyncIO): void {
+        let ds = datastar.Sse.overStreamIO(io);
+        let _h = await ds.writeHeaders();
+        let alive = true;
+        while (alive) {
+            let r = self.acp.report();
+            let frag = metricsPanel(
+                r.reachable ? "1" : "0",
+                `${r.postureScore}`, `${r.decisions}`, `${r.coverage}`,
+                `${r.denies}`, `${r.stepUps}`);
+            let w = await ds.patchElementsSimple(frag);
+            if (w < 0) { alive = false; }
+            if (alive) { await aio.delay(2000); }
+        }
+    }
+}

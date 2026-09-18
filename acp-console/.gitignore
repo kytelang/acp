@@ -1,0 +1,4 @@
+build/
+*.o
+node_modules/
+wwwroot/app.css

@@ -408,8 +408,8 @@ was not actually performed.
 
 ### v1.3 Reporting dashboard (kyte candidate, conditions apply)
 
-- [m] **v1.3.1 Read-only reporting.**
-  - [m] acp-server `/report` serves verdict/outcome/coverage/posture/weakening figures re-derivable from the verifiable export; `/metrics` Prometheus. [ ] richer dashboards on top.
+- [x] **v1.3.1 Read-only reporting.**
+  - [x] `acp-console`: a Kyte + datastar web console (live SSE) over acp-server's read-only API; the shell opens an SSE stream that patches live governance metrics every ~2s. Kyte kept out of the trust path (UI/reporting only); every figure re-derives from the verifiable export. Proven end-to-end (datastar-patch-elements frames with live data).
   - [b] Approval inbox stays in Rust (enforcement path); reporting may use kyte only if the above holds.
 
 ### H1: Hardening gate (parallel to v1.2/v1.3; REQUIRED before GA)

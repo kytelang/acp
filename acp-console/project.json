@@ -1,0 +1,8 @@
+{
+  "name": "acp-console",
+  "version": "0.1.0",
+  "type": "web",
+  "dependencies": [
+    "https://github.com/kytelang/kyte-datastar"
+  ]
+}

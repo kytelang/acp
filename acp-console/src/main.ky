@@ -1,0 +1,79 @@
+// main.ky, the composition root. It constructs the app-wide dependencies ONCE (here just a
+// repository), then hands them to each feature's `register(...)` so the feature can wire its own
+// routes. A route maps a path to a handler INSTANCE that implements `RouteHandler` (one uniform
+// `async serve(ctx): Response` method) and holds its dependencies as fields. There is no mediator
+// and no DI container in the default setup: dependencies are plain constructor arguments, resolved
+// right here where you can see them. Vertical slices live under Features/.
+import web.app;
+import env;
+import list;
+import string;
+import data.migrate;
+import migrations;
+import Features.Dashboard.Shared.acp_client;
+import Features.Dashboard.Sse.metrics_sse;
+
+fn buildApp(): App {
+    let app = App();
+
+    // Build the shared dependencies once, then let each feature register its routes against them.
+    // As the app grows, add a feature module with its own `register(app, deps...)` and call it here.
+    // The console is a read-only view over acp-server's verifiable API (default local port).
+    // The static shell (wwwroot/index.html) loads datastar and opens the SSE stream, which patches
+    // the live metrics fragment into #metrics. No trust lives in the UI.
+    let acp = AcpClient("http://127.0.0.1:8787");
+    app.sse("/sse/metrics", MetricsSse(acp));
+
+    // Serve static assets (wwwroot/) for any unmatched GET.
+    app.useStatic("/", "./wwwroot");
+    return app;
+}
+
+fn hasFlag(args: list.List<string>, flag: string): bool {
+    let i = 0;
+    while (i < args.size()) {
+        if (string.eql(args.get(i) ?? "", flag)) { return true; }
+        i = i + 1;
+    }
+    return false;
+}
+
+// `--migrate` mode: apply this app's schema migrations, then EXIT (do not serve). The orchestrator
+// runs the SAME binary in this mode once, to success, BEFORE it rolls out new replicas -- so the schema
+// is ready before any new code serves traffic. Enable it in app.yaml with:
+//     migrate: { args: ["--migrate"], timeoutMs: 120000 }
+// The migrations themselves live in src/migrations.ky and ship inside this binary, so code and schema
+// never drift. A non-zero exit here aborts the rollout and keeps the last-good replicas serving.
+fn runMigrations(): int {
+    let ms = migrations.all();
+    // Warn on any migration that is not expand-only (unsafe to apply while old replicas still run).
+    let warns = migrate.lintAll(ms);
+    let wi = 0;
+    while (wi < warns.size()) { console.log("migrate warning: " + (warns.get(wi) ?? "")); wi = wi + 1; }
+    // This starter has no database (ProductRepository returns stub data), so there is nothing to apply.
+    // Once you connect a database, open the connection here and run the migrations against it -- make
+    // this fn `async` and:
+    //     import data.db;
+    //     let conn = ...open your connection (once, at sync top level)...;
+    //     let rep = await migrate.run(conn, ms);
+    //     if (!rep.ok()) { console.log("migrate failed: " + rep.err); return 1; }  // non-zero aborts the rollout
+    //     console.log(`migrated: ${rep.applied} applied`);
+    console.log(`migrate: ${ms.size()} migration(s) declared; no database configured, nothing to apply`);
+    return 0;
+}
+
+fn main(): int {
+    // Deploy-time schema gate: `app --migrate` applies migrations and exits (see runMigrations).
+    if (hasFlag(env.args(), "--migrate")) { return runMigrations(); }
+    let app = buildApp();
+    // Configuration lives in app.yaml at the project root and is loaded for you into `app.config`
+    // when `App()` is constructed -- you never load config by hand, and there are no environment
+    // variables (they collide when several apps share a machine). The listen port comes from
+    // `--port N` if the orchestrator passed one, else `config.port` in app.yaml, else the 8080
+    // default here. For a typed section, add an `@serializable` struct and read it with
+    // `app.config.bind<MyConfig>("mysection")`.
+    let port = app.config.port(8080);
+    console.log("Listening on http://127.0.0.1:" + `${port}`);
+    app.run(port);
+    return 0;
+}

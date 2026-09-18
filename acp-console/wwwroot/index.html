@@ -1,0 +1,30 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>ACP Console</title>
+  <script type="module" src="https://cdn.jsdelivr.net/gh/starfederation/datastar@v1.0.0/bundles/datastar.js"></script>
+  <style>
+    body{font-family:system-ui,-apple-system,sans-serif;margin:0;background:#0f172a;color:#e2e8f0}
+    .wrap{max-width:960px;margin:0 auto;padding:2.5rem 1.5rem}
+    h1{font-weight:600;margin:0} .sub{color:#94a3b8;margin:.4rem 0 0}
+    .grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(150px,1fr));gap:1rem;margin-top:1.75rem}
+    .card{background:#1e293b;border:1px solid #334155;border-radius:12px;padding:1.25rem}
+    .k{font-size:.72rem;color:#94a3b8;text-transform:uppercase;letter-spacing:.06em}
+    .v{font-size:2rem;font-weight:700;margin-top:.35rem}
+    .dot{display:inline-block;width:.6rem;height:.6rem;border-radius:50%;margin-right:.4rem}
+    .on{background:#34d399} .off{background:#f87171}
+  </style>
+</head>
+<body>
+  <div class="wrap">
+    <h1>Agent Control Plane</h1>
+    <p class="sub">Live governance console. Read-only view over the verifiable evidence.</p>
+    <!-- On load, datastar opens the SSE stream; the server patches #metrics every couple of seconds. -->
+    <div id="metrics" data-on-load="@get('/sse/metrics')">
+      <p class="sub">connecting to acp-server…</p>
+    </div>
+  </div>
+</body>
+</html>

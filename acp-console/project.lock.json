@@ -1,0 +1,11 @@
+{
+  "lockfileVersion": 1,
+  "dependencies": [
+    {
+      "url": "https://github.com/kytelang/kyte-datastar",
+      "ref": null,
+      "resolved": null,
+      "name": "kyte-datastar"
+    }
+  ]
+}

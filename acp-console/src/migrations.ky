@@ -1,0 +1,24 @@
+import data.migrate;
+import list;
+
+// The ordered schema migrations this app owns. They ship INSIDE the app binary, so the code and its
+// schema never drift, and the orchestrator applies them (via `app --migrate`) before rolling out new
+// code. Each has a unique, ASCENDING `version`; `up` moves the schema forward and `down` reverses it.
+//
+// Keep every migration EXPAND-ONLY: add tables, add nullable columns, add indexes. Do NOT DROP, RENAME,
+// ALTER a column TYPE, or SET NOT NULL in the same release as the code that needs it -- during a rolling
+// deploy the OLD and NEW versions run against this one schema at the same time, and a tightening change
+// breaks the still-running old version. Ship destructive changes as a SEPARATE, later release, after
+// every replica already speaks the new schema. `migrate.lintExpandOnly` flags the risky cases for you.
+pub fn all(): list.List<migrate.Migration> {
+    let ms = list.List<migrate.Migration>();
+    ms.push(migrate.migration(
+        1,
+        "create_products",
+        migrate.table("products").id()
+            .column("name", "TEXT", "NOT NULL")
+            .column("price", "BIGINT", "NOT NULL")
+            .toSqlIfNotExists(),
+        migrate.dropTableSql("products")));
+    return ms;
+}

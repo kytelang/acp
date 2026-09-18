@@ -1,0 +1,39 @@
+// Reads ACP governance data from the acp-server JSON API. The console is a READ-ONLY view over the
+// verifiable evidence: every figure is served by acp-server and re-derivable from the signed
+// export, so the UI carries no trust (decision v1.3.1).
+import web.client;
+import web.response;
+import serde.json;
+
+pub struct AcpReport {
+    pub reachable: bool,
+    pub postureScore: double,
+    pub decisions: long,
+    pub coverage: double,
+    pub denies: long,
+    pub stepUps: long,
+    init() {
+        self.reachable = false; self.postureScore = 0.0; self.decisions = 0;
+        self.coverage = 0.0; self.denies = 0; self.stepUps = 0;
+    }
+}
+
+pub struct AcpClient {
+    base: string,
+    init(base: string) { self.base = base; }
+
+    pub fn report(self: AcpClient): AcpReport {
+        let r = AcpReport();
+        let resp = client.Http.get(self.base + "/report");
+        if (resp.status.toCode() != 200) { return r; }
+        let v = json.parse(resp.body);
+        r.reachable = true;
+        r.postureScore = json.asFloat(json.get(v, "posture_score")) ?? 0.0;
+        r.decisions = json.asNumber(json.get(v, "decisions")) ?? 0;
+        r.coverage = json.asFloat(json.get(v, "policy_coverage")) ?? 0.0;
+        let verdicts = json.get(v, "verdicts");
+        r.denies = json.asNumber(json.get(verdicts, "deny")) ?? 0;
+        r.stepUps = json.asNumber(json.get(verdicts, "step_up")) ?? 0;
+        return r;
+    }
+}

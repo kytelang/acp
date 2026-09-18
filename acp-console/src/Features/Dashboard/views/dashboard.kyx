@@ -1,0 +1,14 @@
+// The live metrics fragment. Carries its own id="metrics" so datastar morphs it onto the shell's
+// container in place. Returned by the SSE stream; never a full page.
+pub fn metricsPanel(reachable: string, posture: string, decisions: string, coverage: string, denies: string, stepUps: string): Html {
+    return <div id="metrics">
+        <p class="sub"><span class={reachable == "1" ? "dot on" : "dot off"}></span>{reachable == "1" ? "acp-server connected" : "acp-server offline"}</p>
+        <div class="grid">
+            <div class="card"><div class="k">Posture score</div><div class="v">{posture}</div></div>
+            <div class="card"><div class="k">Decisions</div><div class="v">{decisions}</div></div>
+            <div class="card"><div class="k">Policy coverage</div><div class="v">{coverage}</div></div>
+            <div class="card"><div class="k">Denied</div><div class="v">{denies}</div></div>
+            <div class="card"><div class="k">Step-up</div><div class="v">{stepUps}</div></div>
+        </div>
+    </div>;
+}
