@@ -43,6 +43,7 @@ struct Opts {
     registry: Option<String>,
     agent_id: Option<String>,
     agent_token: Option<String>,
+    principal: Option<String>,
 }
 
 fn parse_opts(items: &[String]) -> Result<(Opts, Vec<String>), String> {
@@ -73,6 +74,7 @@ fn parse_opts(items: &[String]) -> Result<(Opts, Vec<String>), String> {
             "--registry" => o.registry = it.next().cloned(),
             "--agent-id" => o.agent_id = it.next().cloned(),
             "--agent-token" => o.agent_token = it.next().cloned(),
+            "--principal" => o.principal = it.next().cloned(),
             "--shadow" => o.shadow = true,
             "--fail-open" => o.fail_open = true,
             other => return Err(format!("unknown option '{other}'")),
@@ -180,6 +182,10 @@ fn build_controller(o: &Opts) -> Result<Arc<Controller>, String> {
     // Verified caller identity: when a registry is configured, the presented (agent-id, token) MUST
     // verify. Fail closed on a missing/invalid/revoked credential so a mis-enrolled agent cannot run
     // un-governed. Without a registry the proxy runs unidentified (agent/app rules simply do not match).
+    // The human principal is bound at enrolment via --principal (the launching user for local
+    // agents; the OAuth-token subject for remote agents once wired). It is proxy-supplied and
+    // trusted, never asserted by the agent. Absent -> "unattributed" so the gap is governable.
+    let principal = o.principal.clone().unwrap_or_else(|| "unattributed".to_string());
     if let Some(reg_path) = &o.registry {
         let reg = acp_registry::Registry::load(reg_path)
             .map_err(|e| format!("cannot load registry {reg_path}: {e}"))?;
@@ -190,14 +196,17 @@ fn build_controller(o: &Opts) -> Result<Arc<Controller>, String> {
         match reg.verify(&aid, &tok) {
             Some(id) => {
                 eprintln!(
-                    "acp-proxy: verified identity app={} ({}) agent={} ({})",
-                    id.app_name, id.app_id, id.agent_name, id.agent_id
+                    "acp-proxy: verified identity app={} ({}) agent={} ({}) principal={}",
+                    id.app_name, id.app_id, id.agent_name, id.agent_id, principal
                 );
                 // Policy rules reference the human names; evidence-friendly ids remain in the registry.
-                controller.set_identity(id.app_name, id.agent_name);
+                controller.set_identity(id.app_name, id.agent_name, principal);
             }
             None => return Err(format!("agent {aid} failed registry verification (unknown, revoked, or bad token)")),
         }
+    } else if o.principal.is_some() {
+        // No registry, but a principal was declared: still stamp it (agent/app stay empty).
+        controller.set_identity(String::new(), String::new(), principal);
     }
     Ok(controller)
 }

@@ -14,6 +14,7 @@ use crate::limits;
 use crate::policy::{self, Enforce};
 use acp_approvals::ApprovalStore;
 use acp_core::impact::ImpactTaxonomy;
+use acp_core::resource::ResourceTaxonomy;
 use acp_core::types::Verdict;
 use acp_jsonrpc::{classify, error_response, inspect, ParsedFrame};
 use acp_policy::PolicyEngine;
@@ -44,13 +45,15 @@ pub struct Controller {
     sinks: Vec<Box<dyn Sink>>,
     fail_open: bool,
     impact_tax: ImpactTaxonomy,
+    resource_tax: ResourceTaxonomy,
     // F2: break-glass grants, applied to the verdict before enforcement. Empty = no-op.
     breakglass: Mutex<acp_core::breakglass::BreakGlassRegistry>,
     // F2 channel: an optional on-disk grant file the proxy watches (operator/server writes it).
     bg_file: Mutex<Option<String>>,
     bg_mtime: Mutex<Option<std::time::SystemTime>>,
-    // Verified caller identity (app_id, agent_id) from the registry; empty when unregistered.
-    identity: Mutex<(String, String)>,
+    // Verified caller identity (app_id, agent_id, human principal) from the registry; empty
+    // app/agent when unregistered; principal is "unattributed" until a verified human is bound.
+    identity: Mutex<(String, String, String)>,
     // Signed policy store to hot-reload from (watched by mtime); None = static --policy.
     policy_dir: Mutex<Option<String>>,
     policy_mtime: Mutex<Option<std::time::SystemTime>>,
@@ -82,10 +85,11 @@ impl Controller {
             sinks,
             fail_open,
             impact_tax,
+            resource_tax: ResourceTaxonomy::default(),
             breakglass: Mutex::new(acp_core::breakglass::BreakGlassRegistry::new()),
             bg_file: Mutex::new(None),
             bg_mtime: Mutex::new(None),
-            identity: Mutex::new((String::new(), String::new())),
+            identity: Mutex::new((String::new(), String::new(), "unattributed".to_string())),
             policy_dir: Mutex::new(None),
             policy_mtime: Mutex::new(None),
         }
@@ -124,8 +128,8 @@ impl Controller {
     /// Set the proxy's verified caller identity (app_id, agent_id). The proxy stamps this into the
     /// policy context (so per-app/per-agent rules apply) and into evidence. It is set once at
     /// startup after the registry verifies the presented agent token.
-    pub fn set_identity(&self, app_id: String, agent_id: String) {
-        *self.identity.lock().unwrap() = (app_id, agent_id);
+    pub fn set_identity(&self, app_id: String, agent_id: String, principal: String) {
+        *self.identity.lock().unwrap() = (app_id, agent_id, principal);
     }
 
     /// F2 channel: watch a break-glass grant file. The operator (or control server) writes the file
@@ -234,10 +238,10 @@ impl Controller {
                 ParsedFrame::ToolCall(tc) => tc,
                 _ => return FrameAction::Forward,
             };
-            let (app_id, agent_id) = self.identity.lock().unwrap().clone();
+            let (app_id, agent_id, principal) = self.identity.lock().unwrap().clone();
             // Record the verified agent id when present, else the transport default.
             let rec_agent = if agent_id.is_empty() { self.agent.clone() } else { agent_id.clone() };
-            let mut a = policy::assess(&eng, &self.env, &tc, &self.impact_tax, &agent_id, &app_id);
+            let mut a = policy::assess(&eng, &self.env, &tc, &self.impact_tax, &self.resource_tax, &agent_id, &app_id, &principal);
             // F2: apply any active break-glass grant to the verdict, then re-derive enforcement.
             // With no grant this is the identity, so the normal path is untouched.
             self.refresh_break_glass();

@@ -40,7 +40,8 @@ fn approval_required(id: &Value, rule: &str) -> String {
 }
 
 use acp_core::impact::ImpactTaxonomy;
-use acp_policy::{build_context_identified, PolicyOutcome};
+use acp_core::resource::ResourceTaxonomy;
+use acp_policy::{build_context_identified_full, PolicyOutcome};
 
 /// The full assessment of a tool call: the proxy action plus the fields needed to build an
 /// evidence record (M3). `gated` is true for deny/step_up (which must fail closed on a write
@@ -61,13 +62,16 @@ fn impact_str(tax: &ImpactTaxonomy, tool: &str, args: &Value) -> &'static str {
 }
 
 /// Evaluate a tool call and return both the enforcement action and the evidence fields.
+#[allow(clippy::too_many_arguments)]
 pub fn assess(
     engine: &PolicyEngine,
     env: &str,
     tc: &ToolCall,
     tax: &ImpactTaxonomy,
+    rtax: &ResourceTaxonomy,
     agent: &str,
     app: &str,
+    principal: &str,
 ) -> Assessment {
     let impact = impact_str(tax, &tc.name, &tc.arguments);
     if !valid_tool(&tc.name) {
@@ -89,13 +93,15 @@ pub fn assess(
             impact_taxonomy: tax.version.clone(),
         };
     }
-    let outcome = engine.evaluate(build_context_identified(
+    let outcome = engine.evaluate(build_context_identified_full(
         &tc.name,
         &tc.arguments,
         env,
         agent,
         app,
+        principal,
         tax,
+        rtax,
     ));
     let enforce = enforce_for(outcome.verdict, tc, &outcome, impact);
     Assessment {
