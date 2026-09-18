@@ -2,3 +2,4 @@ evidence.db
 evidence.db.*
 signing.key
 signing.key.pub
+registry.json

@@ -31,6 +31,21 @@ the last argument in `.mcp.json` for any real MCP server command to govern that 
    acp-cli export demo/claude-code/evidence.db | jq .   # every gated call, with its verdict
    ```
 
+## Per-agent enforcement (verified identity)
+
+By default the proxy runs unidentified and the policy applies globally. To make Claude Code a
+*verified agent* so per-agent rules apply and a bad credential fails closed:
+
+```sh
+bash setup.sh    # registers app 'claude-code-demo' + agent 'coding-assistant', rewrites .mcp.json
+```
+
+`setup.sh` registers the agent (issuing a one-time token), and wires `.mcp.json` to pass
+`--registry --agent-id --agent-token`. Now the proxy proves the agent's identity on startup
+(printing `verified identity app=claude-code-demo agent=coding-assistant`) and the policy rule
+`coding-assistant-no-charge` denies `charge_card` for *this agent specifically*. Revoke it any time
+with `acp-cli agent revoke registry.json <agent-id>` and the proxy stops verifying immediately.
+
 ## Governing a REAL tool server
 
 Replace the tool-server command at the end of `.mcp.json`'s `args` (after `--`) with any MCP
