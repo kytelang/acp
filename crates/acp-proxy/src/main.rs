@@ -38,6 +38,7 @@ struct Opts {
     impact: Option<String>,
     cef: Option<String>,
     ocsf: Option<String>,
+    syslog: Option<String>,
     break_glass: Option<String>,
     policy_dir: Option<String>,
     registry: Option<String>,
@@ -74,6 +75,7 @@ fn parse_opts(items: &[String]) -> Result<(Opts, Vec<String>), String> {
             "--impact" => o.impact = it.next().cloned(),
             "--cef" => o.cef = it.next().cloned(),
             "--ocsf" => o.ocsf = it.next().cloned(),
+            "--syslog" => o.syslog = it.next().cloned(),
             "--break-glass-file" => o.break_glass = it.next().cloned(),
             "--break-glass-key" => o.break_glass_key = it.next().cloned(),
             "--tool-pins" => o.tool_pins = it.next().cloned(),
@@ -158,6 +160,12 @@ fn build_controller(o: &Opts) -> Result<Arc<Controller>, String> {
             events::CefSink::open(cp).map_err(|e| format!("cannot open cef {cp}: {e}"))?,
         ));
         eprintln!("acp-proxy: CEF governance events -> {cp}");
+    }
+    if let Some(target) = &o.syslog {
+        sinks.push(Box::new(
+            events::SyslogSink::open(target).map_err(|e| format!("cannot open syslog {target}: {e}"))?,
+        ));
+        eprintln!("acp-proxy: CEF governance events -> syslog {target}");
     }
     if let Some(op) = &o.ocsf {
         sinks.push(Box::new(

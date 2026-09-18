@@ -190,23 +190,49 @@ impl CefSink {
         })
     }
 }
+/// The CEF line for an event, shared by the file and syslog sinks. Redacted: never carries args.
+pub fn cef_line(ev: &Event<'_>) -> String {
+    format!(
+        "CEF:0|ACP|acp-proxy|1.0|{}|AI action {}|{}|act={} cs1={} cs1Label=tool cs2={} cs2Label=rule cs3={} cs3Label=impact suser={}",
+        cef_escape_header(ev.verdict),
+        cef_escape_header(ev.outcome),
+        severity(ev.verdict),
+        cef_escape_ext(ev.outcome),
+        cef_escape_ext(ev.tool),
+        cef_escape_ext(ev.rule_id.unwrap_or("")),
+        cef_escape_ext(ev.impact),
+        cef_escape_ext(ev.session),
+    )
+}
+
 impl Sink for CefSink {
     fn emit(&self, ev: &Event<'_>) {
-        let line = format!(
-            "CEF:0|ACP|acp-proxy|1.0|{}|AI action {}|{}|act={} cs1={} cs1Label=tool cs2={} cs2Label=rule cs3={} cs3Label=impact suser={}",
-            cef_escape_header(ev.verdict),
-            cef_escape_header(ev.outcome),
-            severity(ev.verdict),
-            cef_escape_ext(ev.outcome),
-            cef_escape_ext(ev.tool),
-            cef_escape_ext(ev.rule_id.unwrap_or("")),
-            cef_escape_ext(ev.impact),
-            cef_escape_ext(ev.session),
-        );
+        let line = cef_line(ev);
         if let Ok(mut f) = self.file.lock() {
             let _ = writeln!(f, "{line}");
             let _ = f.flush();
         }
+    }
+}
+
+/// A syslog sink: sends each event as a CEF message over UDP to a SIEM collector (host:port). This
+/// is direct network delivery, no file to tail. Fire-and-forget so it never blocks enforcement; a
+/// dropped datagram is acceptable for the audit stream (the tamper-evident ledger is the source of
+/// truth, this is the real-time feed). PRI 134 = local0.info.
+pub struct SyslogSink {
+    sock: std::net::UdpSocket,
+    target: String,
+}
+impl SyslogSink {
+    pub fn open(target: &str) -> std::io::Result<SyslogSink> {
+        let sock = std::net::UdpSocket::bind("0.0.0.0:0")?;
+        Ok(SyslogSink { sock, target: target.to_string() })
+    }
+}
+impl Sink for SyslogSink {
+    fn emit(&self, ev: &Event<'_>) {
+        let msg = format!("<134>{}", cef_line(ev));
+        let _ = self.sock.send_to(msg.as_bytes(), &self.target);
     }
 }
 
@@ -239,5 +265,34 @@ impl Sink for OcsfSink {
             let _ = writeln!(f, "{v}");
             let _ = f.flush();
         }
+    }
+}
+
+#[cfg(test)]
+mod syslog_tests {
+    use super::*;
+
+    #[test]
+    fn syslog_sink_delivers_a_cef_line_over_udp() {
+        // Stand up a UDP listener, point the sink at it, emit, and read the datagram back.
+        let listener = std::net::UdpSocket::bind("127.0.0.1:0").unwrap();
+        let addr = listener.local_addr().unwrap().to_string();
+        listener.set_read_timeout(Some(std::time::Duration::from_secs(2))).unwrap();
+        let sink = SyslogSink::open(&addr).unwrap();
+        let ev = Event {
+            agent: "acp-client",
+            tool: "charge_card",
+            verdict: "deny",
+            rule_id: Some("cap-charge"),
+            impact: "high",
+            outcome: "denied",
+            session: "sess-1",
+        };
+        sink.emit(&ev);
+        let mut buf = [0u8; 1024];
+        let n = listener.recv(&mut buf).unwrap();
+        let got = std::str::from_utf8(&buf[..n]).unwrap();
+        assert!(got.starts_with("<134>CEF:0|ACP|acp-proxy|1.0|deny|"), "got: {got}");
+        assert!(got.contains("cs1=charge_card"));
     }
 }
