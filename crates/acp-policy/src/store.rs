@@ -64,6 +64,15 @@ pub fn current_info(store_dir: &str) -> Result<Value, String> {
     serde_json::from_slice(&raw).map_err(|e| e.to_string())
 }
 
+/// The raw YAML source of the current deployed policy, for read-only inspection in the console.
+/// This is the same file whose hash is bound into the signed manifest, so what the operator reads
+/// here is exactly what the proxy enforces.
+pub fn current_source(store_dir: &str) -> Result<String, String> {
+    let cur = current_info(store_dir)?;
+    let file = cur.get("file").and_then(|v| v.as_str()).ok_or_else(|| "no current policy".to_string())?;
+    fs::read_to_string(format!("{store_dir}/{file}")).map_err(|e| e.to_string())
+}
+
 /// Load the current policy, verifying its signature and that the file has not been tampered with.
 /// Fails closed on a bad signature or a file whose hash does not match the signed manifest.
 pub fn load_current(store_dir: &str) -> Result<PolicyEngine, String> {

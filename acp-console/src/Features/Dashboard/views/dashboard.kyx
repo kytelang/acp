@@ -111,3 +111,43 @@ pub fn evidencePanel(rows: list.List<EvidenceRow>): Html {
         }}
     </div>;
 }
+
+
+// Per-app / per-agent rules of the deployed policy (live-patched fragment #policyrules).
+pub fn policyRulesPanel(rows: list.List<PolicyRuleRow>): Html {
+    return <div id="policyrules">
+        {if (rows.size() == 0) {
+            <p class="empty">No rules in the deployed policy.</p>
+        } else {
+            <table class="tbl">
+                <thead><tr><th>Rule</th><th>App</th><th>Agent</th><th>Tool</th><th>Effect</th><th>Approvers</th></tr></thead>
+                <tbody>
+                    {for (i in 0..rows.size()) {
+                        let r = rows.get(i) ?? PolicyRuleRow("", "", "", "", "", "");
+                        let appr = string.eql(r.approvers, "") ? "-" : r.approvers;
+                        <tr>
+                            <td class="strong">{r.id}</td>
+                            <td>{if (string.eql(r.app, "any")) { <span class="dim">any</span> } else { <span class="badge ok">{r.app}</span> }}</td>
+                            <td>{if (string.eql(r.agent, "any")) { <span class="dim">any</span> } else { <span class="badge ver">{r.agent}</span> }}</td>
+                            <td class="mono">{r.tool}</td>
+                            <td>{verdictBadge(r.verdict)}</td>
+                            <td class="mono dim">{appr}</td>
+                        </tr>
+                    }}
+                </tbody>
+            </table>
+        }}
+    </div>;
+}
+
+// Outcome of a policy deploy (patched into #deployresult after the operator clicks Deploy).
+pub fn deployResultPanel(res: DeployResult): Html {
+    return <div id="deployresult" class="deploystatus">
+        {if (res.ok) {
+            <span class="badge ok">deployed</span>
+        } else {
+            <span class="badge bad">rejected</span>
+        }}
+        <span class="dim">{res.message}</span>
+    </div>;
+}

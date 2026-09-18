@@ -34,6 +34,8 @@ pub class MetricsSse impl SseHandler {
             if (w5 < 0) { alive = false; }
             let w6 = await ds.patchElementsSimple(evidencePanel(self.acp.evidenceRows()));
             if (w6 < 0) { alive = false; }
+            let w7 = await ds.patchElementsSimple(policyRulesPanel(self.acp.policyRules()));
+            if (w7 < 0) { alive = false; }
             if (alive) { await aio.delay(2000); }
         }
     }

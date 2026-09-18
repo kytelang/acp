@@ -23,19 +23,16 @@
     body{margin:0;background:var(--bg);color:var(--txt);font:14px/1.5 -apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,sans-serif;-webkit-font-smoothing:antialiased}
     a{color:inherit;text-decoration:none}
     .app{display:grid;grid-template-columns:236px 1fr;min-height:100vh}
-
-    /* Sidebar */
     .sidebar{background:var(--sidebar);border-right:1px solid var(--line);padding:1.25rem 0;position:sticky;top:0;height:100vh}
     .brand{display:flex;align-items:center;gap:.6rem;padding:0 1.25rem 1.25rem;border-bottom:1px solid var(--line)}
     .logo{width:34px;height:34px;border-radius:9px;background:linear-gradient(135deg,var(--accent),#8b5cf6);display:grid;place-items:center;font-weight:800;color:#fff;font-size:1rem;box-shadow:0 2px 12px rgba(99,102,241,.4)}
     .brand-t{font-weight:700;letter-spacing:.2px} .brand-s{font-size:.7rem;color:var(--muted)}
     nav{padding:1rem .75rem;display:flex;flex-direction:column;gap:.15rem}
     .nav-l{font-size:.65rem;text-transform:uppercase;letter-spacing:.1em;color:var(--muted);padding:.75rem .75rem .35rem}
-    .nav-i{display:flex;align-items:center;gap:.7rem;padding:.55rem .75rem;border-radius:9px;color:var(--dim);font-weight:500;transition:.15s}
+    .nav-i{display:flex;align-items:center;gap:.7rem;padding:.55rem .75rem;border-radius:9px;color:var(--dim);font-weight:500;transition:.15s;cursor:pointer}
     .nav-i:hover{background:var(--panel);color:var(--txt)}
+    .nav-i.active{background:var(--panel);color:var(--txt);box-shadow:inset 3px 0 0 var(--accent)}
     .nav-i .ic{width:20px;text-align:center;opacity:.9}
-
-    /* Main */
     .main{display:flex;flex-direction:column;min-width:0}
     .topbar{height:60px;border-bottom:1px solid var(--line);display:flex;align-items:center;justify-content:space-between;padding:0 1.75rem;background:var(--topbar);position:sticky;top:0;z-index:5}
     .topbar h1{font-size:1.05rem;font-weight:650;margin:0}
@@ -43,35 +40,26 @@
     .live{width:.55rem;height:.55rem;border-radius:50%;background:var(--ok);box-shadow:0 0 0 0 rgba(16,185,129,.5);animation:pulse 2s infinite}
     @keyframes pulse{0%{box-shadow:0 0 0 0 rgba(16,185,129,.45)}70%{box-shadow:0 0 0 7px rgba(16,185,129,0)}100%{box-shadow:0 0 0 0 rgba(16,185,129,0)}}
     .content{padding:1.75rem;max-width:1080px;width:100%}
-
-    /* Cards */
     .card{background:var(--panel);border:1px solid var(--line);border-radius:14px;margin-bottom:1.25rem;overflow:hidden;box-shadow:0 1px 3px rgba(0,0,0,.3)}
     .card-h{display:flex;align-items:center;gap:.6rem;padding:.9rem 1.25rem;border-bottom:1px solid var(--line);font-weight:600;font-size:.92rem}
-    .card-h .ic{opacity:.85} .card-b{padding:1.25rem}
-
-    /* Stat tiles */
+    .card-h .ic{opacity:.85} .card-h .sub{margin-left:auto;font-weight:400;font-size:.78rem;color:var(--muted)}
+    .card-b{padding:1.25rem}
     .stats{display:grid;grid-template-columns:repeat(auto-fit,minmax(130px,1fr));gap:1rem}
     .stat{background:var(--panel2);border:1px solid var(--line);border-radius:12px;padding:1.1rem}
     .stat-k{font-size:.68rem;text-transform:uppercase;letter-spacing:.07em;color:var(--muted)}
     .stat-v{font-size:2rem;font-weight:750;margin-top:.3rem;letter-spacing:-.02em}
     .stat-v.danger{color:var(--bad)} .stat-v.warn{color:var(--warn)}
-
-    /* Tables */
     .tbl{width:100%;border-collapse:collapse;font-size:.88rem}
     .tbl th{text-align:left;font-size:.66rem;text-transform:uppercase;letter-spacing:.07em;color:var(--muted);padding:.4rem .5rem;border-bottom:1px solid var(--line2)}
-    .tbl td{padding:.6rem .5rem;border-bottom:1px solid var(--line)}
+    .tbl td{padding:.6rem .5rem;border-bottom:1px solid var(--line);vertical-align:middle}
     .tbl tr:last-child td{border-bottom:0}
     .strong{font-weight:600} .mono{font-family:ui-monospace,SFMono-Regular,Menlo,monospace;font-size:.8rem} .dim{color:var(--dim)}
     .empty{color:var(--muted);font-style:italic;margin:.25rem 0}
-
-    /* Badges */
     .badge{display:inline-block;padding:.16rem .55rem;border-radius:999px;font-size:.7rem;font-weight:600;letter-spacing:.02em}
     .badge.ok{background:rgba(16,185,129,.15);color:#34d399;border:1px solid rgba(16,185,129,.3)}
     .badge.bad{background:rgba(239,68,68,.15);color:#f87171;border:1px solid rgba(239,68,68,.3)}
     .badge.warn{background:rgba(245,158,11,.15);color:#fbbf24;border:1px solid rgba(245,158,11,.3)}
     .badge.ver{background:rgba(99,102,241,.18);color:#a5b4fc;border:1px solid rgba(99,102,241,.35);font-family:ui-monospace,monospace}
-
-    /* Approvals */
     .alist{display:flex;flex-direction:column;gap:.75rem}
     .arow{display:flex;align-items:center;justify-content:space-between;gap:1rem;background:var(--panel2);border:1px solid var(--line2);border-radius:11px;padding:.85rem 1rem}
     .ainfo{display:flex;align-items:center;gap:.75rem;min-width:0}
@@ -80,12 +68,19 @@
     .btn{padding:.45rem .95rem;border:0;border-radius:9px;cursor:pointer;font-size:.82rem;font-weight:600;transition:.15s}
     .btn.ok{background:var(--ok);color:#052e22} .btn.ok:hover{background:#0ea371}
     .btn.no{background:rgba(239,68,68,.15);color:#f87171;border:1px solid rgba(239,68,68,.35)} .btn.no:hover{background:rgba(239,68,68,.25)}
-    .polrow{display:flex;align-items:center;gap:.6rem}
+    .btn.primary{background:var(--accent);color:#fff} .btn.primary:hover{filter:brightness(1.12)}
+    .deploy{display:flex;flex-direction:column;gap:.85rem}
+    .deploy label.fld{display:flex;flex-direction:column;gap:.35rem;font-size:.68rem;color:var(--muted);text-transform:uppercase;letter-spacing:.06em}
+    .deploy textarea{width:100%;min-height:230px;background:var(--panel2);border:1px solid var(--line2);border-radius:10px;color:var(--txt);font-family:ui-monospace,SFMono-Regular,Menlo,monospace;font-size:.82rem;line-height:1.55;padding:.9rem;resize:vertical}
+    .deploy input{background:var(--panel2);border:1px solid var(--line2);border-radius:9px;color:var(--txt);padding:.55rem .8rem;font-size:.85rem;max-width:240px}
+    .deploy .row{display:flex;gap:1rem;align-items:flex-end;flex-wrap:wrap}
+    .deploystatus{display:flex;align-items:center;gap:.6rem;min-height:1.5rem}
+    .hint{color:var(--muted);font-size:.78rem;margin:.1rem 0 .4rem}
     .tbtn{background:var(--panel);border:1px solid var(--line);color:var(--txt);width:36px;height:36px;border-radius:9px;cursor:pointer;font-size:1rem;display:grid;place-items:center;transition:.15s} .tbtn:hover{background:var(--panel2)}
     .tright{display:flex;align-items:center;gap:.85rem}
   </style>
 </head>
-<body data-signals="{theme: 'dark'}" data-class-light="$theme === 'light'" data-persist>
+<body data-signals="{theme: 'dark', view: 'overview'}" data-class-light="$theme === 'light'">
   <div class="app">
     <aside class="sidebar">
       <div class="brand">
@@ -94,46 +89,90 @@
       </div>
       <nav>
         <div class="nav-l">Governance</div>
-        <a class="nav-i" href="#sec-overview"><span class="ic">📊</span> Overview</a>
-        <a class="nav-i" href="#sec-approvals"><span class="ic">✋</span> Approvals</a>
-        <a class="nav-i" href="#sec-evidence"><span class="ic">📜</span> Evidence</a>
+        <div class="nav-i" data-class-active="$view === 'overview'" data-on:click="$view = 'overview'"><span class="ic">&#128202;</span> Overview</div>
+        <div class="nav-i" data-class-active="$view === 'approvals'" data-on:click="$view = 'approvals'"><span class="ic">&#9995;</span> Approvals</div>
+        <div class="nav-i" data-class-active="$view === 'evidence'" data-on:click="$view = 'evidence'"><span class="ic">&#128220;</span> Evidence</div>
         <div class="nav-l">Identity</div>
-        <a class="nav-i" href="#sec-apps"><span class="ic">📦</span> Apps</a>
-        <a class="nav-i" href="#sec-agents"><span class="ic">🤖</span> Agents</a>
+        <div class="nav-i" data-class-active="$view === 'apps'" data-on:click="$view = 'apps'"><span class="ic">&#128230;</span> Apps</div>
+        <div class="nav-i" data-class-active="$view === 'agents'" data-on:click="$view = 'agents'"><span class="ic">&#129302;</span> Agents</div>
         <div class="nav-l">Policy</div>
-        <a class="nav-i" href="#sec-policy"><span class="ic">🔏</span> Deployed policy</a>
+        <div class="nav-i" data-class-active="$view === 'policy'" data-on:click="$view = 'policy'"><span class="ic">&#128271;</span> Policy</div>
       </nav>
     </aside>
 
     <div class="main">
       <div class="topbar">
-        <h1>Governance overview</h1>
+        <h1 data-text="$view === 'overview' ? 'Governance overview' : $view === 'approvals' ? 'Pending approvals' : $view === 'evidence' ? 'Evidence timeline' : $view === 'apps' ? 'Registered apps' : $view === 'agents' ? 'Registered agents' : 'Policy'">Governance overview</h1>
         <div class="tright">
           <button class="tbtn" data-on:click="$theme = $theme === 'dark' ? 'light' : 'dark'" title="Toggle theme">
-            <span data-text="$theme === 'dark' ? '☀' : '☾'"></span>
+            <span data-text="$theme === 'dark' ? '&#9728;' : '&#9790;'"></span>
           </button>
           <div class="pill"><span class="live"></span> live</div>
         </div>
       </div>
-      <!-- One SSE stream, opened on load, patches every fragment below. -->
+
       <div class="content" data-on-intersect="@get('/sse/metrics')">
-        <div class="card" id="sec-overview"><div class="card-h"><span class="ic">📊</span> Overview</div>
-          <div class="card-b"><div id="metrics" class="stats"><p class="empty">connecting to acp-server…</p></div></div></div>
+        <section class="view" data-show="$view === 'overview'">
+          <div class="card"><div class="card-h"><span class="ic">&#128202;</span> Posture &amp; activity</div>
+            <div class="card-b"><div id="metrics" class="stats"><p class="empty">connecting to acp-server&#8230;</p></div></div></div>
+        </section>
 
-        <div class="card" id="sec-approvals"><div class="card-h"><span class="ic">✋</span> Pending approvals</div>
-          <div class="card-b"><div id="approvals"><p class="empty">…</p></div></div></div>
+        <section class="view" data-show="$view === 'approvals'">
+          <div class="card"><div class="card-h"><span class="ic">&#9995;</span> Holds awaiting a human decision</div>
+            <div class="card-b"><div id="approvals"><p class="empty">&#8230;</p></div></div></div>
+        </section>
 
-        <div class="card" id="sec-evidence"><div class="card-h"><span class="ic">📜</span> Evidence timeline</div>
-          <div class="card-b"><div id="evidence"><p class="empty">…</p></div></div></div>
+        <section class="view" data-show="$view === 'evidence'">
+          <div class="card"><div class="card-h"><span class="ic">&#128220;</span> Recent governed decisions<span class="sub">tamper-evident ledger</span></div>
+            <div class="card-b"><div id="evidence"><p class="empty">&#8230;</p></div></div></div>
+        </section>
 
-        <div class="card" id="sec-apps"><div class="card-h"><span class="ic">📦</span> Registered apps</div>
-          <div class="card-b"><div id="apps"><p class="empty">…</p></div></div></div>
+        <section class="view" data-show="$view === 'apps'">
+          <div class="card"><div class="card-h"><span class="ic">&#128230;</span> Registered apps</div>
+            <div class="card-b"><div id="apps"><p class="empty">&#8230;</p></div></div></div>
+        </section>
 
-        <div class="card" id="sec-agents"><div class="card-h"><span class="ic">🤖</span> Registered agents</div>
-          <div class="card-b"><div id="agents"><p class="empty">…</p></div></div></div>
+        <section class="view" data-show="$view === 'agents'">
+          <div class="card"><div class="card-h"><span class="ic">&#129302;</span> Registered agents</div>
+            <div class="card-b"><div id="agents"><p class="empty">&#8230;</p></div></div></div>
+        </section>
 
-        <div class="card" id="sec-policy"><div class="card-h"><span class="ic">🔏</span> Deployed policy</div>
-          <div class="card-b"><div id="policy"><p class="empty">…</p></div></div></div>
+        <section class="view" data-show="$view === 'policy'">
+          <div class="card"><div class="card-h"><span class="ic">&#128271;</span> Deployed policy &mdash; rules per app / per agent<span class="sub" id="policy"><span class="empty">&#8230;</span></span></div>
+            <div class="card-b"><div id="policyrules"><p class="empty">&#8230;</p></div></div></div>
+
+          <div class="card"><div class="card-h"><span class="ic">&#128640;</span> Deploy a new policy version</div>
+            <div class="card-b">
+              <p class="hint">Paste a policy in the YAML DSL. acp-server validates and signs it, then the proxy hot-reloads it only after verifying that signature. A policy that does not compile is rejected and nothing is written. Scope a rule to an app or agent with <span class="mono">app:</span> / <span class="mono">agent:</span> inside its <span class="mono">when</span>.</p>
+              <div class="deploy">
+                <label class="fld">Policy (YAML)
+                  <textarea data-bind="policy" spellcheck="false">version: 1
+default: allow
+rules:
+  - id: no-destructive-deletes
+    when: { tool: delete_all }
+    verdict: deny
+  - id: charges-need-approval
+    when: { tool: charge_card }
+    verdict: step_up
+    approvers: [finance]
+  # Per-agent example: scope a rule to one registered agent by name-or-id.
+  # - id: analytics-read-only
+  #   when: { tool: "*", agent: analytics }
+  #   verdict: deny
+</textarea>
+                </label>
+                <div class="row">
+                  <label class="fld">Author
+                    <input type="text" data-bind="author" value="operator" />
+                  </label>
+                  <button class="btn primary" data-on:click="@post('/policy/deploy')">Deploy policy</button>
+                  <div class="deploystatus" id="deployresult"></div>
+                </div>
+              </div>
+            </div>
+          </div>
+        </section>
       </div>
     </div>
   </div>

@@ -5,6 +5,7 @@ import web.client;
 import web.response;
 import serde.json;
 import list;
+import string;
 
 pub struct AcpReport {
     pub reachable: bool,
@@ -45,6 +46,24 @@ pub struct ApprovalRow {
     pub id: string,
     pub tool: string,
     init(id: string, tool: string) { self.id = id; self.tool = tool; }
+}
+
+pub struct PolicyRuleRow {
+    pub id: string,
+    pub app: string,
+    pub agent: string,
+    pub tool: string,
+    pub verdict: string,
+    pub approvers: string,
+    init(id: string, app: string, agent: string, tool: string, verdict: string, approvers: string) {
+        self.id = id; self.app = app; self.agent = agent; self.tool = tool; self.verdict = verdict; self.approvers = approvers;
+    }
+}
+
+pub struct DeployResult {
+    pub ok: bool,
+    pub message: string,
+    init(ok: bool, message: string) { self.ok = ok; self.message = message; }
 }
 
 pub struct AcpClient {
@@ -159,5 +178,59 @@ pub struct AcpClient {
             i = i + 1;
         }
         return rows;
+    }
+
+    // Rules of the currently deployed policy, with app/agent resolved to registered names. Shows
+    // "any" where a rule is not scoped to a specific app or agent. Read-only over the signed file.
+    pub fn policyRules(self: AcpClient): list.List<PolicyRuleRow> {
+        let rows = list.List<PolicyRuleRow>();
+        let resp = client.Http.get(self.base + "/policy-store/rules");
+        if (resp.status.toCode() != 200) { return rows; }
+        let rv = json.get(json.parse(resp.body), "rules");
+        let arr = json.asArray(rv);
+        if (arr == undefined) { return rows; }
+        let i = 0;
+        while (i < arr.size()) {
+            let item = json.at(rv, i);
+            let app = json.asString(json.get(item, "app_label")) ?? "any";
+            let agent = json.asString(json.get(item, "agent_label")) ?? "any";
+            let apArr = json.asArray(json.get(item, "approvers"));
+            let apprv = "";
+            if (apArr != undefined) {
+                let j = 0;
+                while (j < apArr.size()) {
+                    let a = json.asString(json.at(json.get(item, "approvers"), j)) ?? "";
+                    apprv = string.eql(apprv, "") ? a : apprv + ", " + a;
+                    j = j + 1;
+                }
+            }
+            rows.push(PolicyRuleRow(
+                json.asString(json.get(item, "id")) ?? "?",
+                app, agent,
+                json.asString(json.get(item, "tool")) ?? "*",
+                json.asString(json.get(item, "verdict")) ?? "allow",
+                apprv));
+            i = i + 1;
+        }
+        return rows;
+    }
+
+    // Deploy a policy by forwarding the browser's datastar signals (which already carry a "policy"
+    // and "author" field) straight to acp-server, the trust store. The server validates, versions,
+    // signs, and writes it; we return the outcome for display.
+    pub fn deployRaw(self: AcpClient, body: string): DeployResult {
+        let hdrs = client.Http.emptyHeaders();
+        hdrs.set("Content-Type", "application/json");
+        let resp = client.Http.request("POST", self.base + "/policy-store/deploy", hdrs, body);
+        if (resp.status.toCode() != 200) {
+            return DeployResult(false, "acp-server unreachable (HTTP " + `${resp.status.toCode()}` + ")");
+        }
+        let v = json.parse(resp.body);
+        let ok = json.asBool(json.get(v, "ok")) ?? false;
+        if (ok) {
+            let ver = json.asNumber(json.get(v, "version")) ?? 0;
+            return DeployResult(true, "Deployed as v" + `${ver}`);
+        }
+        return DeployResult(false, json.asString(json.get(v, "error")) ?? "deploy rejected");
     }
 }

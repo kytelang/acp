@@ -1,0 +1,21 @@
+import web.routing;
+import web.response;
+import ds_response;
+import Features.Dashboard.Shared.acp_client;
+import Features.Dashboard.views.dashboard;
+
+// POST /policy/deploy: the console forwards the browser's datastar signals (which carry a "policy"
+// YAML body and an "author") to acp-server, the trust store. acp-server validates, versions, and
+// signs the policy; the proxy hot-reloads it only after verifying that signature. The console holds
+// no signing key and makes no policy decision: it is a submit form over the verifiable API.
+pub struct DeployHandler impl RouteHandler {
+    acp: AcpClient,
+    init(acp: AcpClient) { self.acp = acp; }
+
+    async fn serve(self: DeployHandler, ctx: Context): Response {
+        let res = self.acp.deployRaw(ctx.request.body);
+        // The live SSE stream refreshes the rules table and version badge on its next tick; here we
+        // just report the immediate outcome next to the Deploy button.
+        return await ds_response.patch(deployResultPanel(res));
+    }
+}

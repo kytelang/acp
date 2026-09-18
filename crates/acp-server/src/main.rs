@@ -121,6 +121,8 @@ async fn main() {
         .route("/apps", get(apps))
         .route("/agents", get(agents))
         .route("/policy-store", get(policy_store_current))
+        .route("/policy-store/rules", get(policy_store_rules))
+        .route("/policy-store/deploy", post(policy_store_deploy))
         .route("/approvals/pending", get(approvals_pending))
         .route("/evidence/recent", get(evidence_recent))
         .with_state(state);
@@ -422,6 +424,106 @@ async fn policy_store_current(State(st): State<Arc<AppState>>) -> impl IntoRespo
     match st.policy_store.as_ref().map(|p| acp_policy::store::current_info(p)) {
         Some(Ok(v)) => Json(v),
         _ => Json(serde_json::json!({"version": 0})),
+    }
+}
+
+/// Load-or-create the Ed25519 signer used to sign console-initiated deployments. Persisted next to
+/// the store so the signed manifest stays verifiable across restarts. The proxy trusts the pubkey
+/// embedded in current.json (tamper-evidence of the file against the signed hash).
+fn deploy_signer(store_dir: &str) -> acp_core::sign::Ed25519Signer {
+    let key_path = format!("{store_dir}/deploy.key");
+    let _ = std::fs::create_dir_all(store_dir);
+    match std::fs::read(&key_path) {
+        Ok(b) if b.len() == 32 => {
+            let mut s = [0u8; 32];
+            s.copy_from_slice(&b);
+            acp_core::sign::Ed25519Signer::from_seed(&s)
+        }
+        _ => {
+            let s = acp_core::sign::Ed25519Signer::generate();
+            let _ = std::fs::write(&key_path, s.seed());
+            s
+        }
+    }
+}
+
+/// The rules of the current deployed policy, with app/agent ids resolved to registered names, so the
+/// console can show which rule governs which app and agent. Read-only projection of the signed file.
+async fn policy_store_rules(State(st): State<Arc<AppState>>) -> impl IntoResponse {
+    let src = match st.policy_store.as_ref().map(|p| acp_policy::store::current_source(p)) {
+        Some(Ok(s)) => s,
+        _ => return Json(serde_json::json!({"rules": [], "count": 0})),
+    };
+    let pol = match acp_policy::dsl::parse_str(&src) {
+        Ok(p) => p,
+        Err(e) => return Json(serde_json::json!({"rules": [], "count": 0, "error": e.to_string()})),
+    };
+    let reg = st.registry.as_ref().and_then(|p| acp_registry::Registry::load(p).ok());
+    let app_name = |m: &Option<String>| -> Option<String> {
+        let id = m.as_deref()?;
+        reg.as_ref()
+            .and_then(|r| r.apps().into_iter().find(|a| a.id == id).map(|a| a.name.clone()))
+            .or_else(|| Some(id.to_string()))
+    };
+    let agent_name = |m: &Option<String>| -> Option<String> {
+        let id = m.as_deref()?;
+        reg.as_ref()
+            .and_then(|r| r.agents().into_iter().find(|a| a.id == id).map(|a| a.name.clone()))
+            .or_else(|| Some(id.to_string()))
+    };
+    let rules: Vec<_> = pol
+        .rules
+        .iter()
+        .map(|r| {
+            let verdict = serde_json::to_value(&r.verdict)
+                .ok()
+                .and_then(|v| v.as_str().map(|s| s.to_string()))
+                .unwrap_or_else(|| "allow".to_string());
+            serde_json::json!({
+                "id": r.id,
+                "tool": r.when.tool,
+                "app": r.when.app,
+                "app_label": app_name(&r.when.app),
+                "agent": r.when.agent,
+                "agent_label": agent_name(&r.when.agent),
+                "verdict": verdict,
+                "approvers": r.approvers,
+                "reason": r.reason,
+            })
+        })
+        .collect();
+    let default = serde_json::to_value(&pol.default)
+        .ok()
+        .and_then(|v| v.as_str().map(|s| s.to_string()))
+        .unwrap_or_else(|| "allow".to_string());
+    Json(serde_json::json!({"rules": rules, "count": pol.rules.len(), "default": default}))
+}
+
+/// Deploy a policy from the console: validate, version, sign, and write it to the store the proxy
+/// watches. A policy that does not compile is rejected before anything is written; the proxy
+/// hot-reloads the new version only after verifying the signature.
+async fn policy_store_deploy(
+    State(st): State<Arc<AppState>>,
+    Json(body): Json<serde_json::Value>,
+) -> impl IntoResponse {
+    let store = match &st.policy_store {
+        Some(s) => s.clone(),
+        None => return Json(serde_json::json!({"ok": false, "error": "no policy store configured"})),
+    };
+    let src = body.get("policy").and_then(|v| v.as_str()).unwrap_or("");
+    let author = body
+        .get("author")
+        .and_then(|v| v.as_str())
+        .map(|s| s.trim())
+        .filter(|s| !s.is_empty())
+        .unwrap_or("console");
+    if src.trim().is_empty() {
+        return Json(serde_json::json!({"ok": false, "error": "policy source is empty"}));
+    }
+    let signer = deploy_signer(&store);
+    match acp_policy::store::deploy(src, &store, &signer, author) {
+        Ok(d) => Json(serde_json::json!({"ok": true, "version": d.version, "hash": d.hash})),
+        Err(e) => Json(serde_json::json!({"ok": false, "error": e})),
     }
 }
 
