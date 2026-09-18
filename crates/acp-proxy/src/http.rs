@@ -105,6 +105,8 @@ async fn handle(State(st): State<Arc<HttpState>>, body: Bytes) -> Response {
                     (status, [("content-type", "text/event-stream")], body).into_response()
                 } else {
                     let bytes = resp.bytes().await.unwrap_or_default();
+                    // Tool-integrity: inspect the (buffered) response for a tools/list result.
+                    st.controller.inspect_response(&bytes);
                     (status, [("content-type", "application/json")], bytes).into_response()
                 }
             }

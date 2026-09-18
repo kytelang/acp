@@ -48,6 +48,7 @@ pub mod shadoweval;
 pub mod sign;
 pub mod ticket;
 pub mod timeline;
+pub mod toolintegrity;
 pub mod tuning;
 pub mod types;
 pub mod warehouse;

@@ -52,9 +52,12 @@ pub async fn run(cmd: &str, args: &[String], controller: Arc<Controller>) -> any
     });
 
     let s2c_out = to_client.clone();
+    let s2c_ctl = controller.clone();
     let s2c = tokio::spawn(async move {
         let mut lines = BufReader::new(child_stdout).lines();
         while let Ok(Some(line)) = lines.next_line().await {
+            // Inspect server->client frames for tool-integrity (tools/list); relay verbatim.
+            s2c_ctl.inspect_response(line.as_bytes());
             if s2c_out.send(line).await.is_err() {
                 break;
             }

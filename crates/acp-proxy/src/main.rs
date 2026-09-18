@@ -45,6 +45,7 @@ struct Opts {
     agent_token: Option<String>,
     principal: Option<String>,
     break_glass_key: Option<String>,
+    tool_pins: Option<String>,
 }
 
 fn parse_opts(items: &[String]) -> Result<(Opts, Vec<String>), String> {
@@ -72,6 +73,7 @@ fn parse_opts(items: &[String]) -> Result<(Opts, Vec<String>), String> {
             "--ocsf" => o.ocsf = it.next().cloned(),
             "--break-glass-file" => o.break_glass = it.next().cloned(),
             "--break-glass-key" => o.break_glass_key = it.next().cloned(),
+            "--tool-pins" => o.tool_pins = it.next().cloned(),
             "--policy-dir" => o.policy_dir = it.next().cloned(),
             "--registry" => o.registry = it.next().cloned(),
             "--agent-id" => o.agent_id = it.next().cloned(),
@@ -189,6 +191,10 @@ fn build_controller(o: &Opts) -> Result<Arc<Controller>, String> {
     if let Some(dir) = &o.policy_dir {
         controller.set_policy_dir(dir.clone());
         eprintln!("acp-proxy: hot-reloading signed policies from {dir}");
+    }
+    if let Some(pins) = &o.tool_pins {
+        controller.set_tool_pins_file(pins.clone());
+        eprintln!("acp-proxy: tool-integrity pins persisted at {pins}");
     }
     // Verified caller identity: when a registry is configured, the presented (agent-id, token) MUST
     // verify. Fail closed on a missing/invalid/revoked credential so a mis-enrolled agent cannot run
