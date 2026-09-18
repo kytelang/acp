@@ -628,7 +628,7 @@ customer), not deferred.
 - [m] **F10 [v1/P1] Public API + outbound webhooks.**
   - [m] `acp_core::webhook::sign_webhook`/`verify_webhook`: HMAC-SHA256 signed, timestamp-bound (replay-protected) webhooks; HMAC verified against RFC 4231. Tested. [ ] the versioned REST API surface + rate limits sit on the acp-server.
 - [x] **F11 [v2/P1] Cross-proxy forensic timeline + hybrid logical clocks.**
-  - [x] `acp_core::hlc` HLC stamped into every decision record; encoding sorts causally; unit-tested across nodes (F11 core). [ ] multi-proxy timeline query + skew alarm.
+  - [x] `acp_core::hlc` HLC stamped into every decision record; encoding sorts causally; unit-tested across nodes (F11 core). [x] multi-proxy timeline query (acp_ledger::ordered_by_hlc + /timeline) + skew alarm (acp_core::timeline::skew_exceeds).
 - [~] **F12 [v3/P2] On-prem / air-gapped deployment mode.**
   - [x] Full gate->evidence->verify chain (Merkle + KMS-seam signing + internal anchor) verifies with zero network calls; tampered head fails every check (airgapped.rs). [ ] offline signed-update + SBOM verification packaging remain.
 - [d] **F13 [v3/P2] Customer change-management & adoption kit.**
