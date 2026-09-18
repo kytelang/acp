@@ -1,0 +1,14 @@
+version: 1
+default: allow
+rules:
+  - id: no-destructive
+    when: { tool: "delete_all" }
+    verdict: deny
+    reason: "destructive tool blocked by ACP policy"
+  - id: cap-charge
+    when:
+      tool: "charge_card"
+      arg: { amount_cents: { gt: 50000 } }
+    verdict: step_up
+    approvers: ["security"]
+    reason: "a charge over 500.00 needs human approval"

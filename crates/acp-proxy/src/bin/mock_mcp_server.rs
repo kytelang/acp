@@ -30,7 +30,14 @@ fn main() {
             }
             Some("ping") => json!({"jsonrpc":"2.0","id":id,"result":{}}),
             Some("tools/list") => {
-                json!({"jsonrpc":"2.0","id":id,"result":{"tools":[{"name":"echo","description":"echo","inputSchema":{"type":"object"}}]}})
+                // A small, realistic tool set so ACP policy has something to govern when a real MCP
+                // client (e.g. Claude Code) drives this server through the proxy.
+                json!({"jsonrpc":"2.0","id":id,"result":{"tools":[
+                    {"name":"echo","description":"Echo back the given text.","inputSchema":{"type":"object","properties":{"text":{"type":"string"}}}},
+                    {"name":"write_note","description":"Save a short note (demo, no side effect).","inputSchema":{"type":"object","properties":{"note":{"type":"string"}}}},
+                    {"name":"charge_card","description":"Charge a payment card (high-impact).","inputSchema":{"type":"object","properties":{"amount_cents":{"type":"integer"}}}},
+                    {"name":"delete_all","description":"Delete everything (dangerous).","inputSchema":{"type":"object"}}
+                ]}})
             }
             Some("resources/list") => json!({"jsonrpc":"2.0","id":id,"result":{"resources":[]}}),
             Some("prompts/list") => json!({"jsonrpc":"2.0","id":id,"result":{"prompts":[]}}),

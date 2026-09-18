@@ -1,0 +1,15 @@
+{
+  "mcpServers": {
+    "acp-governed": {
+      "command": "/Users/kamlesh/kytelang/acp/target/release/acp-proxy",
+      "args": [
+        "stdio",
+        "--policy", "/Users/kamlesh/kytelang/acp/demo/claude-code/policy.yaml",
+        "--ledger", "/Users/kamlesh/kytelang/acp/demo/claude-code/evidence.db",
+        "--key",    "/Users/kamlesh/kytelang/acp/demo/claude-code/signing.key",
+        "--",
+        "/Users/kamlesh/kytelang/acp/target/release/mock-mcp-server"
+      ]
+    }
+  }
+}
