@@ -1,0 +1,87 @@
+# Phase B: platform-ready control plane
+
+Date: 2026-09-18
+Status: design. Makes the control plane safe for a whole org: real identity (so the human principal stops being mocked), multi-tenancy, role-based access, and a decision stream to the SIEM. Prerequisite for every later phase, because they all rely on verified identity and tenant isolation.
+
+## Purpose
+
+Today the human principal is bound at enrolment (`--principal`) and degrades to `unattributed`; there is one implicit tenant; anyone who can reach the control API can do anything. Phase B closes all three so the platform can be operated by many teams with least privilege and non-repudiable identity.
+
+## B1. Identity: verified human + workload
+
+```mermaid
+sequenceDiagram
+  autonumber
+  participant Agent
+  participant PEP as "Enforcement point"
+  participant IdP as "Entra / Okta (OIDC)"
+  participant SPIRE as "SPIFFE / SPIRE"
+  participant PDP
+
+  Note over Agent,PEP: HTTP transport carries an OAuth token (MCP auth spec)
+  Agent->>PEP: action + bearer token
+  PEP->>IdP: validate token (JWKS, audience, expiry)
+  IdP-->>PEP: claims (sub, email, groups)
+  PEP->>SPIRE: attest workload identity of the agent
+  SPIRE-->>PEP: SPIFFE ID (svid)
+  PEP->>PEP: build delegation = agent(svid) acting-for human(sub)
+  PEP->>PDP: evaluate with verified principal
+```
+
+- Humans: OIDC against the org IdP. The verified `sub` becomes the `principal_id`; `principal_source = oauth`; `verified = true`. Replaces the `--principal` fallback for HTTP transports. Local/stdio agents keep the enrolment binding but can be pinned to an SSO session.
+- Workloads (agents, gateways, services): SPIFFE/SPIRE issues an attested SVID, so an agent's identity is proven by what it is, not a shared token. The registry token becomes a bootstrap credential; the SVID is the runtime identity.
+- Provisioning: SCIM from the IdP keeps agents/humans/teams and their deprovisioning in sync, so a disabled user immediately fails verification everywhere.
+
+Reuses `acp-registry` (HumanPrincipal, Delegation already exist) and `acp-auth` (OIDC scaffolding exists; Entra is currently mocked). The work is real JWKS validation, SPIFFE integration, and SCIM sync.
+
+## B2. Multi-tenancy
+
+```mermaid
+erDiagram
+  TENANT ||--o{ TEAM : contains
+  TENANT ||--o{ POLICY : owns
+  TENANT ||--o{ LEDGER : owns
+  TENANT ||--o{ KEY : owns
+  TEAM ||--o{ AGENT : registers
+  TEAM ||--o{ HUMAN : members
+  AGENT ||--o{ DELEGATION : acts_via
+  HUMAN ||--o{ DELEGATION : acts_for
+  POLICY ||--o{ RULE : contains
+  TENANT {
+    string id
+    string name
+    string idp_issuer
+  }
+```
+
+Every object is tenant-scoped: policy stores, evidence ledgers, signing keys, registries. A PEP is bound to a tenant at enrolment; cross-tenant reads are impossible by construction (separate stores plus a tenant claim checked on every control-API call). This mirrors the existing single-tenant layout, lifted under a `tenant_id`.
+
+## B3. RBAC (who governs what)
+
+| Role | Can |
+|---|---|
+| admin | manage tenants, keys, roles |
+| policy-author | edit and deploy policy (signed) |
+| approver | resolve step-up approvals (separation of duty: cannot approve own agent) |
+| break-glass-operator | engage / clear the kill-switch |
+| auditor | read evidence and reports, nothing mutating |
+| registrar | register / revoke agents and humans |
+
+Enforced at the control API and surfaced in the console. Roles come from IdP groups via the OIDC claims, so access is provisioned centrally. `acp-auth` already models RBAC; the work is binding roles to every control endpoint and to console actions.
+
+## B4. SIEM export
+
+The evidence plane streams every decision (allow / deny / step-up / obligation / kill-switch / integrity-alert) to the org SIEM in a standard schema (OCSF or CEF, both already emitted by the proxy events). Analysts get agent + human + resource + operation + verdict per event, joinable with the rest of the security estate.
+
+## Work items
+
+1. OIDC token validation in the PEPs (JWKS cache, audience/issuer/expiry), mapping `sub` to the verified principal. [acp-auth, acp-proxy]
+2. SPIFFE/SPIRE workload identity for agents and gateways; SVID as the runtime agent id. [new acp-workload-id]
+3. SCIM provisioning sync into the registry. [acp-registry]
+4. Tenant scoping across registry, policy store, ledger, keys; tenant claim on every control call. [acp-server, acp-registry, acp-policy::store]
+5. RBAC binding on every control endpoint and console action; roles from IdP groups. [acp-auth, acp-server, acp-console]
+6. SIEM export of the decision stream (OCSF/CEF) with delivery guarantees. [acp-core::warehouse or a sink]
+
+## Acceptance
+
+A governed HTTP call resolves a real Entra user as the verified principal; two tenants cannot see each other's policy or evidence; a user without the policy-author role cannot deploy; every decision appears in the SIEM with agent + human + resource.
