@@ -83,6 +83,7 @@ pub fn assess(
                 rule_id: Some("safe-entity".into()),
                 approvers: vec![],
                 reason: Some("invalid tool name".into()),
+                obligations: vec![],
             },
             impact,
             impact_taxonomy: tax.version.clone(),

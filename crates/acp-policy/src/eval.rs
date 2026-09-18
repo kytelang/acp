@@ -20,6 +20,8 @@ pub struct PolicyOutcome {
     pub rule_id: Option<String>,
     pub approvers: Vec<String>,
     pub reason: Option<String>,
+    /// Obligations to apply on an allow (model v2, D4). Empty for a plain allow/deny.
+    pub obligations: Vec<dsl::Obligation>,
 }
 
 pub struct PolicyEngine {
@@ -90,6 +92,10 @@ impl PolicyEngine {
                     .map(|s| s.split(',').map(str::to_string).collect())
                     .unwrap_or_default(),
                 reason: pol.annotation("reason").map(str::to_string),
+                obligations: pol
+                    .annotation("obligations")
+                    .and_then(|s| serde_json::from_str(s).ok())
+                    .unwrap_or_default(),
             };
             chosen = Some(match chosen {
                 Some(cur) if rank(cur.verdict) >= rank(candidate.verdict) => cur,
@@ -102,6 +108,7 @@ impl PolicyEngine {
             rule_id: None,
             approvers: vec![],
             reason: None,
+            obligations: vec![],
         })
     }
 }
@@ -132,6 +139,7 @@ fn fail_closed(reason: &str) -> PolicyOutcome {
         rule_id: Some("eval-error".into()),
         approvers: vec![],
         reason: Some(reason.into()),
+        obligations: vec![],
     }
 }
 
@@ -142,4 +150,53 @@ fn fixed_entities() -> (EntityUid, EntityUid, EntityUid) {
         EntityUid::from_str(r#"Action::"call""#).unwrap(),
         EntityUid::from_str(r#"Tool::"t""#).unwrap(),
     )
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::context::build_context_identified_full;
+    use acp_core::impact::ImpactTaxonomy;
+    use acp_core::resource::ResourceTaxonomy;
+
+    fn ctx(tool: &str, agent: &str, principal: &str) -> serde_json::Value {
+        build_context_identified_full(
+            tool, &serde_json::json!({}), "prod", agent, "", principal,
+            &ImpactTaxonomy::default(), &ResourceTaxonomy::default(),
+        )
+    }
+
+    #[test]
+    fn resource_and_operation_are_matched_from_the_tool() {
+        // Deny any delete on the database resource, for any agent.
+        let src = "version: 1\ndefault: allow\nrules:\n  - id: no-db-delete\n    when: { resource: database, operation: delete }\n    verdict: deny\n";
+        let e = PolicyEngine::from_yaml(src).unwrap();
+        // db.delete_row -> (database, delete): denied.
+        assert_eq!(e.evaluate(ctx("db.delete_row", "any", "")).verdict, Verdict::Deny);
+        // db.query -> (database, read): allowed (default).
+        assert_eq!(e.evaluate(ctx("db.query", "any", "")).verdict, Verdict::Allow);
+        // write_file -> (filesystem, write): not database, allowed.
+        assert_eq!(e.evaluate(ctx("write_file", "any", "")).verdict, Verdict::Allow);
+    }
+
+    #[test]
+    fn principal_scope_matches_the_verified_human() {
+        // Unattributed callers may not touch secrets.
+        let src = "version: 1\ndefault: allow\nrules:\n  - id: no-anon-secrets\n    when: { resource: secrets, principal: unattributed }\n    verdict: deny\n";
+        let e = PolicyEngine::from_yaml(src).unwrap();
+        assert_eq!(e.evaluate(ctx("get_secret", "a", "unattributed")).verdict, Verdict::Deny);
+        // A verified human (alice) is allowed.
+        assert_eq!(e.evaluate(ctx("get_secret", "a", "alice")).verdict, Verdict::Allow);
+    }
+
+    #[test]
+    fn obligations_round_trip_into_the_outcome() {
+        let src = "version: 1\ndefault: allow\nrules:\n  - id: mask-pii\n    when: { resource: database, operation: read }\n    verdict: allow\n    obligations:\n      - kind: redact\n        fields: [ssn, card]\n";
+        let e = PolicyEngine::from_yaml(src).unwrap();
+        let out = e.evaluate(ctx("db.query", "a", ""));
+        assert_eq!(out.verdict, Verdict::Allow);
+        assert_eq!(out.obligations.len(), 1);
+        assert_eq!(out.obligations[0].kind, dsl::ObligationKind::Redact);
+        assert_eq!(out.obligations[0].fields, vec!["ssn".to_string(), "card".to_string()]);
+    }
 }

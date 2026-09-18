@@ -34,6 +34,12 @@ fn compile_rule(rule: &Rule) -> String {
     if let Some(reason) = &rule.reason {
         out.push_str(&format!("@reason(\"{}\")\n", esc(reason)));
     }
+    if !rule.obligations.is_empty() {
+        // Obligations are outcome metadata, not matching conditions: encode them as JSON on an
+        // annotation the evaluator reads back and the proxy executes at enforcement time.
+        let js = serde_json::to_string(&rule.obligations).unwrap_or_default();
+        out.push_str(&format!("@obligations(\"{}\")\n", esc(&js)));
+    }
 
     let effect = if rule.verdict == Verdict::Allow {
         "permit"
@@ -43,8 +49,10 @@ fn compile_rule(rule: &Rule) -> String {
     out.push_str(&format!("{effect}(principal, action, resource)\n"));
 
     let mut conds: Vec<String> = Vec::new();
-    if let Some(tc) = tool_cond(&rule.when.tool) {
-        conds.push(tc);
+    if let Some(t) = &rule.when.tool {
+        if let Some(tc) = tool_cond(t) {
+            conds.push(tc);
+        }
     }
     if let Some(a) = &rule.when.app {
         if let Some(c) = id_cond("context.app", a) {
@@ -53,6 +61,21 @@ fn compile_rule(rule: &Rule) -> String {
     }
     if let Some(a) = &rule.when.agent {
         if let Some(c) = id_cond("context.agent", a) {
+            conds.push(c);
+        }
+    }
+    if let Some(pr) = &rule.when.principal {
+        if let Some(c) = id_cond("context.principal", pr) {
+            conds.push(c);
+        }
+    }
+    if let Some(r) = &rule.when.resource {
+        if let Some(c) = id_cond("context.resource", r) {
+            conds.push(c);
+        }
+    }
+    if let Some(o) = &rule.when.operation {
+        if let Some(c) = id_cond("context.operation", o) {
             conds.push(c);
         }
     }

@@ -3,6 +3,7 @@
 
 use acp_core::classify::classify;
 use acp_core::impact::ImpactTaxonomy;
+use acp_core::resource::ResourceTaxonomy;
 use acp_core::types::BlastRadius;
 use serde_json::{json, Map, Value};
 
@@ -48,6 +49,24 @@ pub fn build_context_identified(
     app: &str,
     tax: &ImpactTaxonomy,
 ) -> Value {
+    build_context_identified_full(tool, args, env, agent, app, "", tax, &ResourceTaxonomy::default())
+}
+
+/// The full model-v2 context: the verified agent AND human principal (D1), plus the proxy-derived
+/// resource and operation the tool touches (D2/D3), all in the trusted namespace. `principal` is the
+/// human the agent acts for ("unattributed" when none is verified); it is never taken from arguments.
+/// `resource`/`operation` are classified from the tool name by the resource taxonomy, never from args.
+#[allow(clippy::too_many_arguments)]
+pub fn build_context_identified_full(
+    tool: &str,
+    args: &Value,
+    env: &str,
+    agent: &str,
+    app: &str,
+    principal: &str,
+    tax: &ImpactTaxonomy,
+    rtax: &ResourceTaxonomy,
+) -> Value {
     let mut derived = Map::new();
     if let Some(obj) = args.as_object() {
         for (k, v) in obj {
@@ -58,6 +77,7 @@ pub fn build_context_identified(
             }
         }
     }
+    let (res, op) = rtax.classify(tool);
     json!({
         "tool": tool,
         "args": args,
@@ -67,6 +87,10 @@ pub fn build_context_identified(
         "principal_scopes": [],
         "agent": agent,
         "app": app,
+        "principal": principal,
+        "resource": res.as_str(),
+        "operation": op.as_str(),
+        "resource_taxonomy": rtax.version,
         "derived": Value::Object(derived),
     })
 }
