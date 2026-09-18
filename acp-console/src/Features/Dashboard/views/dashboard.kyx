@@ -19,7 +19,7 @@ pub fn appsPanel(rows: list.List<AppRow>): Html {
             <p class="empty">No apps registered.</p>
         } else {
             <table class="tbl">
-                <thead><tr><th>App</th><th>Owner</th><th>Agents</th><th>ID</th></tr></thead>
+                <thead><tr><th>Team</th><th>Owner</th><th>Agents</th><th>ID</th></tr></thead>
                 <tbody>
                     {for (i in 0..rows.size()) {
                         let r = rows.get(i) ?? AppRow("", "", "", "0");
@@ -42,7 +42,7 @@ pub fn agentsPanel(rows: list.List<AgentRow>): Html {
             <p class="empty">No agents registered.</p>
         } else {
             <table class="tbl">
-                <thead><tr><th>Agent</th><th>Belongs to app</th><th>Status</th></tr></thead>
+                <thead><tr><th>Agent</th><th>Belongs to team</th><th>Status</th></tr></thead>
                 <tbody>
                     {for (i in 0..rows.size()) {
                         let r = rows.get(i) ?? AgentRow("", "", false);
@@ -119,25 +119,32 @@ pub fn evidencePanel(rows: list.List<EvidenceRow>): Html {
 }
 
 
-// Per-app / per-agent rules of the deployed policy (live-patched fragment #policyrules).
+// A scoping cell: "any" shown muted, else a coloured badge. Used for agent/principal/resource.
+fn scopeCell(val: string, cls: string): Html {
+    if (string.eql(val, "any")) { return <span class="dim">any</span>; }
+    return <span class={"badge " + cls}>{val}</span>;
+}
+
+// Rules of the deployed policy, per agent / principal / resource / operation (fragment #policyrules).
 pub fn policyRulesPanel(rows: list.List<PolicyRuleRow>): Html {
     return <div id="policyrules">
         {if (rows.size() == 0) {
             <p class="empty">No rules in the deployed policy.</p>
         } else {
             <table class="tbl">
-                <thead><tr><th>Rule</th><th>App</th><th>Agent</th><th>Tool</th><th>Effect</th><th>Approvers</th></tr></thead>
+                <thead><tr><th>Rule</th><th>Agent</th><th>Principal</th><th>Resource</th><th>Op</th><th>Tool</th><th>Effect</th><th>Obligations</th></tr></thead>
                 <tbody>
                     {for (i in 0..rows.size()) {
-                        let r = rows.get(i) ?? PolicyRuleRow("", "", "", "", "", "");
-                        let appr = string.eql(r.approvers, "") ? "-" : r.approvers;
+                        let r = rows.get(i) ?? PolicyRuleRow("", "", "", "", "", "", "", "");
                         <tr>
                             <td class="strong">{r.id}</td>
-                            <td>{if (string.eql(r.app, "any")) { <span class="dim">any</span> } else { <span class="badge ok">{r.app}</span> }}</td>
-                            <td>{if (string.eql(r.agent, "any")) { <span class="dim">any</span> } else { <span class="badge ver">{r.agent}</span> }}</td>
-                            <td class="mono">{r.tool}</td>
+                            <td>{scopeCell(r.agent, "ver")}</td>
+                            <td>{scopeCell(r.principal, "warn")}</td>
+                            <td>{scopeCell(r.resource, "ok")}</td>
+                            <td class="mono dim">{r.operation}</td>
+                            <td class="mono dim">{r.tool}</td>
                             <td>{verdictBadge(r.verdict)}</td>
-                            <td class="mono dim">{appr}</td>
+                            <td class="mono dim">{r.obligations}</td>
                         </tr>
                     }}
                 </tbody>

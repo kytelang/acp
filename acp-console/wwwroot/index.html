@@ -93,7 +93,7 @@
         <div class="nav-i" data-class-active="$view === 'approvals'" data-on:click="$view = 'approvals'"><span class="ic">&#9995;</span> Approvals</div>
         <div class="nav-i" data-class-active="$view === 'evidence'" data-on:click="$view = 'evidence'"><span class="ic">&#128220;</span> Evidence</div>
         <div class="nav-l">Identity</div>
-        <div class="nav-i" data-class-active="$view === 'apps'" data-on:click="$view = 'apps'"><span class="ic">&#128230;</span> Apps</div>
+        <div class="nav-i" data-class-active="$view === 'apps'" data-on:click="$view = 'apps'"><span class="ic">&#128230;</span> Teams</div>
         <div class="nav-i" data-class-active="$view === 'agents'" data-on:click="$view = 'agents'"><span class="ic">&#129302;</span> Agents</div>
         <div class="nav-l">Policy</div>
         <div class="nav-i" data-class-active="$view === 'policy'" data-on:click="$view = 'policy'"><span class="ic">&#128271;</span> Policy</div>
@@ -102,7 +102,7 @@
 
     <div class="main">
       <div class="topbar">
-        <h1 data-text="$view === 'overview' ? 'Governance overview' : $view === 'approvals' ? 'Pending approvals' : $view === 'evidence' ? 'Evidence timeline' : $view === 'apps' ? 'Registered apps' : $view === 'agents' ? 'Registered agents' : 'Policy'">Governance overview</h1>
+        <h1 data-text="$view === 'overview' ? 'Governance overview' : $view === 'approvals' ? 'Pending approvals' : $view === 'evidence' ? 'Evidence timeline' : $view === 'apps' ? 'Teams' : $view === 'agents' ? 'Registered agents' : 'Policy'">Governance overview</h1>
         <div class="tright">
           <button class="tbtn" data-on:click="$theme = $theme === 'dark' ? 'light' : 'dark'" title="Toggle theme">
             <span data-text="$theme === 'dark' ? '&#9728;' : '&#9790;'"></span>
@@ -128,7 +128,7 @@
         </section>
 
         <section class="view" data-show="$view === 'apps'">
-          <div class="card"><div class="card-h"><span class="ic">&#128230;</span> Registered apps</div>
+          <div class="card"><div class="card-h"><span class="ic">&#128230;</span> Teams &amp; agents</div>
             <div class="card-b"><div id="apps"><p class="empty">&#8230;</p></div></div></div>
         </section>
 
@@ -149,17 +149,22 @@
                   <textarea data-bind="policy" spellcheck="false">version: 1
 default: allow
 rules:
-  - id: no-destructive-deletes
-    when: { tool: delete_all }
+  - id: no-db-deletes
+    when: { resource: database, operation: delete }
     verdict: deny
+  - id: anon-cannot-read-secrets
+    when: { resource: secrets, principal: unattributed }
+    verdict: deny
+  - id: mask-pii-on-db-reads
+    when: { resource: database, operation: read }
+    verdict: allow
+    obligations:
+      - kind: redact
+        fields: [ssn, card]
   - id: charges-need-approval
-    when: { tool: charge_card }
+    when: { resource: payments }
     verdict: step_up
     approvers: [finance]
-  # Per-agent example: scope a rule to one registered agent by name-or-id.
-  # - id: analytics-read-only
-  #   when: { tool: "*", agent: analytics }
-  #   verdict: deny
 </textarea>
                 </label>
                 <div class="row">

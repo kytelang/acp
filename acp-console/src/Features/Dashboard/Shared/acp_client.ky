@@ -53,13 +53,16 @@ pub struct ApprovalRow {
 
 pub struct PolicyRuleRow {
     pub id: string,
-    pub app: string,
     pub agent: string,
+    pub principal: string,
+    pub resource: string,
+    pub operation: string,
     pub tool: string,
     pub verdict: string,
-    pub approvers: string,
-    init(id: string, app: string, agent: string, tool: string, verdict: string, approvers: string) {
-        self.id = id; self.app = app; self.agent = agent; self.tool = tool; self.verdict = verdict; self.approvers = approvers;
+    pub obligations: string,
+    init(id: string, agent: string, principal: string, resource: string, operation: string, tool: string, verdict: string, obligations: string) {
+        self.id = id; self.agent = agent; self.principal = principal; self.resource = resource;
+        self.operation = operation; self.tool = tool; self.verdict = verdict; self.obligations = obligations;
     }
 }
 
@@ -225,24 +228,27 @@ pub struct AcpClient {
         let i = 0;
         while (i < arr.size()) {
             let item = json.at(rv, i);
-            let app = json.asString(json.get(item, "app_label")) ?? "any";
             let agent = json.asString(json.get(item, "agent_label")) ?? "any";
-            let apArr = json.asArray(json.get(item, "approvers"));
-            let apprv = "";
-            if (apArr != undefined) {
+            let principal = json.asString(json.get(item, "principal")) ?? "any";
+            let resource = json.asString(json.get(item, "resource")) ?? "any";
+            let operation = json.asString(json.get(item, "operation")) ?? "any";
+            let obArr = json.asArray(json.get(item, "obligations"));
+            let obs = "";
+            if (obArr != undefined) {
                 let j = 0;
-                while (j < apArr.size()) {
-                    let a = json.asString(json.at(json.get(item, "approvers"), j)) ?? "";
-                    apprv = string.eql(apprv, "") ? a : apprv + ", " + a;
+                while (j < obArr.size()) {
+                    let o = json.asString(json.at(json.get(item, "obligations"), j)) ?? "";
+                    obs = string.eql(obs, "") ? o : obs + ", " + o;
                     j = j + 1;
                 }
             }
+            if (string.eql(obs, "")) { obs = "-"; }
             rows.push(PolicyRuleRow(
                 json.asString(json.get(item, "id")) ?? "?",
-                app, agent,
+                agent, principal, resource, operation,
                 json.asString(json.get(item, "tool")) ?? "*",
                 json.asString(json.get(item, "verdict")) ?? "allow",
-                apprv));
+                obs));
             i = i + 1;
         }
         return rows;
