@@ -46,6 +46,16 @@ fn compile_rule(rule: &Rule) -> String {
     if let Some(tc) = tool_cond(&rule.when.tool) {
         conds.push(tc);
     }
+    if let Some(a) = &rule.when.app {
+        if let Some(c) = id_cond("context.app", a) {
+            conds.push(c);
+        }
+    }
+    if let Some(a) = &rule.when.agent {
+        if let Some(c) = id_cond("context.agent", a) {
+            conds.push(c);
+        }
+    }
     if let Some(m) = &rule.when.env {
         conds.push(trusted_cond("context.env", m));
     }
@@ -62,6 +72,18 @@ fn compile_rule(rule: &Rule) -> String {
     };
     out.push_str(&format!("when {{\n    {body}\n}};"));
     out
+}
+
+/// A trusted-identity condition (app/agent): exact, glob (`*`), or None for any. These fields are
+/// always present in the context (the proxy injects the verified identity, empty when unknown).
+fn id_cond(path: &str, val: &str) -> Option<String> {
+    if val == "*" {
+        None
+    } else if val.contains('*') {
+        Some(format!("{path} like \"{}\"", esc(val)))
+    } else {
+        Some(format!("{path} == \"{}\"", esc(val)))
+    }
 }
 
 fn tool_cond(tool: &str) -> Option<String> {

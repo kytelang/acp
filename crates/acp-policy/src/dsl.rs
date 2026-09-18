@@ -39,6 +39,13 @@ pub struct Rule {
 pub struct When {
     /// Tool name; exact, glob (`db.*`), or `*` for any.
     pub tool: String,
+    /// Registered app id; exact, glob, or absent for any. Trusted (proxy-injected from the
+    /// verified registry identity), so an agent cannot spoof it.
+    #[serde(default)]
+    pub app: Option<String>,
+    /// Registered agent id; exact, glob, or absent for any. Trusted, as above.
+    #[serde(default)]
+    pub agent: Option<String>,
     /// Argument matchers against agent-supplied arguments (the `context.args` namespace).
     #[serde(default)]
     pub arg: BTreeMap<String, Matcher>,

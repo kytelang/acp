@@ -32,6 +32,22 @@ pub fn build_context(tool: &str, args: &Value, env: &str) -> Value {
 
 /// Build the namespaced context using a specific (per-tenant, versioned) impact taxonomy (E4).
 pub fn build_context_with(tool: &str, args: &Value, env: &str, tax: &ImpactTaxonomy) -> Value {
+    // Identity unknown (unregistered / not yet wired): agent and app are empty, so agent/app-scoped
+    // rules simply do not match and the default verdict applies.
+    build_context_identified(tool, args, env, "", "", tax)
+}
+
+/// Build the context with the proxy-verified caller identity (`agent`, `app`) in the trusted
+/// namespace. The agent cannot populate these: they come from the registry-verified identity, so a
+/// per-agent or per-app rule cannot be spoofed by argument content.
+pub fn build_context_identified(
+    tool: &str,
+    args: &Value,
+    env: &str,
+    agent: &str,
+    app: &str,
+    tax: &ImpactTaxonomy,
+) -> Value {
     let mut derived = Map::new();
     if let Some(obj) = args.as_object() {
         for (k, v) in obj {
@@ -49,6 +65,8 @@ pub fn build_context_with(tool: &str, args: &Value, env: &str, tax: &ImpactTaxon
         "impact": level_str(tax.score(tool, args)),
         "impact_taxonomy": tax.version,
         "principal_scopes": [],
+        "agent": agent,
+        "app": app,
         "derived": Value::Object(derived),
     })
 }

@@ -41,6 +41,9 @@ fn main() -> ExitCode {
         "verify-artifact" => cmd_verify_artifact(&args[2..]),
         "bench-ledger" => cmd_bench_ledger(&args[2..]),
         "break-glass" => cmd_break_glass(&args[2..]),
+        "app" => cmd_app(&args[2..]),
+        "agent" => cmd_agent(&args[2..]),
+        "registry" => cmd_registry(&args[2..]),
         _ => usage("acp [init|verify|verify-pack|export|policy-compile|policy-test|approve|deny|approvals|canary|learn|replay|purge|classify-eval]"),
     }
 }
@@ -764,5 +767,60 @@ fn cmd_break_glass(rest: &[String]) -> ExitCode {
             ExitCode::SUCCESS
         }
         _ => usage("acp break-glass <engage|clear> ..."),
+    }
+}
+
+
+fn cmd_app(rest: &[String]) -> ExitCode {
+    match (rest.first().map(String::as_str), rest.get(1), rest.get(2), rest.get(3)) {
+        (Some("register"), Some(file), Some(name), owner) => {
+            let mut reg = match acp_registry::Registry::load(file) { Ok(r) => r, Err(e) => { eprintln!("acp: {e}"); return ExitCode::from(1); } };
+            let app = reg.register_app(name, owner.map(String::as_str).unwrap_or(""));
+            if reg.save(file).is_err() { eprintln!("acp: cannot write {file}"); return ExitCode::from(1); }
+            println!("registered app: id={} name={}", app.id, app.name);
+            ExitCode::SUCCESS
+        }
+        _ => usage("acp app register <registry.json> <name> [owner]"),
+    }
+}
+
+fn cmd_agent(rest: &[String]) -> ExitCode {
+    let reg_of = |file: &str| acp_registry::Registry::load(file);
+    match (rest.first().map(String::as_str), rest.get(1), rest.get(2), rest.get(3)) {
+        (Some("register"), Some(file), Some(app_id), Some(name)) => {
+            let mut reg = match reg_of(file) { Ok(r) => r, Err(e) => { eprintln!("acp: {e}"); return ExitCode::from(1); } };
+            match reg.register_agent(app_id, name) {
+                Ok((agent, token)) => {
+                    if reg.save(file).is_err() { eprintln!("acp: cannot write {file}"); return ExitCode::from(1); }
+                    println!("registered agent: id={} app={}", agent.id, agent.app_id);
+                    println!("TOKEN (shown once, give it to the agent): {token}");
+                    ExitCode::SUCCESS
+                }
+                Err(e) => { eprintln!("acp: {e}"); ExitCode::from(1) }
+            }
+        }
+        (Some("revoke"), Some(file), Some(agent_id), _) => {
+            let mut reg = match reg_of(file) { Ok(r) => r, Err(e) => { eprintln!("acp: {e}"); return ExitCode::from(1); } };
+            if reg.deactivate_agent(agent_id) {
+                let _ = reg.save(file);
+                println!("revoked agent {agent_id}");
+                ExitCode::SUCCESS
+            } else { eprintln!("acp: no such agent {agent_id}"); ExitCode::from(1) }
+        }
+        _ => usage("acp agent <register <registry.json> <app_id> <name> | revoke <registry.json> <agent_id>>"),
+    }
+}
+
+fn cmd_registry(rest: &[String]) -> ExitCode {
+    match (rest.first().map(String::as_str), rest.get(1)) {
+        (Some("list"), Some(file)) => {
+            let reg = match acp_registry::Registry::load(file) { Ok(r) => r, Err(e) => { eprintln!("acp: {e}"); return ExitCode::from(1); } };
+            println!("apps:");
+            for a in reg.apps() { println!("  {} ({}) owner={}", a.id, a.name, a.owner); }
+            println!("agents:");
+            for a in reg.agents() { println!("  {} ({}) app={} active={}", a.id, a.name, a.app_id, a.active); }
+            ExitCode::SUCCESS
+        }
+        _ => usage("acp registry list <registry.json>"),
     }
 }

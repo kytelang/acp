@@ -467,8 +467,8 @@ was not actually performed.
 
 ### v2.4 Agent identity integration
 
-- [m] **v2.4.1 IdP-backed authority.**
-  - [m] Principal + roles come from a verified Entra token (`acp-auth`), not a self-asserted header; capability checks enforced. [ ] delegation chains + Agent-ID specifics.
+- [m] **v2.4.1 IdP-backed authority + app/agent registry.**
+  - [m] Principal + roles from a verified Entra token (`acp-auth`); NEW `acp-registry`: apps + agents registered, agents issued a one-time token, `verify(agent_id, token)` gives an un-spoofable Identity (revocation immediate, JSON-persisted); policy DSL gains `app`/`agent` matchers so rules scope per-app/per-agent (tested). CLI `acp app/agent/registry`. [ ] wire the proxy to verify the presented agent token against the registry and stamp the verified identity into the context.
   - [b] `X-ACP-Principal` is now verified and may be signed as verified attribution (supersedes D10 v0 stance).
 
 ### H2: Hardening gate (parallel to v2; REQUIRED before scale)

@@ -184,3 +184,28 @@ fn context_derivation_is_deterministic_golden() {
     assert_eq!(c1["impact"], json!("high"));
     assert_eq!(c1["derived"]["to_class"], json!("pii"));
 }
+
+#[test]
+fn per_agent_and_per_app_rules_scope_by_verified_identity() {
+    use acp_core::types::Verdict;
+    use acp_policy::{build_context_identified, PolicyEngine};
+    let e = PolicyEngine::from_yaml(
+        "version: 1\ndefault: allow\nrules:\n  - id: triage-no-payments\n    when:\n      agent: \"triage\"\n      tool: \"payments.*\"\n    verdict: deny\n  - id: portal-stepup\n    when:\n      app: \"portal\"\n      tool: \"catalog.read\"\n    verdict: step_up\n    approvers: [\"sec\"]\n",
+    )
+    .unwrap();
+    let tax = acp_core::impact::ImpactTaxonomy::default();
+    let ctx = |tool: &str, agent: &str, app: &str| {
+        build_context_identified(tool, &serde_json::json!({}), "prod", agent, app, &tax)
+    };
+
+    // Agent-scoped: 'triage' cannot call payments.*; another agent can (default allow).
+    assert_eq!(e.evaluate(ctx("payments.charge", "triage", "portal")).verdict, Verdict::Deny);
+    assert_eq!(e.evaluate(ctx("payments.charge", "analytics", "portal")).verdict, Verdict::Allow);
+
+    // App-scoped: catalog.read steps up for app 'portal', allowed for another app.
+    assert_eq!(e.evaluate(ctx("catalog.read", "x", "portal")).verdict, Verdict::StepUp);
+    assert_eq!(e.evaluate(ctx("catalog.read", "x", "other")).verdict, Verdict::Allow);
+
+    // Unknown identity (empty agent/app, as when unregistered) does not match agent/app rules.
+    assert_eq!(e.evaluate(ctx("payments.charge", "", "")).verdict, Verdict::Allow);
+}
