@@ -39,6 +39,7 @@ struct Opts {
     cef: Option<String>,
     ocsf: Option<String>,
     break_glass: Option<String>,
+    policy_dir: Option<String>,
     registry: Option<String>,
     agent_id: Option<String>,
     agent_token: Option<String>,
@@ -68,6 +69,7 @@ fn parse_opts(items: &[String]) -> Result<(Opts, Vec<String>), String> {
             "--cef" => o.cef = it.next().cloned(),
             "--ocsf" => o.ocsf = it.next().cloned(),
             "--break-glass-file" => o.break_glass = it.next().cloned(),
+            "--policy-dir" => o.policy_dir = it.next().cloned(),
             "--registry" => o.registry = it.next().cloned(),
             "--agent-id" => o.agent_id = it.next().cloned(),
             "--agent-token" => o.agent_token = it.next().cloned(),
@@ -80,7 +82,13 @@ fn parse_opts(items: &[String]) -> Result<(Opts, Vec<String>), String> {
 }
 
 fn build_controller(o: &Opts) -> Result<Arc<Controller>, String> {
-    let engine = match &o.policy {
+    let engine = if let Some(dir) = &o.policy_dir {
+        let eng = acp_policy::store::load_current(dir)
+            .map_err(|e| format!("cannot load current policy from {dir}: {e}"))?;
+        eprintln!("acp-proxy: signed policy loaded from {dir} ({}...)", &eng.hash()[..12.min(eng.hash().len())]);
+        Some(Arc::new(eng))
+    } else {
+        match &o.policy {
         Some(p) => {
             let src =
                 std::fs::read_to_string(p).map_err(|e| format!("cannot read policy {p}: {e}"))?;
@@ -93,6 +101,7 @@ fn build_controller(o: &Opts) -> Result<Arc<Controller>, String> {
             Some(Arc::new(eng))
         }
         None => None,
+        }
     };
     let approvals_default = o.ledger.as_ref().map(|l| format!("{l}.approvals"));
     let evidence = match &o.ledger {
@@ -163,6 +172,10 @@ fn build_controller(o: &Opts) -> Result<Arc<Controller>, String> {
     if let Some(bg) = &o.break_glass {
         controller.set_break_glass_file(bg.clone());
         eprintln!("acp-proxy: watching break-glass grant file {bg}");
+    }
+    if let Some(dir) = &o.policy_dir {
+        controller.set_policy_dir(dir.clone());
+        eprintln!("acp-proxy: hot-reloading signed policies from {dir}");
     }
     // Verified caller identity: when a registry is configured, the presented (agent-id, token) MUST
     // verify. Fail closed on a missing/invalid/revoked credential so a mis-enrolled agent cannot run

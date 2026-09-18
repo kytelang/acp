@@ -10,7 +10,9 @@ acp-core = { path = "../acp-core" }
 serde.workspace = true
 serde_yaml.workspace = true
 serde_json.workspace = true
+hex.workspace = true
 cedar-policy = "4"
 
 [dev-dependencies]
 serde_json.workspace = true
+hex.workspace = true

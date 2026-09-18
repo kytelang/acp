@@ -34,7 +34,7 @@ struct State {
 }
 
 pub struct Controller {
-    engine: Option<Arc<PolicyEngine>>,
+    engine: Mutex<Option<Arc<PolicyEngine>>>,
     env: String,
     shadow: bool,
     state: Mutex<State>,
@@ -51,6 +51,9 @@ pub struct Controller {
     bg_mtime: Mutex<Option<std::time::SystemTime>>,
     // Verified caller identity (app_id, agent_id) from the registry; empty when unregistered.
     identity: Mutex<(String, String)>,
+    // Signed policy store to hot-reload from (watched by mtime); None = static --policy.
+    policy_dir: Mutex<Option<String>>,
+    policy_mtime: Mutex<Option<std::time::SystemTime>>,
 }
 
 impl Controller {
@@ -66,7 +69,7 @@ impl Controller {
         impact_tax: ImpactTaxonomy,
     ) -> Controller {
         Controller {
-            engine,
+            engine: Mutex::new(engine),
             env,
             shadow,
             state: Mutex::new(State {
@@ -83,6 +86,38 @@ impl Controller {
             bg_file: Mutex::new(None),
             bg_mtime: Mutex::new(None),
             identity: Mutex::new((String::new(), String::new())),
+            policy_dir: Mutex::new(None),
+            policy_mtime: Mutex::new(None),
+        }
+    }
+
+    /// Hot-reload signed policies from a store directory. The proxy loads the current signed policy
+    /// (verifying its signature) and swaps it in when the store changes. A deploy that fails
+    /// verification is ignored (the current policy keeps enforcing), so a bad deploy never opens the
+    /// gate.
+    pub fn set_policy_dir(&self, dir: String) {
+        *self.policy_dir.lock().unwrap() = Some(dir);
+    }
+
+    fn refresh_policy(&self) {
+        let dir = match self.policy_dir.lock().unwrap().clone() {
+            Some(d) => d,
+            None => return,
+        };
+        let mtime = std::fs::metadata(format!("{dir}/current.json")).ok().and_then(|m| m.modified().ok());
+        {
+            let mut last = self.policy_mtime.lock().unwrap();
+            if *last == mtime {
+                return;
+            }
+            *last = mtime;
+        }
+        match acp_policy::store::load_current(&dir) {
+            Ok(engine) => {
+                *self.engine.lock().unwrap() = Some(Arc::new(engine));
+                eprintln!("acp-proxy: hot-reloaded policy from {dir}");
+            }
+            Err(e) => eprintln!("acp-proxy: policy reload REJECTED ({e}); keeping current policy"),
         }
     }
 
@@ -190,8 +225,9 @@ impl Controller {
         }
 
         if insp.is_tool_call {
-            let eng = match &self.engine {
-                Some(e) => e.clone(),
+            self.refresh_policy();
+            let eng = match self.engine.lock().unwrap().clone() {
+                Some(e) => e,
                 None => return FrameAction::Forward, // no policy: pass through
             };
             let tc = match classify(raw) {

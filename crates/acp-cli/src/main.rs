@@ -44,6 +44,7 @@ fn main() -> ExitCode {
         "app" => cmd_app(&args[2..]),
         "agent" => cmd_agent(&args[2..]),
         "registry" => cmd_registry(&args[2..]),
+        "policy" => cmd_policy(&args[2..]),
         _ => usage("acp [init|verify|verify-pack|export|policy-compile|policy-test|approve|deny|approvals|canary|learn|replay|purge|classify-eval]"),
     }
 }
@@ -822,5 +823,41 @@ fn cmd_registry(rest: &[String]) -> ExitCode {
             ExitCode::SUCCESS
         }
         _ => usage("acp registry list <registry.json>"),
+    }
+}
+
+
+/// Signed, versioned policy deployment.
+///   acp policy deploy  <policy.yaml> <store-dir> <keyfile>
+///   acp policy current <store-dir>
+fn cmd_policy(rest: &[String]) -> ExitCode {
+    use acp_core::sign::Ed25519Signer;
+    match rest.first().map(String::as_str) {
+        Some("deploy") => {
+            let (pol, store, keyf) = match (rest.get(1), rest.get(2), rest.get(3)) {
+                (Some(a), Some(b), Some(c)) => (a, b, c),
+                _ => return usage("acp policy deploy <policy.yaml> <store-dir> <keyfile>"),
+            };
+            let src = match std::fs::read_to_string(pol) {
+                Ok(s) => s,
+                Err(e) => { eprintln!("acp: cannot read {pol}: {e}"); return ExitCode::from(1); }
+            };
+            let signer = match std::fs::read(keyf) {
+                Ok(b) if b.len() == 32 => { let mut s=[0u8;32]; s.copy_from_slice(&b); Ed25519Signer::from_seed(&s) }
+                _ => { let s = Ed25519Signer::generate(); if std::fs::write(keyf, s.seed()).is_err() { eprintln!("acp: cannot write key {keyf}"); return ExitCode::from(1); } s }
+            };
+            match acp_policy::store::deploy(&src, store, &signer, "cli") {
+                Ok(d) => { println!("deployed policy v{} (hash {}...) to {store}", d.version, &d.hash[..12.min(d.hash.len())]); ExitCode::SUCCESS }
+                Err(e) => { eprintln!("acp: deploy rejected: {e}"); ExitCode::from(1) }
+            }
+        }
+        Some("current") => {
+            let Some(store) = rest.get(1) else { return usage("acp policy current <store-dir>"); };
+            match acp_policy::store::current_info(store) {
+                Ok(v) => { println!("{}", serde_json::to_string_pretty(&v).unwrap()); ExitCode::SUCCESS }
+                Err(e) => { eprintln!("acp: {e}"); ExitCode::from(1) }
+            }
+        }
+        _ => usage("acp policy <deploy|current> ..."),
     }
 }

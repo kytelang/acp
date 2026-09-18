@@ -4,6 +4,7 @@ pub mod compile;
 pub mod context;
 pub mod dsl;
 pub mod eval;
+pub mod store;
 
 pub use compile::compile_to_cedar;
 pub use context::{build_context, build_context_identified, build_context_with, valid_tool};
