@@ -6,42 +6,115 @@
   <title>ACP Console</title>
   <script type="module" src="https://cdn.jsdelivr.net/gh/starfederation/datastar@v1.0.0/bundles/datastar.js"></script>
   <style>
-    body{font-family:system-ui,-apple-system,sans-serif;margin:0;background:#0f172a;color:#e2e8f0}
-    .wrap{max-width:1000px;margin:0 auto;padding:2.5rem 1.5rem}
-    header{display:flex;align-items:baseline;gap:1rem;border-bottom:1px solid #1e293b;padding-bottom:1rem}
-    h1{font-weight:600;margin:0;font-size:1.4rem} .sub{color:#94a3b8;margin:.4rem 0 0;font-size:.9rem}
-    h2.sec{font-size:.8rem;color:#7c8aa5;text-transform:uppercase;letter-spacing:.08em;margin:2rem 0 .75rem}
-    .grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(150px,1fr));gap:1rem}
-    .card{background:#1e293b;border:1px solid #334155;border-radius:12px;padding:1.25rem}
-    .card.wide{grid-column:1/-1}
-    .k{font-size:.72rem;color:#94a3b8;text-transform:uppercase;letter-spacing:.06em}
-    .v{font-size:2rem;font-weight:700;margin-top:.35rem} .line{margin-top:.5rem;font-size:.95rem}
-    .arow{display:flex;align-items:center;gap:.75rem;padding:.4rem 0;border-bottom:1px solid #263143} .arow:last-child{border-bottom:0} .atool{font-weight:600} .btn{padding:.35rem .8rem;border:0;border-radius:8px;cursor:pointer;font-size:.85rem} .btn.ok{background:#059669;color:#fff} .btn.no{background:#7f1d1d;color:#fca5a5} .dot{display:inline-block;width:.6rem;height:.6rem;border-radius:50%;margin-right:.4rem}
-    .on{background:#34d399} .off{background:#f87171}
+    :root{
+      --bg:#0a0e1a; --panel:#111726; --panel2:#0d1320; --line:#1e2740; --line2:#28324f;
+      --txt:#e5eaf5; --dim:#8892ab; --muted:#5c6685;
+      --accent:#6366f1; --ok:#10b981; --warn:#f59e0b; --bad:#ef4444;
+    }
+    *{box-sizing:border-box}
+    body{margin:0;background:var(--bg);color:var(--txt);font:14px/1.5 -apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,sans-serif;-webkit-font-smoothing:antialiased}
+    a{color:inherit;text-decoration:none}
+    .app{display:grid;grid-template-columns:236px 1fr;min-height:100vh}
+
+    /* Sidebar */
+    .sidebar{background:linear-gradient(180deg,#0c1120,#0a0e1a);border-right:1px solid var(--line);padding:1.25rem 0;position:sticky;top:0;height:100vh}
+    .brand{display:flex;align-items:center;gap:.6rem;padding:0 1.25rem 1.25rem;border-bottom:1px solid var(--line)}
+    .logo{width:34px;height:34px;border-radius:9px;background:linear-gradient(135deg,var(--accent),#8b5cf6);display:grid;place-items:center;font-weight:800;color:#fff;font-size:1rem;box-shadow:0 2px 12px rgba(99,102,241,.4)}
+    .brand-t{font-weight:700;letter-spacing:.2px} .brand-s{font-size:.7rem;color:var(--muted)}
+    nav{padding:1rem .75rem;display:flex;flex-direction:column;gap:.15rem}
+    .nav-l{font-size:.65rem;text-transform:uppercase;letter-spacing:.1em;color:var(--muted);padding:.75rem .75rem .35rem}
+    .nav-i{display:flex;align-items:center;gap:.7rem;padding:.55rem .75rem;border-radius:9px;color:var(--dim);font-weight:500;transition:.15s}
+    .nav-i:hover{background:var(--panel);color:var(--txt)}
+    .nav-i .ic{width:20px;text-align:center;opacity:.9}
+
+    /* Main */
+    .main{display:flex;flex-direction:column;min-width:0}
+    .topbar{height:60px;border-bottom:1px solid var(--line);display:flex;align-items:center;justify-content:space-between;padding:0 1.75rem;background:var(--panel2);position:sticky;top:0;z-index:5}
+    .topbar h1{font-size:1.05rem;font-weight:650;margin:0}
+    .pill{display:flex;align-items:center;gap:.5rem;font-size:.8rem;color:var(--dim);background:var(--panel);border:1px solid var(--line);padding:.35rem .75rem;border-radius:999px}
+    .live{width:.55rem;height:.55rem;border-radius:50%;background:var(--ok);box-shadow:0 0 0 0 rgba(16,185,129,.5);animation:pulse 2s infinite}
+    @keyframes pulse{0%{box-shadow:0 0 0 0 rgba(16,185,129,.45)}70%{box-shadow:0 0 0 7px rgba(16,185,129,0)}100%{box-shadow:0 0 0 0 rgba(16,185,129,0)}}
+    .content{padding:1.75rem;max-width:1080px;width:100%}
+
+    /* Cards */
+    .card{background:var(--panel);border:1px solid var(--line);border-radius:14px;margin-bottom:1.25rem;overflow:hidden;box-shadow:0 1px 3px rgba(0,0,0,.3)}
+    .card-h{display:flex;align-items:center;gap:.6rem;padding:.9rem 1.25rem;border-bottom:1px solid var(--line);font-weight:600;font-size:.92rem}
+    .card-h .ic{opacity:.85} .card-b{padding:1.25rem}
+
+    /* Stat tiles */
+    .stats{display:grid;grid-template-columns:repeat(auto-fit,minmax(130px,1fr));gap:1rem}
+    .stat{background:var(--panel2);border:1px solid var(--line);border-radius:12px;padding:1.1rem}
+    .stat-k{font-size:.68rem;text-transform:uppercase;letter-spacing:.07em;color:var(--muted)}
+    .stat-v{font-size:2rem;font-weight:750;margin-top:.3rem;letter-spacing:-.02em}
+    .stat-v.danger{color:var(--bad)} .stat-v.warn{color:var(--warn)}
+
+    /* Tables */
+    .tbl{width:100%;border-collapse:collapse;font-size:.88rem}
+    .tbl th{text-align:left;font-size:.66rem;text-transform:uppercase;letter-spacing:.07em;color:var(--muted);padding:.4rem .5rem;border-bottom:1px solid var(--line2)}
+    .tbl td{padding:.6rem .5rem;border-bottom:1px solid var(--line)}
+    .tbl tr:last-child td{border-bottom:0}
+    .strong{font-weight:600} .mono{font-family:ui-monospace,SFMono-Regular,Menlo,monospace;font-size:.8rem} .dim{color:var(--dim)}
+    .empty{color:var(--muted);font-style:italic;margin:.25rem 0}
+
+    /* Badges */
+    .badge{display:inline-block;padding:.16rem .55rem;border-radius:999px;font-size:.7rem;font-weight:600;letter-spacing:.02em}
+    .badge.ok{background:rgba(16,185,129,.15);color:#34d399;border:1px solid rgba(16,185,129,.3)}
+    .badge.bad{background:rgba(239,68,68,.15);color:#f87171;border:1px solid rgba(239,68,68,.3)}
+    .badge.warn{background:rgba(245,158,11,.15);color:#fbbf24;border:1px solid rgba(245,158,11,.3)}
+    .badge.ver{background:rgba(99,102,241,.18);color:#a5b4fc;border:1px solid rgba(99,102,241,.35);font-family:ui-monospace,monospace}
+
+    /* Approvals */
+    .alist{display:flex;flex-direction:column;gap:.75rem}
+    .arow{display:flex;align-items:center;justify-content:space-between;gap:1rem;background:var(--panel2);border:1px solid var(--line2);border-radius:11px;padding:.85rem 1rem}
+    .ainfo{display:flex;align-items:center;gap:.75rem;min-width:0}
+    .atool{font-weight:650} .aid{font-size:.72rem;overflow:hidden;text-overflow:ellipsis;max-width:230px;white-space:nowrap}
+    .abtns{display:flex;gap:.5rem;flex-shrink:0}
+    .btn{padding:.45rem .95rem;border:0;border-radius:9px;cursor:pointer;font-size:.82rem;font-weight:600;transition:.15s}
+    .btn.ok{background:var(--ok);color:#052e22} .btn.ok:hover{background:#0ea371}
+    .btn.no{background:rgba(239,68,68,.15);color:#f87171;border:1px solid rgba(239,68,68,.35)} .btn.no:hover{background:rgba(239,68,68,.25)}
+    .polrow{display:flex;align-items:center;gap:.6rem}
   </style>
 </head>
 <body>
-  <div class="wrap">
-    <header>
-      <h1>Agent Control Plane</h1>
-      <span class="sub">live governance console</span>
-    </header>
-    <!-- One SSE stream (opened on load) patches every section below. -->
-    <div data-on-load="@get('/sse/metrics')">
-      <h2 class="sec">Overview</h2>
-      <div id="metrics" class="grid"><p class="sub">connecting to acp-server…</p></div>
-      <h2 class="sec">Identity</h2>
-      <div class="grid">
-        <div id="apps" class="card wide"><div class="k">Registered apps</div><div class="line sub">…</div></div>
-        <div id="agents" class="card wide"><div class="k">Registered agents</div><div class="line sub">…</div></div>
+  <div class="app">
+    <aside class="sidebar">
+      <div class="brand">
+        <div class="logo">A</div>
+        <div><div class="brand-t">ACP</div><div class="brand-s">Agent Control Plane</div></div>
       </div>
-      <h2 class="sec">Approvals</h2>
-      <div class="grid">
-        <div id="approvals" class="card wide"><div class="k">Pending approvals</div><div class="line sub">…</div></div>
+      <nav>
+        <div class="nav-l">Governance</div>
+        <a class="nav-i" href="#sec-overview"><span class="ic">📊</span> Overview</a>
+        <a class="nav-i" href="#sec-approvals"><span class="ic">✋</span> Approvals</a>
+        <div class="nav-l">Identity</div>
+        <a class="nav-i" href="#sec-apps"><span class="ic">📦</span> Apps</a>
+        <a class="nav-i" href="#sec-agents"><span class="ic">🤖</span> Agents</a>
+        <div class="nav-l">Policy</div>
+        <a class="nav-i" href="#sec-policy"><span class="ic">📜</span> Deployed policy</a>
+      </nav>
+    </aside>
+
+    <div class="main">
+      <div class="topbar">
+        <h1>Governance overview</h1>
+        <div class="pill"><span class="live"></span> live</div>
       </div>
-      <h2 class="sec">Policy</h2>
-      <div class="grid">
-        <div id="policy" class="card wide"><div class="k">Deployed policy</div><div class="line sub">…</div></div>
+      <!-- One SSE stream, opened on load, patches every fragment below. -->
+      <div class="content" data-on-load="@get('/sse/metrics')">
+        <div class="card" id="sec-overview"><div class="card-h"><span class="ic">📊</span> Overview</div>
+          <div class="card-b"><div id="metrics" class="stats"><p class="empty">connecting to acp-server…</p></div></div></div>
+
+        <div class="card" id="sec-approvals"><div class="card-h"><span class="ic">✋</span> Pending approvals</div>
+          <div class="card-b"><div id="approvals"><p class="empty">…</p></div></div></div>
+
+        <div class="card" id="sec-apps"><div class="card-h"><span class="ic">📦</span> Registered apps</div>
+          <div class="card-b"><div id="apps"><p class="empty">…</p></div></div></div>
+
+        <div class="card" id="sec-agents"><div class="card-h"><span class="ic">🤖</span> Registered agents</div>
+          <div class="card-b"><div id="agents"><p class="empty">…</p></div></div></div>
+
+        <div class="card" id="sec-policy"><div class="card-h"><span class="ic">📜</span> Deployed policy</div>
+          <div class="card-b"><div id="policy"><p class="empty">…</p></div></div></div>
       </div>
     </div>
   </div>

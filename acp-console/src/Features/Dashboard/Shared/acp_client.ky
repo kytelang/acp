@@ -19,6 +19,20 @@ pub struct AcpReport {
     }
 }
 
+pub struct AppRow {
+    pub name: string,
+    pub owner: string,
+    pub id: string,
+    init(name: string, owner: string, id: string) { self.name = name; self.owner = owner; self.id = id; }
+}
+
+pub struct AgentRow {
+    pub name: string,
+    pub app: string,
+    pub active: bool,
+    init(name: string, app: string, active: bool) { self.name = name; self.app = app; self.active = active; }
+}
+
 pub struct ApprovalRow {
     pub id: string,
     pub tool: string,
@@ -44,63 +58,56 @@ pub struct AcpClient {
         return r;
     }
 
-    // A comma-joined summary of registered apps ("portal (team), billing (ops)").
-    pub fn appsSummary(self: AcpClient): string {
+    // Registered apps as rows for the table.
+    pub fn appsRows(self: AcpClient): list.List<AppRow> {
+        let rows = list.List<AppRow>();
         let resp = client.Http.get(self.base + "/apps");
-        if (resp.status.toCode() != 200) { return "unavailable"; }
-        let root = json.parse(resp.body);
-        let av = json.get(root, "apps");
+        if (resp.status.toCode() != 200) { return rows; }
+        let av = json.get(json.parse(resp.body), "apps");
         let arr = json.asArray(av);
-        if (arr == undefined) { return "none"; }
-        let n = arr.size();
-        if (n == 0) { return "none registered"; }
-        let out = "";
+        if (arr == undefined) { return rows; }
         let i = 0;
-        while (i < n) {
+        while (i < arr.size()) {
             let item = json.at(av, i);
-            let name = json.asString(json.get(item, "name")) ?? "?";
-            let owner = json.asString(json.get(item, "owner")) ?? "";
-            let one = name + " (" + owner + ")";
-            out = (i == 0) ? one : out + ", " + one;
+            rows.push(AppRow(
+                json.asString(json.get(item, "name")) ?? "?",
+                json.asString(json.get(item, "owner")) ?? "",
+                json.asString(json.get(item, "id")) ?? ""));
             i = i + 1;
         }
-        return `${n} app(s): ` + out;
+        return rows;
     }
 
-    // A summary of registered agents, marking revoked ones.
-    pub fn agentsSummary(self: AcpClient): string {
+    // Registered agents as rows for the table.
+    pub fn agentsRows(self: AcpClient): list.List<AgentRow> {
+        let rows = list.List<AgentRow>();
         let resp = client.Http.get(self.base + "/agents");
-        if (resp.status.toCode() != 200) { return "unavailable"; }
-        let root = json.parse(resp.body);
-        let av = json.get(root, "agents");
+        if (resp.status.toCode() != 200) { return rows; }
+        let av = json.get(json.parse(resp.body), "agents");
         let arr = json.asArray(av);
-        if (arr == undefined) { return "none"; }
-        let n = arr.size();
-        if (n == 0) { return "none registered"; }
-        let out = "";
-        let active = 0;
+        if (arr == undefined) { return rows; }
         let i = 0;
-        while (i < n) {
+        while (i < arr.size()) {
             let item = json.at(av, i);
-            let name = json.asString(json.get(item, "name")) ?? "?";
-            let isActive = json.asBool(json.get(item, "active")) ?? false;
-            if (isActive) { active = active + 1; }
-            let one = name + (isActive ? "" : " (revoked)");
-            out = (i == 0) ? one : out + ", " + one;
+            rows.push(AgentRow(
+                json.asString(json.get(item, "name")) ?? "?",
+                json.asString(json.get(item, "app_id")) ?? "",
+                json.asBool(json.get(item, "active")) ?? false));
             i = i + 1;
         }
-        return `${n} agent(s), ${active} active: ` + out;
+        return rows;
     }
 
-    // The current deployed signed policy version + author.
-    pub fn policySummary(self: AcpClient): string {
+    pub fn policyVersion(self: AcpClient): string {
         let resp = client.Http.get(self.base + "/policy-store");
-        if (resp.status.toCode() != 200) { return "unavailable"; }
-        let root = json.parse(resp.body);
-        let ver = json.asNumber(json.get(root, "version")) ?? 0;
-        if (ver == 0) { return "no signed policy deployed"; }
-        let author = json.asString(json.get(root, "author")) ?? "?";
-        return `v${ver} deployed by ${author}`;
+        if (resp.status.toCode() != 200) { return "?"; }
+        let ver = json.asNumber(json.get(json.parse(resp.body), "version")) ?? 0;
+        return (ver == 0) ? "none" : `v${ver}`;
+    }
+    pub fn policyAuthor(self: AcpClient): string {
+        let resp = client.Http.get(self.base + "/policy-store");
+        if (resp.status.toCode() != 200) { return "unknown"; }
+        return json.asString(json.get(json.parse(resp.body), "author")) ?? "unknown";
     }
 
     // Pending approvals (holds awaiting a human decision).

@@ -24,11 +24,11 @@ pub class MetricsSse impl SseHandler {
             let w = await ds.patchElementsSimple(frag);
             if (w < 0) { alive = false; }
             // Identity + policy sections, same stream.
-            let w2 = await ds.patchElementsSimple(appsPanel(self.acp.appsSummary()));
+            let w2 = await ds.patchElementsSimple(appsPanel(self.acp.appsRows()));
             if (w2 < 0) { alive = false; }
-            let w3 = await ds.patchElementsSimple(agentsPanel(self.acp.agentsSummary()));
+            let w3 = await ds.patchElementsSimple(agentsPanel(self.acp.agentsRows()));
             if (w3 < 0) { alive = false; }
-            let w4 = await ds.patchElementsSimple(policyPanel(self.acp.policySummary()));
+            let w4 = await ds.patchElementsSimple(policyPanel(self.acp.policyVersion(), self.acp.policyAuthor()));
             if (w4 < 0) { alive = false; }
             let w5 = await ds.patchElementsSimple(approvalsPanel(self.acp.pendingApprovals()));
             if (w5 < 0) { alive = false; }
