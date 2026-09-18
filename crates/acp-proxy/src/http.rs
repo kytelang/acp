@@ -67,13 +67,18 @@ async fn handle(State(st): State<Arc<HttpState>>, body: Bytes) -> Response {
                 .into_response();
         }
     };
-    match st.controller.decide_frame(&body) {
-        FrameAction::Reply(json) => ([("content-type", "application/json")], json).into_response(),
-        FrameAction::Forward => match st
+    let forward_body: reqwest::Body = match st.controller.decide_frame(&body) {
+        FrameAction::Reply(json) => {
+            return ([("content-type", "application/json")], json).into_response()
+        }
+        FrameAction::Forward => body.into(),
+        FrameAction::ForwardRewritten(rewritten) => rewritten.into(),
+    };
+    match st
             .client
             .post(&st.upstream)
             .header("content-type", "application/json")
-            .body(body)
+            .body(forward_body)
             .send()
             .await
         {
@@ -104,6 +109,5 @@ async fn handle(State(st): State<Arc<HttpState>>, body: Bytes) -> Response {
                 }
             }
             Err(e) => (StatusCode::BAD_GATEWAY, format!("upstream error: {e}")).into_response(),
-        },
     }
 }

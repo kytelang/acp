@@ -71,6 +71,11 @@ pub async fn run(cmd: &str, args: &[String], controller: Arc<Controller>) -> any
                         break;
                     }
                 }
+                FrameAction::ForwardRewritten(rewritten) => {
+                    if to_child.send(rewritten).await.is_err() {
+                        break;
+                    }
+                }
                 FrameAction::Reply(json) => {
                     let _ = c2s_out.send(json).await;
                 }

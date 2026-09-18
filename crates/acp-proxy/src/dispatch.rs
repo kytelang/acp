@@ -25,6 +25,8 @@ use std::sync::{Arc, Mutex};
 pub enum FrameAction {
     /// Forward the frame to the tool server unchanged.
     Forward,
+    /// Forward this rewritten JSON line instead of the original (redact obligation, model v2 D4).
+    ForwardRewritten(String),
     /// Do not forward; send this JSON line back to the client.
     Reply(String),
 }
@@ -259,6 +261,8 @@ impl Controller {
                     a.enforce = policy::enforce_for(eff, &tc, &a.outcome, a.impact);
                 }
             }
+            // Redact obligation may rewrite the forwarded frame; captured here, applied at forward.
+            let mut redacted_frame: Option<String> = None;
             // Obligations (model v2, D4): only meaningful when the (post break-glass) verdict is
             // still Allow. confirm -> route to human approval (step-up); rate_limit -> deny once the
             // per-(agent, resource) budget is spent. Deny-overrides among obligations. redact (a
@@ -267,6 +271,7 @@ impl Controller {
                 use acp_policy::dsl::ObligationKind;
                 let (res, _op) = self.resource_tax.classify(&tc.name);
                 let (mut rate_exceeded, mut needs_confirm) = (false, false);
+                let mut redact_fields: Vec<String> = Vec::new();
                 for ob in &a.outcome.obligations {
                     match ob.kind {
                         ObligationKind::Confirm => needs_confirm = true,
@@ -286,7 +291,7 @@ impl Controller {
                                 rate_exceeded = true;
                             }
                         }
-                        ObligationKind::Redact => { /* 3b-2: frame rewrite */ }
+                        ObligationKind::Redact => redact_fields.extend(ob.fields.iter().cloned()),
                     }
                 }
                 let over = if rate_exceeded {
@@ -300,6 +305,15 @@ impl Controller {
                     a.outcome.verdict = v;
                     a.outcome.reason = Some(reason);
                     a.enforce = policy::enforce_for(v, &tc, &a.outcome, a.impact);
+                } else if !redact_fields.is_empty() {
+                    // Verdict stays Allow: forward the call with the named argument fields masked.
+                    let redacted_args = acp_core::redact::redact_args(&tc.arguments, &redact_fields);
+                    if let Ok(mut frame) = serde_json::from_slice::<Value>(raw) {
+                        if let Some(obj) = frame.get_mut("params").and_then(|pp| pp.as_object_mut()) {
+                            obj.insert("arguments".to_string(), redacted_args);
+                        }
+                        redacted_frame = Some(frame.to_string());
+                    }
                 }
             }
             let verdict_s = match a.outcome.verdict {
@@ -439,7 +453,10 @@ impl Controller {
                         a.impact,
                         "forwarded",
                     );
-                    FrameAction::Forward
+                    match redacted_frame {
+                        Some(f) => FrameAction::ForwardRewritten(f),
+                        None => FrameAction::Forward,
+                    }
                 }
                 Enforce::Reply(json) => {
                     // A4: a policy-evaluation error is fail-closed to deny, but it must be
@@ -574,5 +591,60 @@ mod bg_tests {
 
         std::fs::remove_file(&file).unwrap();
         assert!(matches!(c.decide_frame(&call()), FrameAction::Forward), "cleared grant reverts");
+    }
+}
+
+
+#[cfg(test)]
+mod obligation_tests {
+    use super::*;
+
+    fn controller_with(pol: &str) -> Controller {
+        let engine = Arc::new(PolicyEngine::from_yaml(pol).unwrap());
+        Controller::new(
+            Some(engine), "prod".to_string(), false, None, None, vec![], false,
+            ImpactTaxonomy::default(),
+        )
+    }
+
+    fn db_call(args: serde_json::Value) -> Vec<u8> {
+        json!({"jsonrpc":"2.0","id":1,"method":"tools/call",
+               "params":{"name":"db.query","arguments":args}})
+            .to_string().into_bytes()
+    }
+
+    #[test]
+    fn redact_obligation_masks_the_forwarded_frame() {
+        // db.query -> (database, read); this rule allows but redacts ssn.
+        let pol = "version: 1\ndefault: allow\nrules:\n  - id: mask\n    when: { resource: database, operation: read }\n    verdict: allow\n    obligations:\n      - kind: redact\n        fields: [ssn]\n";
+        let c = controller_with(pol);
+        match c.decide_frame(&db_call(json!({"ssn":"123-45-6789","q":"select"}))) {
+            FrameAction::ForwardRewritten(rw) => {
+                let v: Value = serde_json::from_str(&rw).unwrap();
+                assert_ne!(v["params"]["arguments"]["ssn"].as_str().unwrap_or(""), "123-45-6789",
+                    "ssn must be masked in the forwarded frame");
+                assert_eq!(v["params"]["arguments"]["q"], json!("select"), "other args untouched");
+            }
+            _ => panic!("expected ForwardRewritten for a redact obligation"),
+        }
+    }
+
+    #[test]
+    fn rate_limit_obligation_denies_once_the_budget_is_spent() {
+        let pol = "version: 1\ndefault: allow\nrules:\n  - id: cap\n    when: { resource: database, operation: read }\n    verdict: allow\n    obligations:\n      - kind: rate_limit\n        max: 1\n        window_ms: 60000\n";
+        let c = controller_with(pol);
+        // First call is within budget (max=1) and forwards.
+        assert!(matches!(c.decide_frame(&db_call(json!({}))), FrameAction::Forward));
+        // Second call exceeds the budget and is denied.
+        assert!(matches!(c.decide_frame(&db_call(json!({}))), FrameAction::Reply(_)));
+    }
+
+    #[test]
+    fn confirm_obligation_routes_to_step_up() {
+        // No approvals store, so a step-up returns the approval-required reply.
+        let pol = "version: 1\ndefault: allow\nrules:\n  - id: ask\n    when: { resource: database, operation: read }\n    verdict: allow\n    obligations:\n      - kind: confirm\n";
+        let c = controller_with(pol);
+        assert!(matches!(c.decide_frame(&db_call(json!({}))), FrameAction::Reply(_)),
+            "confirm obligation must require approval (step-up)");
     }
 }
