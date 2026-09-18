@@ -91,9 +91,19 @@ surface of an enterprise trust product. This section lists them so nothing is a 
 answers the question directly: is everything else available in Rust? Yes, with a couple of caveats
 noted at the end.
 
-### A. External services to provision (the `[m]` adapters point at these)
-Each already has a working local/mock backend in-repo; going live means providing the real one and
-changing a connection string or config, not writing new logic.
+### Deployment baseline: fully local, no cloud
+ACP runs **entirely inside the enterprise with no cloud account and no network egress** as its
+baseline (see `docs/ops/self-contained-deployment.md`; proven by `scripts/run-local.sh` and the
+air-gapped test). Minimal footprint: the `acp-proxy` + `acp-server` binaries, a local SQLite ledger,
+and a local Ed25519 key. Every service below is an **optional** backend behind an interface with a
+local backend that ships in the repo; the cloud rows are swaps for orgs that want managed backends,
+never a dependency. The **one accepted external option is Entra ID** for identity (most enterprises
+run Windows/Entra), and even that is optional: `acp-auth` verifies any OIDC provider via JWKS, so
+self-hosted Keycloak/Dex works identically, and it is mocked in tests.
+
+### A. Optional managed backends (the `[m]` adapters can point at these; the local baseline needs none)
+Each already has a working local/on-prem backend in-repo; going managed means providing the cloud
+service and changing a connection string or config, not writing new logic.
 - Managed Postgres (evidence store, multi-tenant) `->` `acp-pgstore` (done against local PG)
 - Azure Entra ID tenant + app registration (SSO/OIDC, RBAC roles) `->` `acp-auth` (done against a mock IdP)
 - A KMS/HSM: AWS KMS, Azure Key Vault, GCP KMS, or a PKCS#11 HSM (signing + rotation) `->` `keymgr`
