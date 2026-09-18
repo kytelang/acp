@@ -82,7 +82,25 @@ pub fn assess(engine: &PolicyEngine, env: &str, tc: &ToolCall, tax: &ImpactTaxon
         };
     }
     let outcome = engine.evaluate(build_context_with(&tc.name, &tc.arguments, env, tax));
-    let enforce = match outcome.verdict {
+    let enforce = enforce_for(outcome.verdict, tc, &outcome, impact);
+    Assessment {
+        enforce,
+        outcome,
+        impact,
+        impact_taxonomy: tax.version.clone(),
+    }
+}
+
+/// Map a (possibly overridden) verdict to the proxy action. Exposed so a runtime override such as
+/// break-glass can re-derive the enforcement action after changing the verdict, using the exact
+/// same replies as the normal path.
+pub fn enforce_for(
+    verdict: Verdict,
+    tc: &ToolCall,
+    outcome: &PolicyOutcome,
+    impact: &str,
+) -> Enforce {
+    match verdict {
         Verdict::Allow | Verdict::Shadow => Enforce::Forward,
         Verdict::Deny => Enforce::Reply(deny_result(
             &tc.id,
@@ -94,11 +112,5 @@ pub fn assess(engine: &PolicyEngine, env: &str, tc: &ToolCall, tax: &ImpactTaxon
             &tc.id,
             outcome.rule_id.as_deref().unwrap_or("policy"),
         )),
-    };
-    Assessment {
-        enforce,
-        outcome,
-        impact,
-        impact_taxonomy: tax.version.clone(),
     }
 }

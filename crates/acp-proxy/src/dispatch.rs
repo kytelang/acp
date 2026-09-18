@@ -44,6 +44,8 @@ pub struct Controller {
     sinks: Vec<Box<dyn Sink>>,
     fail_open: bool,
     impact_tax: ImpactTaxonomy,
+    // F2: break-glass grants, applied to the verdict before enforcement. Empty = no-op.
+    breakglass: Mutex<acp_core::breakglass::BreakGlassRegistry>,
 }
 
 impl Controller {
@@ -72,7 +74,25 @@ impl Controller {
             sinks,
             fail_open,
             impact_tax,
+            breakglass: Mutex::new(acp_core::breakglass::BreakGlassRegistry::new()),
         }
+    }
+
+    /// F2: engage a break-glass mode at runtime. Returns the meta-audit event to record. With no
+    /// active grant, decisions are entirely unaffected. Called by the admin control channel (the
+    /// server->proxy wiring is the remaining deploy step), and exercised by the bg_tests.
+    #[allow(dead_code)]
+    pub fn engage_break_glass(
+        &self,
+        mode: acp_core::breakglass::Mode,
+        reason: &str,
+        actor: &str,
+        ttl_ms: u64,
+    ) -> Result<acp_core::metaaudit::MetaEvent, String> {
+        self.breakglass
+            .lock()
+            .unwrap()
+            .engage(mode, reason, actor, dispatch_now_ms(), ttl_ms)
     }
 
     fn emit_event(
@@ -134,7 +154,20 @@ impl Controller {
                 ParsedFrame::ToolCall(tc) => tc,
                 _ => return FrameAction::Forward,
             };
-            let a = policy::assess(&eng, &self.env, &tc, &self.impact_tax);
+            let mut a = policy::assess(&eng, &self.env, &tc, &self.impact_tax);
+            // F2: apply any active break-glass grant to the verdict, then re-derive enforcement.
+            // With no grant this is the identity, so the normal path is untouched.
+            {
+                let eff = self
+                    .breakglass
+                    .lock()
+                    .unwrap()
+                    .effective(a.outcome.verdict, dispatch_now_ms());
+                if eff != a.outcome.verdict {
+                    a.outcome.verdict = eff;
+                    a.enforce = policy::enforce_for(eff, &tc, &a.outcome, a.impact);
+                }
+            }
             let verdict_s = match a.outcome.verdict {
                 Verdict::Allow => "allow",
                 Verdict::Deny => "deny",
@@ -310,6 +343,13 @@ impl Controller {
     }
 }
 
+fn dispatch_now_ms() -> u64 {
+    std::time::SystemTime::now()
+        .duration_since(std::time::UNIX_EPOCH)
+        .map(|d| d.as_millis() as u64)
+        .unwrap_or(0)
+}
+
 fn fail_closed_reply(id: &Value) -> String {
     json!({
         "jsonrpc": "2.0", "id": id,
@@ -317,4 +357,63 @@ fn fail_closed_reply(id: &Value) -> String {
             "text": "blocked: evidence unavailable, failing closed"}]}
     })
     .to_string()
+}
+
+#[cfg(test)]
+mod bg_tests {
+    use super::*;
+    use acp_core::breakglass::Mode;
+
+    fn controller() -> Controller {
+        // default-allow policy: `echo` is forwarded unless a break-glass grant overrides it.
+        let engine =
+            Arc::new(PolicyEngine::from_yaml("version: 1\ndefault: allow\nrules: []\n").unwrap());
+        Controller::new(
+            Some(engine),
+            "prod".to_string(),
+            false,
+            None,
+            None,
+            vec![],
+            false,
+            ImpactTaxonomy::default(),
+        )
+    }
+
+    fn call() -> Vec<u8> {
+        json!({"jsonrpc":"2.0","id":1,"method":"tools/call","params":{"name":"echo","arguments":{"x":1}}})
+            .to_string()
+            .into_bytes()
+    }
+
+    #[test]
+    fn without_break_glass_a_default_allow_is_forwarded() {
+        let c = controller();
+        assert!(
+            matches!(c.decide_frame(&call()), FrameAction::Forward),
+            "no grant = normal path"
+        );
+    }
+
+    #[test]
+    fn lockdown_break_glass_denies_an_otherwise_allowed_call() {
+        let c = controller();
+        // Sanity: allowed before engaging.
+        assert!(matches!(c.decide_frame(&call()), FrameAction::Forward));
+        // Engage lockdown: the same call is now denied on the hot path.
+        c.engage_break_glass(Mode::LockdownAll, "incident-1", "oncall", 60_000)
+            .unwrap();
+        assert!(
+            matches!(c.decide_frame(&call()), FrameAction::Reply(_)),
+            "lockdown denies"
+        );
+    }
+
+    #[test]
+    fn engage_requires_a_reason() {
+        let c = controller();
+        assert!(c
+            .engage_break_glass(Mode::LockdownAll, "", "oncall", 60_000)
+            .is_err());
+    }
 }

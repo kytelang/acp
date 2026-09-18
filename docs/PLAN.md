@@ -609,8 +609,8 @@ customer), not deferred.
 
 - [~] **F1 [H0/P0] SIEM/SOAR event streaming.**
   - [x] Multi-sink governance-event seam (`Sink` trait): redacted JSONL (`--events`), OTLP/HTTP OpenTelemetry (`--otel`), **CEF** (`--cef`) and **OCSF** (`--ocsf`) SIEM sinks, all off-reactor and arg-free (tested). Vendor push-connectors plug into the same trait.
-- [m] **F2 [H0/P0] Break-glass / emergency controls.**
-  - [m] `acp_core::breakglass` + `BreakGlassRegistry`: scoped modes (mandatory reason + TTL, auto-revert); engage/revert each emit a tamper-evident meta-audit event; `effective()` applies active grants; emergency-bypass forwards a would-hold. Tested. [ ] wire the engage control channel into the proxy runtime.
+- [x] **F2 [H0/P0] Break-glass / emergency controls.**
+  - [x] `acp_core::breakglass` + `BreakGlassRegistry` wired into the proxy `Controller`: `engage_break_glass` applies active grants to the verdict in `decide_frame` (no-op by default), re-deriving enforcement; lockdown denies an otherwise-allowed call on the hot path (bg_tests; all existing enforcement tests still pass). [ ] the admin transport that calls engage is the deploy step.
 - [m] **F3 [H1/P1] Fleet management for many proxies.**
   - [m] `acp_core::fleet::FleetRegistry`: register/heartbeat, cohort-scoped rollout targets (prod-eu reaches only its proxies), silent-proxy ungoverned-surface alert. Tested. Real config-push channel = transport.
 - [m] **F4 [v1/P1] Notification channels beyond Slack.**
