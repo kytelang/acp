@@ -72,6 +72,17 @@ pub struct DeployResult {
     init(ok: bool, message: string) { self.ok = ok; self.message = message; }
 }
 
+pub struct KillStatus {
+    pub active: bool,
+    pub mode: string,
+    pub scope: string,
+    pub reason: string,
+    pub signed: bool,
+    init(active: bool, mode: string, scope: string, reason: string, signed: bool) {
+        self.active = active; self.mode = mode; self.scope = scope; self.reason = reason; self.signed = signed;
+    }
+}
+
 pub struct AcpClient {
     base: string,
     init(base: string) { self.base = base; }
@@ -271,5 +282,43 @@ pub struct AcpClient {
             return DeployResult(true, "Deployed as v" + `${ver}`);
         }
         return DeployResult(false, json.asString(json.get(v, "error")) ?? "deploy rejected");
+    }
+
+    // Current break-glass / kill-switch status from acp-server.
+    pub fn killStatus(self: AcpClient): KillStatus {
+        let resp = client.Http.get(self.base + "/break-glass");
+        if (resp.status.toCode() != 200) { return KillStatus(false, "", "", "", false); }
+        let v = json.parse(resp.body);
+        return KillStatus(
+            json.asBool(json.get(v, "active")) ?? false,
+            json.asString(json.get(v, "mode")) ?? "",
+            json.asString(json.get(v, "scope")) ?? "",
+            json.asString(json.get(v, "reason")) ?? "",
+            json.asBool(json.get(v, "signed")) ?? false);
+    }
+
+    // Engage break-glass by forwarding the browser's datastar signals (mode/scope/reason/ttl_ms) to
+    // acp-server, which writes the signed grant the proxy watches. The console holds no key.
+    pub fn killEngageRaw(self: AcpClient, body: string): DeployResult {
+        let hdrs = client.Http.emptyHeaders();
+        hdrs.set("Content-Type", "application/json");
+        let resp = client.Http.request("POST", self.base + "/break-glass/engage", hdrs, body);
+        if (resp.status.toCode() != 200) { return DeployResult(false, "acp-server unreachable"); }
+        let v = json.parse(resp.body);
+        let ok = json.asBool(json.get(v, "ok")) ?? false;
+        if (ok) {
+            let m = json.asString(json.get(v, "mode")) ?? "";
+            let sc = json.asString(json.get(v, "scope")) ?? "";
+            return DeployResult(true, "engaged " + m + " (" + sc + ")");
+        }
+        return DeployResult(false, json.asString(json.get(v, "error")) ?? "engage rejected");
+    }
+
+    pub fn killClear(self: AcpClient): DeployResult {
+        let hdrs = client.Http.emptyHeaders();
+        hdrs.set("Content-Type", "application/json");
+        let resp = client.Http.request("POST", self.base + "/break-glass/clear", hdrs, "{}");
+        if (resp.status.toCode() != 200) { return DeployResult(false, "acp-server unreachable"); }
+        return DeployResult(true, "break-glass cleared");
     }
 }

@@ -164,3 +164,29 @@ pub fn deployResultPanel(res: DeployResult): Html {
         <span class="dim">{res.message}</span>
     </div>;
 }
+
+
+// Live break-glass / kill-switch status (fragment #killstatus).
+pub fn killStatusPanel(s: KillStatus): Html {
+    return <div id="killstatus">
+        {if (s.active) {
+            <div class="polrow">
+                <span class="badge bad">ENGAGED</span>
+                <span class="badge ver">{s.mode}</span>
+                <span class="dim">scope</span> <span class="strong">{s.scope}</span>
+                <span class="dim">{s.reason}</span>
+                {if (s.signed) { <span class="badge ok">signed</span> } else { <span class="badge warn">unsigned</span> }}
+            </div>
+        } else {
+            <div class="polrow"><span class="badge ok">normal</span> <span class="dim">no active break-glass grant</span></div>
+        }}
+    </div>;
+}
+
+// Outcome of an engage/clear action (fragment #killresult).
+pub fn killResultPanel(res: DeployResult): Html {
+    return <div id="killresult" class="deploystatus">
+        {if (res.ok) { <span class="badge ok">done</span> } else { <span class="badge bad">error</span> }}
+        <span class="dim">{res.message}</span>
+    </div>;
+}

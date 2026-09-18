@@ -14,6 +14,7 @@ import Features.Dashboard.Shared.acp_client;
 import Features.Dashboard.Sse.metrics_sse;
 import Features.Dashboard.Approvals.handler;
 import Features.Dashboard.Policy.deploy_handler;
+import Features.Dashboard.Policy.kill_handler;
 
 fn buildApp(): App {
     let app = App();
@@ -29,6 +30,8 @@ fn buildApp(): App {
     app.post("/approve/{id}", ResolveHandler(acp, srv, true));
     app.post("/deny/{id}", ResolveHandler(acp, srv, false));
     app.post("/policy/deploy", DeployHandler(acp));
+    app.post("/kill/engage", KillHandler(acp, true));
+    app.post("/kill/clear", KillHandler(acp, false));
 
     // Serve static assets (wwwroot/) for any unmatched GET.
     app.useStatic("/", "./wwwroot");

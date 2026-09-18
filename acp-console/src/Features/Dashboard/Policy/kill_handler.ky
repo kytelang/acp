@@ -1,0 +1,19 @@
+import web.routing;
+import web.response;
+import ds_response;
+import Features.Dashboard.Shared.acp_client;
+import Features.Dashboard.views.dashboard;
+
+// POST /kill/engage and /kill/clear: operate the hardened kill-switch. The console forwards the
+// operator's request to acp-server (which writes the signed grant the proxy watches) and patches the
+// result. The console holds no signing key and makes no decision; acp-server is the trust store.
+pub struct KillHandler impl RouteHandler {
+    acp: AcpClient,
+    engage: bool,
+    init(acp: AcpClient, engage: bool) { self.acp = acp; self.engage = engage; }
+
+    async fn serve(self: KillHandler, ctx: Context): Response {
+        let res = self.engage ? self.acp.killEngageRaw(ctx.request.body) : self.acp.killClear();
+        return await ds_response.patch(killResultPanel(res));
+    }
+}

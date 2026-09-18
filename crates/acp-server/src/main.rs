@@ -602,7 +602,11 @@ async fn break_glass_engage(
         return Json(serde_json::json!({"ok": false, "error": "reason is required"}));
     }
     let actor = body.get("actor").and_then(|v| v.as_str()).filter(|s| !s.is_empty()).unwrap_or("console").to_string();
-    let ttl_ms = body.get("ttl_ms").and_then(|v| v.as_u64()).unwrap_or(3_600_000);
+    let ttl_ms = body
+        .get("ttl_ms")
+        .and_then(|v| v.as_u64().or_else(|| v.as_str().and_then(|s| s.trim().parse().ok())))
+        .filter(|n| *n > 0)
+        .unwrap_or(3_600_000);
     let mut grant = GrantFile::new_scoped(mode, scope, &reason, &actor, now_ms(), ttl_ms);
     if let Some(seed) = &st.break_glass_seed {
         grant.sign(&acp_core::sign::Ed25519Signer::from_seed(seed));

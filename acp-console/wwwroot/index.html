@@ -72,6 +72,7 @@
     .deploy{display:flex;flex-direction:column;gap:.85rem}
     .deploy label.fld{display:flex;flex-direction:column;gap:.35rem;font-size:.68rem;color:var(--muted);text-transform:uppercase;letter-spacing:.06em}
     .deploy textarea{width:100%;min-height:230px;background:var(--panel2);border:1px solid var(--line2);border-radius:10px;color:var(--txt);font-family:ui-monospace,SFMono-Regular,Menlo,monospace;font-size:.82rem;line-height:1.55;padding:.9rem;resize:vertical}
+    .deploy select{background:var(--panel2);border:1px solid var(--line2);border-radius:9px;color:var(--txt);padding:.55rem .8rem;font-size:.85rem}
     .deploy input{background:var(--panel2);border:1px solid var(--line2);border-radius:9px;color:var(--txt);padding:.55rem .8rem;font-size:.85rem;max-width:240px}
     .deploy .row{display:flex;gap:1rem;align-items:flex-end;flex-wrap:wrap}
     .deploystatus{display:flex;align-items:center;gap:.6rem;min-height:1.5rem}
@@ -97,12 +98,14 @@
         <div class="nav-i" data-class-active="$view === 'agents'" data-on:click="$view = 'agents'"><span class="ic">&#129302;</span> Agents</div>
         <div class="nav-l">Policy</div>
         <div class="nav-i" data-class-active="$view === 'policy'" data-on:click="$view = 'policy'"><span class="ic">&#128271;</span> Policy</div>
+        <div class="nav-l">Emergency</div>
+        <div class="nav-i" data-class-active="$view === 'kill'" data-on:click="$view = 'kill'"><span class="ic">&#128721;</span> Kill-switch</div>
       </nav>
     </aside>
 
     <div class="main">
       <div class="topbar">
-        <h1 data-text="$view === 'overview' ? 'Governance overview' : $view === 'approvals' ? 'Pending approvals' : $view === 'evidence' ? 'Evidence timeline' : $view === 'apps' ? 'Teams' : $view === 'agents' ? 'Registered agents' : 'Policy'">Governance overview</h1>
+        <h1 data-text="$view === 'overview' ? 'Governance overview' : $view === 'approvals' ? 'Pending approvals' : $view === 'evidence' ? 'Evidence timeline' : $view === 'apps' ? 'Teams' : $view === 'agents' ? 'Registered agents' : $view === 'policy' ? 'Policy' : 'Emergency kill-switch'">Governance overview</h1>
         <div class="tright">
           <button class="tbtn" data-on:click="$theme = $theme === 'dark' ? 'light' : 'dark'" title="Toggle theme">
             <span data-text="$theme === 'dark' ? '&#9728;' : '&#9790;'"></span>
@@ -173,6 +176,36 @@ rules:
                   </label>
                   <button class="btn primary" data-on:click="@post('/policy/deploy')">Deploy policy</button>
                   <div class="deploystatus" id="deployresult"></div>
+                </div>
+              </div>
+            </div>
+          </div>
+        </section>
+
+        <section class="view" data-show="$view === 'kill'">
+          <div class="card"><div class="card-h"><span class="ic">&#128721;</span> Break-glass status</div>
+            <div class="card-b"><div id="killstatus"><p class="empty">&#8230;</p></div></div></div>
+
+          <div class="card"><div class="card-h"><span class="ic">&#9888;</span> Engage or clear the kill-switch</div>
+            <div class="card-b">
+              <p class="hint">Engaging writes a signed, scoped grant acp-server hands to the proxy. Lockdown denies matching calls and STAYS locked until cleared; scope it (<span class="mono">resource:database</span>, <span class="mono">agent:triage</span>) to contain one resource or agent without downing the fleet.</p>
+              <div class="deploy">
+                <div class="row">
+                  <label class="fld">Mode
+                    <select data-bind="mode">
+                      <option value="lockdown_all">lockdown_all (deny)</option>
+                      <option value="disable_enforce">disable_enforce (observe)</option>
+                      <option value="emergency_bypass">emergency_bypass (allow held)</option>
+                    </select>
+                  </label>
+                  <label class="fld">Scope <input type="text" data-bind="scope" value="global" /></label>
+                  <label class="fld">Reason <input type="text" data-bind="reason" value="incident" /></label>
+                  <label class="fld">TTL ms <input type="text" data-bind="ttl_ms" value="3600000" /></label>
+                </div>
+                <div class="row">
+                  <button class="btn no" data-on:click="@post('/kill/engage')">Engage</button>
+                  <button class="btn ok" data-on:click="@post('/kill/clear')">Clear</button>
+                  <div class="deploystatus" id="killresult"></div>
                 </div>
               </div>
             </div>
