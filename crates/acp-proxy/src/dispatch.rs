@@ -46,6 +46,9 @@ pub struct Controller {
     impact_tax: ImpactTaxonomy,
     // F2: break-glass grants, applied to the verdict before enforcement. Empty = no-op.
     breakglass: Mutex<acp_core::breakglass::BreakGlassRegistry>,
+    // F2 channel: an optional on-disk grant file the proxy watches (operator/server writes it).
+    bg_file: Mutex<Option<String>>,
+    bg_mtime: Mutex<Option<std::time::SystemTime>>,
 }
 
 impl Controller {
@@ -75,7 +78,38 @@ impl Controller {
             fail_open,
             impact_tax,
             breakglass: Mutex::new(acp_core::breakglass::BreakGlassRegistry::new()),
+            bg_file: Mutex::new(None),
+            bg_mtime: Mutex::new(None),
         }
+    }
+
+    /// F2 channel: watch a break-glass grant file. The operator (or control server) writes the file
+    /// via `acp break-glass`; the proxy applies the current on-disk grant. Local-file based, so it
+    /// works for stdio and HTTP transports with no network.
+    pub fn set_break_glass_file(&self, path: String) {
+        *self.bg_file.lock().unwrap() = Some(path);
+    }
+
+    /// Reload the registry from the grant file when it changes (mtime-cached, so it is a cheap stat
+    /// on the hot path). A missing/empty file clears any active grant.
+    fn refresh_break_glass(&self) {
+        let path = match self.bg_file.lock().unwrap().clone() {
+            Some(p) => p,
+            None => return,
+        };
+        let mtime = std::fs::metadata(&path).ok().and_then(|m| m.modified().ok());
+        {
+            let mut last = self.bg_mtime.lock().unwrap();
+            if *last == mtime {
+                return; // unchanged (covers both "still absent" and "same file")
+            }
+            *last = mtime;
+        }
+        let grant = std::fs::read(&path)
+            .ok()
+            .and_then(|b| serde_json::from_slice::<acp_core::breakglass::GrantFile>(&b).ok())
+            .and_then(|g| g.to_break_glass());
+        self.breakglass.lock().unwrap().replace_all(grant);
     }
 
     /// F2: engage a break-glass mode at runtime. Returns the meta-audit event to record. With no
@@ -157,6 +191,7 @@ impl Controller {
             let mut a = policy::assess(&eng, &self.env, &tc, &self.impact_tax);
             // F2: apply any active break-glass grant to the verdict, then re-derive enforcement.
             // With no grant this is the identity, so the normal path is untouched.
+            self.refresh_break_glass();
             {
                 let eff = self
                     .breakglass
@@ -415,5 +450,30 @@ mod bg_tests {
         assert!(c
             .engage_break_glass(Mode::LockdownAll, "", "oncall", 60_000)
             .is_err());
+    }
+
+    #[test]
+    fn the_grant_file_channel_flips_the_hot_path_and_reverts() {
+        use acp_core::breakglass::GrantFile;
+        let dir = std::env::temp_dir().join(format!("acp-bgfile-{}", std::process::id()));
+        std::fs::create_dir_all(&dir).unwrap();
+        let file = dir.join("grant.json");
+        let _ = std::fs::remove_file(&file);
+
+        let c = controller();
+        c.set_break_glass_file(file.to_string_lossy().to_string());
+        assert!(matches!(c.decide_frame(&call()), FrameAction::Forward), "no grant = normal path");
+
+        // Stamp real wall-clock so the TTL window covers "now" (decide_frame uses real time).
+        let now = std::time::SystemTime::now()
+            .duration_since(std::time::UNIX_EPOCH)
+            .map(|d| d.as_millis() as u64)
+            .unwrap_or(0);
+        let grant = GrantFile::new(Mode::LockdownAll, "incident", "oncall", now, 3_600_000);
+        std::fs::write(&file, serde_json::to_string(&grant).unwrap()).unwrap();
+        assert!(matches!(c.decide_frame(&call()), FrameAction::Reply(_)), "grant file engages lockdown");
+
+        std::fs::remove_file(&file).unwrap();
+        assert!(matches!(c.decide_frame(&call()), FrameAction::Forward), "cleared grant reverts");
     }
 }

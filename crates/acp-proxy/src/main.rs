@@ -38,6 +38,7 @@ struct Opts {
     impact: Option<String>,
     cef: Option<String>,
     ocsf: Option<String>,
+    break_glass: Option<String>,
 }
 
 fn parse_opts(items: &[String]) -> Result<(Opts, Vec<String>), String> {
@@ -63,6 +64,7 @@ fn parse_opts(items: &[String]) -> Result<(Opts, Vec<String>), String> {
             "--impact" => o.impact = it.next().cloned(),
             "--cef" => o.cef = it.next().cloned(),
             "--ocsf" => o.ocsf = it.next().cloned(),
+            "--break-glass-file" => o.break_glass = it.next().cloned(),
             "--shadow" => o.shadow = true,
             "--fail-open" => o.fail_open = true,
             other => return Err(format!("unknown option '{other}'")),
@@ -142,7 +144,7 @@ fn build_controller(o: &Opts) -> Result<Arc<Controller>, String> {
     if o.shadow {
         eprintln!("acp-proxy: SHADOW MODE (recording would-blocks, enforcing nothing)");
     }
-    Ok(Arc::new(Controller::new(
+    let controller = Arc::new(Controller::new(
         engine,
         env,
         o.shadow,
@@ -151,7 +153,12 @@ fn build_controller(o: &Opts) -> Result<Arc<Controller>, String> {
         sinks,
         o.fail_open,
         impact_tax,
-    )))
+    ));
+    if let Some(bg) = &o.break_glass {
+        controller.set_break_glass_file(bg.clone());
+        eprintln!("acp-proxy: watching break-glass grant file {bg}");
+    }
+    Ok(controller)
 }
 
 #[tokio::main]

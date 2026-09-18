@@ -7,6 +7,7 @@
 
 use crate::metaaudit::{MetaEvent, MetaKind};
 use crate::types::Verdict;
+use serde::{Deserialize, Serialize};
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum Mode {
@@ -16,6 +17,55 @@ pub enum Mode {
     LockdownAll,
     /// Forward calls that would be held for approval: unblock an operator mid-incident.
     EmergencyBypass,
+}
+
+impl Mode {
+    pub fn as_str(&self) -> &'static str {
+        match self {
+            Mode::DisableEnforce => "disable_enforce",
+            Mode::LockdownAll => "lockdown_all",
+            Mode::EmergencyBypass => "emergency_bypass",
+        }
+    }
+    pub fn parse(s: &str) -> Option<Mode> {
+        match s {
+            "disable_enforce" => Some(Mode::DisableEnforce),
+            "lockdown_all" => Some(Mode::LockdownAll),
+            "emergency_bypass" => Some(Mode::EmergencyBypass),
+            _ => None,
+        }
+    }
+}
+
+/// On-disk break-glass grant: the local channel between an operator (or the control server) and a
+/// proxy. The operator writes this file (via `acp break-glass`), the proxy watches it and applies
+/// the grant. Local-file based so it works for both the stdio and HTTP transports and needs no
+/// cloud or network.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct GrantFile {
+    pub mode: String,
+    pub reason: String,
+    pub actor: String,
+    pub engaged_ms: u64,
+    pub ttl_ms: u64,
+}
+
+impl GrantFile {
+    pub fn new(mode: Mode, reason: &str, actor: &str, now_ms: u64, ttl_ms: u64) -> Self {
+        GrantFile {
+            mode: mode.as_str().to_string(),
+            reason: reason.to_string(),
+            actor: actor.to_string(),
+            engaged_ms: now_ms,
+            ttl_ms,
+        }
+    }
+    /// Parse into a live grant, or None if the mode is unknown or the grant is invalid.
+    pub fn to_break_glass(&self) -> Option<(BreakGlass, String)> {
+        let mode = Mode::parse(&self.mode)?;
+        let bg = BreakGlass::engage(mode, &self.reason, self.engaged_ms, self.ttl_ms).ok()?;
+        Some((bg, self.actor.clone()))
+    }
 }
 
 /// An active break-glass grant. Construct via `BreakGlass::engage` so a reason is mandatory.
@@ -78,6 +128,15 @@ pub struct BreakGlassRegistry {
 impl BreakGlassRegistry {
     pub fn new() -> Self {
         Self::default()
+    }
+
+    /// Replace all active grants with `grant` (or clear if None). Used by the file-watch channel to
+    /// reflect the current on-disk grant exactly.
+    pub fn replace_all(&mut self, grant: Option<(BreakGlass, String)>) {
+        self.grants.clear();
+        if let Some(g) = grant {
+            self.grants.push(g);
+        }
     }
 
     /// Engage a mode. Returns the meta-audit event the caller must append to the tamper-evident

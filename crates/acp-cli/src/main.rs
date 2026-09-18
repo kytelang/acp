@@ -40,6 +40,7 @@ fn main() -> ExitCode {
         "sign-artifact" => cmd_sign_artifact(&args[2..]),
         "verify-artifact" => cmd_verify_artifact(&args[2..]),
         "bench-ledger" => cmd_bench_ledger(&args[2..]),
+        "break-glass" => cmd_break_glass(&args[2..]),
         _ => usage("acp [init|verify|verify-pack|export|policy-compile|policy-test|approve|deny|approvals|canary|learn|replay|purge|classify-eval]"),
     }
 }
@@ -709,4 +710,59 @@ fn cmd_bench_ledger(rest: &[String]) -> ExitCode {
         n as f64 / verify_s.max(1e-9)
     );
     if ok { ExitCode::SUCCESS } else { ExitCode::from(1) }
+}
+
+
+/// F2 channel: write (or clear) the break-glass grant file the proxy watches.
+///   acp break-glass engage <file> <mode> <reason> <actor> <ttl_ms>
+///   acp break-glass clear  <file>
+/// Modes: lockdown_all | disable_enforce | emergency_bypass. Prints a meta-audit line to record.
+fn cmd_break_glass(rest: &[String]) -> ExitCode {
+    use acp_core::breakglass::{GrantFile, Mode};
+    match rest.first().map(String::as_str) {
+        Some("clear") => {
+            let Some(file) = rest.get(1) else { return usage("acp break-glass clear <file>"); };
+            match std::fs::remove_file(file) {
+                Ok(_) | Err(_) => {
+                    println!("break-glass cleared ({file}); the proxy reverts to normal on next decision");
+                    ExitCode::SUCCESS
+                }
+            }
+        }
+        Some("engage") => {
+            let (file, mode_s, reason, actor, ttl_s) =
+                match (rest.get(1), rest.get(2), rest.get(3), rest.get(4), rest.get(5)) {
+                    (Some(f), Some(m), Some(r), Some(a), Some(t)) => (f, m, r, a, t),
+                    _ => return usage("acp break-glass engage <file> <mode> <reason> <actor> <ttl_ms>"),
+                };
+            let Some(mode) = Mode::parse(mode_s) else {
+                eprintln!("acp: unknown mode '{mode_s}' (lockdown_all|disable_enforce|emergency_bypass)");
+                return ExitCode::from(2);
+            };
+            let ttl_ms: u64 = match ttl_s.parse() {
+                Ok(n) if n > 0 => n,
+                _ => { eprintln!("acp: ttl_ms must be a positive number"); return ExitCode::from(2); }
+            };
+            // A fixed engaged_ms of 0 is not used; stamp wall-clock so the TTL is meaningful.
+            let now = std::time::SystemTime::now()
+                .duration_since(std::time::UNIX_EPOCH)
+                .map(|d| d.as_millis() as u64)
+                .unwrap_or(0);
+            if reason.trim().is_empty() {
+                eprintln!("acp: break-glass requires a reason");
+                return ExitCode::from(2);
+            }
+            let grant = GrantFile::new(mode, reason, actor, now, ttl_ms);
+            let json = serde_json::to_string_pretty(&grant).unwrap();
+            if std::fs::write(file, json).is_err() {
+                eprintln!("acp: cannot write {file}");
+                return ExitCode::from(1);
+            }
+            println!("break-glass ENGAGED: mode={mode_s} actor={actor} ttl_ms={ttl_ms} -> {file}");
+            // Meta-audit line the operator/server should append to the tamper-evident log.
+            println!("META-AUDIT: {{\"kind\":\"break_glass_engage\",\"actor\":\"{actor}\",\"reason\":\"{reason}\",\"after\":\"{mode_s}\"}}");
+            ExitCode::SUCCESS
+        }
+        _ => usage("acp break-glass <engage|clear> ..."),
+    }
 }
