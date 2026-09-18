@@ -56,7 +56,15 @@ What the operator does once, in Azure:
 
 Verification path (RS256 + rotating JWKS) is built and unit-tested offline with a self-signed RSA fixture; pointing it at a real tenant is only the config above. Until real values are supplied, the build ships mock placeholders (`tenant=common`, `aud=acp-app`) and the `MockEntra` EdDSA issuer for tests, so nothing above the JWKS seam changes when real Entra is wired.
 
-## B2. Multi-tenancy
+## B2. Multi-tenancy - NOT BUILT (dropped)
+
+DECISION (2026-09-19): ACP is an on-prem service for a single organisation, not a cloud/SaaS
+product, so tenant isolation is unnecessary. A single shared control plane (one policy set, one
+evidence ledger, one key set) is correct; the display-only Team grouping already organises agents
+without isolation machinery. The design below is retained only as a reference in case ACP is ever
+offered as a hosted multi-org service. It is NOT on the build list.
+
+### (reference only) Multi-tenancy
 
 ```mermaid
 erDiagram

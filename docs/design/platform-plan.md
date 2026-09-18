@@ -8,7 +8,7 @@ Status: the sequenced build plan for the architecture in `platform-architecture.
 | Phase | Delivers | Status |
 |---|---|---|
 | A | MCP enforcement-and-evidence core (model-v2) | DONE, shipped and tested |
-| B | Platform control plane: real identity, multi-tenancy, RBAC, SIEM | design done |
+| B | Platform control plane: real identity, RBAC, SIEM (multi-tenancy DROPPED: on-prem single-org) | mostly built |
 | C | LLM gateway PEP: govern direct model API usage | design done |
 | D | Agent-native policy sync: govern non-MCP agent powers | design done |
 | E | Discovery plane: find shadow AI, feed the registry | design done |

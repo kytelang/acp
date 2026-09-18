@@ -57,7 +57,7 @@ flowchart TB
     R["Registry: teams · agents · humans · resources"]
     POL["Policy: author · sign · version · distribute"]
     TAX["Taxonomies: tool→resource · impact"]
-    RBAC["RBAC + multi-tenant  ·  TO BUILD"]
+    RBAC["RBAC (BUILT)  ·  single-tenant on-prem"]
     KILL["Emergency: fleet kill-switch"]
     CON["Console"]
   end
