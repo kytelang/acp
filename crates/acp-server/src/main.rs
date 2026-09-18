@@ -26,6 +26,8 @@ struct AppState {
     meta: Option<std::sync::Mutex<acp_ledger::Ledger>>,
     registry: Option<String>,
     policy_store: Option<String>,
+    break_glass_file: Option<String>,
+    break_glass_seed: Option<[u8; 32]>,
 }
 
 #[tokio::main]
@@ -36,6 +38,8 @@ async fn main() {
     let mut meta_ledger: Option<String> = None;
     let mut registry: Option<String> = None;
     let mut policy_store: Option<String> = None;
+    let mut break_glass_file: Option<String> = None;
+    let mut break_glass_seed: Option<[u8; 32]> = None;
     let mut it = args.iter().skip(1);
     while let Some(a) = it.next() {
         match a.as_str() {
@@ -46,6 +50,22 @@ async fn main() {
             "--meta-ledger" => meta_ledger = it.next().cloned(),
             "--registry" => registry = it.next().cloned(),
             "--policy-store" => policy_store = it.next().cloned(),
+            "--break-glass-file" => break_glass_file = it.next().cloned(),
+            "--break-glass-key" => {
+                if let Some(h) = it.next() {
+                    match hex::decode(h) {
+                        Ok(b) if b.len() == 32 => {
+                            let mut s = [0u8; 32];
+                            s.copy_from_slice(&b);
+                            break_glass_seed = Some(s);
+                        }
+                        _ => {
+                            eprintln!("acp-server: --break-glass-key must be a 32-byte hex seed");
+                            std::process::exit(2);
+                        }
+                    }
+                }
+            }
             other => {
                 eprintln!("acp-server: unknown option '{other}'");
                 std::process::exit(2);
@@ -101,6 +121,8 @@ async fn main() {
         meta,
         registry,
         policy_store,
+        break_glass_file,
+        break_glass_seed,
     });
     let app = Router::new()
         .route("/", get(inbox))
@@ -125,6 +147,9 @@ async fn main() {
         .route("/policy-store/deploy", post(policy_store_deploy))
         .route("/approvals/pending", get(approvals_pending))
         .route("/evidence/recent", get(evidence_recent))
+        .route("/break-glass", get(break_glass_status))
+        .route("/break-glass/engage", post(break_glass_engage))
+        .route("/break-glass/clear", post(break_glass_clear))
         .with_state(state);
 
     let listener = tokio::net::TcpListener::bind(&addr).await.expect("bind");
@@ -471,6 +496,8 @@ async fn policy_store_rules(State(st): State<Arc<AppState>>) -> impl IntoRespons
             .and_then(|r| r.agents().into_iter().find(|a| a.id == id).map(|a| a.name.clone()))
             .or_else(|| Some(id.to_string()))
     };
+    let _ = &app_name; // app is display-only now; kept for team resolution elsewhere.
+    use acp_policy::dsl::ObligationKind;
     let rules: Vec<_> = pol
         .rules
         .iter()
@@ -479,14 +506,27 @@ async fn policy_store_rules(State(st): State<Arc<AppState>>) -> impl IntoRespons
                 .ok()
                 .and_then(|v| v.as_str().map(|s| s.to_string()))
                 .unwrap_or_else(|| "allow".to_string());
+            let obligations: Vec<String> = r
+                .obligations
+                .iter()
+                .map(|o| match o.kind {
+                    ObligationKind::Confirm => "confirm".to_string(),
+                    ObligationKind::Redact => format!("redact({})", o.fields.join(",")),
+                    ObligationKind::RateLimit => {
+                        format!("rate_limit({}/{}ms)", o.max.unwrap_or(0), o.window_ms.unwrap_or(0))
+                    }
+                })
+                .collect();
             serde_json::json!({
                 "id": r.id,
-                "tool": r.when.tool,
-                "app": r.when.app,
-                "app_label": app_name(&r.when.app),
                 "agent": r.when.agent,
                 "agent_label": agent_name(&r.when.agent),
+                "principal": r.when.principal,
+                "resource": r.when.resource,
+                "operation": r.when.operation,
+                "tool": r.when.tool,
                 "verdict": verdict,
+                "obligations": obligations,
                 "approvers": r.approvers,
                 "reason": r.reason,
             })
@@ -525,6 +565,61 @@ async fn policy_store_deploy(
         Ok(d) => Json(serde_json::json!({"ok": true, "version": d.version, "hash": d.hash})),
         Err(e) => Json(serde_json::json!({"ok": false, "error": e})),
     }
+}
+
+/// Current break-glass status (what the proxy would be applying).
+async fn break_glass_status(State(st): State<Arc<AppState>>) -> impl IntoResponse {
+    use acp_core::breakglass::GrantFile;
+    match &st.break_glass_file {
+        Some(f) => match std::fs::read(f).ok().and_then(|b| serde_json::from_slice::<GrantFile>(&b).ok()) {
+            Some(g) => Json(serde_json::json!({
+                "active": true, "mode": g.mode, "scope": g.scope, "reason": g.reason, "actor": g.actor, "signed": !g.sig.is_empty()
+            })),
+            None => Json(serde_json::json!({"active": false, "configured": true})),
+        },
+        None => Json(serde_json::json!({"active": false, "configured": false})),
+    }
+}
+
+/// Engage break-glass: write a (signed, if a key is configured) scoped grant to the file the proxy
+/// watches. This is a controlled action; the proxy applies it on its next decision.
+async fn break_glass_engage(
+    State(st): State<Arc<AppState>>,
+    Json(body): Json<serde_json::Value>,
+) -> impl IntoResponse {
+    use acp_core::breakglass::{GrantFile, Mode, Scope};
+    let file = match &st.break_glass_file {
+        Some(f) => f.clone(),
+        None => return Json(serde_json::json!({"ok": false, "error": "no break-glass file configured"})),
+    };
+    let mode = match body.get("mode").and_then(|v| v.as_str()).and_then(Mode::parse) {
+        Some(m) => m,
+        None => return Json(serde_json::json!({"ok": false, "error": "invalid mode (lockdown_all|disable_enforce|emergency_bypass)"})),
+    };
+    let scope = Scope::parse(body.get("scope").and_then(|v| v.as_str()).unwrap_or("global"));
+    let reason = body.get("reason").and_then(|v| v.as_str()).unwrap_or("").trim().to_string();
+    if reason.is_empty() {
+        return Json(serde_json::json!({"ok": false, "error": "reason is required"}));
+    }
+    let actor = body.get("actor").and_then(|v| v.as_str()).filter(|s| !s.is_empty()).unwrap_or("console").to_string();
+    let ttl_ms = body.get("ttl_ms").and_then(|v| v.as_u64()).unwrap_or(3_600_000);
+    let mut grant = GrantFile::new_scoped(mode, scope, &reason, &actor, now_ms(), ttl_ms);
+    if let Some(seed) = &st.break_glass_seed {
+        grant.sign(&acp_core::sign::Ed25519Signer::from_seed(seed));
+    }
+    let json = serde_json::to_string_pretty(&grant).unwrap();
+    if std::fs::write(&file, json).is_err() {
+        return Json(serde_json::json!({"ok": false, "error": "cannot write grant file"}));
+    }
+    Json(serde_json::json!({"ok": true, "mode": grant.mode, "scope": grant.scope, "signed": !grant.sig.is_empty()}))
+}
+
+/// Clear break-glass: remove the grant file (the proxy reverts to normal on its next decision).
+async fn break_glass_clear(State(st): State<Arc<AppState>>) -> impl IntoResponse {
+    if let Some(f) = &st.break_glass_file {
+        let _ = std::fs::remove_file(f);
+    }
+    Json(serde_json::json!({"ok": true}))
 }
 
 fn now_ms() -> u64 {
