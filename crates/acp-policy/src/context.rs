@@ -94,3 +94,45 @@ pub fn build_context_identified_full(
         "derived": Value::Object(derived),
     })
 }
+
+/// Build the trusted context for a direct model API call (LLM gateway, phase C). The subject is the
+/// calling app (stamped as `agent`) plus the human principal; the resource/operation are the model
+/// class and API operation the gateway derived from the model name (never from the body). Same shape
+/// the policy engine matches, so one policy language governs tools and model calls alike.
+#[allow(clippy::too_many_arguments)]
+pub fn build_model_context(
+    model: &str,
+    class: &str,
+    operation: &str,
+    app: &str,
+    principal: &str,
+    args: &Value,
+    env: &str,
+) -> Value {
+    let mut derived = Map::new();
+    if let Some(obj) = args.as_object() {
+        for (k, v) in obj {
+            if let Some(s) = v.as_str() {
+                if let Some(cl) = classify(s) {
+                    derived.insert(format!("{k}_class"), Value::String(cl.to_string()));
+                }
+            }
+        }
+    }
+    let tax = ImpactTaxonomy::default();
+    json!({
+        "tool": model,
+        "args": args,
+        "env": env,
+        "impact": level_str(tax.score(model, args)),
+        "impact_taxonomy": tax.version,
+        "principal_scopes": [],
+        "agent": app,
+        "app": app,
+        "principal": principal,
+        "resource": class,
+        "operation": operation,
+        "resource_taxonomy": "model@default-1",
+        "derived": Value::Object(derived),
+    })
+}

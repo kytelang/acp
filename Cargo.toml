@@ -1,6 +1,7 @@
 [workspace]
 resolver = "2"
-members = ["crates/*"]
+members = [
+    "crates/acp-gateway","crates/*"]
 
 [workspace.package]
 edition = "2021"

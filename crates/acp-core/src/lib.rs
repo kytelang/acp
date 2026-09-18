@@ -29,6 +29,7 @@ pub mod lineage;
 pub mod liveness;
 pub mod mcpdrift;
 pub mod merkle;
+pub mod modelclass;
 pub mod metaaudit;
 pub mod metering;
 pub mod notify;

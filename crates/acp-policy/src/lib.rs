@@ -9,7 +9,7 @@ pub mod store;
 pub use compile::compile_to_cedar;
 pub use context::{
     build_context, build_context_identified, build_context_identified_full, build_context_with,
-    valid_tool,
+    build_model_context, valid_tool,
 };
 pub use dsl::{parse_str, validate, Policy, Rule};
 pub use eval::{PolicyEngine, PolicyOutcome};

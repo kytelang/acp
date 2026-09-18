@@ -128,7 +128,7 @@ fn wildcard(pat: &[u8], s: &[u8]) -> bool {
 }
 
 /// True if `tool` matches `pattern`, where the pattern may contain `|`-separated alternatives.
-fn pattern_matches(pattern: &str, tool: &str) -> bool {
+pub fn pattern_matches(pattern: &str, tool: &str) -> bool {
     let t = tool.to_ascii_lowercase();
     pattern
         .split('|')
