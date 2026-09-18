@@ -16,7 +16,8 @@ use axum::{
     Json, Router,
 };
 use serde_json::json;
-use std::sync::Arc;
+use std::collections::HashMap;
+use std::sync::{Arc, Mutex};
 
 struct GwState {
     engine: PolicyEngine,
@@ -26,6 +27,7 @@ struct GwState {
     env: String,
     oidc: Option<(acp_auth::Jwks, acp_auth::EntraConfig)>,
     client: reqwest::Client,
+    limiters: Mutex<HashMap<String, acp_core::ratelimit::TokenBucket>>,
 }
 
 #[tokio::main]
@@ -97,6 +99,7 @@ async fn main() -> std::process::ExitCode {
         env,
         oidc,
         client: reqwest::Client::new(),
+        limiters: Mutex::new(HashMap::new()),
     });
     let upstream_log = st.upstream.clone();
     let app = Router::new().route("/*path", any(handle)).with_state(st);
@@ -158,7 +161,47 @@ async fn handle(
             Json(json!({"error": {"message": "human approval required (step-up) by ACP policy", "type": "acp_step_up"}})),
         )
             .into_response(),
-        Verdict::Allow | Verdict::Shadow => forward(&st, &path, body).await,
+        Verdict::Allow | Verdict::Shadow => {
+            // Obligations (model v2, D4) on the gateway: a rate_limit acts as a per-(app, model-class)
+            // token/cost budget and denies once spent; a confirm routes to step-up. Deny-overrides.
+            use acp_policy::dsl::ObligationKind;
+            let (mut over_budget, mut needs_confirm) = (false, false);
+            for ob in &d.obligations {
+                match ob.kind {
+                    ObligationKind::Confirm => needs_confirm = true,
+                    ObligationKind::RateLimit => {
+                        let key = format!("{}|{}", app, d.resource);
+                        let max = ob.max.unwrap_or(1_000_000);
+                        let window = ob.window_ms.unwrap_or(86_400_000);
+                        let ok = {
+                            let mut lims = st.limiters.lock().unwrap();
+                            let bucket = lims.entry(key).or_insert_with(|| {
+                                let rate = (max as f64) * 1000.0 / (window as f64);
+                                acp_core::ratelimit::TokenBucket::new(max as f64, rate, now_ms())
+                            });
+                            bucket.allow(now_ms())
+                        };
+                        if !ok {
+                            over_budget = true;
+                        }
+                    }
+                    ObligationKind::Redact => { /* prompt/response redaction is C3-scan, wired with the content plane */ }
+                }
+            }
+            if over_budget {
+                return (
+                    StatusCode::TOO_MANY_REQUESTS,
+                    Json(json!({"error": {"message": "model budget exceeded for this app/model class", "type": "acp_budget_exceeded"}})),
+                ).into_response();
+            }
+            if needs_confirm {
+                return (
+                    StatusCode::PAYMENT_REQUIRED,
+                    Json(json!({"error": {"message": "human approval required (confirm obligation)", "type": "acp_step_up"}})),
+                ).into_response();
+            }
+            forward(&st, &path, body).await
+        }
     }
 }
 
