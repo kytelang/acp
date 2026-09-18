@@ -44,6 +44,7 @@ struct Opts {
     agent_id: Option<String>,
     agent_token: Option<String>,
     principal: Option<String>,
+    break_glass_key: Option<String>,
 }
 
 fn parse_opts(items: &[String]) -> Result<(Opts, Vec<String>), String> {
@@ -70,6 +71,7 @@ fn parse_opts(items: &[String]) -> Result<(Opts, Vec<String>), String> {
             "--cef" => o.cef = it.next().cloned(),
             "--ocsf" => o.ocsf = it.next().cloned(),
             "--break-glass-file" => o.break_glass = it.next().cloned(),
+            "--break-glass-key" => o.break_glass_key = it.next().cloned(),
             "--policy-dir" => o.policy_dir = it.next().cloned(),
             "--registry" => o.registry = it.next().cloned(),
             "--agent-id" => o.agent_id = it.next().cloned(),
@@ -174,6 +176,15 @@ fn build_controller(o: &Opts) -> Result<Arc<Controller>, String> {
     if let Some(bg) = &o.break_glass {
         controller.set_break_glass_file(bg.clone());
         eprintln!("acp-proxy: watching break-glass grant file {bg}");
+    }
+    if let Some(k) = &o.break_glass_key {
+        match hex::decode(k) {
+            Ok(pk) => {
+                controller.set_break_glass_key(pk);
+                eprintln!("acp-proxy: break-glass grants must be signed by the pinned key");
+            }
+            Err(_) => return Err("--break-glass-key must be hex".to_string()),
+        }
     }
     if let Some(dir) = &o.policy_dir {
         controller.set_policy_dir(dir.clone());

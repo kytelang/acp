@@ -757,21 +757,43 @@ fn cmd_break_glass(rest: &[String]) -> ExitCode {
                 eprintln!("acp: break-glass requires a reason");
                 return ExitCode::from(2);
             }
-            // Optional --scope aims the grant: global | agent:<id> | resource:<class> | tool:<name>.
+            // Optional flags: --scope aims the grant; --key <32-byte hex seed> signs it so a proxy
+            // that pins the corresponding public key will accept it (and reject forgeries).
             let mut scope = Scope::Global;
+            let mut key_hex: Option<String> = None;
             let mut i = 6;
             while i < rest.len() {
-                if rest[i] == "--scope" {
-                    if let Some(v) = rest.get(i + 1) {
-                        scope = Scope::parse(v);
+                match rest[i].as_str() {
+                    "--scope" => {
+                        if let Some(v) = rest.get(i + 1) {
+                            scope = Scope::parse(v);
+                        }
+                        i += 2;
                     }
-                    i += 2;
-                } else {
-                    i += 1;
+                    "--key" => {
+                        key_hex = rest.get(i + 1).cloned();
+                        i += 2;
+                    }
+                    _ => i += 1,
                 }
             }
             let scope_s = scope.as_str();
-            let grant = GrantFile::new_scoped(mode, scope, reason, actor, now, ttl_ms);
+            let mut grant = GrantFile::new_scoped(mode, scope, reason, actor, now, ttl_ms);
+            if let Some(kh) = key_hex {
+                match hex::decode(&kh) {
+                    Ok(b) if b.len() == 32 => {
+                        let mut seed = [0u8; 32];
+                        seed.copy_from_slice(&b);
+                        let signer = acp_core::sign::Ed25519Signer::from_seed(&seed);
+                        grant.sign(&signer);
+                        println!("signed; pin on the proxy with --break-glass-key {}", grant.pubkey);
+                    }
+                    _ => {
+                        eprintln!("acp: --key must be a 32-byte hex seed");
+                        return ExitCode::from(2);
+                    }
+                }
+            }
             let json = serde_json::to_string_pretty(&grant).unwrap();
             if std::fs::write(file, json).is_err() {
                 eprintln!("acp: cannot write {file}");

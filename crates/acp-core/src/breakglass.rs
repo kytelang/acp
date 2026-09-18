@@ -108,9 +108,48 @@ pub struct GrantFile {
     pub actor: String,
     pub engaged_ms: u64,
     pub ttl_ms: u64,
+    /// Ed25519 signature (hex) over the canonical grant content, and the signer's public key (hex).
+    /// Empty on an unsigned grant. When the proxy pins a key, only grants validly signed by it apply.
+    #[serde(default)]
+    pub sig: String,
+    #[serde(default)]
+    pub pubkey: String,
 }
 
 impl GrantFile {
+    /// Canonical bytes signed/verified. Excludes sig/pubkey; covers every field that changes effect.
+    fn signing_bytes(&self) -> Vec<u8> {
+        format!(
+            "{}|{}|{}|{}|{}|{}",
+            self.mode, self.scope, self.reason, self.actor, self.engaged_ms, self.ttl_ms
+        )
+        .into_bytes()
+    }
+
+    /// Sign the grant so a proxy that pins the signer's key will accept it (and reject forgeries).
+    pub fn sign(&mut self, signer: &dyn crate::sign::Signer) {
+        self.sig = hex::encode(signer.sign(&self.signing_bytes()));
+        self.pubkey = hex::encode(signer.public_key());
+    }
+
+    /// Verify against an optionally-pinned public key. With a pinned key the grant MUST carry a valid
+    /// signature by exactly that key; without pinning the grant is accepted as-is (filesystem
+    /// permissions are then the control). A tripped-or-cleared switch is only as trustworthy as this.
+    pub fn verify(&self, pinned_pubkey: Option<&[u8]>) -> bool {
+        let pinned = match pinned_pubkey {
+            Some(p) => p,
+            None => return true,
+        };
+        let sig = match hex::decode(&self.sig) {
+            Ok(s) => s,
+            Err(_) => return false,
+        };
+        let pk = match hex::decode(&self.pubkey) {
+            Ok(p) => p,
+            Err(_) => return false,
+        };
+        pk == pinned && crate::sign::verify_ed25519(pinned, &self.signing_bytes(), &sig)
+    }
     pub fn new(mode: Mode, reason: &str, actor: &str, now_ms: u64, ttl_ms: u64) -> Self {
         Self::new_scoped(mode, Scope::Global, reason, actor, now_ms, ttl_ms)
     }
@@ -122,6 +161,8 @@ impl GrantFile {
             actor: actor.to_string(),
             engaged_ms: now_ms,
             ttl_ms,
+            sig: String::new(),
+            pubkey: String::new(),
         }
     }
     /// Parse into a live grant, or None if the mode is unknown or the grant is invalid.
@@ -338,6 +379,29 @@ mod registry_tests {
     fn a_reason_is_still_mandatory_through_the_registry() {
         let mut reg = BreakGlassRegistry::new();
         assert!(reg.engage(Mode::LockdownAll, "", "actor", 0, 1000).is_err());
+    }
+
+    #[test]
+    fn signed_grant_verifies_only_under_the_pinned_key() {
+        use crate::sign::{Ed25519Signer, Signer};
+        let signer = Ed25519Signer::generate();
+        let pk = signer.public_key();
+        let mut gf = GrantFile::new_scoped(Mode::LockdownAll, Scope::Global, "breach", "oncall", 0, 1000);
+        gf.sign(&signer);
+        // Valid under the pinning key.
+        assert!(gf.verify(Some(&pk)));
+        // No pinning -> accepted (legacy).
+        assert!(gf.verify(None));
+        // A different pinned key rejects it.
+        let other = Ed25519Signer::generate().public_key();
+        assert!(!gf.verify(Some(&other)));
+        // Tampering the content (after signing) breaks verification.
+        let mut tampered = gf.clone();
+        tampered.reason = "not-the-signed-reason".into();
+        assert!(!tampered.verify(Some(&pk)));
+        // An unsigned grant is rejected the moment a key is pinned.
+        let unsigned = GrantFile::new(Mode::LockdownAll, "x", "y", 0, 1000);
+        assert!(!unsigned.verify(Some(&pk)));
     }
 
     #[test]

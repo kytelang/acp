@@ -55,6 +55,8 @@ pub struct Controller {
     // F2 channel: an optional on-disk grant file the proxy watches (operator/server writes it).
     bg_file: Mutex<Option<String>>,
     bg_mtime: Mutex<Option<std::time::SystemTime>>,
+    // Optional pinned public key: when set, only grants validly signed by it are applied (3c-3).
+    bg_key: Mutex<Option<Vec<u8>>>,
     // Verified caller identity (app_id, agent_id, human principal) from the registry; empty
     // app/agent when unregistered; principal is "unattributed" until a verified human is bound.
     identity: Mutex<(String, String, String)>,
@@ -94,6 +96,7 @@ impl Controller {
             breakglass: Mutex::new(acp_core::breakglass::BreakGlassRegistry::new()),
             bg_file: Mutex::new(None),
             bg_mtime: Mutex::new(None),
+            bg_key: Mutex::new(None),
             identity: Mutex::new((String::new(), String::new(), "unattributed".to_string())),
             policy_dir: Mutex::new(None),
             policy_mtime: Mutex::new(None),
@@ -144,6 +147,13 @@ impl Controller {
         *self.bg_file.lock().unwrap() = Some(path);
     }
 
+    /// Pin the public key that break-glass grants must be signed by. With a key pinned, an unsigned
+    /// or wrongly-signed grant is rejected and the current grant is kept, so merely writing the grant
+    /// file cannot trip or clear the switch.
+    pub fn set_break_glass_key(&self, pubkey: Vec<u8>) {
+        *self.bg_key.lock().unwrap() = Some(pubkey);
+    }
+
     /// Reload the registry from the grant file when it changes (mtime-cached, so it is a cheap stat
     /// on the hot path). A missing/empty file clears any active grant.
     fn refresh_break_glass(&self) {
@@ -159,11 +169,28 @@ impl Controller {
             }
             *last = mtime;
         }
-        let grant = std::fs::read(&path)
-            .ok()
-            .and_then(|b| serde_json::from_slice::<acp_core::breakglass::GrantFile>(&b).ok())
-            .and_then(|g| g.to_break_glass());
-        self.breakglass.lock().unwrap().replace_all(grant);
+        // File absent -> a legitimate clear (protected by filesystem permissions).
+        let bytes = match std::fs::read(&path) {
+            Ok(b) => b,
+            Err(_) => {
+                self.breakglass.lock().unwrap().replace_all(None);
+                return;
+            }
+        };
+        let gf = match serde_json::from_slice::<acp_core::breakglass::GrantFile>(&bytes) {
+            Ok(g) => g,
+            Err(_) => {
+                eprintln!("acp-proxy: break-glass grant unparseable; keeping current grant");
+                return;
+            }
+        };
+        let pinned = self.bg_key.lock().unwrap().clone();
+        if !gf.verify(pinned.as_deref()) {
+            // A forged/invalid grant must not be able to trip OR clear the switch: keep current.
+            eprintln!("acp-proxy: break-glass grant REJECTED (signature/pin check failed); keeping current grant");
+            return;
+        }
+        self.breakglass.lock().unwrap().replace_all(gf.to_break_glass());
     }
 
     /// F2: engage a break-glass mode at runtime. Returns the meta-audit event to record. With no
