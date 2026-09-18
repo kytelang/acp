@@ -46,6 +46,8 @@ pub struct Controller {
     fail_open: bool,
     impact_tax: ImpactTaxonomy,
     resource_tax: ResourceTaxonomy,
+    // Per-(agent, resource) rate-limit buckets for the rate_limit obligation (model v2, D4).
+    limiters: Mutex<std::collections::HashMap<String, acp_core::ratelimit::TokenBucket>>,
     // F2: break-glass grants, applied to the verdict before enforcement. Empty = no-op.
     breakglass: Mutex<acp_core::breakglass::BreakGlassRegistry>,
     // F2 channel: an optional on-disk grant file the proxy watches (operator/server writes it).
@@ -86,6 +88,7 @@ impl Controller {
             fail_open,
             impact_tax,
             resource_tax: ResourceTaxonomy::default(),
+            limiters: Mutex::new(std::collections::HashMap::new()),
             breakglass: Mutex::new(acp_core::breakglass::BreakGlassRegistry::new()),
             bg_file: Mutex::new(None),
             bg_mtime: Mutex::new(None),
@@ -254,6 +257,49 @@ impl Controller {
                 if eff != a.outcome.verdict {
                     a.outcome.verdict = eff;
                     a.enforce = policy::enforce_for(eff, &tc, &a.outcome, a.impact);
+                }
+            }
+            // Obligations (model v2, D4): only meaningful when the (post break-glass) verdict is
+            // still Allow. confirm -> route to human approval (step-up); rate_limit -> deny once the
+            // per-(agent, resource) budget is spent. Deny-overrides among obligations. redact (a
+            // frame rewrite) lands in 3b-2.
+            if a.outcome.verdict == Verdict::Allow && !a.outcome.obligations.is_empty() {
+                use acp_policy::dsl::ObligationKind;
+                let (res, _op) = self.resource_tax.classify(&tc.name);
+                let (mut rate_exceeded, mut needs_confirm) = (false, false);
+                for ob in &a.outcome.obligations {
+                    match ob.kind {
+                        ObligationKind::Confirm => needs_confirm = true,
+                        ObligationKind::RateLimit => {
+                            let key = format!("{}|{}", rec_agent, res.as_str());
+                            let max = ob.max.unwrap_or(60);
+                            let window = ob.window_ms.unwrap_or(60_000);
+                            let allowed = {
+                                let mut lims = self.limiters.lock().unwrap();
+                                let bucket = lims.entry(key).or_insert_with(|| {
+                                    let rate = (max as f64) * 1000.0 / (window as f64);
+                                    acp_core::ratelimit::TokenBucket::new(max as f64, rate, dispatch_now_ms())
+                                });
+                                bucket.allow(dispatch_now_ms())
+                            };
+                            if !allowed {
+                                rate_exceeded = true;
+                            }
+                        }
+                        ObligationKind::Redact => { /* 3b-2: frame rewrite */ }
+                    }
+                }
+                let over = if rate_exceeded {
+                    Some((Verdict::Deny, "rate limit exceeded".to_string()))
+                } else if needs_confirm {
+                    Some((Verdict::StepUp, "confirmation required".to_string()))
+                } else {
+                    None
+                };
+                if let Some((v, reason)) = over {
+                    a.outcome.verdict = v;
+                    a.outcome.reason = Some(reason);
+                    a.enforce = policy::enforce_for(v, &tc, &a.outcome, a.impact);
                 }
             }
             let verdict_s = match a.outcome.verdict {
