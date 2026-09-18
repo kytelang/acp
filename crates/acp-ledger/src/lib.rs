@@ -134,6 +134,38 @@ impl Ledger {
         if let Some(seq) = self.existing(decision_id)? {
             return Ok(seq);
         }
+        // Wrap the 2-3 inserts (args_blob, records, tree_heads) plus the Merkle mutation in ONE
+        // transaction: one WAL commit instead of three (perf) and atomicity (a crash never leaves a
+        // record without its signed tree head). On a commit failure the DB rolls back but the
+        // in-memory Merkle has the extra leaf, so we rebuild it from the persisted rows (rare path).
+        self.conn
+            .execute_batch("BEGIN IMMEDIATE")
+            .map_err(|e| e.to_string())?;
+        match self.append_txn(decision_id, kind, record, args) {
+            Ok(seq) => match self.conn.execute_batch("COMMIT") {
+                Ok(_) => Ok(seq),
+                Err(e) => {
+                    let _ = self.conn.execute_batch("ROLLBACK");
+                    self.rebuild_merkle()?;
+                    Err(e.to_string())
+                }
+            },
+            Err(e) => {
+                let _ = self.conn.execute_batch("ROLLBACK");
+                self.rebuild_merkle()?;
+                Err(e)
+            }
+        }
+    }
+
+    /// The transactional body of `append`; assumes a transaction is open.
+    fn append_txn(
+        &mut self,
+        decision_id: &str,
+        kind: &str,
+        record: &Value,
+        args: Option<&Value>,
+    ) -> Result<u64, String> {
         let canonical = canonical_bytes(record);
         let leaf = leaf_hash(&canonical);
         let args_hash = args.map(sha256_hex);
@@ -168,6 +200,23 @@ impl Ledger {
             )
             .map_err(|e| e.to_string())?;
         Ok(seq)
+    }
+
+    /// Rebuild the in-memory Merkle tree from the persisted leaves (used after a rolled-back append).
+    fn rebuild_merkle(&mut self) -> Result<(), String> {
+        let mut merkle = MerkleLog::new();
+        let mut stmt = self
+            .conn
+            .prepare("SELECT canonical FROM records ORDER BY seq")
+            .map_err(|e| e.to_string())?;
+        let rows = stmt
+            .query_map([], |r| r.get::<_, Vec<u8>>(0))
+            .map_err(|e| e.to_string())?;
+        for row in rows {
+            merkle.append(&row.map_err(|e| e.to_string())?);
+        }
+        self.merkle = merkle;
+        Ok(())
     }
 
     /// Append a linked outcome record for an earlier decision (D11): forwarded / not_executed /
@@ -232,7 +281,12 @@ impl Ledger {
                 ))
             })
             .map_err(|e| e.to_string())?;
+        // Verify each stored head incrementally: advance an O(log n) tree to the head's size and
+        // compare its root. Heads are in ascending size order, so each leaf is folded exactly once,
+        // making the whole head check O(n log n) instead of O(n^2).
         let mut any = false;
+        let mut inc = MerkleLog::new();
+        let mut next_leaf = 0usize;
         for head in heads {
             any = true;
             let (size, root, ts, sig) = head.map_err(|e| e.to_string())?;
@@ -243,11 +297,11 @@ impl Ledger {
                     merkle.size()
                 ));
             }
-            let recomputed = acp_core::merkle::root_of(
-                &(0..size)
-                    .map(|i| merkle.leaf(i).unwrap())
-                    .collect::<Vec<_>>(),
-            );
+            while next_leaf < size {
+                inc.append_hash(merkle.leaf(next_leaf).unwrap());
+                next_leaf += 1;
+            }
+            let recomputed = inc.root();
             if recomputed.to_vec() != root {
                 return Err(format!(
                     "history rewrite: root at size {size} does not match signed head"

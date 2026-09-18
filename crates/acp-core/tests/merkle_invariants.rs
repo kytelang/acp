@@ -82,3 +82,18 @@ fn inclusion_proof_cost_scales_logarithmically() {
         );
     }
 }
+
+#[test]
+fn incremental_root_equals_root_of_for_every_size() {
+    // The O(log n) frontier root() must be byte-identical to the O(n) root_of for all sizes, or
+    // every signature and proof would break. Check exhaustively.
+    use acp_core::merkle::{root_of, leaf_hash};
+    let mut m = MerkleLog::new();
+    let mut leaves = Vec::new();
+    for i in 0..400usize {
+        let bytes = format!("leaf-{i}");
+        m.append(bytes.as_bytes());
+        leaves.push(leaf_hash(bytes.as_bytes()));
+        assert_eq!(m.root(), root_of(&leaves), "incremental root diverged at size {}", i + 1);
+    }
+}

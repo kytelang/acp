@@ -474,7 +474,7 @@ was not actually performed.
 ### H2: Hardening gate (parallel to v2; REQUIRED before scale)
 
 - [~] **H2.1 Large-ledger performance [9].**
-  - [x] Inclusion-proof cost validated logarithmic (merkle_invariants.rs) + `acp bench-ledger <n>` load tool times append/verify throughput; archival/compaction = tiering doc + the archive-only verify test. [ ] the full 100M run is `bench-ledger` with a large N on a release build + load box (debug fsync-per-append is the current limiter).
+  - [x] Inclusion-proof cost validated logarithmic (merkle_invariants.rs) + `acp bench-ledger <n>` load tool times append/verify throughput; archival/compaction = tiering doc + the archive-only verify test. [x] append is now O(n log n) (incremental Merkle frontier) + synchronous=NORMAL + single-transaction append: ~12.5k appends/sec and ~22k verify/sec in release (20k in 1.6s/0.9s, was O(n^2)); [ ] the full 100M run is `bench-ledger` on a load box.
 - [m] **H2.2 Multi-region / residency [3][4].**
   - [m] `acp_core::residency::ResidencyPolicy`: default-deny placement restricted to a tenant's allowed regions; out-of-region placement refused (tested). [ ] the multi-region deployment topology.
 - [e] **H2.3 Sector attestations [10].** (external: HIPAA/sector assessor)

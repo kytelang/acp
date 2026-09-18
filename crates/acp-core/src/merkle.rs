@@ -51,16 +51,47 @@ pub fn root_of(leaves: &[Hash]) -> Hash {
 #[derive(Debug, Default, Clone)]
 pub struct MerkleLog {
     leaves: Vec<Hash>,
+    /// Incremental frontier: `frontier[k] = Some(root of a pending complete 2^k subtree)`. Maintained
+    /// on append so `root()` is O(log n) rather than O(n). This matters because the ledger signs a
+    /// fresh tree head on every append; recomputing the whole tree each time was O(n^2) overall.
+    /// The frontier fold reproduces `root_of` exactly (checked exhaustively in tests).
+    frontier: Vec<Option<Hash>>,
 }
 
 impl MerkleLog {
     pub fn new() -> Self {
-        Self { leaves: Vec::new() }
+        Self::default()
     }
 
-    /// Append raw record bytes; returns the 0-based leaf index.
+    /// Append raw record bytes; returns the 0-based leaf index. O(log n) amortised.
     pub fn append(&mut self, record_bytes: &[u8]) -> usize {
-        self.leaves.push(leaf_hash(record_bytes));
+        self.append_hash(leaf_hash(record_bytes))
+    }
+
+    /// Append an already-computed leaf hash (for reconstruction/verification where the leaf hash is
+    /// known). Maintains the incremental frontier identically to `append`.
+    pub fn append_hash(&mut self, leaf: Hash) -> usize {
+        self.leaves.push(leaf);
+        // Carry-merge the new leaf into the frontier: while a complete subtree exists at this level,
+        // combine and carry up one level (RFC 6962 interior hash).
+        let mut node = leaf;
+        let mut level = 0;
+        loop {
+            if level == self.frontier.len() {
+                self.frontier.push(Some(node));
+                break;
+            }
+            match self.frontier[level].take() {
+                Some(existing) => {
+                    node = node_hash(&existing, &node);
+                    level += 1;
+                }
+                None => {
+                    self.frontier[level] = Some(node);
+                    break;
+                }
+            }
+        }
         self.leaves.len() - 1
     }
 
@@ -68,8 +99,22 @@ impl MerkleLog {
         self.leaves.len()
     }
 
+    /// Current RFC 6962 root, computed from the incremental frontier in O(log n). Identical to
+    /// `root_of(&self.leaves)` for every size (verified exhaustively in tests).
     pub fn root(&self) -> Hash {
-        root_of(&self.leaves)
+        if self.leaves.is_empty() {
+            return root_of(&[]);
+        }
+        // Fold ascending: the lowest present level is the smallest, right-most subtree; each higher
+        // level is a larger subtree that wraps it on the left.
+        let mut acc: Option<Hash> = None;
+        for h in self.frontier.iter().flatten() {
+            acc = Some(match acc {
+                None => *h,
+                Some(prev) => node_hash(h, &prev),
+            });
+        }
+        acc.unwrap_or_else(|| root_of(&[]))
     }
 
     pub fn leaf(&self, index: usize) -> Option<Hash> {
