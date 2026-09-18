@@ -121,6 +121,7 @@ name = "acp-proxy"
 version = "0.0.0"
 dependencies = [
  "acp-approvals",
+ "acp-auth",
  "acp-core",
  "acp-jsonrpc",
  "acp-ledger",

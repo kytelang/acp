@@ -13,6 +13,7 @@ use axum::{
     body::Bytes, extract::State, http::StatusCode, response::IntoResponse, response::Response,
     routing::post, Router,
 };
+use axum::http::HeaderMap;
 use std::sync::Arc;
 use std::time::Duration;
 
@@ -54,7 +55,7 @@ pub async fn run(addr: &str, upstream: String, controller: Arc<Controller>) -> a
     Ok(())
 }
 
-async fn handle(State(st): State<Arc<HttpState>>, body: Bytes) -> Response {
+async fn handle(State(st): State<Arc<HttpState>>, headers: HeaderMap, body: Bytes) -> Response {
     // Concurrency cap: acquire a permit or shed load with 503 + Retry-After (no unbounded queueing).
     let _permit = match st.sem.clone().try_acquire_owned() {
         Ok(p) => p,
@@ -67,7 +68,16 @@ async fn handle(State(st): State<Arc<HttpState>>, body: Bytes) -> Response {
                 .into_response();
         }
     };
-    let forward_body: reqwest::Body = match st.controller.decide_frame(&body) {
+    // Per-request human identity: verify this request's bearer (if OIDC is configured) and stamp the
+    // resulting principal onto the decision. Absent/invalid -> the startup principal (unattributed).
+    let principal = {
+        let tok = headers
+            .get("authorization")
+            .and_then(|v| v.to_str().ok())
+            .and_then(|s| s.strip_prefix("Bearer "));
+        st.controller.resolve_principal_from_token(tok)
+    };
+    let forward_body: reqwest::Body = match st.controller.decide_frame_with_principal(&body, principal) {
         FrameAction::Reply(json) => {
             return ([("content-type", "application/json")], json).into_response()
         }

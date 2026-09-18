@@ -73,6 +73,16 @@ pub struct Controller {
     // Enforcement attestation (4b): when a key is set, the HTTP transport stamps a signed, short-
     // lived token on forwarded requests so a guarded tool server can reject un-proxied calls.
     enforcement_signer: Mutex<Option<acp_core::sign::Ed25519Signer>>,
+    // Per-request human identity (phase B): when set, the HTTP transport verifies each request's
+    // bearer token and stamps the resulting human principal onto that call, overriding the startup
+    // default. An invalid/absent token degrades to the startup principal (unattributed), never an
+    // ungoverned pass.
+    oidc: Mutex<Option<Oidc>>,
+}
+
+struct Oidc {
+    jwks: acp_auth::Jwks,
+    cfg: acp_auth::EntraConfig,
 }
 
 impl Controller {
@@ -114,6 +124,7 @@ impl Controller {
             quarantined: Mutex::new(HashSet::new()),
             tool_pins_file: Mutex::new(None),
             enforcement_signer: Mutex::new(None),
+            oidc: Mutex::new(None),
         }
     }
 
@@ -178,6 +189,25 @@ impl Controller {
     /// Set the key used to sign enforcement attestations stamped on forwarded HTTP requests.
     pub fn set_enforcement_key(&self, seed: [u8; 32]) {
         *self.enforcement_signer.lock().unwrap() = Some(acp_core::sign::Ed25519Signer::from_seed(&seed));
+    }
+
+    /// Configure per-request human-identity verification (the org IdP JWKS + issuer/audience).
+    pub fn set_oidc(&self, jwks: acp_auth::Jwks, cfg: acp_auth::EntraConfig) {
+        *self.oidc.lock().unwrap() = Some(Oidc { jwks, cfg });
+    }
+
+    /// Resolve a verified human principal from a request bearer token, or None if OIDC is not
+    /// configured, no token was presented, or the token does not verify. None degrades the call to
+    /// the startup principal (unattributed) rather than failing it, so policy decides what an
+    /// unattributed caller may do.
+    pub fn resolve_principal_from_token(&self, token: Option<&str>) -> Option<String> {
+        let guard = self.oidc.lock().unwrap();
+        let oidc = guard.as_ref()?;
+        let token = token?;
+        match acp_auth::verify(token, &oidc.jwks, &oidc.cfg, dispatch_now_ms()) {
+            Ok(p) => Some(if p.username.is_empty() { p.oid } else { p.username }),
+            Err(_) => None,
+        }
     }
 
     /// A fresh enforcement token for the current session, if an enforcement key is configured.
@@ -317,6 +347,12 @@ impl Controller {
     }
 
     pub fn decide_frame(&self, raw: &[u8]) -> FrameAction {
+        self.decide_frame_with_principal(raw, None)
+    }
+
+    /// Decide a frame, optionally overriding the human principal with one the transport verified from
+    /// this request's bearer token (per-request enforcement identity, phase B).
+    pub fn decide_frame_with_principal(&self, raw: &[u8], principal_override: Option<String>) -> FrameAction {
         let insp = inspect(raw);
 
         // Resource limit (M1.5): fail-closed on oversize.
@@ -357,7 +393,8 @@ impl Controller {
                 self.emit_event(&tc.name, "deny", Some("tool-integrity"), "high", "quarantined");
                 return FrameAction::Reply(quarantine_reply(&tc.id, &tc.name));
             }
-            let (app_id, agent_id, principal) = self.identity.lock().unwrap().clone();
+            let (app_id, agent_id, principal0) = self.identity.lock().unwrap().clone();
+            let principal = principal_override.clone().unwrap_or(principal0);
             // Record the verified agent id when present, else the transport default.
             let rec_agent = if agent_id.is_empty() { self.agent.clone() } else { agent_id.clone() };
             // Trusted, proxy-derived facts stamped into evidence alongside the verdict.
@@ -821,5 +858,46 @@ mod integrity_tests {
         c.inspect_response(&list_result("echoes input"));
         c.inspect_response(&list_result("echoes input")); // unchanged re-list
         assert!(matches!(c.decide_frame(&echo_call()), FrameAction::Forward));
+    }
+}
+
+
+#[cfg(test)]
+mod oidc_tests {
+    use super::*;
+    use acp_auth::MockEntra;
+
+    fn controller() -> Controller {
+        let engine = Arc::new(PolicyEngine::from_yaml("version: 1\ndefault: allow\nrules: []\n").unwrap());
+        Controller::new(Some(engine), "prod".to_string(), false, None, None, vec![], false, ImpactTaxonomy::default())
+    }
+
+    #[test]
+    fn resolves_the_verified_human_from_a_bearer_token() {
+        let mock = MockEntra::new("common", "acp-app");
+        let c = controller();
+        c.set_oidc(mock.jwks(), mock.config());
+        let tok = mock.issue("oid-1", "alice@corp", "common", &["PolicyAdmin"], dispatch_now_ms(), 3600);
+        assert_eq!(c.resolve_principal_from_token(Some(&tok)), Some("alice@corp".to_string()));
+        // No token, a forged token, and (below) no OIDC all degrade to None -> startup principal.
+        assert_eq!(c.resolve_principal_from_token(None), None);
+        assert_eq!(c.resolve_principal_from_token(Some("not.a.token")), None);
+    }
+
+    #[test]
+    fn no_oidc_configured_yields_no_principal() {
+        let c = controller();
+        let mock = MockEntra::new("common", "acp-app");
+        let tok = mock.issue("oid-1", "alice@corp", "common", &["PolicyAdmin"], dispatch_now_ms(), 3600);
+        assert_eq!(c.resolve_principal_from_token(Some(&tok)), None, "unconfigured proxy trusts no token");
+    }
+
+    #[test]
+    fn a_valid_override_drives_the_decision_and_forwards() {
+        let c = controller();
+        let frame = json!({"jsonrpc":"2.0","id":1,"method":"tools/call","params":{"name":"echo","arguments":{}}})
+            .to_string().into_bytes();
+        // A per-request principal override still flows through to a normal forward under default-allow.
+        assert!(matches!(c.decide_frame_with_principal(&frame, Some("alice@corp".to_string())), FrameAction::Forward));
     }
 }

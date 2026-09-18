@@ -47,6 +47,8 @@ struct Opts {
     break_glass_key: Option<String>,
     tool_pins: Option<String>,
     enforcement_key: Option<String>,
+    entra_tenant: Option<String>,
+    entra_audience: Option<String>,
 }
 
 fn parse_opts(items: &[String]) -> Result<(Opts, Vec<String>), String> {
@@ -76,6 +78,8 @@ fn parse_opts(items: &[String]) -> Result<(Opts, Vec<String>), String> {
             "--break-glass-key" => o.break_glass_key = it.next().cloned(),
             "--tool-pins" => o.tool_pins = it.next().cloned(),
             "--enforcement-key" => o.enforcement_key = it.next().cloned(),
+            "--entra-tenant" => o.entra_tenant = it.next().cloned(),
+            "--entra-audience" => o.entra_audience = it.next().cloned(),
             "--policy-dir" => o.policy_dir = it.next().cloned(),
             "--registry" => o.registry = it.next().cloned(),
             "--agent-id" => o.agent_id = it.next().cloned(),
@@ -87,6 +91,15 @@ fn parse_opts(items: &[String]) -> Result<(Opts, Vec<String>), String> {
         }
     }
     Ok((o, cmd))
+}
+
+async fn load_jwks(source: &str) -> Result<acp_auth::Jwks, String> {
+    let body = if source.starts_with("http") {
+        reqwest::get(source).await.map_err(|e| e.to_string())?.text().await.map_err(|e| e.to_string())?
+    } else {
+        std::fs::read_to_string(source).map_err(|e| e.to_string())?
+    };
+    acp_auth::Jwks::from_jwks_json(&body).map_err(|e| format!("{e:?}"))
 }
 
 fn build_controller(o: &Opts) -> Result<Arc<Controller>, String> {
@@ -276,6 +289,20 @@ async fn main() -> ExitCode {
             return ExitCode::from(1);
         }
     };
+
+    // Per-request human identity (phase B): verify each request's bearer against the org IdP and
+    // stamp the resulting human principal onto governed calls.
+    if let (Some(tid), Some(aud)) = (&opts.entra_tenant, &opts.entra_audience) {
+        let issuer = format!("https://login.microsoftonline.com/{tid}/v2.0");
+        let jwks_url = format!("https://login.microsoftonline.com/{tid}/discovery/v2.0/keys");
+        match load_jwks(&jwks_url).await {
+            Ok(jwks) => {
+                controller.set_oidc(jwks, acp_auth::EntraConfig { issuer: issuer.clone(), audience: aud.clone() });
+                eprintln!("acp-proxy: per-request human identity enabled (issuer {issuer})");
+            }
+            Err(e) => eprintln!("acp-proxy: could not load JWKS ({e}); human principal stays as configured"),
+        }
+    }
 
     match sub {
         Some("stdio") => {
