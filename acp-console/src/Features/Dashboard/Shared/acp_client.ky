@@ -24,7 +24,10 @@ pub struct AppRow {
     pub name: string,
     pub owner: string,
     pub id: string,
-    init(name: string, owner: string, id: string) { self.name = name; self.owner = owner; self.id = id; }
+    pub agents: string,
+    init(name: string, owner: string, id: string, agents: string) {
+        self.name = name; self.owner = owner; self.id = id; self.agents = agents;
+    }
 }
 
 pub struct AgentRow {
@@ -93,13 +96,27 @@ pub struct AcpClient {
         let av = json.get(json.parse(resp.body), "apps");
         let arr = json.asArray(av);
         if (arr == undefined) { return rows; }
+        // An app owns agents; fetch them once so each app row can show its agent count.
+        let agResp = client.Http.get(self.base + "/agents");
+        let agVal = (agResp.status.toCode() == 200) ? json.get(json.parse(agResp.body), "agents") : undefined;
+        let agArr = json.asArray(agVal);
         let i = 0;
         while (i < arr.size()) {
             let item = json.at(av, i);
+            let appId = json.asString(json.get(item, "id")) ?? "";
+            let cnt = 0;
+            if (agArr != undefined) {
+                let j = 0;
+                while (j < agArr.size()) {
+                    let ag = json.at(agVal, j);
+                    if (string.eql(json.asString(json.get(ag, "app_id")) ?? "", appId)) { cnt = cnt + 1; }
+                    j = j + 1;
+                }
+            }
             rows.push(AppRow(
                 json.asString(json.get(item, "name")) ?? "?",
                 json.asString(json.get(item, "owner")) ?? "",
-                json.asString(json.get(item, "id")) ?? ""));
+                appId, `${cnt}`));
             i = i + 1;
         }
         return rows;
@@ -113,12 +130,28 @@ pub struct AcpClient {
         let av = json.get(json.parse(resp.body), "agents");
         let arr = json.asArray(av);
         if (arr == undefined) { return rows; }
+        // Resolve each agent's parent app id to the app name, so the hierarchy reads app -> agent.
+        let apResp = client.Http.get(self.base + "/apps");
+        let apVal = (apResp.status.toCode() == 200) ? json.get(json.parse(apResp.body), "apps") : undefined;
+        let apArr = json.asArray(apVal);
         let i = 0;
         while (i < arr.size()) {
             let item = json.at(av, i);
+            let appId = json.asString(json.get(item, "app_id")) ?? "";
+            let appName = appId;
+            if (apArr != undefined) {
+                let k = 0;
+                while (k < apArr.size()) {
+                    let ap = json.at(apVal, k);
+                    if (string.eql(json.asString(json.get(ap, "id")) ?? "", appId)) {
+                        appName = json.asString(json.get(ap, "name")) ?? appId;
+                    }
+                    k = k + 1;
+                }
+            }
             rows.push(AgentRow(
                 json.asString(json.get(item, "name")) ?? "?",
-                json.asString(json.get(item, "app_id")) ?? "",
+                appName,
                 json.asBool(json.get(item, "active")) ?? false));
             i = i + 1;
         }

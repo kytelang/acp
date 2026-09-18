@@ -19,11 +19,16 @@ pub fn appsPanel(rows: list.List<AppRow>): Html {
             <p class="empty">No apps registered.</p>
         } else {
             <table class="tbl">
-                <thead><tr><th>Name</th><th>Owner</th><th>ID</th></tr></thead>
+                <thead><tr><th>App</th><th>Owner</th><th>Agents</th><th>ID</th></tr></thead>
                 <tbody>
                     {for (i in 0..rows.size()) {
-                        let r = rows.get(i) ?? AppRow("", "", "");
-                        <tr><td class="strong">{r.name}</td><td>{r.owner}</td><td class="mono dim">{r.id}</td></tr>
+                        let r = rows.get(i) ?? AppRow("", "", "", "0");
+                        <tr>
+                            <td class="strong">{r.name}</td>
+                            <td>{r.owner}</td>
+                            <td><span class="badge ok">{r.agents}</span></td>
+                            <td class="mono dim">{r.id}</td>
+                        </tr>
                     }}
                 </tbody>
             </table>
@@ -37,13 +42,13 @@ pub fn agentsPanel(rows: list.List<AgentRow>): Html {
             <p class="empty">No agents registered.</p>
         } else {
             <table class="tbl">
-                <thead><tr><th>Agent</th><th>App</th><th>Status</th></tr></thead>
+                <thead><tr><th>Agent</th><th>Belongs to app</th><th>Status</th></tr></thead>
                 <tbody>
                     {for (i in 0..rows.size()) {
                         let r = rows.get(i) ?? AgentRow("", "", false);
                         <tr>
                             <td class="strong">{r.name}</td>
-                            <td class="mono dim">{r.app}</td>
+                            <td><span class="badge ok">{r.app}</span></td>
                             <td>{if (r.active) { <span class="badge ok">active</span> } else { <span class="badge bad">revoked</span> }}</td>
                         </tr>
                     }}
@@ -75,10 +80,11 @@ pub fn approvalsPanel(rows: list.List<ApprovalRow>): Html {
 }
 
 pub fn policyPanel(version: string, author: string): Html {
-    return <div id="policy" class="polrow">
+    return <span id="policy" class="sub">
         <span class="badge ver">{version}</span>
-        <span class="dim">deployed by</span> <span class="strong">{author}</span>
-    </div>;
+        <span class="dim" style="margin:0 .35rem">deployed by</span>
+        <span class="strong">{author}</span>
+    </span>;
 }
 
 fn verdictBadge(v: string): Html {
