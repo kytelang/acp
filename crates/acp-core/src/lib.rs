@@ -5,6 +5,7 @@
 //! RFC 6962-style verifiable log, and the signing seam.
 
 pub mod adapter;
+pub mod attest;
 pub mod agility;
 pub mod anchor;
 pub mod anomaly;

@@ -74,14 +74,15 @@ async fn handle(State(st): State<Arc<HttpState>>, body: Bytes) -> Response {
         FrameAction::Forward => body.into(),
         FrameAction::ForwardRewritten(rewritten) => rewritten.into(),
     };
-    match st
-            .client
-            .post(&st.upstream)
-            .header("content-type", "application/json")
-            .body(forward_body)
-            .send()
-            .await
-        {
+    let mut upstream_req = st
+        .client
+        .post(&st.upstream)
+        .header("content-type", "application/json");
+    if let Some(tok) = st.controller.enforcement_token() {
+        // Prove to a guarded tool server that this call passed governance (4b).
+        upstream_req = upstream_req.header("x-acp-enforcement", tok);
+    }
+    match upstream_req.body(forward_body).send().await {
             Ok(resp) => {
                 let status = StatusCode::from_u16(resp.status().as_u16()).unwrap_or(StatusCode::OK);
                 let ctype = resp

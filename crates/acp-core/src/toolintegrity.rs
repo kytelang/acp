@@ -8,7 +8,7 @@
 //! than a silent escalation. Trust-on-first-use, optionally persisted so a change is caught across
 //! restarts.
 
-use crate::canonical::sha256_hex_bytes;
+use crate::canonical::sha256_hex;
 use serde_json::{json, Value};
 use std::collections::BTreeMap;
 
@@ -31,9 +31,10 @@ pub fn tool_fingerprint(name: &str, description: &str, input_schema: &Value) -> 
         "description": description,
         "inputSchema": input_schema,
     });
-    // serde_json serialises object keys in sorted order (no preserve_order feature), so this is
-    // stable across servers that emit the same tool with differently-ordered fields.
-    sha256_hex_bytes(normalized.to_string().as_bytes())
+    // canonical::sha256_hex sorts object keys recursively before hashing, so the fingerprint is
+    // stable across servers that emit the same tool with differently-ordered fields (serde_json's
+    // preserve_order is enabled in this workspace, so we must NOT rely on to_string ordering).
+    sha256_hex(&normalized)
 }
 
 /// The set of pinned tool fingerprints, keyed by tool name.

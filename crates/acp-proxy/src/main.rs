@@ -46,6 +46,7 @@ struct Opts {
     principal: Option<String>,
     break_glass_key: Option<String>,
     tool_pins: Option<String>,
+    enforcement_key: Option<String>,
 }
 
 fn parse_opts(items: &[String]) -> Result<(Opts, Vec<String>), String> {
@@ -74,6 +75,7 @@ fn parse_opts(items: &[String]) -> Result<(Opts, Vec<String>), String> {
             "--break-glass-file" => o.break_glass = it.next().cloned(),
             "--break-glass-key" => o.break_glass_key = it.next().cloned(),
             "--tool-pins" => o.tool_pins = it.next().cloned(),
+            "--enforcement-key" => o.enforcement_key = it.next().cloned(),
             "--policy-dir" => o.policy_dir = it.next().cloned(),
             "--registry" => o.registry = it.next().cloned(),
             "--agent-id" => o.agent_id = it.next().cloned(),
@@ -195,6 +197,25 @@ fn build_controller(o: &Opts) -> Result<Arc<Controller>, String> {
     if let Some(pins) = &o.tool_pins {
         controller.set_tool_pins_file(pins.clone());
         eprintln!("acp-proxy: tool-integrity pins persisted at {pins}");
+    }
+    if let Some(k) = &o.enforcement_key {
+        match hex::decode(k) {
+            Ok(b) if b.len() == 32 => {
+                let mut seed = [0u8; 32];
+                seed.copy_from_slice(&b);
+                let pubkey = acp_core::sign::Ed25519Signer::from_seed(&seed);
+                use acp_core::sign::Signer;
+                eprintln!(
+                    "acp-proxy: stamping enforcement attestations; guard tool servers with pubkey {}",
+                    hex::encode(pubkey.public_key())
+                );
+                controller.set_enforcement_key(seed);
+            }
+            _ => return Err("--enforcement-key must be a 32-byte hex seed".to_string()),
+        }
+    }
+    if o.fail_open {
+        eprintln!("acp-proxy: WARNING --fail-open is set: on an evidence-write failure the proxy FORWARDS ungoverned. This weakens the fail-closed guarantee; use only for controlled testing.");
     }
     // Verified caller identity: when a registry is configured, the presented (agent-id, token) MUST
     // verify. Fail closed on a missing/invalid/revoked credential so a mis-enrolled agent cannot run

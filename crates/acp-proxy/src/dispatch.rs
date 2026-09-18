@@ -70,6 +70,9 @@ pub struct Controller {
     tool_pins: Mutex<ToolPins>,
     quarantined: Mutex<HashSet<String>>,
     tool_pins_file: Mutex<Option<String>>,
+    // Enforcement attestation (4b): when a key is set, the HTTP transport stamps a signed, short-
+    // lived token on forwarded requests so a guarded tool server can reject un-proxied calls.
+    enforcement_signer: Mutex<Option<acp_core::sign::Ed25519Signer>>,
 }
 
 impl Controller {
@@ -110,6 +113,7 @@ impl Controller {
             tool_pins: Mutex::new(ToolPins::new()),
             quarantined: Mutex::new(HashSet::new()),
             tool_pins_file: Mutex::new(None),
+            enforcement_signer: Mutex::new(None),
         }
     }
 
@@ -169,6 +173,19 @@ impl Controller {
     pub fn set_tool_pins_file(&self, path: String) {
         *self.tool_pins.lock().unwrap() = ToolPins::load(&path);
         *self.tool_pins_file.lock().unwrap() = Some(path);
+    }
+
+    /// Set the key used to sign enforcement attestations stamped on forwarded HTTP requests.
+    pub fn set_enforcement_key(&self, seed: [u8; 32]) {
+        *self.enforcement_signer.lock().unwrap() = Some(acp_core::sign::Ed25519Signer::from_seed(&seed));
+    }
+
+    /// A fresh enforcement token for the current session, if an enforcement key is configured.
+    pub fn enforcement_token(&self) -> Option<String> {
+        let guard = self.enforcement_signer.lock().unwrap();
+        guard
+            .as_ref()
+            .map(|s| acp_core::attest::issue(s, &self.session, dispatch_now_ms()))
     }
 
     /// Inspect a server-to-client frame. If it is a tools/list result, fingerprint each advertised
