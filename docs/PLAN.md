@@ -372,7 +372,7 @@ was not actually performed.
   - [m] `acp-auth` Entra OIDC verify + RBAC (mock IdP, 8 tests); `acp_core::webhook::verify_slack` Slack signature verify; `acp-mtls` mutual TLS proxy<->server (rustls, client-cert REQUIRED, real in-memory handshake test: valid client completes mutual auth, rogue client rejected). Real Entra/certs = config.
 - [~] **H0.9 Supply chain: signed releases + SBOM [7].**
   - [x] CycloneDX SBOM generated offline (scripts/sbom.sh, 360 components) AND signed: `acp sign-artifact`/`verify-artifact` (Ed25519) sign the SBOM/release and detect tampering (round-trip tested); cargo-audit in CI. Real release uses a KMS-held key (config).
-- [e] **H0.10 Third-party pen test [8].** (external: pen-test vendor; the fuzz/robustness suites are built)
+- [e] **H0.10 Third-party pen test [8].** (external: pen-test vendor. In-repo: `scripts/pentest.sh` adversarial self-test battery, 5/5 passing, gives the vendor a starting point; the fuzz/robustness suites are also built)
   - [b] Pen test of proxy/server/console complete; findings remediated.
 - [~] **H0.11 Fuzzing + E2E + load [12][9].**
   - [x] Framing + policy compiler fuzzed: deterministic 10k-input corpora assert no panic on hostile input, and the happy path still compiles (fuzz_robustness.rs, fuzz_frames.rs). [ ] full cargo-fuzz + E2E MCP + load run remain.
@@ -514,7 +514,7 @@ was not actually performed.
 - [x] **X.1 CI/CD gates always green.** (.github/workflows/ci.yml: fmt/clippy -D warnings/build/test/transparency/audit)
   - [b] build/test/clippy/fmt/audit + transparency + trust-suite + `acp verify` on every merge.
 - [d] **X.2 Secure SDLC + threat-model upkeep [8].**
-  - [d] docs/ops/secure-sdlc.md: CI gates (clippy-Dwarnings, trust-core assurance, fuzz, transparency self-test, cargo-audit, SBOM), review discipline, threat-model upkeep, vuln-disclosure. [ ] public disclosure/bug-bounty go live at GA.
+  - [d] docs/ops/secure-sdlc.md: CI gates (clippy-Dwarnings, trust-core assurance, fuzz, transparency self-test, cargo-audit, SBOM, **pen-test harness `scripts/pentest.sh`**), review discipline, threat-model upkeep, vuln-disclosure. [ ] public disclosure/bug-bounty go live at GA.
 - [x] **X.3 Billing/metering without touching evidence [R7].**
   - [x] `acp_core::metering::Meter` counts one unit/decision, never reads args, overage is BillOverage (never stops gating); /report exposes billable_units. Unit-tested.
 - [x] **X.4 Support without seeing args [R7].**

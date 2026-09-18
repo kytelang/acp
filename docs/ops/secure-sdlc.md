@@ -11,6 +11,7 @@ regression cannot slip in unreviewed.
   compiler and frame parser.
 - The transparency self-test (`make test-transparency`) and `acp verify` on a produced pack.
 - Dependency scanning (cargo-audit) and the SBOM generation.
+- The pen-test harness (`scripts/pentest.sh`): drives adversarial frames and asserts policy is enforced, inputs fail closed, evidence is tamper-evident (two layers), and no raw args leak. Runs in CI and before a release.
 
 ## Review and threat model
 
