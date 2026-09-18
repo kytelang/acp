@@ -330,7 +330,7 @@ was not actually performed.
 ### M5: HTTP transport, shadow, anti-bypass, polish
 
 - [x] **M5.1 Streamable HTTP transport.**
-  - [x] `acp-proxy http` reverse-proxy: transparency + deny + allow pass over HTTP, sharing the decision path with stdio. [ ] server-initiated SSE streaming is a fast-follow.
+  - [x] `acp-proxy http` reverse-proxy: transparency + deny + allow pass over HTTP, sharing the decision path with stdio. [x] server->client SSE passthrough: an upstream text/event-stream response is streamed through the HTTP transport chunk-by-chunk (futures unfold over resp.chunk(), no buffering); tested against a mock SSE upstream (framing + events preserved).
 - [~] **M5.2 Tool<->proxy binding + upstream TLS (D10).**
   - [x] stdio: tool<->proxy binding is structural (proxy owns the child's stdio). HTTP: rustls verifies https upstreams, cleartext-http warned. [ ] mTLS tool binding + cert pinning (H0).
 - [x] **M5.3 Shadow mode + safe fail-policy (D9).**

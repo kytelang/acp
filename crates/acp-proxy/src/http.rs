@@ -79,8 +79,29 @@ async fn handle(State(st): State<Arc<HttpState>>, body: Bytes) -> Response {
         {
             Ok(resp) => {
                 let status = StatusCode::from_u16(resp.status().as_u16()).unwrap_or(StatusCode::OK);
-                let bytes = resp.bytes().await.unwrap_or_default();
-                (status, [("content-type", "application/json")], bytes).into_response()
+                let ctype = resp
+                    .headers()
+                    .get(reqwest::header::CONTENT_TYPE)
+                    .and_then(|v| v.to_str().ok())
+                    .unwrap_or("")
+                    .to_string();
+                if ctype.starts_with("text/event-stream") {
+                    // MCP streamable-HTTP: the upstream answered with an SSE stream (server->client
+                    // notifications/results). Stream it through chunk-by-chunk without buffering the
+                    // (potentially unbounded) body. The governed request already ran through
+                    // decide_frame above, so there is nothing to gate on the response body.
+                    let s = futures_util::stream::unfold(resp, |mut r| async move {
+                        match r.chunk().await {
+                            Ok(Some(chunk)) => Some((Ok::<_, std::io::Error>(chunk), r)),
+                            _ => None,
+                        }
+                    });
+                    let body = axum::body::Body::from_stream(s);
+                    (status, [("content-type", "text/event-stream")], body).into_response()
+                } else {
+                    let bytes = resp.bytes().await.unwrap_or_default();
+                    (status, [("content-type", "application/json")], bytes).into_response()
+                }
             }
             Err(e) => (StatusCode::BAD_GATEWAY, format!("upstream error: {e}")).into_response(),
         },
