@@ -34,6 +34,28 @@ sequenceDiagram
 
 Reuses `acp-registry` (HumanPrincipal, Delegation already exist) and `acp-auth` (OIDC scaffolding exists; Entra is currently mocked). The work is real JWKS validation, SPIFFE integration, and SCIM sync.
 
+## B1a. Deployment prerequisites (what the operator provides)
+
+Making identity real needs no secrets in ACP, only non-secret config plus one Azure step the operator owns. Documented here so it is part of the design, not an afterthought.
+
+What ACP needs (non-secret config, in `EntraConfig` / a config file):
+
+| Value | Meaning | Secret? |
+|---|---|---|
+| Tenant ID | the tenant GUID; issuer is `https://login.microsoftonline.com/{tenant}/v2.0` | no |
+| Application (client) ID | the token `aud` must equal this | no |
+| JWKS URI | `https://login.microsoftonline.com/{tenant}/discovery/v2.0/keys` (Entra rotates keys; ACP fetches and caches) | no, public |
+| App role names | e.g. `PolicyAdmin`, `Approver`, `BreakGlassOperator`, `Auditor`, `Registrar`; mapped to ACP capabilities | no |
+
+What ACP does NOT need: the client secret (verification uses Entra's public keys, not a secret), and never a password. A secret would only be needed if ACP itself initiated a login flow; as a resource server validating incoming tokens it needs none.
+
+What the operator does once, in Azure:
+1. Create an App Registration for ACP.
+2. Define the App Roles above and assign users or groups to them (so tokens carry `roles`).
+3. Provide the tenant id and application id for the config, and one real user token for a live end-to-end check.
+
+Verification path (RS256 + rotating JWKS) is built and unit-tested offline with a self-signed RSA fixture; pointing it at a real tenant is only the config above. Until real values are supplied, the build ships mock placeholders (`tenant=common`, `aud=acp-app`) and the `MockEntra` EdDSA issuer for tests, so nothing above the JWKS seam changes when real Entra is wired.
+
 ## B2. Multi-tenancy
 
 ```mermaid

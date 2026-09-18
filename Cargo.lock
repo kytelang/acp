@@ -17,6 +17,8 @@ version = "0.0.0"
 dependencies = [
  "acp-core",
  "base64 0.22.1",
+ "hex",
+ "ring",
  "serde",
  "serde_json",
 ]
@@ -127,6 +129,7 @@ dependencies = [
  "anyhow",
  "axum",
  "futures-util",
+ "hex",
  "reqwest",
  "serde_json",
  "tokio",
