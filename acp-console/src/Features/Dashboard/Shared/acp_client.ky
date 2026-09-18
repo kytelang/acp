@@ -271,12 +271,23 @@ pub struct AcpClient {
         return rows;
     }
 
+    // Fetch a bearer token for a role. In dev this hits acp-server's mock /auth/dev-token; in a
+    // real deployment the console shell performs an OIDC login and this returns the user's token.
+    // Empty string when auth is not enabled (the server then runs RBAC-off and accepts the call).
+    fn authToken(self: AcpClient, role: string): string {
+        let resp = client.Http.get(self.base + "/auth/dev-token?role=" + role);
+        if (resp.status.toCode() != 200) { return ""; }
+        return json.asString(json.get(json.parse(resp.body), "token")) ?? "";
+    }
+
     // Deploy a policy by forwarding the browser's datastar signals (which already carry a "policy"
     // and "author" field) straight to acp-server, the trust store. The server validates, versions,
     // signs, and writes it; we return the outcome for display.
     pub fn deployRaw(self: AcpClient, body: string): DeployResult {
         let hdrs = client.Http.emptyHeaders();
         hdrs.set("Content-Type", "application/json");
+        let tok = self.authToken("PolicyAdmin");
+        if (!string.eql(tok, "")) { hdrs.set("Authorization", "Bearer " + tok); }
         let resp = client.Http.request("POST", self.base + "/policy-store/deploy", hdrs, body);
         if (resp.status.toCode() != 200) {
             return DeployResult(false, "acp-server unreachable (HTTP " + `${resp.status.toCode()}` + ")");
@@ -308,6 +319,8 @@ pub struct AcpClient {
     pub fn killEngageRaw(self: AcpClient, body: string): DeployResult {
         let hdrs = client.Http.emptyHeaders();
         hdrs.set("Content-Type", "application/json");
+        let tok = self.authToken("BreakGlassOperator");
+        if (!string.eql(tok, "")) { hdrs.set("Authorization", "Bearer " + tok); }
         let resp = client.Http.request("POST", self.base + "/break-glass/engage", hdrs, body);
         if (resp.status.toCode() != 200) { return DeployResult(false, "acp-server unreachable"); }
         let v = json.parse(resp.body);
@@ -323,6 +336,8 @@ pub struct AcpClient {
     pub fn killClear(self: AcpClient): DeployResult {
         let hdrs = client.Http.emptyHeaders();
         hdrs.set("Content-Type", "application/json");
+        let tok = self.authToken("BreakGlassOperator");
+        if (!string.eql(tok, "")) { hdrs.set("Authorization", "Bearer " + tok); }
         let resp = client.Http.request("POST", self.base + "/break-glass/clear", hdrs, "{}");
         if (resp.status.toCode() != 200) { return DeployResult(false, "acp-server unreachable"); }
         return DeployResult(true, "break-glass cleared");
