@@ -1,0 +1,10 @@
+[package]
+name = "acp-hsm"
+version = "0.0.0"
+edition.workspace = true
+license.workspace = true
+description = "Agent Control Plane: PKCS#11 HSM signing backend for the Signer seam (Ed25519)."
+
+[dependencies]
+acp-core = { path = "../acp-core" }
+cryptoki.workspace = true
