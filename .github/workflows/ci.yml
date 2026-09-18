@@ -2,22 +2,34 @@ name: ci
 on: [push, pull_request]
 jobs:
   build-test:
-    runs-on: ubuntu-latest
+    # Target-OS verification matrix: the enforcement core must build and pass on every OS a
+    # customer might self-host on (Linux, macOS, Windows).
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, macos-latest, windows-latest]
+    runs-on: ${{ matrix.os }}
     steps:
       - uses: actions/checkout@v4
       - uses: dtolnay/rust-toolchain@stable
         with:
           components: rustfmt, clippy
       - name: fmt
+        if: matrix.os == 'ubuntu-latest'
         run: cargo fmt --all --check
       - name: clippy
+        if: matrix.os == 'ubuntu-latest'
         run: cargo clippy --workspace --all-targets -- -D warnings
       - name: build
         run: cargo build --workspace --all-targets
       - name: test
         run: cargo test --workspace
       - name: transparency (M1 golden)
+        if: matrix.os != 'windows-latest'
         run: make test-transparency
+      - name: shakedown + pentest (resilience + security self-test)
+        if: matrix.os == 'ubuntu-latest'
+        run: bash scripts/pentest.sh && bash scripts/shakedown.sh
   audit:
     runs-on: ubuntu-latest
     steps:
