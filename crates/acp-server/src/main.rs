@@ -37,9 +37,20 @@ struct AppState {
 /// with the right capability. `dev` is an in-memory mock issuer for local use (issues test tokens);
 /// production sets jwks+cfg from the org IdP and leaves dev None.
 struct Auth {
-    jwks: acp_auth::Jwks,
+    jwks: std::sync::Arc<std::sync::RwLock<acp_auth::Jwks>>,
     cfg: acp_auth::EntraConfig,
     dev: Option<acp_auth::MockEntra>,
+}
+
+/// Load a JWKS from a URL (fetched) or a file path (read). Used for real Entra keys.
+async fn load_jwks(source: &str) -> Result<acp_auth::Jwks, String> {
+    let body = if source.starts_with("http") {
+        reqwest::get(source).await.map_err(|e| e.to_string())?
+            .text().await.map_err(|e| e.to_string())?
+    } else {
+        std::fs::read_to_string(source).map_err(|e| e.to_string())?
+    };
+    acp_auth::Jwks::from_jwks_json(&body).map_err(|e| format!("{e:?}"))
 }
 
 /// Authorise a request for a capability. RBAC disabled (auth None) allows everything (local demo).
@@ -50,7 +61,8 @@ fn authorize(auth: &Option<Auth>, headers: &HeaderMap, cap: acp_auth::Capability
         .and_then(|v| v.to_str().ok())
         .and_then(|s| s.strip_prefix("Bearer "))
         .ok_or_else(|| (StatusCode::UNAUTHORIZED, Json(serde_json::json!({"ok":false,"error":"missing bearer token"}))).into_response())?;
-    let p = acp_auth::verify(token, &a.jwks, &a.cfg, now_ms())
+    let jwks = a.jwks.read().unwrap();
+    let p = acp_auth::verify(token, &jwks, &a.cfg, now_ms())
         .map_err(|e| (StatusCode::UNAUTHORIZED, Json(serde_json::json!({"ok":false,"error":format!("invalid token: {e:?}")}))).into_response())?;
     if !p.can(cap) {
         return Err((StatusCode::FORBIDDEN, Json(serde_json::json!({"ok":false,"error":format!("principal lacks {cap:?}")}))).into_response());
@@ -72,6 +84,8 @@ async fn main() {
     let mut oidc_issuer: Option<String> = None;
     let mut oidc_audience: Option<String> = None;
     let mut dev_auth = false;
+    let mut entra_tenant: Option<String> = None;
+    let mut entra_audience: Option<String> = None;
     let mut it = args.iter().skip(1);
     while let Some(a) = it.next() {
         match a.as_str() {
@@ -86,6 +100,8 @@ async fn main() {
             "--oidc-issuer" => oidc_issuer = it.next().cloned(),
             "--oidc-audience" => oidc_audience = it.next().cloned(),
             "--dev-auth" => dev_auth = true,
+            "--entra-tenant" => entra_tenant = it.next().cloned(),
+            "--entra-audience" => entra_audience = it.next().cloned(),
             "--break-glass-file" => break_glass_file = it.next().cloned(),
             "--break-glass-key" => {
                 if let Some(h) = it.next() {
@@ -148,22 +164,64 @@ async fn main() {
         }
     });
 
-    // Control-plane RBAC (opt-in). --dev-auth spins an in-memory mock issuer for local use; real
-    // deployments pass --oidc-jwks (Entra JWKS file) + --oidc-issuer + --oidc-audience.
+    // Control-plane RBAC (opt-in). Three ways to enable, in priority order:
+    //   --dev-auth                         : in-memory mock issuer (local use)
+    //   --entra-tenant + --entra-audience  : real Entra; issuer + JWKS URL derived from the tenant
+    //   --oidc-jwks(url|file) + --oidc-issuer + --oidc-audience : explicit
+    // With none, RBAC is off and the local demo is unaffected.
     let auth: Option<Auth> = if dev_auth {
         let mock = acp_auth::MockEntra::new("common", "acp-app");
         eprintln!("acp-server: DEV auth enabled (mock issuer); GET /auth/dev-token?role=PolicyAdmin");
-        Some(Auth { jwks: mock.jwks(), cfg: mock.config(), dev: Some(mock) })
-    } else if let (Some(jf), Some(iss), Some(aud)) = (&oidc_jwks, &oidc_issuer, &oidc_audience) {
-        match std::fs::read_to_string(jf).ok().and_then(|s| acp_auth::Jwks::from_jwks_json(&s).ok()) {
-            Some(jwks) => {
-                eprintln!("acp-server: OIDC RBAC enabled (issuer {iss})");
-                Some(Auth { jwks, cfg: acp_auth::EntraConfig { issuer: iss.clone(), audience: aud.clone() }, dev: None })
-            }
-            None => { eprintln!("acp-server: could not load JWKS {jf}; RBAC disabled"); None }
-        }
+        Some(Auth {
+            jwks: std::sync::Arc::new(std::sync::RwLock::new(mock.jwks())),
+            cfg: mock.config(),
+            dev: Some(mock),
+        })
     } else {
-        None
+        // Resolve (issuer, audience, jwks_source) from either the Entra convenience flags or the
+        // explicit OIDC flags.
+        let resolved = if let (Some(tid), Some(aud)) = (&entra_tenant, &entra_audience) {
+            Some((
+                format!("https://login.microsoftonline.com/{tid}/v2.0"),
+                aud.clone(),
+                format!("https://login.microsoftonline.com/{tid}/discovery/v2.0/keys"),
+            ))
+        } else if let (Some(src), Some(iss), Some(aud)) = (&oidc_jwks, &oidc_issuer, &oidc_audience) {
+            Some((iss.clone(), aud.clone(), src.clone()))
+        } else {
+            None
+        };
+        match resolved {
+            Some((issuer, audience, source)) => match load_jwks(&source).await {
+                Ok(jwks) => {
+                    eprintln!("acp-server: OIDC RBAC enabled (issuer {issuer}, aud {audience})");
+                    let jwks_arc = std::sync::Arc::new(std::sync::RwLock::new(jwks));
+                    // Key rotation: refresh the JWKS hourly when it came from a URL.
+                    if source.starts_with("http") {
+                        let arc = jwks_arc.clone();
+                        let url = source.clone();
+                        tokio::spawn(async move {
+                            loop {
+                                tokio::time::sleep(std::time::Duration::from_secs(3600)).await;
+                                if let Ok(fresh) = load_jwks(&url).await {
+                                    *arc.write().unwrap() = fresh;
+                                }
+                            }
+                        });
+                    }
+                    Some(Auth {
+                        jwks: jwks_arc,
+                        cfg: acp_auth::EntraConfig { issuer, audience },
+                        dev: None,
+                    })
+                }
+                Err(e) => {
+                    eprintln!("acp-server: could not load JWKS from {source}: {e}; RBAC disabled");
+                    None
+                }
+            },
+            None => None,
+        }
     };
     let state = Arc::new(AppState {
         approvals,

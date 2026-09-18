@@ -6,6 +6,7 @@ license.workspace = true
 description = "Agent Control Plane: control service - approval inbox, policy endpoint, verify, reporting."
 
 [dependencies]
+reqwest.workspace = true
 acp-core = { path = "../acp-core" }
 acp-auth = { path = "../acp-auth" }
 acp-policy = { path = "../acp-policy" }
