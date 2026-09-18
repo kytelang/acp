@@ -35,7 +35,57 @@ pub struct Agent {
     pub active: bool,
 }
 
-/// The verified identity the proxy stamps into the policy context.
+/// Where a human principal's identity was established. Determines how far it can be trusted. The
+/// human principal is always proxy-injected (from the MCP OAuth token or an enrolment binding), never
+/// asserted by the agent. When no verified human is available the principal is `unattributed`, so the
+/// gap is visible to policy rather than silent (a rule can deny or step-up unattributed high-risk work).
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum PrincipalSource {
+    /// Verified subject claim from the org identity provider, via the MCP OAuth token (strongest).
+    Oauth,
+    /// The launching OS or SSO user, bound to the agent session at proxy enrolment (local agents).
+    OsLogin,
+    Sso,
+    /// No verified human behind the call.
+    Unattributed,
+}
+
+impl PrincipalSource {
+    pub fn as_str(&self) -> &'static str {
+        match self {
+            PrincipalSource::Oauth => "oauth",
+            PrincipalSource::OsLogin => "os_login",
+            PrincipalSource::Sso => "sso",
+            PrincipalSource::Unattributed => "unattributed",
+        }
+    }
+    /// A principal is "verified" for policy purposes when it came from any real source.
+    pub fn verified(&self) -> bool {
+        !matches!(self, PrincipalSource::Unattributed)
+    }
+}
+
+/// A human on whose behalf an agent acts. Durable identity; the per-session binding is a `Delegation`.
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+pub struct HumanPrincipal {
+    pub id: String,
+    pub display: String,
+    pub source: PrincipalSource,
+}
+
+impl HumanPrincipal {
+    /// The sentinel principal used when no verified human is available.
+    pub fn unattributed() -> Self {
+        HumanPrincipal { id: "unattributed".into(), display: "unattributed".into(), source: PrincipalSource::Unattributed }
+    }
+    pub fn verified(&self) -> bool {
+        self.source.verified()
+    }
+}
+
+/// The verified identity the proxy stamps into the policy context: the agent (always verified from
+/// its token) plus the human principal it acts for (unattributed until a verified human is attached).
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct Identity {
     pub agent_id: String,
@@ -43,12 +93,62 @@ pub struct Identity {
     /// Human-friendly names, what policy authors reference (`when: { agent: "triage" }`).
     pub agent_name: String,
     pub app_name: String,
+    /// The human principal (D1). Defaults to the unattributed sentinel; `with_principal` attaches a
+    /// verified one once the proxy has resolved it from the OAuth token or enrolment.
+    pub principal_id: String,
+    pub principal_display: String,
+    pub principal_source: PrincipalSource,
+}
+
+impl Identity {
+    pub fn principal_verified(&self) -> bool {
+        self.principal_source.verified()
+    }
+    /// Attach a resolved human principal to this (agent-only) identity.
+    pub fn with_principal(mut self, p: &HumanPrincipal) -> Self {
+        self.principal_id = p.id.clone();
+        self.principal_display = p.display.clone();
+        self.principal_source = p.source;
+        self
+    }
+}
+
+/// The per-session envelope binding an agent to the human it acts for, for a task, with an expiry.
+/// Constructed by the proxy at enrolment from a verified `Identity`; stamped context is derived from it.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct Delegation {
+    pub agent_id: String,
+    pub agent_name: String,
+    pub principal_id: String,
+    pub principal_source: PrincipalSource,
+    pub task: String,
+    pub issued_ms: u64,
+    pub expires_ms: u64,
+}
+
+impl Delegation {
+    pub fn from_identity(id: &Identity, task: &str, issued_ms: u64, ttl_ms: u64) -> Self {
+        Delegation {
+            agent_id: id.agent_id.clone(),
+            agent_name: id.agent_name.clone(),
+            principal_id: id.principal_id.clone(),
+            principal_source: id.principal_source,
+            task: task.to_string(),
+            issued_ms,
+            expires_ms: issued_ms.saturating_add(ttl_ms),
+        }
+    }
+    pub fn active(&self, now_ms: u64) -> bool {
+        now_ms < self.expires_ms
+    }
 }
 
 #[derive(Debug, Default, Clone, Serialize, Deserialize)]
 pub struct Registry {
     apps: BTreeMap<String, App>,
     agents: BTreeMap<String, Agent>,
+    #[serde(default)]
+    principals: BTreeMap<String, HumanPrincipal>,
 }
 
 impl Registry {
@@ -96,6 +196,9 @@ impl Registry {
             app_id: agent.app_id.clone(),
             agent_name: agent.name.clone(),
             app_name: app.name.clone(),
+            principal_id: "unattributed".to_string(),
+            principal_display: "unattributed".to_string(),
+            principal_source: PrincipalSource::Unattributed,
         })
     }
 
@@ -115,6 +218,22 @@ impl Registry {
     }
     pub fn agents(&self) -> Vec<&Agent> {
         self.agents.values().collect()
+    }
+
+    /// Register a human principal (D1). The id is stable; `resolve_principal` looks it up on a call.
+    pub fn register_principal(&mut self, display: &str, source: PrincipalSource) -> HumanPrincipal {
+        let p = HumanPrincipal { id: format!("usr-{}", rand_hex(6)), display: display.to_string(), source };
+        self.principals.insert(p.id.clone(), p.clone());
+        p
+    }
+    pub fn principals(&self) -> Vec<&HumanPrincipal> {
+        self.principals.values().collect()
+    }
+    /// Resolve a principal id to its record, or the unattributed sentinel if unknown/absent. Never
+    /// fails: an unresolved principal degrades to `unattributed` rather than blocking the call here
+    /// (policy decides what an unattributed principal may do).
+    pub fn resolve_principal(&self, principal_id: &str) -> HumanPrincipal {
+        self.principals.get(principal_id).cloned().unwrap_or_else(HumanPrincipal::unattributed)
     }
 
     pub fn load(path: &str) -> Result<Registry, String> {
@@ -173,5 +292,51 @@ mod tests {
         let json = serde_json::to_string(&r).unwrap();
         let r2: Registry = serde_json::from_str(&json).unwrap();
         assert!(r2.verify(&agent.id, &token).is_some(), "verify survives persistence");
+    }
+
+    #[test]
+    fn identity_defaults_to_unattributed_then_takes_a_principal() {
+        let mut r = Registry::new();
+        let app = r.register_app("portal", "team");
+        let (agent, token) = r.register_agent(&app.id, "triage").unwrap();
+        let id = r.verify(&agent.id, &token).unwrap();
+        // No verified human yet.
+        assert!(!id.principal_verified());
+        assert_eq!(id.principal_source, PrincipalSource::Unattributed);
+        // Attach a verified principal.
+        let alice = r.register_principal("alice@corp", PrincipalSource::Oauth);
+        let id2 = id.with_principal(&alice);
+        assert!(id2.principal_verified());
+        assert_eq!(id2.principal_id, alice.id);
+    }
+
+    #[test]
+    fn resolve_principal_degrades_to_unattributed() {
+        let mut r = Registry::new();
+        let alice = r.register_principal("alice", PrincipalSource::Sso);
+        assert_eq!(r.resolve_principal(&alice.id).display, "alice");
+        // Unknown id never errors; it degrades.
+        assert!(!r.resolve_principal("usr-nope").verified());
+    }
+
+    #[test]
+    fn delegation_binds_agent_to_principal_and_expires() {
+        let mut r = Registry::new();
+        let app = r.register_app("portal", "team");
+        let (agent, token) = r.register_agent(&app.id, "triage").unwrap();
+        let bob = r.register_principal("bob", PrincipalSource::Oauth);
+        let id = r.verify(&agent.id, &token).unwrap().with_principal(&bob);
+        let d = Delegation::from_identity(&id, "close-tickets", 1_000, 60_000);
+        assert_eq!(d.principal_id, bob.id);
+        assert!(d.active(30_000));
+        assert!(!d.active(61_001), "delegation expires with its ttl");
+    }
+
+    #[test]
+    fn old_registry_json_without_principals_still_loads() {
+        // A v1 file predates the principals map; serde default must fill it.
+        let v1 = r#"{"apps":{},"agents":{}}"#;
+        let r: Registry = serde_json::from_str(v1).unwrap();
+        assert_eq!(r.principals().len(), 0);
     }
 }
