@@ -182,14 +182,19 @@ dependencies = [
  "acp-auth",
  "acp-core",
  "acp-ledger",
+ "acp-mtls",
  "acp-policy",
  "acp-registry",
  "axum",
  "hex",
+ "hyper",
+ "hyper-util",
  "maud",
  "reqwest",
  "serde_json",
  "tokio",
+ "tokio-rustls",
+ "tower",
 ]
 
 [[package]]

@@ -79,6 +79,9 @@ async fn main() {
     let mut registry: Option<String> = None;
     let mut policy_store: Option<String> = None;
     let mut break_glass_file: Option<String> = None;
+    let mut tls_ca: Option<String> = None;
+    let mut tls_cert: Option<String> = None;
+    let mut tls_key: Option<String> = None;
     let mut break_glass_seed: Option<[u8; 32]> = None;
     let mut oidc_jwks: Option<String> = None;
     let mut oidc_issuer: Option<String> = None;
@@ -103,6 +106,9 @@ async fn main() {
             "--entra-tenant" => entra_tenant = it.next().cloned(),
             "--entra-audience" => entra_audience = it.next().cloned(),
             "--break-glass-file" => break_glass_file = it.next().cloned(),
+            "--tls-ca" => tls_ca = it.next().cloned(),
+            "--tls-cert" => tls_cert = it.next().cloned(),
+            "--tls-key" => tls_key = it.next().cloned(),
             "--break-glass-key" => {
                 if let Some(h) = it.next() {
                     match hex::decode(acp_core::secret::resolve(h)) {
@@ -269,6 +275,12 @@ async fn main() {
         .route("/auth/dev-token", get(dev_token))
         .with_state(state);
 
+    // mTLS between components: when TLS flags are given, require a client cert signed by the ACP CA.
+    if let (Some(ca), Some(cert), Some(key)) = (&tls_ca, &tls_cert, &tls_key) {
+        eprintln!("acp-server: listening on https://{addr} (mTLS, client cert required)");
+        serve_mtls(&addr, app, ca, cert, key).await;
+        return;
+    }
     let listener = tokio::net::TcpListener::bind(&addr).await.expect("bind");
     eprintln!("acp-server: listening on http://{addr}");
     // X.7: drain in-flight requests on SIGTERM/Ctrl-C instead of dropping them. The evidence
@@ -768,6 +780,37 @@ async fn dev_token(State(st): State<Arc<AppState>>, Query(q): Query<StdHashMap<S
             Json(serde_json::json!({"token": tok, "role": role}))
         }
         None => Json(serde_json::json!({"error": "dev auth not enabled"})),
+    }
+}
+
+/// Serve the axum app over mutual TLS: present the server cert and REQUIRE a client cert signed by
+/// the ACP CA, so only enrolled components can reach the control API.
+async fn serve_mtls(addr: &str, app: Router, ca: &str, cert: &str, key: &str) {
+    acp_mtls::ensure_provider();
+    let ca = std::fs::read(ca).expect("read tls-ca");
+    let cert = std::fs::read(cert).expect("read tls-cert");
+    let key = std::fs::read(key).expect("read tls-key");
+    let cfg = acp_mtls::server_config(&ca, &cert, &key).expect("mtls server config");
+    let acceptor = tokio_rustls::TlsAcceptor::from(cfg);
+    let listener = tokio::net::TcpListener::bind(addr).await.expect("bind");
+    loop {
+        let (stream, _) = match listener.accept().await {
+            Ok(s) => s,
+            Err(_) => continue,
+        };
+        let acceptor = acceptor.clone();
+        let app = app.clone();
+        tokio::spawn(async move {
+            let tls = match acceptor.accept(stream).await {
+                Ok(t) => t, // handshake fails here for a client with no/bad cert (mutual auth)
+                Err(_) => return,
+            };
+            let io = hyper_util::rt::TokioIo::new(tls);
+            let svc = hyper_util::service::TowerToHyperService::new(app);
+            let _ = hyper_util::server::conn::auto::Builder::new(hyper_util::rt::TokioExecutor::new())
+                .serve_connection(io, svc)
+                .await;
+        });
     }
 }
 

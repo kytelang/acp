@@ -9,6 +9,11 @@ description = "Agent Control Plane: control service - approval inbox, policy end
 reqwest.workspace = true
 acp-core = { path = "../acp-core" }
 acp-auth = { path = "../acp-auth" }
+acp-mtls = { path = "../acp-mtls" }
+tokio-rustls = "0.26"
+hyper = { version = "1", features = ["server", "http1"] }
+hyper-util = { version = "0.1", features = ["server-auto", "tokio", "service"] }
+tower = "0.5"
 acp-policy = { path = "../acp-policy" }
 acp-registry = { path = "../acp-registry" }
 acp-ledger = { path = "../acp-ledger" }

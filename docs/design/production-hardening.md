@@ -32,9 +32,9 @@ broad rollout, P2 = scale and resilience. On-prem single-org, so no multi-tenant
    dev-token stand-in is used only when no such header is present (local use, and dev-auth is now
    guarded). A built-in auth-code flow inside the console remains an optional alternative to the IAP.
 
-## P1 - before broad rollout  [5 of 6 done; only mTLS remains]
+## P1 - before broad rollout  [DONE]
 
-7. mTLS between components: proxy/gateway to acp-server and to upstreams should use the existing
+7. [DONE - server enforcement + toolchain] mTLS between components: proxy/gateway to acp-server and to upstreams should use the existing
    `acp-mtls` (client-cert-required), not plain HTTP, so the control channel is authenticated.
 8. [DONE - backup+verify] Ledger durability and retention: define backup, off-box replication, and a retention/rotation
    policy for the evidence ledger; verify recovery across a restart (the store is per-append durable,
