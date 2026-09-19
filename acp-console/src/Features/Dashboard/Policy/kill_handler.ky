@@ -13,7 +13,8 @@ pub struct KillHandler impl RouteHandler {
     init(acp: AcpClient, engage: bool) { self.acp = acp; self.engage = engage; }
 
     async fn serve(self: KillHandler, ctx: Context): Response {
-        let res = self.engage ? self.acp.killEngageRaw(ctx.request.body) : self.acp.killClear();
+        let auth = ctx.request.headers.get("authorization") ?? "";
+        let res = self.engage ? self.acp.killEngageRaw(ctx.request.body, auth) : self.acp.killClear(auth);
         return await ds_response.patch(killResultPanel(res));
     }
 }

@@ -13,7 +13,8 @@ pub struct DeployHandler impl RouteHandler {
     init(acp: AcpClient) { self.acp = acp; }
 
     async fn serve(self: DeployHandler, ctx: Context): Response {
-        let res = self.acp.deployRaw(ctx.request.body);
+        let auth = ctx.request.headers.get("authorization") ?? "";
+        let res = self.acp.deployRaw(ctx.request.body, auth);
         // The live SSE stream refreshes the rules table and version badge on its next tick; here we
         // just report the immediate outcome next to the Deploy button.
         return await ds_response.patch(deployResultPanel(res));

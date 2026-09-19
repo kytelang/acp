@@ -283,11 +283,17 @@ pub struct AcpClient {
     // Deploy a policy by forwarding the browser's datastar signals (which already carry a "policy"
     // and "author" field) straight to acp-server, the trust store. The server validates, versions,
     // signs, and writes it; we return the outcome for display.
-    pub fn deployRaw(self: AcpClient, body: string): DeployResult {
+    pub fn deployRaw(self: AcpClient, body: string, userAuth: string): DeployResult {
         let hdrs = client.Http.emptyHeaders();
         hdrs.set("Content-Type", "application/json");
-        let tok = self.authToken("PolicyAdmin");
-        if (!string.eql(tok, "")) { hdrs.set("Authorization", "Bearer " + tok); }
+        // Prefer the caller's real token (injected by an identity-aware proxy / OIDC login in front
+        // of the console); fall back to a dev token only when none is present (local use).
+        if (!string.eql(userAuth, "")) {
+            hdrs.set("Authorization", userAuth);
+        } else {
+            let tok = self.authToken("PolicyAdmin");
+            if (!string.eql(tok, "")) { hdrs.set("Authorization", "Bearer " + tok); }
+        }
         let resp = client.Http.request("POST", self.base + "/policy-store/deploy", hdrs, body);
         if (resp.status.toCode() != 200) {
             return DeployResult(false, "acp-server unreachable (HTTP " + `${resp.status.toCode()}` + ")");
@@ -316,11 +322,15 @@ pub struct AcpClient {
 
     // Engage break-glass by forwarding the browser's datastar signals (mode/scope/reason/ttl_ms) to
     // acp-server, which writes the signed grant the proxy watches. The console holds no key.
-    pub fn killEngageRaw(self: AcpClient, body: string): DeployResult {
+    pub fn killEngageRaw(self: AcpClient, body: string, userAuth: string): DeployResult {
         let hdrs = client.Http.emptyHeaders();
         hdrs.set("Content-Type", "application/json");
-        let tok = self.authToken("BreakGlassOperator");
-        if (!string.eql(tok, "")) { hdrs.set("Authorization", "Bearer " + tok); }
+        if (!string.eql(userAuth, "")) {
+            hdrs.set("Authorization", userAuth);
+        } else {
+            let tok = self.authToken("BreakGlassOperator");
+            if (!string.eql(tok, "")) { hdrs.set("Authorization", "Bearer " + tok); }
+        }
         let resp = client.Http.request("POST", self.base + "/break-glass/engage", hdrs, body);
         if (resp.status.toCode() != 200) { return DeployResult(false, "acp-server unreachable"); }
         let v = json.parse(resp.body);
@@ -333,11 +343,15 @@ pub struct AcpClient {
         return DeployResult(false, json.asString(json.get(v, "error")) ?? "engage rejected");
     }
 
-    pub fn killClear(self: AcpClient): DeployResult {
+    pub fn killClear(self: AcpClient, userAuth: string): DeployResult {
         let hdrs = client.Http.emptyHeaders();
         hdrs.set("Content-Type", "application/json");
-        let tok = self.authToken("BreakGlassOperator");
-        if (!string.eql(tok, "")) { hdrs.set("Authorization", "Bearer " + tok); }
+        if (!string.eql(userAuth, "")) {
+            hdrs.set("Authorization", userAuth);
+        } else {
+            let tok = self.authToken("BreakGlassOperator");
+            if (!string.eql(tok, "")) { hdrs.set("Authorization", "Bearer " + tok); }
+        }
         let resp = client.Http.request("POST", self.base + "/break-glass/clear", hdrs, "{}");
         if (resp.status.toCode() != 200) { return DeployResult(false, "acp-server unreachable"); }
         return DeployResult(true, "break-glass cleared");
