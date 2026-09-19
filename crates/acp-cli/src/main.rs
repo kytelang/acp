@@ -43,6 +43,7 @@ fn main() -> ExitCode {
         "break-glass" => cmd_break_glass(&args[2..]),
         "app" => cmd_app(&args[2..]),
         "agent" => cmd_agent(&args[2..]),
+        "native-compile" => cmd_native_compile(&args[2..]),
         "registry" => cmd_registry(&args[2..]),
         "policy" => cmd_policy(&args[2..]),
         _ => usage("acp [init|verify|verify-pack|export|policy-compile|policy-test|approve|deny|approvals|canary|learn|replay|purge|classify-eval]"),
@@ -716,6 +717,41 @@ fn cmd_bench_ledger(rest: &[String]) -> ExitCode {
     if ok { ExitCode::SUCCESS } else { ExitCode::from(1) }
 }
 
+
+/// Compile one ACP policy into a coding agent's native managed-settings (phase D):
+///   acp native-compile <policy.yaml> <claude|copilot|gemini>
+/// Prints the native settings JSON to stdout and a coverage report (what mapped, what is routed to
+/// the proxy) to stderr.
+fn cmd_native_compile(rest: &[String]) -> ExitCode {
+    use acp_nativecompile::{compile, Vendor};
+    let (file, vendor_s) = match (rest.first(), rest.get(1)) {
+        (Some(f), Some(v)) => (f, v),
+        _ => return usage("acp native-compile <policy.yaml> <claude|copilot|gemini>"),
+    };
+    let Some(vendor) = Vendor::parse(vendor_s) else {
+        eprintln!("acp: unknown vendor '{vendor_s}' (claude|copilot|gemini)");
+        return ExitCode::from(2);
+    };
+    let src = match std::fs::read_to_string(file) {
+        Ok(s) => s,
+        Err(e) => { eprintln!("acp: cannot read {file}: {e}"); return ExitCode::from(1); }
+    };
+    let policy = match acp_policy::parse_str(&src) {
+        Ok(p) => p,
+        Err(e) => { eprintln!("acp: invalid policy: {e}"); return ExitCode::from(1); }
+    };
+    let c = compile(&policy, vendor);
+    println!("{}", serde_json::to_string_pretty(&c.settings).unwrap());
+    eprintln!("coverage: {} rule(s) mapped natively [{}]", c.covered.len(), c.covered.join(", "));
+    if !c.uncovered.is_empty() {
+        eprintln!(
+            "routed to proxy ({} rule(s) this agent cannot express natively): {}",
+            c.uncovered.len(),
+            c.uncovered.join(", ")
+        );
+    }
+    ExitCode::SUCCESS
+}
 
 /// F2 channel: write (or clear) the break-glass grant file the proxy watches.
 ///   acp break-glass engage <file> <mode> <reason> <actor> <ttl_ms> [--scope <scope>]

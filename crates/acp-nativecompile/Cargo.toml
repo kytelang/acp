@@ -1,0 +1,10 @@
+[package]
+name = "acp-nativecompile"
+version = "0.0.0"
+edition = "2021"
+description = "Agent Control Plane: compile one ACP policy into coding-agent native managed-settings (phase D)."
+
+[dependencies]
+acp-policy = { path = "../acp-policy" }
+acp-core = { path = "../acp-core" }
+serde_json.workspace = true

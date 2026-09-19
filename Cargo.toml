@@ -1,6 +1,7 @@
 [workspace]
 resolver = "2"
 members = [
+    "crates/acp-nativecompile",
     "crates/acp-gateway","crates/*"]
 
 [workspace.package]

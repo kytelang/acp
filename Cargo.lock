@@ -30,6 +30,7 @@ dependencies = [
  "acp-approvals",
  "acp-core",
  "acp-ledger",
+ "acp-nativecompile",
  "acp-policy",
  "acp-registry",
  "hex",
@@ -109,6 +110,15 @@ version = "0.0.0"
 dependencies = [
  "rustls",
  "rustls-pemfile",
+]
+
+[[package]]
+name = "acp-nativecompile"
+version = "0.0.0"
+dependencies = [
+ "acp-core",
+ "acp-policy",
+ "serde_json",
 ]
 
 [[package]]
