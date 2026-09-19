@@ -7,9 +7,12 @@ the last argument in `.mcp.json` for any real MCP server command to govern that 
 
 ## What the policy does (policy.yaml)
 
-- `delete_all`  -> DENIED (a destructive tool).
-- `charge_card` with amount_cents > 50000 -> STEP-UP (held for human approval).
+- `delete_all`  -> DENIED (destructive tool, matched by name).
+- `resource: payments` (e.g. `charge_card`) -> STEP-UP, held for approver `finance`.
+- `write_note` -> ALLOWED with a `redact` obligation on `secret`/`ssn` fields.
 - everything else -> allowed and forwarded, all recorded.
+
+See `RUNME.md` for the full step-by-step (MCP path and the LLM-gateway path).
 
 ## Run it
 

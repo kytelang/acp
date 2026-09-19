@@ -1,5 +1,7 @@
 evidence.db
 evidence.db.*
+evidence.db-shm
+evidence.db-wal
 signing.key
 signing.key.pub
 registry.json

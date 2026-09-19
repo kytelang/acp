@@ -1,0 +1,10 @@
+version: 1
+default: allow
+rules:
+  - id: frontier-daily-budget
+    when: { resource: frontier }
+    verdict: allow
+    obligations:
+      - kind: rate_limit
+        max: 500
+        window_ms: 86400000

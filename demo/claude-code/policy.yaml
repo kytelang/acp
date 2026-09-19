@@ -1,18 +1,17 @@
 version: 1
 default: allow
 rules:
-  - id: no-destructive
-    when: { tool: "delete_all" }
+  - id: no-destructive-deletes
+    when: { tool: delete_all }
     verdict: deny
-    reason: "destructive tool blocked by ACP policy"
-  - id: coding-assistant-no-charge
-    when: { agent: "coding-assistant", tool: "charge_card" }
-    verdict: deny
-    reason: "the coding assistant is not allowed to charge cards at all"
-  - id: cap-charge
-    when:
-      tool: "charge_card"
-      arg: { amount_cents: { gt: 50000 } }
+    reason: destructive bulk delete is never allowed
+  - id: payments-need-approval
+    when: { resource: payments }
     verdict: step_up
-    approvers: ["security"]
-    reason: "a charge over 500.00 needs human approval"
+    approvers: [finance]
+  - id: redact-secrets-in-notes
+    when: { tool: write_note }
+    verdict: allow
+    obligations:
+      - kind: redact
+        fields: [secret, ssn]
