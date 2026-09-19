@@ -44,6 +44,7 @@ fn main() -> ExitCode {
         "app" => cmd_app(&args[2..]),
         "agent" => cmd_agent(&args[2..]),
         "native-compile" => cmd_native_compile(&args[2..]),
+        "discover" => cmd_discover(&args[2..]),
         "registry" => cmd_registry(&args[2..]),
         "policy" => cmd_policy(&args[2..]),
         _ => usage("acp [init|verify|verify-pack|export|policy-compile|policy-test|approve|deny|approvals|canary|learn|replay|purge|classify-eval]"),
@@ -717,6 +718,38 @@ fn cmd_bench_ledger(rest: &[String]) -> ExitCode {
     if ok { ExitCode::SUCCESS } else { ExitCode::from(1) }
 }
 
+
+/// Discovery plane (phase E): read observed egress endpoints (one per line) and report shadow AI,
+/// classified by provider. Optional second file lists already-governed endpoints to exclude.
+///   acp discover <observed.txt> [governed.txt]
+fn cmd_discover(rest: &[String]) -> ExitCode {
+    use acp_core::discovery::{find_shadow_ai, AiKind};
+    let Some(obs_file) = rest.first() else {
+        return usage("acp discover <observed.txt> [governed.txt]");
+    };
+    let read_lines = |f: &str| -> Vec<String> {
+        std::fs::read_to_string(f)
+            .unwrap_or_default()
+            .lines()
+            .map(|l| l.trim().to_string())
+            .filter(|l| !l.is_empty() && !l.starts_with('#'))
+            .collect()
+    };
+    let observed = read_lines(obs_file);
+    let governed = rest.get(1).map(|f| read_lines(f)).unwrap_or_default();
+    let shadow = find_shadow_ai(&observed, &governed);
+    if shadow.is_empty() {
+        println!("no shadow AI found in {} observed endpoint(s)", observed.len());
+        return ExitCode::SUCCESS;
+    }
+    println!("SHADOW AI: {} un-governed AI endpoint(s) found:", shadow.len());
+    for s in &shadow {
+        let kind = match s.kind { AiKind::ModelApi => "model-api", AiKind::Mcp => "mcp" };
+        println!("  [{kind:9}] {:22} {}", s.provider, s.endpoint);
+    }
+    println!("\nnext: sanction (route through a PEP) or block (egress deny) each.");
+    ExitCode::SUCCESS
+}
 
 /// Compile one ACP policy into a coding agent's native managed-settings (phase D):
 ///   acp native-compile <policy.yaml> <claude|copilot|gemini>
