@@ -47,6 +47,7 @@ fn main() -> ExitCode {
         "discover" => cmd_discover(&args[2..]),
         "grc-report" => cmd_grc_report(&args[2..]),
         "ledger-backup" => cmd_ledger_backup(&args[2..]),
+        "verify-enforcement" => cmd_verify_enforcement(&args[2..]),
         "registry" => cmd_registry(&args[2..]),
         "policy" => cmd_policy(&args[2..]),
         _ => usage("acp [init|verify|verify-pack|export|policy-compile|policy-test|approve|deny|approvals|canary|learn|replay|purge|classify-eval]"),
@@ -720,6 +721,31 @@ fn cmd_bench_ledger(rest: &[String]) -> ExitCode {
     if ok { ExitCode::SUCCESS } else { ExitCode::from(1) }
 }
 
+
+/// Verify an ACP enforcement attestation (P2 #14): the primitive a tool-server guard / sidecar uses
+/// to reject un-proxied calls. Checks the x-acp-enforcement token against the pinned proxy pubkey and
+/// a freshness bound. Exit 0 = valid, 1 = reject.
+///   acp verify-enforcement <proxy-pubkey-hex> <token> [max-age-ms]
+fn cmd_verify_enforcement(rest: &[String]) -> ExitCode {
+    let (pk_hex, token) = match (rest.first(), rest.get(1)) {
+        (Some(a), Some(b)) => (a, b),
+        _ => return usage("acp verify-enforcement <proxy-pubkey-hex> <token> [max-age-ms]"),
+    };
+    let max_age: u64 = rest.get(2).and_then(|s| s.parse().ok()).unwrap_or(300_000);
+    let pubkey = match hex::decode(pk_hex) {
+        Ok(p) => p,
+        Err(_) => { eprintln!("acp: pubkey must be hex"); return ExitCode::from(2); }
+    };
+    let now = std::time::SystemTime::now().duration_since(std::time::UNIX_EPOCH)
+        .map(|d| d.as_millis() as u64).unwrap_or(0);
+    if acp_core::attest::verify(&pubkey, token, now, max_age) {
+        println!("VALID: attestation verifies (governed by the pinned proxy)");
+        ExitCode::SUCCESS
+    } else {
+        eprintln!("REJECT: attestation missing, forged, wrong key, or stale");
+        ExitCode::from(1)
+    }
+}
 
 /// Backup the evidence ledger and verify the copy (P1 #8). Copies the db plus its WAL/SHM so the
 /// snapshot is consistent, then runs the standalone verify on the destination and fails if it does
