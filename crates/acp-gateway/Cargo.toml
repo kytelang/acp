@@ -8,6 +8,7 @@ description = "Agent Control Plane: LLM gateway PEP governing direct model API c
 acp-core = { path = "../acp-core" }
 acp-policy = { path = "../acp-policy" }
 acp-auth = { path = "../acp-auth" }
+acp-ledger = { path = "../acp-ledger" }
 axum = { workspace = true }
 tokio = { workspace = true }
 reqwest.workspace = true

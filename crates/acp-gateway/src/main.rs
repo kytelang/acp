@@ -17,7 +17,10 @@ use axum::{
 };
 use serde_json::json;
 use std::collections::HashMap;
+use std::sync::atomic::{AtomicU64, Ordering};
 use std::sync::{Arc, Mutex};
+
+static SEQ: AtomicU64 = AtomicU64::new(0);
 
 struct GwState {
     engine: PolicyEngine,
@@ -28,6 +31,7 @@ struct GwState {
     oidc: Option<(acp_auth::Jwks, acp_auth::EntraConfig)>,
     client: reqwest::Client,
     limiters: Mutex<HashMap<String, acp_core::ratelimit::TokenBucket>>,
+    ledger: Option<Mutex<acp_ledger::Ledger>>,
 }
 
 #[tokio::main]
@@ -35,6 +39,7 @@ async fn main() -> std::process::ExitCode {
     let args: Vec<String> = std::env::args().collect();
     let mut addr = "127.0.0.1:8799".to_string();
     let (mut policy, mut upstream, mut upstream_key, mut env) = (None, None, None, "prod".to_string());
+    let mut ledger_path: Option<String> = None;
     let (mut entra_tenant, mut entra_audience): (Option<String>, Option<String>) = (None, None);
     let mut it = args.iter().skip(1);
     while let Some(a) = it.next() {
@@ -43,6 +48,7 @@ async fn main() -> std::process::ExitCode {
             "--policy" => policy = it.next().cloned(),
             "--upstream" => upstream = it.next().cloned(),
             "--upstream-key" => upstream_key = it.next().cloned(),
+            "--ledger" => ledger_path = it.next().cloned(),
             "--env" => env = it.next().cloned().unwrap_or(env),
             "--entra-tenant" => entra_tenant = it.next().cloned(),
             "--entra-audience" => entra_audience = it.next().cloned(),
@@ -91,6 +97,10 @@ async fn main() -> std::process::ExitCode {
         }
         _ => None,
     };
+    let ledger = ledger_path.as_ref().and_then(|p| open_ledger(p));
+    if ledger.is_some() {
+        eprintln!("acp-gateway: recording decisions to the tamper-evident ledger");
+    }
     let st = Arc::new(GwState {
         engine,
         tax: ModelTaxonomy::default(),
@@ -100,6 +110,7 @@ async fn main() -> std::process::ExitCode {
         oidc,
         client: reqwest::Client::new(),
         limiters: Mutex::new(HashMap::new()),
+        ledger: ledger.map(Mutex::new),
     });
     let upstream_log = st.upstream.clone();
     let app = Router::new().route("/*path", any(handle)).with_state(st);
@@ -113,6 +124,54 @@ async fn main() -> std::process::ExitCode {
     eprintln!("acp-gateway: governing model calls on http://{addr} -> {upstream_log}");
     let _ = axum::serve(listener, app).await;
     std::process::ExitCode::SUCCESS
+}
+
+fn open_ledger(path: &str) -> Option<acp_ledger::Ledger> {
+    let key_path = format!("{path}.key");
+    let signer: Box<dyn acp_core::sign::Signer + Send> = match std::fs::read(&key_path) {
+        Ok(b) if b.len() == 32 => {
+            let mut s = [0u8; 32];
+            s.copy_from_slice(&b);
+            Box::new(acp_core::sign::Ed25519Signer::from_seed(&s))
+        }
+        _ => {
+            let s = acp_core::sign::Ed25519Signer::generate();
+            let _ = std::fs::write(&key_path, s.seed());
+            Box::new(s)
+        }
+    };
+    acp_ledger::Ledger::open(path, signer).ok()
+}
+
+fn verdict_str(v: Verdict) -> &'static str {
+    match v {
+        Verdict::Allow => "allow",
+        Verdict::Deny => "deny",
+        Verdict::StepUp => "step_up",
+        Verdict::Shadow => "shadow",
+    }
+}
+
+/// Record a governed model-call decision to the tamper-evident ledger (same shape as the MCP proxy,
+/// surface = llm-gateway). Args are never recorded (no prompt in the ledger).
+fn record_decision(st: &GwState, app: &str, principal: &str, model: &str, d: &acp_gateway::GatewayDecision) {
+    let ledger = match &st.ledger {
+        Some(l) => l,
+        None => return,
+    };
+    let did = format!("gw-{}-{}", now_ms(), SEQ.fetch_add(1, Ordering::Relaxed));
+    let verified = !principal.is_empty() && principal != "unattributed";
+    let obs: Vec<String> = d.obligations.iter().map(|o| format!("{:?}", o.kind)).collect();
+    let record = serde_json::json!({
+        "schema": 1, "type": "decision", "ts_ms": now_ms(),
+        "agent_id": app,
+        "principal": {"id": principal, "verified": verified},
+        "action": {"tool": model, "resource": d.resource, "operation": d.operation, "surface": "llm-gateway"},
+        "decision": {"verdict": verdict_str(d.verdict), "rule_id": d.rule_id, "reason": d.reason, "obligations": obs},
+    });
+    if let Ok(mut l) = ledger.lock() {
+        let _ = l.append(&did, "decision", &record, None);
+    }
 }
 
 fn now_ms() -> u64 {
@@ -145,6 +204,7 @@ async fn handle(
     });
 
     let d = decide(&st.engine, &st.tax, model, app, &principal, &argsum, &st.env);
+    record_decision(&st, app, &principal, model, &d);
     eprintln!(
         "acp-gateway: {} model={} class={} op={} app={} principal={} -> {:?}",
         path, model, d.resource, d.operation, app, principal, d.verdict
