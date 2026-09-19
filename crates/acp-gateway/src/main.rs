@@ -40,6 +40,7 @@ struct GwState {
     bg_key: Option<Vec<u8>>,
     content_scan: Option<String>,
     sem: std::sync::Arc<tokio::sync::Semaphore>,
+    budget_state: Option<String>,
 }
 
 #[tokio::main]
@@ -51,6 +52,7 @@ async fn main() -> std::process::ExitCode {
     let mut bg_file: Option<String> = None;
     let mut bg_key_hex: Option<String> = None;
     let mut content_scan: Option<String> = None;
+    let mut budget_state: Option<String> = None;
     let (mut entra_tenant, mut entra_audience): (Option<String>, Option<String>) = (None, None);
     let mut it = args.iter().skip(1);
     while let Some(a) = it.next() {
@@ -63,6 +65,7 @@ async fn main() -> std::process::ExitCode {
             "--break-glass-file" => bg_file = it.next().cloned(),
             "--break-glass-key" => bg_key_hex = it.next().cloned(),
             "--content-scan" => content_scan = it.next().cloned(),
+            "--budget-state" => budget_state = it.next().cloned(),
             "--env" => env = it.next().cloned().unwrap_or(env),
             "--entra-tenant" => entra_tenant = it.next().cloned(),
             "--entra-audience" => entra_audience = it.next().cloned(),
@@ -126,13 +129,20 @@ async fn main() -> std::process::ExitCode {
         oidc,
         client: reqwest::Client::builder().timeout(Duration::from_secs(30)).build().unwrap_or_default(),
         sem: std::sync::Arc::new(tokio::sync::Semaphore::new(256)),
-        limiters: Mutex::new(HashMap::new()),
+        limiters: Mutex::new(
+            budget_state
+                .as_ref()
+                .and_then(|f| std::fs::read_to_string(f).ok())
+                .and_then(|s| serde_json::from_str(&s).ok())
+                .unwrap_or_default(),
+        ),
         ledger: ledger.map(Mutex::new),
         breakglass: Mutex::new(acp_core::breakglass::BreakGlassRegistry::new()),
         bg_file,
         bg_mtime: Mutex::new(None),
         bg_key,
         content_scan,
+        budget_state,
     });
     let upstream_log = st.upstream.clone();
     let app = Router::new().route("/*path", any(handle)).layer(DefaultBodyLimit::max(4 * 1024 * 1024)).with_state(st);
@@ -346,6 +356,13 @@ async fn handle(
                         };
                         if !ok {
                             over_budget = true;
+                        }
+                        // Persist budgets so a restart cannot reset a spent budget (best-effort).
+                        if let Some(f) = &st.budget_state {
+                            let snap = st.limiters.lock().unwrap().clone();
+                            if let Ok(js) = serde_json::to_string(&snap) {
+                                let _ = std::fs::write(f, js);
+                            }
                         }
                     }
                     ObligationKind::Redact => { /* prompt/response redaction is C3-scan, wired with the content plane */ }

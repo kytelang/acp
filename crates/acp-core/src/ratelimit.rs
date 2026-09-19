@@ -5,9 +5,10 @@
 //! a standard token bucket: it refills at a steady rate up to a capacity, and each request consumes
 //! a token. Pure and time-injected so the limiter is deterministic under test.
 
+use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct TokenBucket {
     capacity: f64,
     tokens: f64,
