@@ -1,0 +1,65 @@
+# Production hardening
+
+Date: 2026-09-19
+Status: prioritised hardening plan for taking ACP from feature-complete (all 6 phases built and
+tested) to production. Grounded in a review of the actual code; P0 = before real traffic, P1 = before
+broad rollout, P2 = scale and resilience. On-prem single-org, so no multi-tenant work is implied.
+
+## P0 - before any real traffic
+
+1. Gateway resource protections (the gateway lacks what the MCP proxy transport already has):
+   - Upstream timeout: `reqwest::Client::new()` has no timeout; a hung model API pins connections. Add `.timeout(...)` like the proxy (30s).
+   - Concurrency cap: no semaphore; unbounded in-flight requests. Add a `Semaphore` + shed with 503, like the proxy.
+   - Response streaming: `resp.bytes().await` buffers the whole response; model APIs stream by default (SSE) and responses can be large. Stream chunk-by-chunk like the proxy's `text/event-stream` path.
+   - Request body limit: no cap; a huge body is a DoS. Add `DefaultBodyLimit`.
+   (These four are fixed in the same-day hardening commit; see the gateway.)
+2. Rate-limit / budget durability: the gateway's token budgets live in an in-memory `HashMap`, so a
+   restart resets every budget (a caller can bypass a daily cap by forcing a restart) and budgets are
+   not shared across instances. Persist counters (embedded store) or use a shared store; at minimum
+   document the restart-resets-budgets caveat.
+3. Secrets off the command line: `--upstream-key` (model key), `--break-glass-key`, and seeds are
+   passed as argv and show in `ps`. Accept them from a file or environment variable instead.
+4. Dev auth must never reach production: `--dev-auth` issues unauthenticated role tokens. Gate it
+   behind an explicit `ACP_ALLOW_DEV_AUTH=1` and refuse to start with `--dev-auth` otherwise; the
+   `/auth/dev-token` route must not exist in a real deployment.
+5. Signing-key protection: policy-store, ledger, break-glass, and enforcement keys sit on disk as raw
+   seeds. Wire the existing `acp-hsm` (PKCS#11) path for these, or at least 0600 + a KMS-wrapped seed;
+   never world-readable.
+6. Console real sign-in: the console uses the dev-token stand-in. Wire the real OIDC login (auth-code
+   flow) so a browser user's own token and roles drive it before RBAC is trusted in the UI.
+
+## P1 - before broad rollout
+
+7. mTLS between components: proxy/gateway to acp-server and to upstreams should use the existing
+   `acp-mtls` (client-cert-required), not plain HTTP, so the control channel is authenticated.
+8. Ledger durability and retention: define backup, off-box replication, and a retention/rotation
+   policy for the evidence ledger; verify recovery across a restart (the store is per-append durable,
+   but backup/DR is unproven at scale).
+9. JWKS robustness: handle clock skew (small leeway on exp/nbf), a `kid` miss triggering an immediate
+   refresh (not only the hourly timer), and a JWKS-fetch failure at startup failing closed for
+   RBAC-required deployments rather than silently disabling RBAC.
+10. Observability: health/readiness endpoints on the gateway, Prometheus/OTel metrics (decisions by
+    verdict, latency, upstream errors, budget denials, kill-switch state), and structured logs. Today
+    the gateway logs decisions to stderr only.
+11. Fail-closed audit: if the ledger write fails on the gateway, decide the policy (the proxy already
+    fails closed on evidence-write failure; the gateway currently forwards without recording on a
+    ledger error). Make the gateway match the proxy's record-before-forward guarantee.
+12. Load and soak tests: the suites are unit/integration; add throughput and endurance tests for the
+    proxy and gateway (concurrency, large bodies, streaming, budget churn, key rotation).
+
+## P2 - scale and resilience
+
+13. Shared/distributed rate-limit and pin state for multiple gateway/proxy instances (today each
+    instance is independent).
+14. Enforcement-attestation rollout: deploy the attestation guard in front of tool servers and the
+    egress policy in front of models, so unavoidability is real, not just available.
+15. Discovery telemetry: wire live egress ingestion (network sensor / eBPF / proxy logs) feeding the
+    shadow-AI classifier continuously, rather than a manual `acp discover` over a file.
+16. HA control plane: run acp-server with a standby and a shared/replicated store for the registry and
+    policy store; define failover.
+17. Supply-chain and DR: reproducible builds, signed release artifacts (the ledger signs itself;
+    the binaries should too), and a documented disaster-recovery runbook.
+
+## Not needed (recorded so it is not re-raised)
+
+- Multi-tenancy: dropped. ACP is on-prem single-org; a single shared control plane is correct.

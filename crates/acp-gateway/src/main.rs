@@ -13,11 +13,13 @@ use axum::{
     http::{HeaderMap, StatusCode},
     response::{IntoResponse, Response},
     routing::any,
+    extract::DefaultBodyLimit,
     Json, Router,
 };
 use serde_json::json;
 use std::collections::HashMap;
 use std::sync::atomic::{AtomicU64, Ordering};
+use std::time::Duration;
 use std::sync::{Arc, Mutex};
 
 static SEQ: AtomicU64 = AtomicU64::new(0);
@@ -37,6 +39,7 @@ struct GwState {
     bg_mtime: Mutex<Option<std::time::SystemTime>>,
     bg_key: Option<Vec<u8>>,
     content_scan: Option<String>,
+    sem: std::sync::Arc<tokio::sync::Semaphore>,
 }
 
 #[tokio::main]
@@ -120,7 +123,8 @@ async fn main() -> std::process::ExitCode {
         upstream_key,
         env,
         oidc,
-        client: reqwest::Client::new(),
+        client: reqwest::Client::builder().timeout(Duration::from_secs(30)).build().unwrap_or_default(),
+        sem: std::sync::Arc::new(tokio::sync::Semaphore::new(256)),
         limiters: Mutex::new(HashMap::new()),
         ledger: ledger.map(Mutex::new),
         breakglass: Mutex::new(acp_core::breakglass::BreakGlassRegistry::new()),
@@ -130,7 +134,7 @@ async fn main() -> std::process::ExitCode {
         content_scan,
     });
     let upstream_log = st.upstream.clone();
-    let app = Router::new().route("/*path", any(handle)).with_state(st);
+    let app = Router::new().route("/*path", any(handle)).layer(DefaultBodyLimit::max(4 * 1024 * 1024)).with_state(st);
     let listener = match tokio::net::TcpListener::bind(&addr).await {
         Ok(l) => l,
         Err(e) => {
@@ -278,6 +282,12 @@ async fn handle(
     headers: HeaderMap,
     body: Bytes,
 ) -> Response {
+    let _permit = match st.sem.clone().try_acquire_owned() {
+        Ok(p) => p,
+        Err(_) => {
+            return (StatusCode::SERVICE_UNAVAILABLE, [("retry-after", "1")], "gateway at capacity").into_response();
+        }
+    };
     // The model is in the request body (OpenAI/Anthropic style). No model -> nothing to govern here.
     let parsed: serde_json::Value = serde_json::from_slice(&body).unwrap_or(json!({}));
     let model = parsed.get("model").and_then(|v| v.as_str()).unwrap_or("");
@@ -394,8 +404,19 @@ async fn forward(st: &GwState, path: &str, body: Bytes) -> Response {
                 .and_then(|v| v.to_str().ok())
                 .unwrap_or("application/json")
                 .to_string();
-            let bytes = resp.bytes().await.unwrap_or_default();
-            (status, [("content-type", ctype)], bytes).into_response()
+            if ctype.starts_with("text/event-stream") {
+                // Model APIs stream by default; relay chunk-by-chunk without buffering.
+                let s = futures_util::stream::unfold(resp, |mut r| async move {
+                    match r.chunk().await {
+                        Ok(Some(chunk)) => Some((Ok::<_, std::io::Error>(chunk), r)),
+                        _ => None,
+                    }
+                });
+                (status, [("content-type", "text/event-stream")], axum::body::Body::from_stream(s)).into_response()
+            } else {
+                let bytes = resp.bytes().await.unwrap_or_default();
+                (status, [("content-type", ctype)], bytes).into_response()
+            }
         }
         Err(e) => (StatusCode::BAD_GATEWAY, format!("upstream error: {e}")).into_response(),
     }

@@ -71,6 +71,7 @@ dependencies = [
  "acp-policy",
  "anyhow",
  "axum",
+ "futures-util",
  "hex",
  "reqwest",
  "serde_json",
