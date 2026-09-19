@@ -636,7 +636,7 @@ fn cmd_sign_artifact(rest: &[String]) -> ExitCode {
         }
         _ => {
             let s = Ed25519Signer::generate();
-            if std::fs::write(keyfile, s.seed()).is_err() {
+            if acp_core::secret::write_key_secure(keyfile, &s.seed()).is_err() {
                 eprintln!("acp: cannot write key {keyfile}");
                 return ExitCode::from(1);
             }
@@ -997,7 +997,7 @@ fn cmd_policy(rest: &[String]) -> ExitCode {
             };
             let signer = match std::fs::read(keyf) {
                 Ok(b) if b.len() == 32 => { let mut s=[0u8;32]; s.copy_from_slice(&b); Ed25519Signer::from_seed(&s) }
-                _ => { let s = Ed25519Signer::generate(); if std::fs::write(keyf, s.seed()).is_err() { eprintln!("acp: cannot write key {keyf}"); return ExitCode::from(1); } s }
+                _ => { let s = Ed25519Signer::generate(); if acp_core::secret::write_key_secure(keyf, &s.seed()).is_err() { eprintln!("acp: cannot write key {keyf}"); return ExitCode::from(1); } s }
             };
             match acp_policy::store::deploy(&src, store, &signer, "cli") {
                 Ok(d) => { println!("deployed policy v{} (hash {}...) to {store}", d.version, &d.hash[..12.min(d.hash.len())]); ExitCode::SUCCESS }

@@ -105,7 +105,7 @@ async fn main() {
             "--break-glass-file" => break_glass_file = it.next().cloned(),
             "--break-glass-key" => {
                 if let Some(h) = it.next() {
-                    match hex::decode(h) {
+                    match hex::decode(acp_core::secret::resolve(h)) {
                         Ok(b) if b.len() == 32 => {
                             let mut s = [0u8; 32];
                             s.copy_from_slice(&b);
@@ -151,7 +151,7 @@ async fn main() {
             }
             _ => {
                 let s = acp_core::sign::Ed25519Signer::generate();
-                let _ = std::fs::write(&key_path, s.seed());
+                let _ = acp_core::secret::write_key_secure(&key_path, &s.seed());
                 Box::new(s)
             }
         };
@@ -164,6 +164,10 @@ async fn main() {
         }
     });
 
+    if dev_auth && std::env::var("ACP_ALLOW_DEV_AUTH").ok().as_deref() != Some("1") {
+        eprintln!("acp-server: --dev-auth requires ACP_ALLOW_DEV_AUTH=1 (never enable in production)");
+        std::process::exit(2);
+    }
     // Control-plane RBAC (opt-in). Three ways to enable, in priority order:
     //   --dev-auth                         : in-memory mock issuer (local use)
     //   --entra-tenant + --entra-audience  : real Entra; issuer + JWKS URL derived from the tenant
@@ -583,7 +587,7 @@ fn deploy_signer(store_dir: &str) -> acp_core::sign::Ed25519Signer {
         }
         _ => {
             let s = acp_core::sign::Ed25519Signer::generate();
-            let _ = std::fs::write(&key_path, s.seed());
+            let _ = acp_core::secret::write_key_secure(&key_path, &s.seed());
             s
         }
     }

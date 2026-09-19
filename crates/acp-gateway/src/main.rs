@@ -115,7 +115,8 @@ async fn main() -> std::process::ExitCode {
     if ledger.is_some() {
         eprintln!("acp-gateway: recording decisions to the tamper-evident ledger");
     }
-    let bg_key = bg_key_hex.as_ref().and_then(|h| hex::decode(h).ok());
+    let upstream_key = upstream_key.map(|k| acp_core::secret::resolve(&k));
+    let bg_key = bg_key_hex.as_ref().and_then(|h| hex::decode(acp_core::secret::resolve(h)).ok());
     let st = Arc::new(GwState {
         engine,
         tax: ModelTaxonomy::default(),
@@ -231,7 +232,7 @@ fn open_ledger(path: &str) -> Option<acp_ledger::Ledger> {
         }
         _ => {
             let s = acp_core::sign::Ed25519Signer::generate();
-            let _ = std::fs::write(&key_path, s.seed());
+            let _ = acp_core::secret::write_key_secure(&key_path, &s.seed());
             Box::new(s)
         }
     };

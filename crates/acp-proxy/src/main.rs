@@ -203,7 +203,7 @@ fn build_controller(o: &Opts) -> Result<Arc<Controller>, String> {
         eprintln!("acp-proxy: watching break-glass grant file {bg}");
     }
     if let Some(k) = &o.break_glass_key {
-        match hex::decode(k) {
+        match hex::decode(acp_core::secret::resolve(k)) {
             Ok(pk) => {
                 controller.set_break_glass_key(pk);
                 eprintln!("acp-proxy: break-glass grants must be signed by the pinned key");
@@ -220,7 +220,7 @@ fn build_controller(o: &Opts) -> Result<Arc<Controller>, String> {
         eprintln!("acp-proxy: tool-integrity pins persisted at {pins}");
     }
     if let Some(k) = &o.enforcement_key {
-        match hex::decode(k) {
+        match hex::decode(acp_core::secret::resolve(k)) {
             Ok(b) if b.len() == 32 => {
                 let mut seed = [0u8; 32];
                 seed.copy_from_slice(&b);

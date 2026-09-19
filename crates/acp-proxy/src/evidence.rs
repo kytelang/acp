@@ -49,7 +49,7 @@ fn load_or_create_key(path: &str) -> Result<Box<dyn Signer + Send>, String> {
         Ok(_) => Err(format!("key file {path} is not 32 bytes")),
         Err(e) if e.kind() == std::io::ErrorKind::NotFound => {
             let signer = Ed25519Signer::generate();
-            std::fs::write(path, signer.seed()).map_err(|e| e.to_string())?;
+            acp_core::secret::write_key_secure(path, &signer.seed()).map_err(|e| e.to_string())?;
             #[cfg(unix)]
             {
                 use std::os::unix::fs::PermissionsExt;

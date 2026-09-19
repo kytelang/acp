@@ -46,6 +46,7 @@ pub mod retention;
 pub mod rollout;
 pub mod sandbox;
 pub mod scim;
+pub mod secret;
 pub mod shadoweval;
 pub mod sign;
 pub mod ticket;
