@@ -36,6 +36,7 @@ struct GwState {
     bg_file: Option<String>,
     bg_mtime: Mutex<Option<std::time::SystemTime>>,
     bg_key: Option<Vec<u8>>,
+    content_scan: Option<String>,
 }
 
 #[tokio::main]
@@ -46,6 +47,7 @@ async fn main() -> std::process::ExitCode {
     let mut ledger_path: Option<String> = None;
     let mut bg_file: Option<String> = None;
     let mut bg_key_hex: Option<String> = None;
+    let mut content_scan: Option<String> = None;
     let (mut entra_tenant, mut entra_audience): (Option<String>, Option<String>) = (None, None);
     let mut it = args.iter().skip(1);
     while let Some(a) = it.next() {
@@ -57,6 +59,7 @@ async fn main() -> std::process::ExitCode {
             "--ledger" => ledger_path = it.next().cloned(),
             "--break-glass-file" => bg_file = it.next().cloned(),
             "--break-glass-key" => bg_key_hex = it.next().cloned(),
+            "--content-scan" => content_scan = it.next().cloned(),
             "--env" => env = it.next().cloned().unwrap_or(env),
             "--entra-tenant" => entra_tenant = it.next().cloned(),
             "--entra-audience" => entra_audience = it.next().cloned(),
@@ -124,6 +127,7 @@ async fn main() -> std::process::ExitCode {
         bg_file,
         bg_mtime: Mutex::new(None),
         bg_key,
+        content_scan,
     });
     let upstream_log = st.upstream.clone();
     let app = Router::new().route("/*path", any(handle)).with_state(st);
@@ -173,6 +177,43 @@ fn apply_break_glass(st: &GwState, app: &str, model: &str, d: &mut acp_gateway::
         d.verdict = eff;
         d.rule_id = Some("break-glass".to_string());
         d.reason = Some("emergency control".to_string());
+    }
+}
+
+/// Ask the configured content firewall (Lakera / Azure AI Content Safety / your endpoint) whether a
+/// prompt is safe to forward. Contract: POST {"text": "..."} -> {"block": bool}. INTEGRATE, do not
+/// build: ACP owns authorization, the content plane owns content. Fail-open on an unreachable scanner
+/// would be unsafe, so a scan error blocks (fail-closed) when scanning is configured.
+async fn content_blocked(st: &GwState, body: &serde_json::Value) -> Option<String> {
+    let url = st.content_scan.as_ref()?;
+    // Gather the prompt text from OpenAI-style messages[].content or a "prompt"/"input" field.
+    let mut text = String::new();
+    if let Some(msgs) = body.get("messages").and_then(|v| v.as_array()) {
+        for m in msgs {
+            if let Some(c) = m.get("content").and_then(|v| v.as_str()) {
+                text.push_str(c);
+                text.push('\n');
+            }
+        }
+    }
+    for k in ["prompt", "input"] {
+        if let Some(s) = body.get(k).and_then(|v| v.as_str()) {
+            text.push_str(s);
+        }
+    }
+    if text.is_empty() {
+        return None;
+    }
+    match st.client.post(url).json(&serde_json::json!({"text": text})).send().await {
+        Ok(r) => {
+            let v: serde_json::Value = r.json().await.unwrap_or(serde_json::json!({}));
+            if v.get("block").and_then(|b| b.as_bool()).unwrap_or(false) {
+                Some(v.get("reason").and_then(|x| x.as_str()).unwrap_or("content policy").to_string())
+            } else {
+                None
+            }
+        }
+        Err(e) => Some(format!("content scanner unreachable (fail-closed): {e}")),
     }
 }
 
@@ -309,6 +350,13 @@ async fn handle(
                 return (
                     StatusCode::PAYMENT_REQUIRED,
                     Json(json!({"error": {"message": "human approval required (confirm obligation)", "type": "acp_step_up"}})),
+                ).into_response();
+            }
+            // Content plane (integrate, not build): scan the prompt before it reaches the model.
+            if let Some(reason) = content_blocked(&st, &parsed).await {
+                return (
+                    StatusCode::FORBIDDEN,
+                    Json(json!({"error": {"message": format!("blocked by content policy: {reason}"), "type": "acp_content_blocked"}})),
                 ).into_response();
             }
             forward(&st, &path, body).await
