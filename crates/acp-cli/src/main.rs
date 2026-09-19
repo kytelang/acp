@@ -772,6 +772,36 @@ fn cmd_ledger_backup(rest: &[String]) -> ExitCode {
     }
 }
 
+/// Live discovery: poll an egress-log file and print each newly-seen shadow-AI endpoint. Runs until
+/// interrupted. A weak but useful telemetry ingestion path; production feeds a sensor/eBPF stream.
+fn discover_watch(file: &str) -> ExitCode {
+    use acp_core::discovery::{classify_ai, AiKind};
+    use std::collections::BTreeSet;
+    let mut seen: BTreeSet<String> = BTreeSet::new();
+    let mut offset: u64 = 0;
+    eprintln!("acp: watching {file} for shadow AI (ctrl-c to stop)");
+    loop {
+        if let Ok(content) = std::fs::read_to_string(file) {
+            let bytes = content.len() as u64;
+            if bytes < offset {
+                offset = 0; // file truncated/rotated
+            }
+            for line in content[offset as usize..].lines() {
+                let ep = line.trim();
+                if ep.is_empty() || ep.starts_with('#') || !seen.insert(ep.to_string()) {
+                    continue;
+                }
+                if let Some(ai) = classify_ai(ep) {
+                    let kind = match ai.kind { AiKind::ModelApi => "model-api", AiKind::Mcp => "mcp" };
+                    println!("SHADOW AI [{kind:9}] {:22} {}", ai.provider, ai.endpoint);
+                }
+            }
+            offset = bytes;
+        }
+        std::thread::sleep(std::time::Duration::from_millis(1500));
+    }
+}
+
 /// GRC projection (phase F): read the tamper-evident ledger and print an evidence-backed compliance
 /// report mapping the signed decisions to EU AI Act / NIST AI RMF / ISO 42001 controls.
 ///   acp grc-report <ledger.db>
@@ -834,6 +864,11 @@ fn cmd_discover(rest: &[String]) -> ExitCode {
             .filter(|l| !l.is_empty() && !l.starts_with('#'))
             .collect()
     };
+    // --watch: continuously tail the observed file and flag newly-seen shadow AI (live telemetry
+    // ingestion seed; point it at what a network sensor / egress proxy appends).
+    if rest.iter().any(|a| a == "--watch") {
+        return discover_watch(obs_file);
+    }
     let observed = read_lines(obs_file);
     let governed = rest.get(1).map(|f| read_lines(f)).unwrap_or_default();
     let shadow = find_shadow_ai(&observed, &governed);
