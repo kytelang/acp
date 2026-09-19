@@ -45,6 +45,7 @@ fn main() -> ExitCode {
         "agent" => cmd_agent(&args[2..]),
         "native-compile" => cmd_native_compile(&args[2..]),
         "discover" => cmd_discover(&args[2..]),
+        "grc-report" => cmd_grc_report(&args[2..]),
         "registry" => cmd_registry(&args[2..]),
         "policy" => cmd_policy(&args[2..]),
         _ => usage("acp [init|verify|verify-pack|export|policy-compile|policy-test|approve|deny|approvals|canary|learn|replay|purge|classify-eval]"),
@@ -718,6 +719,52 @@ fn cmd_bench_ledger(rest: &[String]) -> ExitCode {
     if ok { ExitCode::SUCCESS } else { ExitCode::from(1) }
 }
 
+
+/// GRC projection (phase F): read the tamper-evident ledger and print an evidence-backed compliance
+/// report mapping the signed decisions to EU AI Act / NIST AI RMF / ISO 42001 controls.
+///   acp grc-report <ledger.db>
+fn cmd_grc_report(rest: &[String]) -> ExitCode {
+    use acp_core::grc::{report, EvidenceSummary};
+    let Some(ledger) = rest.first() else {
+        return usage("acp grc-report <ledger.db>");
+    };
+    let pack = match acp_ledger::export_file(ledger) {
+        Ok(p) => p,
+        Err(e) => { eprintln!("acp: cannot read ledger {ledger}: {e}"); return ExitCode::from(1); }
+    };
+    let mut s = EvidenceSummary { signed_ledger: true, ..Default::default() };
+    if let Some(recs) = pack.get("records").and_then(|v| v.as_array()) {
+        for r in recs {
+            let canon = match r.get("canonical").and_then(|v| v.as_str()).and_then(|h| hex::decode(h).ok()) {
+                Some(b) => b, None => continue,
+            };
+            let rec: serde_json::Value = match serde_json::from_slice(&canon) { Ok(v) => v, Err(_) => continue };
+            if rec.get("type").and_then(|v| v.as_str()) != Some("decision") { continue; }
+            s.total_decisions += 1;
+            let dec = rec.get("decision").cloned().unwrap_or_default();
+            match dec.get("verdict").and_then(|v| v.as_str()) {
+                Some("deny") => s.denies += 1,
+                Some("step_up") => s.step_ups += 1,
+                _ => {}
+            }
+            if dec.get("rule_id").and_then(|v| v.as_str()) == Some("break-glass") { s.kill_switch_events += 1; }
+            if let Some(obs) = dec.get("obligations").and_then(|v| v.as_array()) {
+                if obs.iter().any(|o| o.as_str().map(|x| x.contains("Redact")).unwrap_or(false)) { s.redactions += 1; }
+            }
+        }
+    }
+    s.policy_in_force = s.total_decisions > 0;
+    println!("ACP evidence-backed compliance report  (ledger: {ledger})");
+    println!("  {} decisions | {} denies | {} step-ups | {} kill-switch | {} redactions | signed ledger\n",
+        s.total_decisions, s.denies, s.step_ups, s.kill_switch_events, s.redactions);
+    let mut fw = "";
+    for c in report(&s) {
+        if c.framework != fw { println!("[{}]", c.framework); fw = c.framework; }
+        let mark = match c.status.as_str() { "satisfied" => "PASS", "partial" => "PART", _ => "GAP " };
+        println!("  {mark}  {:11} {:32} {}", c.control_id, c.title, c.rationale);
+    }
+    ExitCode::SUCCESS
+}
 
 /// Discovery plane (phase E): read observed egress endpoints (one per line) and report shadow AI,
 /// classified by provider. Optional second file lists already-governed endpoints to exclude.
