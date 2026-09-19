@@ -12,7 +12,7 @@ use axum::{
     extract::State,
     http::{HeaderMap, StatusCode},
     response::{IntoResponse, Response},
-    routing::any,
+    routing::{any, get},
     extract::DefaultBodyLimit,
     Json, Router,
 };
@@ -23,6 +23,15 @@ use std::time::Duration;
 use std::sync::{Arc, Mutex};
 
 static SEQ: AtomicU64 = AtomicU64::new(0);
+
+#[derive(Default)]
+struct Metrics {
+    requests: AtomicU64,
+    allowed: AtomicU64,
+    denied: AtomicU64,
+    step_up: AtomicU64,
+    shed: AtomicU64,
+}
 
 struct GwState {
     engine: PolicyEngine,
@@ -41,6 +50,7 @@ struct GwState {
     content_scan: Option<String>,
     sem: std::sync::Arc<tokio::sync::Semaphore>,
     budget_state: Option<String>,
+    metrics: Metrics,
 }
 
 #[tokio::main]
@@ -143,9 +153,16 @@ async fn main() -> std::process::ExitCode {
         bg_key,
         content_scan,
         budget_state,
+        metrics: Metrics::default(),
     });
     let upstream_log = st.upstream.clone();
-    let app = Router::new().route("/*path", any(handle)).layer(DefaultBodyLimit::max(4 * 1024 * 1024)).with_state(st);
+    let app = Router::new()
+        .route("/healthz", get(|| async { "ok" }))
+        .route("/readyz", get(|| async { "ready" }))
+        .route("/metrics", get(metrics))
+        .route("/*path", any(handle))
+        .layer(DefaultBodyLimit::max(4 * 1024 * 1024))
+        .with_state(st);
     let listener = match tokio::net::TcpListener::bind(&addr).await {
         Ok(l) => l,
         Err(e) => {
@@ -290,6 +307,22 @@ fn record_decision(st: &GwState, app: &str, principal: &str, model: &str, d: &ac
     }
 }
 
+/// Prometheus text-format metrics for the gateway.
+async fn metrics(State(st): State<Arc<GwState>>) -> impl IntoResponse {
+    use std::sync::atomic::Ordering::Relaxed;
+    let m = &st.metrics;
+    let body = format!(
+        "# TYPE acp_gateway_requests_total counter\nacp_gateway_requests_total {}\n\
+         # TYPE acp_gateway_allowed_total counter\nacp_gateway_allowed_total {}\n\
+         # TYPE acp_gateway_denied_total counter\nacp_gateway_denied_total {}\n\
+         # TYPE acp_gateway_step_up_total counter\nacp_gateway_step_up_total {}\n\
+         # TYPE acp_gateway_shed_total counter\nacp_gateway_shed_total {}\n",
+        m.requests.load(Relaxed), m.allowed.load(Relaxed), m.denied.load(Relaxed),
+        m.step_up.load(Relaxed), m.shed.load(Relaxed),
+    );
+    ([("content-type", "text/plain; version=0.0.4")], body)
+}
+
 fn now_ms() -> u64 {
     std::time::SystemTime::now()
         .duration_since(std::time::UNIX_EPOCH)
@@ -306,9 +339,11 @@ async fn handle(
     let _permit = match st.sem.clone().try_acquire_owned() {
         Ok(p) => p,
         Err(_) => {
+            st.metrics.shed.fetch_add(1, std::sync::atomic::Ordering::Relaxed);
             return (StatusCode::SERVICE_UNAVAILABLE, [("retry-after", "1")], "gateway at capacity").into_response();
         }
     };
+    st.metrics.requests.fetch_add(1, std::sync::atomic::Ordering::Relaxed);
     // The model is in the request body (OpenAI/Anthropic style). No model -> nothing to govern here.
     let parsed: serde_json::Value = serde_json::from_slice(&body).unwrap_or(json!({}));
     let model = parsed.get("model").and_then(|v| v.as_str()).unwrap_or("");
@@ -340,16 +375,22 @@ async fn handle(
     );
 
     match d.verdict {
-        Verdict::Deny => (
+        Verdict::Deny => {
+            st.metrics.denied.fetch_add(1, std::sync::atomic::Ordering::Relaxed);
+            (
             StatusCode::FORBIDDEN,
             Json(json!({"error": {"message": format!("blocked by ACP rule '{}': {}", d.rule_id.unwrap_or_default(), d.reason.unwrap_or_else(|| "policy".into())), "type": "acp_policy_denied"}})),
         )
-            .into_response(),
-        Verdict::StepUp => (
+            .into_response()
+        }
+        Verdict::StepUp => {
+            st.metrics.step_up.fetch_add(1, std::sync::atomic::Ordering::Relaxed);
+            (
             StatusCode::PAYMENT_REQUIRED,
             Json(json!({"error": {"message": "human approval required (step-up) by ACP policy", "type": "acp_step_up"}})),
         )
-            .into_response(),
+            .into_response()
+        }
         Verdict::Allow | Verdict::Shadow => {
             // Obligations (model v2, D4) on the gateway: a rate_limit acts as a per-(app, model-class)
             // token/cost budget and denies once spent; a confirm routes to step-up. Deny-overrides.
@@ -403,6 +444,7 @@ async fn handle(
                     Json(json!({"error": {"message": format!("blocked by content policy: {reason}"), "type": "acp_content_blocked"}})),
                 ).into_response();
             }
+            st.metrics.allowed.fetch_add(1, std::sync::atomic::Ordering::Relaxed);
             forward(&st, &path, body).await
         }
     }
