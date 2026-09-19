@@ -70,6 +70,7 @@ dependencies = [
  "acp-policy",
  "anyhow",
  "axum",
+ "hex",
  "reqwest",
  "serde_json",
  "tokio",

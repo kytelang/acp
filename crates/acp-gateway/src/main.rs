@@ -32,6 +32,10 @@ struct GwState {
     client: reqwest::Client,
     limiters: Mutex<HashMap<String, acp_core::ratelimit::TokenBucket>>,
     ledger: Option<Mutex<acp_ledger::Ledger>>,
+    breakglass: Mutex<acp_core::breakglass::BreakGlassRegistry>,
+    bg_file: Option<String>,
+    bg_mtime: Mutex<Option<std::time::SystemTime>>,
+    bg_key: Option<Vec<u8>>,
 }
 
 #[tokio::main]
@@ -40,6 +44,8 @@ async fn main() -> std::process::ExitCode {
     let mut addr = "127.0.0.1:8799".to_string();
     let (mut policy, mut upstream, mut upstream_key, mut env) = (None, None, None, "prod".to_string());
     let mut ledger_path: Option<String> = None;
+    let mut bg_file: Option<String> = None;
+    let mut bg_key_hex: Option<String> = None;
     let (mut entra_tenant, mut entra_audience): (Option<String>, Option<String>) = (None, None);
     let mut it = args.iter().skip(1);
     while let Some(a) = it.next() {
@@ -49,6 +55,8 @@ async fn main() -> std::process::ExitCode {
             "--upstream" => upstream = it.next().cloned(),
             "--upstream-key" => upstream_key = it.next().cloned(),
             "--ledger" => ledger_path = it.next().cloned(),
+            "--break-glass-file" => bg_file = it.next().cloned(),
+            "--break-glass-key" => bg_key_hex = it.next().cloned(),
             "--env" => env = it.next().cloned().unwrap_or(env),
             "--entra-tenant" => entra_tenant = it.next().cloned(),
             "--entra-audience" => entra_audience = it.next().cloned(),
@@ -101,6 +109,7 @@ async fn main() -> std::process::ExitCode {
     if ledger.is_some() {
         eprintln!("acp-gateway: recording decisions to the tamper-evident ledger");
     }
+    let bg_key = bg_key_hex.as_ref().and_then(|h| hex::decode(h).ok());
     let st = Arc::new(GwState {
         engine,
         tax: ModelTaxonomy::default(),
@@ -111,6 +120,10 @@ async fn main() -> std::process::ExitCode {
         client: reqwest::Client::new(),
         limiters: Mutex::new(HashMap::new()),
         ledger: ledger.map(Mutex::new),
+        breakglass: Mutex::new(acp_core::breakglass::BreakGlassRegistry::new()),
+        bg_file,
+        bg_mtime: Mutex::new(None),
+        bg_key,
     });
     let upstream_log = st.upstream.clone();
     let app = Router::new().route("/*path", any(handle)).with_state(st);
@@ -124,6 +137,43 @@ async fn main() -> std::process::ExitCode {
     eprintln!("acp-gateway: governing model calls on http://{addr} -> {upstream_log}");
     let _ = axum::serve(listener, app).await;
     std::process::ExitCode::SUCCESS
+}
+
+/// Reload the break-glass grant file when it changes (mtime-cached); verify its signature against a
+/// pinned key if configured; a forged/invalid grant is kept-current, an absent file clears.
+fn refresh_break_glass(st: &GwState) {
+    let path = match &st.bg_file { Some(p) => p.clone(), None => return };
+    let mtime = std::fs::metadata(&path).ok().and_then(|m| m.modified().ok());
+    {
+        let mut last = st.bg_mtime.lock().unwrap();
+        if *last == mtime { return; }
+        *last = mtime;
+    }
+    let bytes = match std::fs::read(&path) {
+        Ok(b) => b,
+        Err(_) => { st.breakglass.lock().unwrap().replace_all(None); return; }
+    };
+    let gf = match serde_json::from_slice::<acp_core::breakglass::GrantFile>(&bytes) {
+        Ok(g) => g,
+        Err(_) => return,
+    };
+    if !gf.verify(st.bg_key.as_deref()) {
+        eprintln!("acp-gateway: break-glass grant REJECTED (signature/pin); keeping current");
+        return;
+    }
+    st.breakglass.lock().unwrap().replace_all(gf.to_break_glass());
+}
+
+/// Apply any active, scope-matching break-glass grant to the decision (e.g. a resource:frontier
+/// lockdown freezes frontier model calls). Mutates the verdict in place.
+fn apply_break_glass(st: &GwState, app: &str, model: &str, d: &mut acp_gateway::GatewayDecision) {
+    refresh_break_glass(st);
+    let eff = st.breakglass.lock().unwrap().effective(d.verdict, now_ms(), app, &d.resource, model);
+    if eff != d.verdict {
+        d.verdict = eff;
+        d.rule_id = Some("break-glass".to_string());
+        d.reason = Some("emergency control".to_string());
+    }
 }
 
 fn open_ledger(path: &str) -> Option<acp_ledger::Ledger> {
@@ -203,7 +253,8 @@ async fn handle(
         "max_tokens": parsed.get("max_tokens").and_then(|v| v.as_u64()).unwrap_or(0),
     });
 
-    let d = decide(&st.engine, &st.tax, model, app, &principal, &argsum, &st.env);
+    let mut d = decide(&st.engine, &st.tax, model, app, &principal, &argsum, &st.env);
+    apply_break_glass(&st, app, model, &mut d);
     record_decision(&st, app, &principal, model, &d);
     eprintln!(
         "acp-gateway: {} model={} class={} op={} app={} principal={} -> {:?}",
