@@ -32,7 +32,7 @@ broad rollout, P2 = scale and resilience. On-prem single-org, so no multi-tenant
    dev-token stand-in is used only when no such header is present (local use, and dev-auth is now
    guarded). A built-in auth-code flow inside the console remains an optional alternative to the IAP.
 
-## P1 - before broad rollout  [4 of 6 done]
+## P1 - before broad rollout  [5 of 6 done; only mTLS remains]
 
 7. mTLS between components: proxy/gateway to acp-server and to upstreams should use the existing
    `acp-mtls` (client-cert-required), not plain HTTP, so the control channel is authenticated.
@@ -48,7 +48,7 @@ broad rollout, P2 = scale and resilience. On-prem single-org, so no multi-tenant
 11. [DONE] Fail-closed audit: if the ledger write fails on the gateway, decide the policy (the proxy already
     fails closed on evidence-write failure; the gateway currently forwards without recording on a
     ledger error). Make the gateway match the proxy's record-before-forward guarantee.
-12. Load and soak tests: the suites are unit/integration; add throughput and endurance tests for the
+12. [DONE - harness] Load and soak tests: the suites are unit/integration; add throughput and endurance tests for the
     proxy and gateway (concurrency, large bodies, streaming, budget churn, key rotation).
 
 ## P2 - scale and resilience
