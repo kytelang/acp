@@ -51,7 +51,7 @@ broad rollout, P2 = scale and resilience. On-prem single-org, so no multi-tenant
 12. [DONE - harness] Load and soak tests: the suites are unit/integration; add throughput and endurance tests for the
     proxy and gateway (concurrency, large bodies, streaming, budget churn, key rotation).
 
-## P2 - scale and resilience
+## P2 - scale and resilience  [14,15 code done; 13,16,17 documented in p2-operations.md]
 
 13. Shared/distributed rate-limit and pin state for multiple gateway/proxy instances (today each
     instance is independent).
