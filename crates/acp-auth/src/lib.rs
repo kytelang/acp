@@ -229,14 +229,16 @@ pub fn verify(
         return Err(AuthError::WrongAudience);
     }
 
+    // Small clock-skew tolerance between ACP and the IdP (60s), the JWT-standard leeway.
+    const LEEWAY_S: u64 = 60;
     let now_s = now_ms / 1000;
     if let Some(exp) = claims.get("exp").and_then(|v| v.as_u64()) {
-        if now_s >= exp {
+        if now_s >= exp.saturating_add(LEEWAY_S) {
             return Err(AuthError::Expired);
         }
     }
     if let Some(nbf) = claims.get("nbf").and_then(|v| v.as_u64()) {
-        if now_s < nbf {
+        if now_s.saturating_add(LEEWAY_S) < nbf {
             return Err(AuthError::NotYetValid);
         }
     }

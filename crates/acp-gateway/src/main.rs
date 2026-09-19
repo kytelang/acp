@@ -98,18 +98,18 @@ async fn main() -> std::process::ExitCode {
     let oidc = match (entra_tenant, entra_audience) {
         (Some(tid), Some(aud)) => {
             let url = format!("https://login.microsoftonline.com/{tid}/discovery/v2.0/keys");
-            match reqwest::get(&url).await.ok() {
-                Some(r) => match r.text().await.ok().and_then(|s| acp_auth::Jwks::from_jwks_json(&s).ok()) {
-                    Some(jwks) => {
-                        eprintln!("acp-gateway: per-request human identity enabled");
-                        Some((jwks, acp_auth::EntraConfig {
-                            issuer: format!("https://login.microsoftonline.com/{tid}/v2.0"),
-                            audience: aud,
-                        }))
-                    }
-                    None => None,
-                },
-                None => None,
+            match load_jwks(&url).await {
+                Ok(jwks) => {
+                    eprintln!("acp-gateway: per-request human identity enabled");
+                    Some((jwks, acp_auth::EntraConfig {
+                        issuer: format!("https://login.microsoftonline.com/{tid}/v2.0"),
+                        audience: aud,
+                    }))
+                }
+                Err(e) => {
+                    eprintln!("acp-gateway: could not load JWKS ({e}); refusing to start (identity requested, failing closed)");
+                    return std::process::ExitCode::from(1);
+                }
             }
         }
         _ => None,
@@ -232,6 +232,15 @@ async fn content_blocked(st: &GwState, body: &serde_json::Value) -> Option<Strin
     }
 }
 
+async fn load_jwks(source: &str) -> Result<acp_auth::Jwks, String> {
+    let body = if source.starts_with("http") {
+        reqwest::get(source).await.map_err(|e| e.to_string())?.text().await.map_err(|e| e.to_string())?
+    } else {
+        std::fs::read_to_string(source).map_err(|e| e.to_string())?
+    };
+    acp_auth::Jwks::from_jwks_json(&body).map_err(|e| format!("{e:?}"))
+}
+
 fn open_ledger(path: &str) -> Option<acp_ledger::Ledger> {
     let key_path = format!("{path}.key");
     let signer: Box<dyn acp_core::sign::Signer + Send> = match std::fs::read(&key_path) {
@@ -260,10 +269,10 @@ fn verdict_str(v: Verdict) -> &'static str {
 
 /// Record a governed model-call decision to the tamper-evident ledger (same shape as the MCP proxy,
 /// surface = llm-gateway). Args are never recorded (no prompt in the ledger).
-fn record_decision(st: &GwState, app: &str, principal: &str, model: &str, d: &acp_gateway::GatewayDecision) {
+fn record_decision(st: &GwState, app: &str, principal: &str, model: &str, d: &acp_gateway::GatewayDecision) -> bool {
     let ledger = match &st.ledger {
         Some(l) => l,
-        None => return,
+        None => return true, // no ledger configured: nothing to fail closed on
     };
     let did = format!("gw-{}-{}", now_ms(), SEQ.fetch_add(1, Ordering::Relaxed));
     let verified = !principal.is_empty() && principal != "unattributed";
@@ -275,8 +284,9 @@ fn record_decision(st: &GwState, app: &str, principal: &str, model: &str, d: &ac
         "action": {"tool": model, "resource": d.resource, "operation": d.operation, "surface": "llm-gateway"},
         "decision": {"verdict": verdict_str(d.verdict), "rule_id": d.rule_id, "reason": d.reason, "obligations": obs},
     });
-    if let Ok(mut l) = ledger.lock() {
-        let _ = l.append(&did, "decision", &record, None);
+    match ledger.lock() {
+        Ok(mut l) => l.append(&did, "decision", &record, None).is_ok(),
+        Err(_) => false,
     }
 }
 
@@ -317,7 +327,13 @@ async fn handle(
 
     let mut d = decide(&st.engine, &st.tax, model, app, &principal, &argsum, &st.env);
     apply_break_glass(&st, app, model, &mut d);
-    record_decision(&st, app, &principal, model, &d);
+    if !record_decision(&st, app, &principal, model, &d) {
+        // Record-before-forward: if the evidence write failed, fail closed rather than act unrecorded.
+        return (
+            StatusCode::SERVICE_UNAVAILABLE,
+            Json(json!({"error": {"message": "evidence unavailable, failing closed", "type": "acp_fail_closed"}})),
+        ).into_response();
+    }
     eprintln!(
         "acp-gateway: {} model={} class={} op={} app={} principal={} -> {:?}",
         path, model, d.resource, d.operation, app, principal, d.verdict

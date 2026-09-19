@@ -33,7 +33,8 @@ fn a_valid_token_authenticates_with_roles_and_capabilities() {
 fn an_expired_token_is_rejected() {
     let idp = idp();
     let tok = idp.issue("oid-1", "u", "contoso-tenant", &[], NOW, 60);
-    let err = verify(&tok, &idp.jwks(), &idp.config(), NOW + 61_000).unwrap_err();
+    // Well past exp + the 60s clock-skew leeway.
+    let err = verify(&tok, &idp.jwks(), &idp.config(), NOW + 121_000).unwrap_err();
     assert_eq!(err, AuthError::Expired);
 }
 
@@ -41,7 +42,7 @@ fn an_expired_token_is_rejected() {
 fn a_not_yet_valid_token_is_rejected() {
     let idp = idp();
     // Issued "in the future" relative to the verify clock.
-    let tok = idp.issue("oid-1", "u", "contoso-tenant", &[], NOW + 60_000, 3600);
+    let tok = idp.issue("oid-1", "u", "contoso-tenant", &[], NOW + 121_000, 3600);
     let err = verify(&tok, &idp.jwks(), &idp.config(), NOW).unwrap_err();
     assert_eq!(err, AuthError::NotYetValid);
 }

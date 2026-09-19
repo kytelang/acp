@@ -220,8 +220,8 @@ async fn main() {
                     })
                 }
                 Err(e) => {
-                    eprintln!("acp-server: could not load JWKS from {source}: {e}; RBAC disabled");
-                    None
+                    eprintln!("acp-server: could not load JWKS from {source}: {e}; refusing to start (auth was requested, failing closed)");
+                    std::process::exit(1);
                 }
             },
             None => None,

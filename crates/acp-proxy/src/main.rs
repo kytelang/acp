@@ -308,7 +308,10 @@ async fn main() -> ExitCode {
                 controller.set_oidc(jwks, acp_auth::EntraConfig { issuer: issuer.clone(), audience: aud.clone() });
                 eprintln!("acp-proxy: per-request human identity enabled (issuer {issuer})");
             }
-            Err(e) => eprintln!("acp-proxy: could not load JWKS ({e}); human principal stays as configured"),
+            Err(e) => {
+                eprintln!("acp-proxy: could not load JWKS ({e}); refusing to start (identity was requested, failing closed)");
+                return ExitCode::from(1);
+            }
         }
     }
 
