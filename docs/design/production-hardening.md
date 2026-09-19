@@ -32,20 +32,20 @@ broad rollout, P2 = scale and resilience. On-prem single-org, so no multi-tenant
    dev-token stand-in is used only when no such header is present (local use, and dev-auth is now
    guarded). A built-in auth-code flow inside the console remains an optional alternative to the IAP.
 
-## P1 - before broad rollout
+## P1 - before broad rollout  [4 of 6 done]
 
 7. mTLS between components: proxy/gateway to acp-server and to upstreams should use the existing
    `acp-mtls` (client-cert-required), not plain HTTP, so the control channel is authenticated.
-8. Ledger durability and retention: define backup, off-box replication, and a retention/rotation
+8. [DONE - backup+verify] Ledger durability and retention: define backup, off-box replication, and a retention/rotation
    policy for the evidence ledger; verify recovery across a restart (the store is per-append durable,
    but backup/DR is unproven at scale).
-9. JWKS robustness: handle clock skew (small leeway on exp/nbf), a `kid` miss triggering an immediate
+9. [DONE] JWKS robustness: handle clock skew (small leeway on exp/nbf), a `kid` miss triggering an immediate
    refresh (not only the hourly timer), and a JWKS-fetch failure at startup failing closed for
    RBAC-required deployments rather than silently disabling RBAC.
-10. Observability: health/readiness endpoints on the gateway, Prometheus/OTel metrics (decisions by
+10. [DONE] Observability: health/readiness endpoints on the gateway, Prometheus/OTel metrics (decisions by
     verdict, latency, upstream errors, budget denials, kill-switch state), and structured logs. Today
     the gateway logs decisions to stderr only.
-11. Fail-closed audit: if the ledger write fails on the gateway, decide the policy (the proxy already
+11. [DONE] Fail-closed audit: if the ledger write fails on the gateway, decide the policy (the proxy already
     fails closed on evidence-write failure; the gateway currently forwards without recording on a
     ledger error). Make the gateway match the proxy's record-before-forward guarantee.
 12. Load and soak tests: the suites are unit/integration; add throughput and endurance tests for the

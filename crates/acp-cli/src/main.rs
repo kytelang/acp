@@ -46,6 +46,7 @@ fn main() -> ExitCode {
         "native-compile" => cmd_native_compile(&args[2..]),
         "discover" => cmd_discover(&args[2..]),
         "grc-report" => cmd_grc_report(&args[2..]),
+        "ledger-backup" => cmd_ledger_backup(&args[2..]),
         "registry" => cmd_registry(&args[2..]),
         "policy" => cmd_policy(&args[2..]),
         _ => usage("acp [init|verify|verify-pack|export|policy-compile|policy-test|approve|deny|approvals|canary|learn|replay|purge|classify-eval]"),
@@ -719,6 +720,31 @@ fn cmd_bench_ledger(rest: &[String]) -> ExitCode {
     if ok { ExitCode::SUCCESS } else { ExitCode::from(1) }
 }
 
+
+/// Backup the evidence ledger and verify the copy (P1 #8). Copies the db plus its WAL/SHM so the
+/// snapshot is consistent, then runs the standalone verify on the destination and fails if it does
+/// not check out. Quiesce writers for a fully consistent snapshot; for a live hot backup use the
+/// sqlite backup API (future).
+///   acp ledger-backup <src.db> <dst.db>
+fn cmd_ledger_backup(rest: &[String]) -> ExitCode {
+    let (src, dst) = match (rest.first(), rest.get(1)) {
+        (Some(s), Some(d)) => (s, d),
+        _ => return usage("acp ledger-backup <src.db> <dst.db>"),
+    };
+    for suffix in ["", "-wal", "-shm"] {
+        let (s, d) = (format!("{src}{suffix}"), format!("{dst}{suffix}"));
+        if std::path::Path::new(&s).exists() {
+            if let Err(e) = std::fs::copy(&s, &d) {
+                eprintln!("acp: copy {s} -> {d} failed: {e}");
+                return ExitCode::from(1);
+            }
+        }
+    }
+    match acp_ledger::verify_file(dst) {
+        Ok(()) => { println!("backup OK: {dst} copied and verifies"); ExitCode::SUCCESS }
+        Err(e) => { eprintln!("acp: backup {dst} does NOT verify: {e}"); ExitCode::from(1) }
+    }
+}
 
 /// GRC projection (phase F): read the tamper-evident ledger and print an evidence-backed compliance
 /// report mapping the signed decisions to EU AI Act / NIST AI RMF / ISO 42001 controls.
