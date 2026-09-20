@@ -56,6 +56,7 @@ fn main() -> ExitCode {
         "assess" => cmd_assess(&args[2..]),
         "attest" => cmd_attest(&args[2..]),
         "usecase" => cmd_usecase(&args[2..]),
+        "intercept" => cmd_intercept(&args[2..]),
         "grc-report" => cmd_grc_report(&args[2..]),
         "ledger-backup" => cmd_ledger_backup(&args[2..]),
         "verify-enforcement" => cmd_verify_enforcement(&args[2..]),
@@ -1594,6 +1595,49 @@ fn cmd_usecase(rest: &[String]) -> ExitCode {
             ExitCode::SUCCESS
         }
         _ => usage("acp usecase <register|link-assessment|advance|list> ..."),
+    }
+}
+
+/// Endpoint interception registry: validate, sign, or test how a destination would be handled.
+///   acp intercept validate <rules.yaml>
+///   acp intercept sign <rules.yaml> --key <hex>
+///   acp intercept match <rules.yaml> <host> [path] [port]
+fn cmd_intercept(rest: &[String]) -> ExitCode {
+    use acp_core::interception::EndpointRegistry;
+    let load = |path: &str| -> Result<EndpointRegistry, ExitCode> {
+        let src = std::fs::read_to_string(path).map_err(|e| { eprintln!("acp: cannot read {path}: {e}"); ExitCode::from(1) })?;
+        EndpointRegistry::from_yaml(&src).map_err(|e| { eprintln!("acp: {e}"); ExitCode::from(1) })
+    };
+    match rest.first().map(String::as_str).unwrap_or("") {
+        "validate" => {
+            let Some(f) = rest.get(1) else { return usage("acp intercept validate <rules.yaml>"); };
+            match load(f) { Ok(r) => { println!("ok: {} rule(s), default {:?}", r.endpoints.len(), r.default); ExitCode::SUCCESS } Err(c) => c }
+        }
+        "sign" => {
+            let Some(f) = rest.get(1) else { return usage("acp intercept sign <rules.yaml> --key <hex>"); };
+            let reg = match load(f) { Ok(r)=>r, Err(c)=>return c };
+            let key = match flag_value(rest, "--key") { Some(h)=>h, None=>{ eprintln!("acp: intercept sign requires --key <hex>"); return ExitCode::from(2);} };
+            let seed: [u8;32] = match hex::decode(&key).ok().and_then(|b| b.try_into().ok()) { Some(s)=>s, None=>{eprintln!("acp: --key must be 32-byte hex");return ExitCode::from(2);} };
+            let signed = reg.sign(&acp_core::sign::Ed25519Signer::from_seed(&seed));
+            println!("{}", serde_json::to_string_pretty(&signed).unwrap_or_default());
+            ExitCode::SUCCESS
+        }
+        "match" => {
+            let (Some(f), Some(host)) = (rest.get(1), rest.get(2)) else { return usage("acp intercept match <rules.yaml> <host> [path] [port]"); };
+            let reg = match load(f) { Ok(r)=>r, Err(c)=>return c };
+            let path = rest.get(3).map(String::as_str).unwrap_or("/");
+            let port: u16 = rest.get(4).and_then(|s| s.parse().ok()).unwrap_or(443);
+            let d = reg.evaluate(host, path, port);
+            let decrypt = reg.should_decrypt(host, port);
+            println!("{}", serde_json::to_string_pretty(&serde_json::json!({
+                "host": host, "path": path, "port": port,
+                "rule_id": d.rule_id, "classification": d.classification,
+                "action": format!("{:?}", d.action), "defaulted": d.defaulted, "flag": d.flag,
+                "should_decrypt": decrypt,
+            })).unwrap_or_default());
+            ExitCode::SUCCESS
+        }
+        _ => usage("acp intercept <validate|sign|match> ..."),
     }
 }
 

@@ -31,6 +31,7 @@ pub mod ha;
 pub mod hlc;
 pub mod hostshim;
 pub mod impact;
+pub mod interception;
 pub mod keymgr;
 pub mod lineage;
 pub mod liveness;
