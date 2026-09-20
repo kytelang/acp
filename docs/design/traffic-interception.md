@@ -1,7 +1,7 @@
 # Configuration-driven traffic interception
 
 Date: 2026-09-20
-Status: design, phases 1, 2 and 3 IMPLEMENTED (see the phasing section). Generalises the explicit gateway and MCP proxy into a universal, endpoint-registry-driven interception layer, so ACP governs what agents, IDEs and browsers send to any AI endpoint, not only the ones wired to talk to ACP directly. Reads with `docs/design/ml-based-content-engine.md` (the analysis behind the inspection), `docs/design/enforcement.md` (unavoidability), and the discovery/enrollment/coverage work in `docs/design/gap-closure.md`.
+Status: design, phases 1, 2, 3 and 5 IMPLEMENTED; phase 4 (browser extension / PAC) is the remainder. Generalises the explicit gateway and MCP proxy into a universal, endpoint-registry-driven interception layer, so ACP governs what agents, IDEs and browsers send to any AI endpoint, not only the ones wired to talk to ACP directly. Reads with `docs/design/ml-based-content-engine.md` (the analysis behind the inspection), `docs/design/enforcement.md` (unavoidability), and the discovery/enrollment/coverage work in `docs/design/gap-closure.md`.
 
 ## 1. What this is, and the ask
 
@@ -145,6 +145,6 @@ The coverage report (`acp coverage`) already cross-references observed endpoints
 2. Explicit forward-proxy interception for the no-MITM surfaces: `HTTPS_PROXY` plus base-URL pinning for agents and IDEs, applying `inspect-prompt` and `govern-tool-call` by reusing the gateway and proxy decision paths. DONE (`acp-intercept`): CONNECT block/pass without decryption, full plain-HTTP body inspection, decisions recorded to the ledger.
 3. TLS-interception mode (ACP CA) for body-inspecting rules on managed devices, with the cert-pinning limits documented and detected (a pinned endpoint is reported, not silently failed). DONE (`acp_intercept::mitm`, `acp-intercept gen-ca`, `--ca-cert`/`--ca-key`): per-host leaf minting, HTTP/1.1-only ALPN, pinning/handshake-failure detection, ledger outcomes.
 4. The browser surface: an extension or PAC-based path.
-5. Wire discovery, enrollment and coverage to the registry so the loop is find, decide, measure.
+5. Wire discovery, enrollment and coverage to the registry so the loop is find, decide, measure. DONE: `acp intercept suggest` (discovery -> candidate rules), `acp intercept from-enrollment` (dispositions -> registry), `acp coverage --registry` (registry -> measured coverage).
 
 The through-line: one signed registry says which endpoints to inspect and how; one interception point gets the body only where configured; and from there it is the content engine, the policy engine and the evidence ledger ACP already has. That is how ACP comes to govern everything sent via agents, IDEs and browsers, by configuration, not by hoping every client was pointed at it.
