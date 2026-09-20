@@ -49,6 +49,8 @@ fn main() -> ExitCode {
         "canary-egress" => cmd_canary_egress(&args[2..]),
         "aibom" => cmd_aibom(&args[2..]),
         "enroll" => cmd_enroll(&args[2..]),
+        "siem" => cmd_siem(&args[2..]),
+        "risk" => cmd_risk(&args[2..]),
         "grc-report" => cmd_grc_report(&args[2..]),
         "ledger-backup" => cmd_ledger_backup(&args[2..]),
         "verify-enforcement" => cmd_verify_enforcement(&args[2..]),
@@ -1257,6 +1259,147 @@ fn cmd_enroll(rest: &[String]) -> ExitCode {
             ExitCode::SUCCESS
         }
         _ => usage("acp enroll <record|governed|export-mdm> <log.json> ..."),
+    }
+}
+
+/// Render a ledger's governed decisions to a SIEM line format for forwarding.
+///   acp siem <ledger.db> --format <cef|ocsf|syslog>
+fn cmd_siem(rest: &[String]) -> ExitCode {
+    use acp_core::siem::{to_cef, to_ocsf, to_syslog, DecisionEvent};
+    let Some(db) = rest.iter().find(|a| !a.starts_with("--")) else {
+        return usage("acp siem <ledger.db> --format <cef|ocsf|syslog>");
+    };
+    let format = flag_value(rest, "--format").unwrap_or_else(|| "cef".into());
+    let pack = match acp_ledger::export_file(db) {
+        Ok(p) => p,
+        Err(e) => {
+            eprintln!("acp: cannot export {db}: {e}");
+            return ExitCode::from(1);
+        }
+    };
+    let empty = vec![];
+    let records = pack["records"].as_array().unwrap_or(&empty);
+    let mut n = 0u64;
+    for r in records {
+        // Each record's canonical field is hex-encoded canonical JSON of the Record.
+        let canon = match r["canonical"].as_str().and_then(|h| hex::decode(h).ok()) {
+            Some(b) => b,
+            None => continue,
+        };
+        let rec: Value = match serde_json::from_slice(&canon) {
+            Ok(v) => v,
+            Err(_) => continue,
+        };
+        // Only governed decisions carry a nested `decision.verdict`; skip other record kinds
+        // (outcome, guard-reject, ...). Fields are nested under `action` and `decision`.
+        let verdict = match rec.get("decision").and_then(|d| d.get("verdict")).and_then(|v| v.as_str()) {
+            Some(v) => v.to_ascii_lowercase(),
+            None => continue,
+        };
+        let action = rec.get("action");
+        let decision = rec.get("decision");
+        let get = |o: Option<&Value>, k: &str| o.and_then(|x| x.get(k)).and_then(|v| v.as_str()).unwrap_or("").to_string();
+        let ev = DecisionEvent {
+            decision_id: r["decision_id"].as_str().unwrap_or("").to_string(),
+            ts_ms: rec.get("ts_ms").and_then(|v| v.as_u64()).unwrap_or(0),
+            agent: rec.get("agent_id").and_then(|v| v.as_str()).unwrap_or("").to_string(),
+            principal: rec.get("principal").and_then(|p| p.get("id")).and_then(|v| v.as_str()).unwrap_or("").to_string(),
+            tool: get(action, "tool"),
+            resource: get(action, "resource"),
+            operation: get(action, "operation"),
+            verdict,
+            rule_id: get(decision, "rule_id"),
+            impact: get(action, "impact").to_ascii_lowercase(),
+        };
+        match format.as_str() {
+            "cef" => println!("{}", to_cef(&ev)),
+            "ocsf" => println!("{}", serde_json::to_string(&to_ocsf(&ev)).unwrap_or_default()),
+            "syslog" => println!("{}", to_syslog(&ev)),
+            other => {
+                eprintln!("acp: unknown --format '{other}' (cef|ocsf|syslog)");
+                return ExitCode::from(2);
+            }
+        }
+        n += 1;
+    }
+    eprintln!("acp siem: {n} decision(s) rendered as {format}");
+    ExitCode::SUCCESS
+}
+
+/// Maintain the AI risk register (evidence-linked; the full GRC lifecycle stays with the GRC platform).
+///   acp risk add <register.json> --id X --title T --owner O --likelihood <low|medium|high> --impact <low|medium|high> --treatment <mitigate|accept|transfer|avoid> [--status <open|mitigating|accepted|closed>] [--control C]... [--decision D]... [--note N] [--key <hex>]
+///   acp risk list <register.json>
+///   acp risk report <register.json>
+fn cmd_risk(rest: &[String]) -> ExitCode {
+    use acp_core::riskregister::{Level, RiskItem, RiskRegister, RiskStatus, Treatment};
+    let multi = |flag: &str| -> Vec<String> {
+        let mut out = Vec::new();
+        let mut it = rest.iter();
+        while let Some(a) = it.next() {
+            if a == flag {
+                if let Some(v) = it.next() {
+                    out.push(v.clone());
+                }
+            }
+        }
+        out
+    };
+    let load = |path: &str| -> RiskRegister {
+        std::fs::read_to_string(path).ok().and_then(|s| serde_json::from_str(&s).ok()).unwrap_or_default()
+    };
+    let sub = rest.first().map(String::as_str).unwrap_or("");
+    match sub {
+        "add" => {
+            let Some(path) = rest.get(1) else { return usage("acp risk add <register.json> --id X --title T --owner O --likelihood L --impact I --treatment T ..."); };
+            let id = match flag_value(rest, "--id") { Some(v) => v, None => return usage("acp risk add ... --id <id>") };
+            let likelihood = match flag_value(rest, "--likelihood").and_then(|s| Level::parse(&s)) { Some(v)=>v, None=>{ eprintln!("acp: --likelihood <low|medium|high>"); return ExitCode::from(2);} };
+            let impact = match flag_value(rest, "--impact").and_then(|s| Level::parse(&s)) { Some(v)=>v, None=>{ eprintln!("acp: --impact <low|medium|high>"); return ExitCode::from(2);} };
+            let treatment = flag_value(rest, "--treatment").and_then(|s| Treatment::parse(&s)).unwrap_or(Treatment::Mitigate);
+            let status = flag_value(rest, "--status").and_then(|s| RiskStatus::parse(&s)).unwrap_or(RiskStatus::Open);
+            let item = RiskItem {
+                id: id.clone(),
+                title: flag_value(rest, "--title").unwrap_or_default(),
+                owner: flag_value(rest, "--owner").unwrap_or_default(),
+                likelihood, impact, treatment, status,
+                linked_controls: multi("--control"),
+                linked_decisions: multi("--decision"),
+                notes: flag_value(rest, "--note").unwrap_or_default(),
+            };
+            let mut reg = load(path);
+            reg.upsert(item);
+            let out = match flag_value(rest, "--key") {
+                Some(h) => match hex::decode(&h).ok().and_then(|b| b.try_into().ok()) {
+                    Some(seed) => serde_json::to_string_pretty(&reg.sign(&acp_core::sign::Ed25519Signer::from_seed(&seed))).unwrap_or_default(),
+                    None => { eprintln!("acp: --key must be 32-byte hex"); return ExitCode::from(2); }
+                },
+                None => serde_json::to_string_pretty(&reg).unwrap_or_default(),
+            };
+            // Persist the plain register (signing is an export concern); print the (maybe signed) view.
+            if std::fs::write(path, serde_json::to_string_pretty(&reg).unwrap_or_default()).is_err() {
+                eprintln!("acp: cannot write {path}"); return ExitCode::from(1);
+            }
+            println!("{out}");
+            let v = reg.view();
+            eprintln!("risk {id} added; {} item(s): {} open, {} high, {} critical", reg.items.len(), v.open, v.high, v.critical);
+            ExitCode::SUCCESS
+        }
+        "list" => {
+            let Some(path) = rest.get(1) else { return usage("acp risk list <register.json>"); };
+            for i in load(path).view().items {
+                println!("{:6} [{:8}] score={} ({}) owner={} {}", i.id, format!("{:?}", i.status).to_lowercase(), i.score(), i.band(), i.owner, i.title);
+            }
+            ExitCode::SUCCESS
+        }
+        "report" => {
+            let Some(path) = rest.get(1) else { return usage("acp risk report <register.json>"); };
+            let v = load(path).view();
+            println!("AI risk register: {} item(s); {} open, {} high, {} critical", v.items.len(), v.open, v.high, v.critical);
+            for i in v.items.iter().filter(|i| i.band() == "critical" || i.band() == "high") {
+                println!("  {:8} {:6} score={} {}  (controls: {}; decisions: {})", i.band(), i.id, i.score(), i.title, i.linked_controls.join(","), i.linked_decisions.join(","));
+            }
+            ExitCode::SUCCESS
+        }
+        _ => usage("acp risk <add|list|report> <register.json> ..."),
     }
 }
 
