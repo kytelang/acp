@@ -7,6 +7,7 @@ unavoidable. On-prem, vendor-neutral. See `docs/positioning.md` and `docs/design
 ## Coverage: the surfaces it governs
 - Agent tool calls (MCP), transparent proxy over stdio and streamable-HTTP
 - Direct model API calls, reverse-proxy gateway (OpenAI / Anthropic / Bedrock / Gemini / ...)
+- Anything from agents / IDEs / browsers via the config-driven forward proxy (acp-intercept): a signed endpoint registry matches each destination (host / sni / path) and governs or tunnels per rule
 - Coding agents' own powers (shell / file / network): one ACP policy compiled into Copilot / Claude / Gemini managed-settings
 - SaaS / embedded AI via connectors (integrate)
 
@@ -80,7 +81,7 @@ unavoidable. On-prem, vendor-neutral. See `docs/positioning.md` and `docs/design
 ## Operations and posture
 - Admin console: overview, approvals, evidence timeline, teams, agents, policy authoring, kill-switch
 - Registration: teams / apps, agents, human principals
-- CLI: policy compile / test, verify / export, break-glass, native-compile, discover, grc-report, coverage, canary-egress, aibom, enroll, risk, siem, content-scan, controls, assess, attest, usecase
+- CLI: policy compile / test, verify / export, break-glass, native-compile, discover, grc-report, coverage, canary-egress, aibom, enroll, risk, siem, content-scan, controls, assess, attest, usecase, intercept
 - Liveness and bypass detection (dead-man's-switch)
 - Fully on-prem, no cloud dependency; vendor-neutral (one policy across Copilot / Claude / Codex / Gemini / custom and any model provider)
 
