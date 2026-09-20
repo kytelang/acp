@@ -73,6 +73,9 @@ pub struct Controller {
     // Enforcement attestation (4b): when a key is set, the HTTP transport stamps a signed, short-
     // lived token on forwarded requests so a guarded tool server can reject un-proxied calls.
     enforcement_signer: Mutex<Option<acp_core::sign::Ed25519Signer>>,
+    // First-party content firewall (complete-platform): when set, tool-call argument strings are
+    // scanned before forwarding; injection/denied-topic block the call, secrets are recorded.
+    content: Mutex<Option<acp_core::content::ContentPolicy>>,
     // Per-request human identity (phase B): when set, the HTTP transport verifies each request's
     // bearer token and stamps the resulting human principal onto that call, overriding the startup
     // default. An invalid/absent token degrades to the startup principal (unattributed), never an
@@ -124,6 +127,7 @@ impl Controller {
             quarantined: Mutex::new(HashSet::new()),
             tool_pins_file: Mutex::new(None),
             enforcement_signer: Mutex::new(None),
+            content: Mutex::new(None),
             oidc: Mutex::new(None),
         }
     }
@@ -189,6 +193,11 @@ impl Controller {
     /// Set the key used to sign enforcement attestations stamped on forwarded HTTP requests.
     pub fn set_enforcement_key(&self, seed: [u8; 32]) {
         *self.enforcement_signer.lock().unwrap() = Some(acp_core::sign::Ed25519Signer::from_seed(&seed));
+    }
+
+    /// Enable the first-party content firewall over tool-call arguments.
+    pub fn set_content_policy(&self, policy: acp_core::content::ContentPolicy) {
+        *self.content.lock().unwrap() = Some(policy);
     }
 
     /// Configure per-request human-identity verification (the org IdP JWKS + issuer/audience).
@@ -416,6 +425,32 @@ impl Controller {
                 if eff != a.outcome.verdict {
                     a.outcome.verdict = eff;
                     a.enforce = policy::enforce_for(eff, &tc, &a.outcome, a.impact);
+                }
+            }
+            // First-party content firewall (complete-platform): scan tool-call argument strings on
+            // the Allow path. A prompt-injection or denied-topic match blocks the call; the decision
+            // then records and enforces exactly like a policy deny.
+            if a.outcome.verdict == Verdict::Allow {
+                if let Some(cp) = self.content.lock().unwrap().as_ref() {
+                    let mut argtext = String::new();
+                    if let Some(obj) = tc.arguments.as_object() {
+                        for v in obj.values() {
+                            if let Some(s) = v.as_str() {
+                                argtext.push_str(s);
+                                argtext.push('\n');
+                            }
+                        }
+                    }
+                    if !argtext.is_empty() {
+                        let cv = acp_core::content::scan_text(cp, &argtext);
+                        if cv.block {
+                            let kinds: Vec<String> = cv.findings.iter().map(|f| f.kind.clone()).collect();
+                            a.outcome.verdict = Verdict::Deny;
+                            a.outcome.rule_id = Some("content-firewall".to_string());
+                            a.outcome.reason = Some(format!("content firewall: {}", kinds.join(", ")));
+                            a.enforce = policy::enforce_for(Verdict::Deny, &tc, &a.outcome, a.impact);
+                        }
+                    }
                 }
             }
             // Redact obligation may rewrite the forwarded frame; captured here, applied at forward.

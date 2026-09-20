@@ -50,6 +50,9 @@ struct Opts {
     enforcement_key: Option<String>,
     entra_tenant: Option<String>,
     entra_audience: Option<String>,
+    content_firewall: bool,
+    block_secrets: bool,
+    deny_topics: Vec<String>,
 }
 
 fn parse_opts(items: &[String]) -> Result<(Opts, Vec<String>), String> {
@@ -89,6 +92,9 @@ fn parse_opts(items: &[String]) -> Result<(Opts, Vec<String>), String> {
             "--principal" => o.principal = it.next().cloned(),
             "--shadow" => o.shadow = true,
             "--fail-open" => o.fail_open = true,
+            "--content-firewall" => o.content_firewall = true,
+            "--block-secrets" => { o.content_firewall = true; o.block_secrets = true; }
+            "--deny-topic" => { o.content_firewall = true; if let Some(v) = it.next() { o.deny_topics.push(v.clone()); } }
             other => return Err(format!("unknown option '{other}'")),
         }
     }
@@ -237,6 +243,15 @@ fn build_controller(o: &Opts) -> Result<Arc<Controller>, String> {
     }
     if o.fail_open {
         eprintln!("acp-proxy: WARNING --fail-open is set: on an evidence-write failure the proxy FORWARDS ungoverned. This weakens the fail-closed guarantee; use only for controlled testing.");
+    }
+    if o.content_firewall {
+        controller.set_content_policy(acp_core::content::ContentPolicy {
+            block_injection: true,
+            block_secrets: o.block_secrets,
+            redact_pii: true,
+            denied_topics: o.deny_topics.clone(),
+        });
+        eprintln!("acp-proxy: first-party content firewall enabled over tool-call arguments");
     }
     // Verified caller identity: when a registry is configured, the presented (agent-id, token) MUST
     // verify. Fail closed on a missing/invalid/revoked credential so a mis-enrolled agent cannot run
