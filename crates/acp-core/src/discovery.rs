@@ -63,6 +63,7 @@ const MODEL_API_HOSTS: &[(&str, &str)] = &[
     ("api.openai.com", "OpenAI"),
     ("openai.azure.com", "Azure OpenAI"),
     ("api.anthropic.com", "Anthropic"),
+    ("claude.ai", "Anthropic"),
     ("bedrock-runtime", "AWS Bedrock"),
     ("bedrock.", "AWS Bedrock"),
     ("generativelanguage.googleapis.com", "Google Gemini"),
@@ -76,6 +77,11 @@ const MODEL_API_HOSTS: &[(&str, &str)] = &[
     ("api.perplexity.ai", "Perplexity"),
     ("endpoints.huggingface", "HuggingFace"),
     ("api-inference.huggingface.co", "HuggingFace"),
+    ("api.deepseek.com", "DeepSeek"),
+    ("api.x.ai", "xAI"),
+    ("githubcopilot.com", "GitHub Copilot"),
+    ("chatgpt.com", "OpenAI"),
+    ("gemini.google.com", "Google Gemini"),
 ];
 
 /// Classify an endpoint as AI usage, if it looks like a model API or an MCP server.

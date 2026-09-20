@@ -14,6 +14,7 @@ acp-approvals = { path = "../acp-approvals" }
 acp-registry = { path = "../acp-registry" }
 hex.workspace = true
 serde_json.workspace = true
+serde_yaml.workspace = true
 
 [dev-dependencies]
 acp-ledger = { path = "../acp-ledger" }

@@ -8,6 +8,7 @@
 
 use crate::sign::{verify_ed25519, Signer};
 use serde::{Deserialize, Serialize};
+use std::collections::BTreeSet;
 
 /// What ACP does with matching traffic.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
@@ -29,6 +30,11 @@ impl Action {
     /// True when the action must read the request body (and so must terminate TLS).
     pub fn needs_body(&self) -> bool {
         matches!(self, Action::InspectPrompt | Action::GovernToolCall | Action::DlpOnly)
+    }
+
+    /// True when the action actively governs (inspects or blocks) rather than passing uninspected.
+    pub fn governs(&self) -> bool {
+        !matches!(self, Action::Pass)
     }
 }
 
@@ -213,6 +219,21 @@ impl EndpointRegistry {
         false
     }
 
+    /// Is this destination actively covered (inspected or blocked) rather than passed uninspected?
+    /// A `pass` rule and the flag-and-pass default count as NOT covered (shadow).
+    pub fn covers(&self, host: &str, path: &str, port: u16) -> bool {
+        self.evaluate(host, path, port).action.governs()
+    }
+
+    /// The set of observed endpoints this registry actively covers (feeds the coverage report).
+    pub fn covered_set(&self, observed: &[(String, String)], port: u16) -> BTreeSet<String> {
+        observed
+            .iter()
+            .filter(|(ep, _)| self.covers(ep, "", port))
+            .map(|(ep, _)| ep.clone())
+            .collect()
+    }
+
     /// Sign the registry (canonical bytes + Ed25519).
     pub fn sign(&self, signer: &dyn Signer) -> SignedRegistry {
         let bytes = crate::canonical::canonical_bytes(self);
@@ -245,6 +266,67 @@ pub fn verify(signed: &SignedRegistry) -> bool {
         Err(_) => return false,
     };
     verify_ed25519(&pk, &crate::canonical::canonical_bytes(&signed.registry), &sig)
+}
+
+
+/// Build an endpoint rule from a shadow-AI enrollment disposition (closing discovery -> enroll ->
+/// registry). Enroll -> inspect (or govern-tool-call for MCP); Quarantine -> block; AcceptRisk ->
+/// pass (a deliberate, recorded exception).
+pub fn rule_from_disposition(d: &crate::enrollment::EndpointDisposition) -> EndpointRule {
+    use crate::enrollment::Disposition;
+    let action = match d.disposition {
+        Disposition::Enroll => {
+            if d.kind == "mcp" {
+                Action::GovernToolCall
+            } else {
+                Action::InspectPrompt
+            }
+        }
+        Disposition::Quarantine => Action::Block,
+        Disposition::AcceptRisk { .. } => Action::Pass,
+    };
+    EndpointRule {
+        id: Some(format!("enroll-{}", d.endpoint)),
+        match_: Match { host_contains: Some(d.endpoint.clone()), ..Default::default() },
+        classify: Some(d.kind.clone()),
+        action,
+    }
+}
+
+/// Build an endpoint registry from an enrollment log (latest disposition per endpoint).
+pub fn registry_from_enrollment(
+    log: &crate::enrollment::EnrollmentLog,
+    default: DefaultAction,
+) -> EndpointRegistry {
+    // Latest-wins per endpoint, mirroring EnrollmentLog::governed/blocklist semantics.
+    let mut by_ep: std::collections::BTreeMap<&str, &crate::enrollment::EndpointDisposition> =
+        std::collections::BTreeMap::new();
+    for d in &log.dispositions {
+        match by_ep.get(d.endpoint.as_str()) {
+            Some(e) if e.decided_ms >= d.decided_ms => {}
+            _ => {
+                by_ep.insert(&d.endpoint, d);
+            }
+        }
+    }
+    let endpoints = by_ep.values().map(|d| rule_from_disposition(d)).collect();
+    EndpointRegistry { version: 1, default, endpoints }
+}
+
+/// Suggest a rule for a discovered AI endpoint (closing discovery -> candidate rule). A model-API
+/// endpoint suggests inspect-prompt; an MCP endpoint suggests govern-tool-call.
+pub fn rule_from_discovered(e: &crate::discovery::AiEndpoint) -> EndpointRule {
+    use crate::discovery::AiKind;
+    let (classify, action) = match e.kind {
+        AiKind::ModelApi => ("model-api", Action::InspectPrompt),
+        AiKind::Mcp => ("mcp", Action::GovernToolCall),
+    };
+    EndpointRule {
+        id: Some(format!("suggest-{}", e.endpoint)),
+        match_: Match { host_contains: Some(e.endpoint.clone()), ..Default::default() },
+        classify: Some(classify.to_string()),
+        action,
+    }
 }
 
 #[cfg(test)]
@@ -321,6 +403,40 @@ endpoints:
         assert!(r.should_decrypt("api.claude.ai", 443), "inspect-prompt host needs body");
         assert!(!r.should_decrypt("api.deepseek.com", 443), "block host does not need body");
         assert!(!r.should_decrypt("example.com", 443), "unmatched host does not decrypt");
+    }
+
+
+    #[test]
+    fn covers_distinguishes_governed_from_passed() {
+        let r = reg();
+        assert!(r.covers("api.claude.ai", "/v1", 443), "inspect-prompt is covered");
+        assert!(r.covers("api.deepseek.com", "/", 443), "block is covered");
+        assert!(!r.covers("example.com", "/", 443), "default flag-and-pass is not covered");
+    }
+
+    #[test]
+    fn registry_built_from_enrollment_reflects_dispositions() {
+        use crate::enrollment::{Disposition, EnrollmentLog};
+        use crate::sign::Ed25519Signer;
+        let s = Ed25519Signer::generate();
+        let mut log = EnrollmentLog::new();
+        log.record(&s, "api.openai.com", "model-api", Disposition::Enroll, "a", "", 1000);
+        log.record(&s, "evil/mcp", "mcp", Disposition::Quarantine, "a", "", 1000);
+        let reg = registry_from_enrollment(&log, DefaultAction::FlagAndPass);
+        assert_eq!(reg.evaluate("api.openai.com", "/v1", 443).action, Action::InspectPrompt);
+        assert_eq!(reg.evaluate("evil/mcp", "/", 443).action, Action::Block);
+    }
+
+    #[test]
+    fn covered_set_feeds_coverage() {
+        let r = reg();
+        let observed = vec![
+            ("api.claude.ai".to_string(), "model-api".to_string()),
+            ("example.com".to_string(), "other".to_string()),
+        ];
+        let covered = r.covered_set(&observed, 443);
+        assert!(covered.contains("api.claude.ai"));
+        assert!(!covered.contains("example.com"));
     }
 
     #[test]

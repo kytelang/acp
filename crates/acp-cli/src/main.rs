@@ -931,10 +931,15 @@ fn cmd_coverage(rest: &[String]) -> ExitCode {
             .collect()
     };
     let observed_raw = read_lines(obs_file);
-    let governed: BTreeSet<String> = positionals
-        .get(1)
-        .map(|f| read_lines(f).into_iter().collect())
-        .unwrap_or_default();
+    // Governed set: either from a --registry (what the interception registry actively covers) or a
+    // plain governed-endpoints file (positional 2).
+    let registry = flag_value(rest, "--registry")
+        .and_then(|f| std::fs::read_to_string(&f).ok())
+        .and_then(|s| acp_core::interception::EndpointRegistry::from_yaml(&s).ok());
+    let governed: BTreeSet<String> = match &registry {
+        Some(reg) => observed_raw.iter().filter(|ep| reg.covers(ep, "", 443)).cloned().collect(),
+        None => positionals.get(1).map(|f| read_lines(f).into_iter().collect()).unwrap_or_default(),
+    };
 
     // Derive a kind for each observed endpoint via the discovery classifier; unknown otherwise.
     let observed: Vec<(String, String)> = observed_raw
@@ -1637,7 +1642,45 @@ fn cmd_intercept(rest: &[String]) -> ExitCode {
             })).unwrap_or_default());
             ExitCode::SUCCESS
         }
-        _ => usage("acp intercept <validate|sign|match> ..."),
+        "from-enrollment" => {
+            let Some(f) = rest.get(1) else { return usage("acp intercept from-enrollment <enroll.json> [--default <flag-and-pass|flag-and-block|pass|block>] [--key <hex>]"); };
+            let log: acp_core::enrollment::EnrollmentLog = match std::fs::read_to_string(f).ok().and_then(|s| serde_json::from_str(&s).ok()) {
+                Some(l) => l, None => { eprintln!("acp: cannot read enrollment log {f}"); return ExitCode::from(1); }
+            };
+            let default = match flag_value(rest, "--default").as_deref() {
+                Some("flag-and-block") => acp_core::interception::DefaultAction::FlagAndBlock,
+                Some("pass") => acp_core::interception::DefaultAction::Pass,
+                Some("block") => acp_core::interception::DefaultAction::Block,
+                _ => acp_core::interception::DefaultAction::FlagAndPass,
+            };
+            let registry = acp_core::interception::registry_from_enrollment(&log, default);
+            emit_registry(&registry, flag_value(rest, "--key"))
+        }
+        "suggest" => {
+            let Some(f) = rest.get(1) else { return usage("acp intercept suggest <observed.txt> [--governed <governed.txt>] [--key <hex>]"); };
+            let read_lines = |p: &str| -> Vec<String> {
+                std::fs::read_to_string(p).unwrap_or_default().lines().map(|l| l.trim().to_string()).filter(|l| !l.is_empty() && !l.starts_with('#')).collect()
+            };
+            let observed = read_lines(f);
+            let governed = flag_value(rest, "--governed").map(|g| read_lines(&g)).unwrap_or_default();
+            let shadow = acp_core::discovery::find_shadow_ai(&observed, &governed);
+            let endpoints: Vec<_> = shadow.iter().map(acp_core::interception::rule_from_discovered).collect();
+            let registry = acp_core::interception::EndpointRegistry { version: 1, default: acp_core::interception::DefaultAction::FlagAndPass, endpoints };
+            eprintln!("suggested {} rule(s) from {} observed endpoint(s)", registry.endpoints.len(), observed.len());
+            emit_registry(&registry, flag_value(rest, "--key"))
+        }
+        _ => usage("acp intercept <validate|sign|match|from-enrollment|suggest> ..."),
+    }
+}
+
+/// Print an endpoint registry as YAML (default) or, with --key, as a signed JSON registry.
+fn emit_registry(registry: &acp_core::interception::EndpointRegistry, key: Option<String>) -> ExitCode {
+    match key {
+        Some(h) => match hex::decode(&h).ok().and_then(|b| b.try_into().ok()) {
+            Some(seed) => { println!("{}", serde_json::to_string_pretty(&registry.sign(&acp_core::sign::Ed25519Signer::from_seed(&seed))).unwrap_or_default()); ExitCode::SUCCESS }
+            None => { eprintln!("acp: --key must be 32-byte hex"); ExitCode::from(2) }
+        },
+        None => { println!("{}", serde_yaml::to_string(registry).unwrap_or_default()); ExitCode::SUCCESS }
     }
 }
 
