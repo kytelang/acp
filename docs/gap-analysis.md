@@ -149,3 +149,13 @@ Recommended priorities to make ACP genuinely the single product an enterprise ca
 2. Complete the real-Entra cutover, so the verified-human-principal claim is demonstrated in production, not only against the mock.
 3. Build the P2 production infrastructure (HA, DR, shared state) so the chokepoint is dependable at scale.
 4. Track Astrix and Noma as the two closest competitors, and integrate rather than rebuild for model scanning, content safety and the GRC lifecycle.
+
+
+## 9. Update (2026-09-20): from missing middle to complete platform
+
+Section 8 argued ACP should stay the neutral middle and not become "Credo plus a firewall". That decision was subsequently reversed on purpose (see `docs/positioning.md`, scope change 2026-09-20): the content firewall and the GRC lifecycle are now built into ACP.
+
+- Content firewall: a first-party, in-path engine (`acp_core::content`) on both the gateway prompt path and the proxy tool-call path. Deterministic injection/jailbreak signatures, PII and secret detection, redaction and denied-topic rules. Not a trained classifier, so the external hook remains for ML-grade detection.
+- GRC lifecycle: control library, EU AI Act assessment and conformity obligations, signed attestations, and an AI use-case registry with lifecycle gates, alongside the existing framework reports and risk register.
+
+The practical consequence for the earlier "do we need Credo and a firewall" question: no. ACP alone now covers baseline content protection and a full governance programme. An external content ML classifier or an incumbent GRC platform is now optional, plugged in where an enterprise already runs one, not required to make ACP complete.

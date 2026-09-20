@@ -56,8 +56,10 @@ unavoidable. On-prem, vendor-neutral. See `docs/positioning.md` and `docs/design
 - Admission gate (acp_core::supplychain): registration fails closed on no provenance (digest), any scanner finding, or an unscanned high-impact artifact; the scanner verdict is supplied by an external scanner (integrate), not built
 - Signed AI bill of materials (acp aibom): CycloneDX over every agent / MCP server / tool / model-class with provenance, admission verdict, scan result, integrity pin and policy in force
 
-## Content safety (integrate)
-- Content-scan hook: external firewall (Lakera / Azure AI Content Safety) on prompts; blocks, fail-closed
+## Content firewall (first-party, in-path)
+- Native content engine (acp_core::content): prompt-injection / jailbreak signature detection, PII and secret detection, span-level redaction, denied-topic rules; block or redact
+- Enforced on BOTH surfaces: the gateway prompt path (--content-firewall) and the MCP proxy tool-call arguments (--content-firewall)
+- Honest boundary: signatures and regexes, not a trained classifier; the external content-scan hook (Lakera / Azure AI Content Safety) stays available for ML-grade detection
 - Redact obligation for sensitive fields
 
 ## Discovery and enrollment
@@ -69,15 +71,21 @@ unavoidable. On-prem, vendor-neutral. See `docs/positioning.md` and `docs/design
 - Evidence-backed framework reports: EU AI Act (Art. 14 / 12 / 9), NIST AI RMF, ISO 42001, each control cited by real ledger records (acp grc-report)
 - Idempotent control-evidence export for GRC platforms (ServiceNow / Archer / OneTrust)
 - Evidence-linked AI risk register (acp risk): risk items scored likelihood x impact, with treatment, lifecycle status and links to the controls and ledger decisions bearing on them; signed snapshot
+- Control library across EU AI Act, NIST AI RMF and ISO 42001 (acp controls)
+- EU AI Act risk assessment and conformity obligations (acp assess): tiers a system unacceptable / high / limited / minimal and lists the controls it must satisfy; signed
+- Signed attestations and sign-offs (acp attest): a named attestor and role bound to a subject, non-repudiable
+- AI use-case registry with lifecycle gates (acp usecase): proposed -> assessed -> approved -> deployed -> retired, refusing a transition without a linked assessment or a valid attestation
 - SIEM export in CEF, OCSF and RFC 5424 syslog, plus OTLP (acp siem)
 
 ## Operations and posture
 - Admin console: overview, approvals, evidence timeline, teams, agents, policy authoring, kill-switch
 - Registration: teams / apps, agents, human principals
-- CLI: policy compile / test, verify / export, break-glass, native-compile, discover, grc-report, coverage, canary-egress, aibom, enroll, risk, siem
+- CLI: policy compile / test, verify / export, break-glass, native-compile, discover, grc-report, coverage, canary-egress, aibom, enroll, risk, siem, content-scan, controls, assess, attest, usecase
 - Liveness and bypass detection (dead-man's-switch)
 - Fully on-prem, no cloud dependency; vendor-neutral (one policy across Copilot / Claude / Codex / Gemini / custom and any model provider)
 
 ## The through-line
-One policy, one identity model, one tamper-evident ledger, one kill-switch, applied to every place
-AI acts, integrating outward for content / IdP / SIEM / GRC rather than replacing them.
+One policy, one identity model, one tamper-evident ledger, one kill-switch, a first-party content
+firewall and a full GRC lifecycle, applied to every place AI acts. A single product for AI
+governance, still interoperating outward (IdP, SIEM, external content ML, external GRC) where an
+enterprise already runs those.

@@ -19,6 +19,18 @@ ACP is the verifiable runtime authorization and evidence layer for AI-agent tool
 2. Verifiable. Every decision and every piece of evidence is signed and re-derivable, tied to a real identity. Trust lives in the cryptography, not in the console.
 3. Vendor-neutral. One policy, one evidence trail, across Copilot, Claude Code, Codex, Gemini and custom agents alike.
 
+## Scope change (2026-09-20): from wedge to complete platform
+
+The sections below describe the original wedge-only scope, kept for the record. On 2026-09-20 the decision was taken to make ACP a complete, single-product AI governance platform: the content firewall and the GRC lifecycle, previously "integrate", are now built in.
+
+What changed, and the honest boundary on each:
+
+- Content firewall: BUILT natively (`acp_core::content`), in-path on both surfaces (the gateway prompt path and the proxy tool-call path). It does deterministic prompt-injection and jailbreak SIGNATURE detection, PII and secret detection, span-level redaction and denied-topic rules. It is not a trained ML classifier, so the external content-scan hook stays available for ML-grade detection against novel or obfuscated attacks. ACP no longer REQUIRES an external firewall for baseline content protection.
+- GRC lifecycle: BUILT natively. Control library (`acp_core::controls`), EU AI Act risk assessment and conformity obligations (`acp_core::assessment`), signed attestations / sign-offs (`acp_core::attestation`), an AI use-case registry with lifecycle gates (`acp_core::usecase`), and the pre-existing evidence-backed framework reports and risk register. ACP can now run a governance programme on its own; it still interoperates with an external GRC platform where one is already in place.
+- Still integrate (unchanged): the IdP (Entra/OIDC), the SIEM (ACP exports CEF/OCSF/OTLP/syslog), and model/artifact scanning (ACP runs the admission gate and AI-BOM, and calls an external scanner for the verdict).
+
+The original "failure mode to avoid" note below (do not become Credo plus a firewall) is now explicitly overridden by this decision. The trade accepted: broader scope and more surface to maintain, in exchange for a single product that meets an enterprise's AI-governance needs without assembling three tools.
+
 ## Build (the wedge, and only this)
 
 - Cross-vendor runtime authorization of tool calls, in the call path.
