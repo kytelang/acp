@@ -48,6 +48,7 @@ fn main() -> ExitCode {
         "coverage" => cmd_coverage(&args[2..]),
         "canary-egress" => cmd_canary_egress(&args[2..]),
         "aibom" => cmd_aibom(&args[2..]),
+        "enroll" => cmd_enroll(&args[2..]),
         "grc-report" => cmd_grc_report(&args[2..]),
         "ledger-backup" => cmd_ledger_backup(&args[2..]),
         "verify-enforcement" => cmd_verify_enforcement(&args[2..]),
@@ -1154,6 +1155,109 @@ fn cmd_aibom(rest: &[String]) -> ExitCode {
         return ExitCode::from(3);
     }
     ExitCode::SUCCESS
+}
+
+/// Manage shadow-AI dispositions (enroll / quarantine / accept-risk), feeding the coverage report
+/// and the MDM/CASB allow+block export.
+///   acp enroll record <log.json> <endpoint> <enroll|quarantine|accept-risk> [--kind K] [--operator O] [--reason R] [--expires-ms N] --key <hex>
+///   acp enroll governed <log.json>        (enrolled endpoints, one per line; feed to `acp coverage`)
+///   acp enroll export-mdm <log.json>      (allow/block JSON for MDM/CASB)
+fn cmd_enroll(rest: &[String]) -> ExitCode {
+    use acp_core::discovery::{classify_ai, AiKind};
+    use acp_core::enrollment::{Disposition, EnrollmentLog};
+
+    let sub = rest.first().map(String::as_str).unwrap_or("");
+    let load_log = |path: &str| -> EnrollmentLog {
+        std::fs::read_to_string(path)
+            .ok()
+            .and_then(|s| serde_json::from_str(&s).ok())
+            .unwrap_or_default()
+    };
+    let now_ms = std::time::SystemTime::now()
+        .duration_since(std::time::UNIX_EPOCH)
+        .map(|d| d.as_millis() as u64)
+        .unwrap_or(0);
+
+    match sub {
+        "record" => {
+            let Some(log_path) = rest.get(1) else {
+                return usage("acp enroll record <log.json> <endpoint> <enroll|quarantine|accept-risk> [--kind K] [--operator O] [--reason R] [--expires-ms N] --key <hex>");
+            };
+            let Some(endpoint) = rest.get(2) else {
+                return usage("acp enroll record <log.json> <endpoint> <enroll|quarantine|accept-risk> ...");
+            };
+            let Some(action) = rest.get(3) else {
+                return usage("acp enroll record <log.json> <endpoint> <enroll|quarantine|accept-risk> ...");
+            };
+            let key_hex = match flag_value(rest, "--key") {
+                Some(h) => h,
+                None => {
+                    eprintln!("acp: enroll record requires --key <hex> (dispositions are signed)");
+                    return ExitCode::from(2);
+                }
+            };
+            let seed: [u8; 32] = match hex::decode(&key_hex).ok().and_then(|b| b.try_into().ok()) {
+                Some(s) => s,
+                None => {
+                    eprintln!("acp: --key must be 32-byte hex");
+                    return ExitCode::from(2);
+                }
+            };
+            let signer = acp_core::sign::Ed25519Signer::from_seed(&seed);
+            let kind = flag_value(rest, "--kind").unwrap_or_else(|| {
+                match classify_ai(endpoint).map(|e| e.kind) {
+                    Some(AiKind::ModelApi) => "model-api".into(),
+                    Some(AiKind::Mcp) => "mcp".into(),
+                    None => "unknown".into(),
+                }
+            });
+            let operator = flag_value(rest, "--operator").unwrap_or_else(|| "unknown".into());
+            let reason = flag_value(rest, "--reason").unwrap_or_default();
+            let disposition = match action.as_str() {
+                "enroll" => Disposition::Enroll,
+                "quarantine" => Disposition::Quarantine,
+                "accept-risk" => {
+                    let ttl: u64 = flag_value(rest, "--expires-ms").and_then(|s| s.parse().ok()).unwrap_or(86_400_000);
+                    Disposition::AcceptRisk { expires_ms: now_ms + ttl }
+                }
+                other => {
+                    eprintln!("acp: unknown disposition '{other}' (enroll|quarantine|accept-risk)");
+                    return ExitCode::from(2);
+                }
+            };
+            let mut log = load_log(log_path);
+            log.record(&signer, endpoint, &kind, disposition, &operator, &reason, now_ms);
+            match serde_json::to_string_pretty(&log) {
+                Ok(s) => {
+                    if std::fs::write(log_path, s).is_err() {
+                        eprintln!("acp: cannot write {log_path}");
+                        return ExitCode::from(1);
+                    }
+                }
+                Err(_) => return ExitCode::from(1),
+            }
+            eprintln!("recorded {action} for {endpoint}; governed={}, blocked={}", log.governed().len(), log.blocklist().len());
+            ExitCode::SUCCESS
+        }
+        "governed" => {
+            let Some(log_path) = rest.get(1) else {
+                return usage("acp enroll governed <log.json>");
+            };
+            for ep in load_log(log_path).governed() {
+                println!("{ep}");
+            }
+            ExitCode::SUCCESS
+        }
+        "export-mdm" => {
+            let Some(log_path) = rest.get(1) else {
+                return usage("acp enroll export-mdm <log.json>");
+            };
+            let mdm = load_log(log_path).export_mdm(now_ms);
+            println!("{}", serde_json::to_string_pretty(&mdm).unwrap_or_default());
+            ExitCode::SUCCESS
+        }
+        _ => usage("acp enroll <record|governed|export-mdm> <log.json> ..."),
+    }
 }
 
 /// Compile one ACP policy into a coding agent's native managed-settings (phase D):

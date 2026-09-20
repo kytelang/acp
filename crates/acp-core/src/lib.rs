@@ -20,6 +20,7 @@ pub mod discovery;
 pub mod drift;
 pub mod dualcontrol;
 pub mod egress;
+pub mod enrollment;
 pub mod fleet;
 pub mod grc;
 pub mod ha;
