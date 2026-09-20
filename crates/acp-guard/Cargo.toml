@@ -1,0 +1,23 @@
+[package]
+name = "acp-guard"
+version = "0.0.0"
+edition = "2021"
+description = "Agent Control Plane: enforcement guard sidecar. Verifies the x-acp-enforcement attestation in front of a tool server so it cannot be reached un-governed."
+
+[lib]
+name = "acp_guard"
+path = "src/lib.rs"
+
+[[bin]]
+name = "acp-guard"
+path = "src/main.rs"
+
+[dependencies]
+acp-core = { path = "../acp-core" }
+acp-ledger = { path = "../acp-ledger" }
+axum = { workspace = true }
+tokio = { workspace = true }
+reqwest.workspace = true
+serde_json.workspace = true
+anyhow.workspace = true
+hex.workspace = true
