@@ -19,3 +19,8 @@ tokio = { workspace = true }
 reqwest.workspace = true
 serde_json.workspace = true
 hex.workspace = true
+rcgen = { version = "0.13", features = ["x509-parser"] }
+rustls = { version = "0.23", features = ["ring"] }
+tokio-rustls = "0.26"
+rustls-pemfile = "2"
+webpki-roots = "1"

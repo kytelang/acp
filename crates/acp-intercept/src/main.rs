@@ -4,7 +4,9 @@
 
 use acp_core::content::{scan_text, ContentPolicy};
 use acp_core::interception::{Action, EndpointRegistry};
+use acp_intercept::mitm::{self, CaSigner};
 use acp_intercept::{absolute_target, connect_target, content_length, parse_request_line};
+use tokio_rustls::TlsConnector;
 use std::sync::{Arc, Mutex};
 use tokio::io::{AsyncReadExt, AsyncWriteExt};
 use tokio::net::{TcpListener, TcpStream};
@@ -14,6 +16,8 @@ struct Cfg {
     content: ContentPolicy,
     client: reqwest::Client,
     ledger: Option<Mutex<acp_ledger::Ledger>>,
+    ca: Option<Arc<CaSigner>>,
+    connector: TlsConnector,
 }
 
 fn now_ms() -> u64 {
@@ -36,11 +40,36 @@ fn record(cfg: &Cfg, host: &str, action: &str, verdict: &str, rule: &Option<Stri
 #[tokio::main]
 async fn main() -> std::process::ExitCode {
     let args: Vec<String> = std::env::args().collect();
+    // Subcommand: generate a CA to install on managed devices for TLS interception.
+    if args.get(1).map(String::as_str) == Some("gen-ca") {
+        let cert_out = args.get(2).cloned().unwrap_or_else(|| "acp-ca.pem".into());
+        let key_out = args.get(3).cloned().unwrap_or_else(|| "acp-ca-key.pem".into());
+        match mitm::generate_ca() {
+            Ok((cert, key)) => {
+                if std::fs::write(&cert_out, cert).is_err() {
+                    eprintln!("acp-intercept: cannot write {cert_out}");
+                    return std::process::ExitCode::from(1);
+                }
+                if acp_core::secret::write_key_secure(&key_out, key.as_bytes()).is_err() {
+                    eprintln!("acp-intercept: cannot write {key_out}");
+                    return std::process::ExitCode::from(1);
+                }
+                eprintln!("acp-intercept: wrote CA cert {cert_out} and key {key_out} (0600). Install {cert_out} as a trusted root on managed devices.");
+                return std::process::ExitCode::SUCCESS;
+            }
+            Err(e) => {
+                eprintln!("acp-intercept: gen-ca failed: {e}");
+                return std::process::ExitCode::from(1);
+            }
+        }
+    }
     let mut addr = "127.0.0.1:8890".to_string();
     let mut rules: Option<String> = None;
     let mut ledger_path: Option<String> = None;
     let mut deny_topics: Vec<String> = Vec::new();
     let mut block_secrets = false;
+    let mut ca_cert: Option<String> = None;
+    let mut ca_key: Option<String> = None;
     let mut it = args.iter().skip(1);
     while let Some(a) = it.next() {
         match a.as_str() {
@@ -49,6 +78,8 @@ async fn main() -> std::process::ExitCode {
             "--ledger" => ledger_path = it.next().cloned(),
             "--deny-topic" => { if let Some(v) = it.next() { deny_topics.push(v.clone()); } }
             "--block-secrets" => block_secrets = true,
+            "--ca-cert" => ca_cert = it.next().cloned(),
+            "--ca-key" => ca_key = it.next().cloned(),
             other => { eprintln!("acp-intercept: unknown option '{other}'"); return std::process::ExitCode::from(2); }
         }
     }
@@ -66,11 +97,24 @@ async fn main() -> std::process::ExitCode {
         },
         None => None,
     };
+    let ca = match (ca_cert.as_ref(), ca_key.as_ref()) {
+        (Some(c), Some(k)) => {
+            let cert = std::fs::read_to_string(c).unwrap_or_default();
+            let key = std::fs::read_to_string(k).unwrap_or_default();
+            match CaSigner::load(&cert, &key) {
+                Ok(s) => { eprintln!("acp-intercept: TLS interception ENABLED (CA {c}); body-inspecting HTTPS endpoints are decrypted"); Some(Arc::new(s)) }
+                Err(e) => { eprintln!("acp-intercept: cannot load CA: {e}"); return std::process::ExitCode::from(1); }
+            }
+        }
+        _ => None,
+    };
     let cfg = Arc::new(Cfg {
         registry,
         content: ContentPolicy { block_injection: true, block_secrets, redact_pii: true, denied_topics: deny_topics },
         client: reqwest::Client::new(),
         ledger,
+        ca,
+        connector: mitm::upstream_connector(),
     });
 
     let listener = match TcpListener::bind(&addr).await {
@@ -141,6 +185,36 @@ async fn handle(cfg: Arc<Cfg>, mut client: TcpStream) -> std::io::Result<()> {
         if decision.action == Action::Block {
             record(&cfg, &host, "block", "deny", &decision.rule_id);
             return write_status(&mut client, 403, "Forbidden", "blocked by endpoint policy").await;
+        }
+        // Phase 3: if TLS interception is enabled and this host needs the body, MITM it.
+        if cfg.registry.should_decrypt(&host, port) {
+            if let Some(ca) = cfg.ca.clone() {
+                client.write_all(b"HTTP/1.1 200 Connection Established\r\n\r\n").await?;
+                let cfg2 = cfg.clone();
+                let host2 = host.clone();
+                let decide = |path: &str| {
+                    let d = cfg2.registry.evaluate(&host2, path, port);
+                    (d.action == Action::Block, d.action.needs_body(), d.rule_id.clone())
+                };
+                let cfg3 = cfg.clone();
+                let inspect = |text: &str| {
+                    let cv = scan_text(&cfg3.content, text);
+                    if cv.block {
+                        Some(cv.findings.iter().map(|f| f.kind.clone()).collect::<Vec<_>>().join(", "))
+                    } else {
+                        None
+                    }
+                };
+                let outcome = mitm::intercept(&ca, &cfg.connector, client, &host, port, decide, inspect).await;
+                let verdict = match outcome {
+                    mitm::MitmOutcome::Blocked(_) => "block",
+                    mitm::MitmOutcome::Forwarded => "inspect-allow",
+                    mitm::MitmOutcome::HandshakeFailed(_) => "pinning-or-handshake-failed",
+                    mitm::MitmOutcome::UpstreamFailed(_) => "upstream-failed",
+                };
+                record(&cfg, &host, "mitm", verdict, &decision.rule_id);
+                return Ok(());
+            }
         }
         // Phase 2: no MITM. A body-inspecting HTTPS host is tunnelled and flagged (inspection needs
         // phase 3). block/pass are fully enforced here.
