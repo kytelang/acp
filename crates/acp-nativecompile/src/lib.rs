@@ -101,6 +101,27 @@ pub fn compile(policy: &Policy, vendor: Vendor) -> Compiled {
     Compiled { settings, covered, uncovered }
 }
 
+/// Compile a policy AND pin the coding agent's own model traffic to the ACP gateway, so its direct
+/// model calls cannot bypass ACP (egress lockdown for the agent's non-MCP model use). When
+/// `gateway_url` is set, an `env` block is emitted setting each vendor SDK's base-URL variable to the
+/// gateway. Combined with a network allowlist that only lets the gateway reach model hosts, even a
+/// leaked key cannot reach a model off-ACP.
+pub fn compile_with_gateway(policy: &Policy, vendor: Vendor, gateway_url: Option<&str>) -> Compiled {
+    let mut c = compile(policy, vendor);
+    if let Some(gw) = gateway_url {
+        let env = json!({
+            "ANTHROPIC_BASE_URL": gw,
+            "OPENAI_BASE_URL": gw,
+            "OPENAI_API_BASE": gw,
+            "GOOGLE_GEMINI_BASE_URL": gw,
+        });
+        if let Some(obj) = c.settings.as_object_mut() {
+            obj.insert("env".to_string(), env);
+        }
+    }
+    c
+}
+
 /// File a rule's native entries; returns whether it was expressible for this vendor.
 fn native_bucket(r: &Rule, vendor: Vendor, deny: &mut Vec<String>, ask: &mut Vec<String>) -> bool {
     let res = match &r.when.resource {
@@ -178,4 +199,15 @@ mod tests {
         assert!(gem.uncovered.contains(&"secrets-ask".to_string()));
         assert!(gem.settings["tools"]["exclude"].as_array().unwrap().iter().any(|v| v == "WriteFileTool"));
     }
+
+    #[test]
+    fn gateway_pinning_forces_model_traffic_through_acp() {
+        let c = compile_with_gateway(&pol(), Vendor::Claude, Some("http://127.0.0.1:8799"));
+        assert_eq!(c.settings["env"]["ANTHROPIC_BASE_URL"], "http://127.0.0.1:8799");
+        assert_eq!(c.settings["env"]["OPENAI_BASE_URL"], "http://127.0.0.1:8799");
+        // without a gateway, no env block is emitted (back-compat).
+        let c2 = compile(&pol(), Vendor::Claude);
+        assert!(c2.settings.get("env").is_none());
+    }
+
 }

@@ -1408,11 +1408,13 @@ fn cmd_risk(rest: &[String]) -> ExitCode {
 /// Prints the native settings JSON to stdout and a coverage report (what mapped, what is routed to
 /// the proxy) to stderr.
 fn cmd_native_compile(rest: &[String]) -> ExitCode {
-    use acp_nativecompile::{compile, Vendor};
-    let (file, vendor_s) = match (rest.first(), rest.get(1)) {
-        (Some(f), Some(v)) => (f, v),
-        _ => return usage("acp native-compile <policy.yaml> <claude|copilot|gemini>"),
+    use acp_nativecompile::{compile_with_gateway, Vendor};
+    let positionals: Vec<&String> = rest.iter().filter(|a| !a.starts_with("--")).collect();
+    let (file, vendor_s) = match (positionals.first(), positionals.get(1)) {
+        (Some(f), Some(v)) => (*f, *v),
+        _ => return usage("acp native-compile <policy.yaml> <claude|copilot|gemini> [--gateway <url>]"),
     };
+    let gateway = flag_value(rest, "--gateway");
     let Some(vendor) = Vendor::parse(vendor_s) else {
         eprintln!("acp: unknown vendor '{vendor_s}' (claude|copilot|gemini)");
         return ExitCode::from(2);
@@ -1425,7 +1427,7 @@ fn cmd_native_compile(rest: &[String]) -> ExitCode {
         Ok(p) => p,
         Err(e) => { eprintln!("acp: invalid policy: {e}"); return ExitCode::from(1); }
     };
-    let c = compile(&policy, vendor);
+    let c = compile_with_gateway(&policy, vendor, gateway.as_deref());
     println!("{}", serde_json::to_string_pretty(&c.settings).unwrap());
     eprintln!("coverage: {} rule(s) mapped natively [{}]", c.covered.len(), c.covered.join(", "));
     if !c.uncovered.is_empty() {
