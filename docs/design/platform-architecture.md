@@ -9,6 +9,11 @@ Governing "the AI landscape" is finite because of one pattern: **one control pla
 
 ## 1. Context: what must be governed, and how ACP sits
 
+![Diagram 1](diagrams/platform-architecture-1.svg)
+
+<details>
+<summary>Diagram source (mermaid)</summary>
+
 ```mermaid
 flowchart TB
   subgraph LAND["Org AI landscape"]
@@ -43,7 +48,14 @@ flowchart TB
   CP -. "decision stream" .-> SIEM
 ```
 
+</details>
+
 ## 2. The planes
+
+![Diagram 2](diagrams/platform-architecture-2.svg)
+
+<details>
+<summary>Diagram source (mermaid)</summary>
 
 ```mermaid
 flowchart TB
@@ -98,11 +110,18 @@ flowchart TB
   DIS --> CTRL
 ```
 
+</details>
+
 Per-plane detail (purpose, components, status) is in the phase design docs. The one-line reading: the control plane authors and signs one policy, the shared PDP decides, and every PEP enforces the same decision and writes the same ledger.
 
 ## 3. The enforcement-point (PEP) pattern
 
 Every PEP, whatever the surface, is the same five steps. This is why the platform is finite: a new surface is a small adapter that inherits identity, policy, evidence, obligations, and the kill-switch for free.
+
+![Diagram 3](diagrams/platform-architecture-3.svg)
+
+<details>
+<summary>Diagram source (mermaid)</summary>
 
 ```mermaid
 sequenceDiagram
@@ -128,6 +147,8 @@ sequenceDiagram
   PEP-->>Caller: allow / deny / step-up / rewritten
 ```
 
+</details>
+
 ## 4. Coverage matrix
 
 | AI surface | PEP | Status | Closes the gap |
@@ -145,6 +166,11 @@ sequenceDiagram
 
 Coverage on paper is not governance; the PEPs must be the only path.
 
+![Diagram 4](diagrams/platform-architecture-4.svg)
+
+<details>
+<summary>Diagram source (mermaid)</summary>
+
 ```mermaid
 flowchart LR
   DEV["Developer / app"] -->|MDM-locked config| MCP["MCP proxy"]
@@ -155,6 +181,8 @@ flowchart LR
   BYP -.->|no attestation → 401| TOOL
   DIS["Discovery"] -->|alarms on any bypass| CP["Control plane"]
 ```
+
+</details>
 
 Unavoidability is an org rollout (network policy plus MDM plus gateway plus the attestation guard from `docs/design/enforcement.md`), enabled by the platform, not a single toggle. Stated plainly to anyone evaluating it.
 

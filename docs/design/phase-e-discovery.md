@@ -9,6 +9,11 @@ ACP governs agents and apps that are registered and routed through a PEP. Anythi
 
 ## Flow
 
+![Diagram 1](diagrams/phase-e-discovery-1.svg)
+
+<details>
+<summary>Diagram source (mermaid)</summary>
+
 ```mermaid
 flowchart LR
   subgraph SRC["Signals"]
@@ -24,6 +29,8 @@ flowchart LR
   TRIAGE -->|block| NET["egress policy: deny"]
   DET -. alarm .-> SIEM["SIEM"]
 ```
+
+</details>
 
 The PEP bypass alarm already exists in embryo: the liveness gap detector flags a proxy that heartbeats but stops emitting decisions while traffic is expected. Phase E generalises "traffic to a model endpoint that did not pass a gateway" into a first-class shadow-AI signal.
 

@@ -9,6 +9,11 @@ Today the human principal is bound at enrolment (`--principal`) and degrades to 
 
 ## B1. Identity: verified human + workload
 
+![Diagram 1](diagrams/phase-b-control-plane-1.svg)
+
+<details>
+<summary>Diagram source (mermaid)</summary>
+
 ```mermaid
 sequenceDiagram
   autonumber
@@ -27,6 +32,8 @@ sequenceDiagram
   PEP->>PEP: build delegation = agent(svid) acting-for human(sub)
   PEP->>PDP: evaluate with verified principal
 ```
+
+</details>
 
 - Humans: OIDC against the org IdP. The verified `sub` becomes the `principal_id`; `principal_source = oauth`; `verified = true`. Replaces the `--principal` fallback for HTTP transports. Local/stdio agents keep the enrolment binding but can be pinned to an SSO session.
 - Workloads (agents, gateways, services): SPIFFE/SPIRE issues an attested SVID, so an agent's identity is proven by what it is, not a shared token. The registry token becomes a bootstrap credential; the SVID is the runtime identity.
@@ -66,6 +73,11 @@ offered as a hosted multi-org service. It is NOT on the build list.
 
 ### (reference only) Multi-tenancy
 
+![Diagram 2](diagrams/phase-b-control-plane-2.svg)
+
+<details>
+<summary>Diagram source (mermaid)</summary>
+
 ```mermaid
 erDiagram
   TENANT ||--o{ TEAM : contains
@@ -83,6 +95,8 @@ erDiagram
     string idp_issuer
   }
 ```
+
+</details>
 
 Every object is tenant-scoped: policy stores, evidence ledgers, signing keys, registries. A PEP is bound to a tenant at enrolment; cross-tenant reads are impossible by construction (separate stores plus a tenant claim checked on every control-API call). This mirrors the existing single-tenant layout, lifted under a `tenant_id`.
 

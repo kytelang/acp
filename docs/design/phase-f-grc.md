@@ -9,6 +9,11 @@ GRC platforms (Credo, OneTrust) produce control mappings and reports from attest
 
 ## Flow
 
+![Diagram 1](diagrams/phase-f-grc-1.svg)
+
+<details>
+<summary>Diagram source (mermaid)</summary>
+
 ```mermaid
 flowchart LR
   LOG["Evidence ledger<br/>(signed decisions)"] --> MAP
@@ -22,6 +27,8 @@ flowchart LR
   MAP --> RPT["Reports · attestations · dashboards"]
   MAP --> EXP["Export to Credo / OneTrust<br/>(as their runtime evidence source)"]
 ```
+
+</details>
 
 ## What maps to what
 

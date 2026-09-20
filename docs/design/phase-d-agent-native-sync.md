@@ -9,6 +9,11 @@ The exclusion map (`docs/research/policy-model-study.md`) showed the coding agen
 
 ## Flow
 
+![Diagram 1](diagrams/phase-d-agent-native-sync-1.svg)
+
+<details>
+<summary>Diagram source (mermaid)</summary>
+
 ```mermaid
 flowchart LR
   POL["ACP policy (model-v2)<br/>signed, versioned"] --> COMP
@@ -29,6 +34,8 @@ flowchart LR
   A3 --> OS1
   POL -. "same policy also drives" .-> MCP["MCP proxy (Phase A)"]
 ```
+
+</details>
 
 ## Mapping model-v2 to native rules
 

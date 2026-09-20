@@ -9,6 +9,11 @@ Not all AI is agentic. Most enterprise AI spend is apps and services calling a m
 
 ## Architecture
 
+![Diagram 1](diagrams/phase-c-llm-gateway-1.svg)
+
+<details>
+<summary>Diagram source (mermaid)</summary>
+
 ```mermaid
 flowchart LR
   subgraph APPS["Apps / services"]
@@ -47,7 +52,14 @@ flowchart LR
   DEC -->|deny / step-up| APP
 ```
 
+</details>
+
 ## Request lifecycle
+
+![Diagram 2](diagrams/phase-c-llm-gateway-2.svg)
+
+<details>
+<summary>Diagram source (mermaid)</summary>
 
 ```mermaid
 sequenceDiagram
@@ -82,6 +94,8 @@ sequenceDiagram
     GW->>LOG: record allow + tokens + cost
   end
 ```
+
+</details>
 
 ## Mapping a model call into the model-v2 context
 

@@ -16,6 +16,11 @@ Status: the sequenced build plan for the architecture in `platform-architecture.
 
 ## Dependencies
 
+![Diagram 1](diagrams/platform-plan-1.svg)
+
+<details>
+<summary>Diagram source (mermaid)</summary>
+
 ```mermaid
 flowchart LR
   A["A · MCP core<br/>DONE"] --> B["B · control plane<br/>identity · tenancy · RBAC · SIEM"]
@@ -29,11 +34,18 @@ flowchart LR
   class A done
 ```
 
+</details>
+
 Reading: B (identity + tenancy) unblocks everything that needs a verified principal and tenant isolation, so it is the true next step. C (the gateway) needs B's identity and is the highest-value surface. D (native sync) only needs A's policy, so it can run in parallel with B/C. E (discovery) needs C to detect model traffic meaningfully. F (GRC) needs evidence from A and C.
 
 ## Illustrative sizing
 
 Durations are relative sizing to show sequencing and parallelism, not date commitments.
+
+![Diagram 2](diagrams/platform-plan-2.svg)
+
+<details>
+<summary>Diagram source (mermaid)</summary>
 
 ```mermaid
 gantt
@@ -52,6 +64,8 @@ gantt
   F GRC projection             :f1, after c1, 25d
 ```
 
+</details>
+
 ## Work breakdown
 
 Each phase's work items and acceptance criteria are in its design doc. Summary of the build surface:
@@ -64,6 +78,11 @@ Each phase's work items and acceptance criteria are in its design doc. Summary o
 
 ## Principles held across every phase
 
+![Diagram 3](diagrams/platform-plan-3.svg)
+
+<details>
+<summary>Diagram source (mermaid)</summary>
+
 ```mermaid
 flowchart TB
   P1["One brain: every PEP uses the same PDP, identity, ledger, kill-switch"]
@@ -73,6 +92,8 @@ flowchart TB
   P5["Trust boundary: exactly one agent-controlled namespace (args); all else derived"]
   P1 --> P2 --> P3 --> P4 --> P5
 ```
+
+</details>
 
 ## Recommended order
 
