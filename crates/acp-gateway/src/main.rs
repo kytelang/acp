@@ -48,6 +48,7 @@ struct GwState {
     bg_mtime: Mutex<Option<std::time::SystemTime>>,
     bg_key: Option<Vec<u8>>,
     content_scan: Option<String>,
+    content_fw: Option<acp_core::content::ContentPolicy>,
     sem: std::sync::Arc<tokio::sync::Semaphore>,
     budget_state: Option<String>,
     metrics: Metrics,
@@ -62,6 +63,9 @@ async fn main() -> std::process::ExitCode {
     let mut bg_file: Option<String> = None;
     let mut bg_key_hex: Option<String> = None;
     let mut content_scan: Option<String> = None;
+    let mut content_fw = false;
+    let mut fw_block_secrets = false;
+    let mut fw_deny_topics: Vec<String> = Vec::new();
     let mut budget_state: Option<String> = None;
     let (mut entra_tenant, mut entra_audience): (Option<String>, Option<String>) = (None, None);
     let mut it = args.iter().skip(1);
@@ -75,6 +79,9 @@ async fn main() -> std::process::ExitCode {
             "--break-glass-file" => bg_file = it.next().cloned(),
             "--break-glass-key" => bg_key_hex = it.next().cloned(),
             "--content-scan" => content_scan = it.next().cloned(),
+            "--content-firewall" => content_fw = true,
+            "--block-secrets" => { content_fw = true; fw_block_secrets = true; }
+            "--deny-topic" => { content_fw = true; if let Some(v) = it.next() { fw_deny_topics.push(v.clone()); } }
             "--budget-state" => budget_state = it.next().cloned(),
             "--env" => env = it.next().cloned().unwrap_or(env),
             "--entra-tenant" => entra_tenant = it.next().cloned(),
@@ -130,6 +137,9 @@ async fn main() -> std::process::ExitCode {
     }
     let upstream_key = upstream_key.map(|k| acp_core::secret::resolve(&k));
     let bg_key = bg_key_hex.as_ref().and_then(|h| hex::decode(acp_core::secret::resolve(h)).ok());
+    let content_fw = if content_fw {
+        Some(acp_core::content::ContentPolicy { block_injection: true, block_secrets: fw_block_secrets, redact_pii: true, denied_topics: fw_deny_topics })
+    } else { None };
     let st = Arc::new(GwState {
         engine,
         tax: ModelTaxonomy::default(),
@@ -152,6 +162,7 @@ async fn main() -> std::process::ExitCode {
         bg_mtime: Mutex::new(None),
         bg_key,
         content_scan,
+        content_fw,
         budget_state,
         metrics: Metrics::default(),
     });
@@ -216,9 +227,8 @@ fn apply_break_glass(st: &GwState, app: &str, model: &str, d: &mut acp_gateway::
 /// prompt is safe to forward. Contract: POST {"text": "..."} -> {"block": bool}. INTEGRATE, do not
 /// build: ACP owns authorization, the content plane owns content. Fail-open on an unreachable scanner
 /// would be unsafe, so a scan error blocks (fail-closed) when scanning is configured.
-async fn content_blocked(st: &GwState, body: &serde_json::Value) -> Option<String> {
-    let url = st.content_scan.as_ref()?;
-    // Gather the prompt text from OpenAI-style messages[].content or a "prompt"/"input" field.
+/// Gather the prompt text from OpenAI-style messages[].content or a "prompt"/"input" field.
+fn gather_prompt_text(body: &serde_json::Value) -> String {
     let mut text = String::new();
     if let Some(msgs) = body.get("messages").and_then(|v| v.as_array()) {
         for m in msgs {
@@ -233,6 +243,29 @@ async fn content_blocked(st: &GwState, body: &serde_json::Value) -> Option<Strin
             text.push_str(s);
         }
     }
+    text
+}
+
+/// First-party content firewall (native): scan the prompt with acp_core::content before it reaches
+/// the model. Returns a block reason if the built-in engine blocks.
+fn native_content_blocked(st: &GwState, body: &serde_json::Value) -> Option<String> {
+    let policy = st.content_fw.as_ref()?;
+    let text = gather_prompt_text(body);
+    if text.is_empty() {
+        return None;
+    }
+    let v = acp_core::content::scan_text(policy, &text);
+    if v.block {
+        let kinds: Vec<String> = v.findings.iter().map(|f| f.kind.clone()).collect();
+        Some(format!("content firewall: {}", kinds.join(", ")))
+    } else {
+        None
+    }
+}
+
+async fn content_blocked(st: &GwState, body: &serde_json::Value) -> Option<String> {
+    let url = st.content_scan.as_ref()?;
+    let text = gather_prompt_text(body);
     if text.is_empty() {
         return None;
     }
@@ -437,7 +470,14 @@ async fn handle(
                     Json(json!({"error": {"message": "human approval required (confirm obligation)", "type": "acp_step_up"}})),
                 ).into_response();
             }
-            // Content plane (integrate, not build): scan the prompt before it reaches the model.
+            // Content plane: first-party firewall (native), then the external scanner if configured.
+            if let Some(reason) = native_content_blocked(&st, &parsed) {
+                st.metrics.denied.fetch_add(1, std::sync::atomic::Ordering::Relaxed);
+                return (
+                    StatusCode::FORBIDDEN,
+                    Json(json!({"error": {"message": format!("blocked by content policy: {reason}"), "type": "acp_content_blocked"}})),
+                ).into_response();
+            }
             if let Some(reason) = content_blocked(&st, &parsed).await {
                 return (
                     StatusCode::FORBIDDEN,

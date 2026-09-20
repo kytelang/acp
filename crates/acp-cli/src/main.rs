@@ -51,6 +51,7 @@ fn main() -> ExitCode {
         "enroll" => cmd_enroll(&args[2..]),
         "siem" => cmd_siem(&args[2..]),
         "risk" => cmd_risk(&args[2..]),
+        "content-scan" => cmd_content_scan(&args[2..]),
         "grc-report" => cmd_grc_report(&args[2..]),
         "ledger-backup" => cmd_ledger_backup(&args[2..]),
         "verify-enforcement" => cmd_verify_enforcement(&args[2..]),
@@ -1401,6 +1402,37 @@ fn cmd_risk(rest: &[String]) -> ExitCode {
         }
         _ => usage("acp risk <add|list|report> <register.json> ..."),
     }
+}
+
+/// Scan text with the first-party content firewall (injection / PII / secret / denied-topic).
+///   acp content-scan <text-or-@file> [--deny-topic <t>]... [--block-secrets] [--no-redact-pii]
+/// Prints the verdict JSON; exits 3 if the text is blocked.
+fn cmd_content_scan(rest: &[String]) -> ExitCode {
+    use acp_core::content::{scan_text, ContentPolicy};
+    let Some(arg) = rest.iter().find(|a| !a.starts_with("--")) else {
+        return usage("acp content-scan <text-or-@file> [--deny-topic <t>] [--block-secrets] [--no-redact-pii]");
+    };
+    let text = if let Some(path) = arg.strip_prefix('@') {
+        std::fs::read_to_string(path).unwrap_or_default()
+    } else {
+        arg.clone()
+    };
+    let mut topics = Vec::new();
+    let mut it = rest.iter();
+    while let Some(a) = it.next() {
+        if a == "--deny-topic" {
+            if let Some(v) = it.next() { topics.push(v.clone()); }
+        }
+    }
+    let policy = ContentPolicy {
+        block_injection: true,
+        block_secrets: rest.iter().any(|a| a == "--block-secrets"),
+        redact_pii: !rest.iter().any(|a| a == "--no-redact-pii"),
+        denied_topics: topics,
+    };
+    let v = scan_text(&policy, &text);
+    println!("{}", serde_json::to_string_pretty(&v).unwrap_or_default());
+    if v.block { ExitCode::from(3) } else { ExitCode::SUCCESS }
 }
 
 /// Compile one ACP policy into a coding agent's native managed-settings (phase D):

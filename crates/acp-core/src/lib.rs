@@ -16,6 +16,7 @@ pub mod breakglass;
 pub mod canonical;
 pub mod coverage;
 pub mod classify;
+pub mod content;
 pub mod discovery;
 pub mod drift;
 pub mod dualcontrol;
