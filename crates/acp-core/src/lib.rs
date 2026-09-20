@@ -5,6 +5,7 @@
 //! RFC 6962-style verifiable log, and the signing seam.
 
 pub mod adapter;
+pub mod aibom;
 pub mod attest;
 pub mod agility;
 pub mod anchor;
@@ -50,6 +51,7 @@ pub mod scim;
 pub mod secret;
 pub mod shadoweval;
 pub mod sign;
+pub mod supplychain;
 pub mod ticket;
 pub mod timeline;
 pub mod toolintegrity;

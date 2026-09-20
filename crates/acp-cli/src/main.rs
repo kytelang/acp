@@ -47,6 +47,7 @@ fn main() -> ExitCode {
         "discover" => cmd_discover(&args[2..]),
         "coverage" => cmd_coverage(&args[2..]),
         "canary-egress" => cmd_canary_egress(&args[2..]),
+        "aibom" => cmd_aibom(&args[2..]),
         "grc-report" => cmd_grc_report(&args[2..]),
         "ledger-backup" => cmd_ledger_backup(&args[2..]),
         "verify-enforcement" => cmd_verify_enforcement(&args[2..]),
@@ -1052,6 +1053,107 @@ fn cmd_canary_egress(rest: &[String]) -> ExitCode {
         }
         ExitCode::from(3)
     }
+}
+
+/// Emit a signed AI bill of materials (CycloneDX) from an artifacts file, running each artifact
+/// through the supply-chain admission gate.
+///   acp aibom <artifacts.json> [--require-scan] [--key <hex>] [--strict]
+/// artifacts.json: an array of objects {kind,name,digest,source,publisher,signature?,scan?,
+/// high_impact?,pin?,policy?} where scan is "clean" | "unscanned" | {"findings":[..]}.
+/// Prints the (signed) CycloneDX doc to stdout, a summary to stderr; --strict exits 3 if any
+/// artifact is denied admission.
+fn cmd_aibom(rest: &[String]) -> ExitCode {
+    use acp_core::aibom::{AiBom, BomEntry};
+    use acp_core::supplychain::{admit, Artifact, ScanVerdict};
+
+    let Some(file) = rest.iter().find(|a| !a.starts_with("--")) else {
+        return usage("acp aibom <artifacts.json> [--require-scan] [--key <hex>] [--strict]");
+    };
+    let raw = match std::fs::read_to_string(file) {
+        Ok(s) => s,
+        Err(e) => {
+            eprintln!("acp: cannot read {file}: {e}");
+            return ExitCode::from(1);
+        }
+    };
+    let items: Vec<Value> = match serde_json::from_str(&raw) {
+        Ok(Value::Array(a)) => a,
+        _ => {
+            eprintln!("acp: {file} must be a JSON array of artifacts");
+            return ExitCode::from(2);
+        }
+    };
+    let require_scan = rest.iter().any(|a| a == "--require-scan");
+
+    let parse_scan = |v: &Value| -> ScanVerdict {
+        match v {
+            Value::String(s) if s == "clean" => ScanVerdict::Clean,
+            Value::String(s) if s == "unscanned" => ScanVerdict::Unscanned,
+            Value::Object(o) => {
+                let issues = o
+                    .get("findings")
+                    .and_then(|f| f.as_array())
+                    .map(|a| a.iter().filter_map(|x| x.as_str().map(String::from)).collect())
+                    .unwrap_or_default();
+                ScanVerdict::Findings { issues }
+            }
+            _ => ScanVerdict::Unscanned,
+        }
+    };
+
+    let now_ms = std::time::SystemTime::now()
+        .duration_since(std::time::UNIX_EPOCH)
+        .map(|d| d.as_millis() as u64)
+        .unwrap_or(0);
+
+    let mut entries: Vec<BomEntry> = Vec::new();
+    for it in &items {
+        let s = |k: &str| it.get(k).and_then(|v| v.as_str()).unwrap_or("").to_string();
+        let artifact = Artifact {
+            kind: s("kind"),
+            name: s("name"),
+            digest: s("digest"),
+            source: s("source"),
+            publisher: s("publisher"),
+            signature: it.get("signature").and_then(|v| v.as_str()).map(String::from),
+        };
+        let scan = it.get("scan").map(parse_scan).unwrap_or(ScanVerdict::Unscanned);
+        let high = it.get("high_impact").and_then(|v| v.as_bool()).unwrap_or(false);
+        let admission = admit(&artifact, &scan, require_scan, high);
+        entries.push(BomEntry {
+            artifact,
+            scan,
+            admission,
+            integrity_pin: it.get("pin").and_then(|v| v.as_str()).map(String::from),
+            policy_in_force: it.get("policy").and_then(|v| v.as_str()).map(String::from),
+        });
+    }
+    let bom = AiBom { generated_ms: now_ms, entries };
+    let denied = bom.denied().len();
+
+    let key_hex = flag_value(rest, "--key");
+    let out = match key_hex {
+        Some(h) => match hex::decode(&h).ok().and_then(|b| b.try_into().ok()) {
+            Some(seed) => {
+                let s = acp_core::sign::Ed25519Signer::from_seed(&seed);
+                serde_json::to_string_pretty(&bom.sign(&s)).unwrap_or_default()
+            }
+            None => {
+                eprintln!("acp: --key must be 32-byte hex");
+                return ExitCode::from(2);
+            }
+        },
+        None => serde_json::to_string_pretty(&bom.cyclonedx()).unwrap_or_default(),
+    };
+    println!("{out}");
+    eprintln!("AI-BOM: {} artifact(s); {denied} denied admission", bom.entries.len());
+    for d in bom.denied() {
+        eprintln!("  DENIED {:12} {}  ({})", d.artifact.kind, d.artifact.name, d.admission.reason());
+    }
+    if rest.iter().any(|a| a == "--strict") && denied > 0 {
+        return ExitCode::from(3);
+    }
+    ExitCode::SUCCESS
 }
 
 /// Compile one ACP policy into a coding agent's native managed-settings (phase D):
