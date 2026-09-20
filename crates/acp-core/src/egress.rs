@@ -52,8 +52,73 @@ pub fn is_internal_target(host: &str) -> bool {
     false
 }
 
+
+/// A direct-connection probe: whether a governed model/tool host was reachable WITHOUT going through
+/// ACP. The egress canary (gap-closure, containment plane) dials each governed host directly and
+/// records whether the connection succeeded; the network allowlist should make that impossible, so a
+/// success means the host can reach a model or tool off-ACP (a containment breach).
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct Probe {
+    pub target: String,
+    pub kind: String,
+    pub reachable_directly: bool,
+}
+
+/// The canary verdict over a set of probes.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct CanaryResult {
+    /// Hosts reachable directly (bypass possible): the breaches that must page.
+    pub breaches: Vec<String>,
+    /// Hosts correctly refused a direct connection: containment holding.
+    pub contained: Vec<String>,
+}
+
+impl CanaryResult {
+    /// True when no governed host was reachable off-ACP.
+    pub fn ok(&self) -> bool {
+        self.breaches.is_empty()
+    }
+}
+
+/// Evaluate probe results into a canary verdict. Any host reachable directly is a breach.
+pub fn evaluate_probes(probes: &[Probe]) -> CanaryResult {
+    let mut breaches = Vec::new();
+    let mut contained = Vec::new();
+    for p in probes {
+        let line = format!("{} ({})", p.target, p.kind);
+        if p.reachable_directly {
+            breaches.push(line);
+        } else {
+            contained.push(line);
+        }
+    }
+    breaches.sort();
+    contained.sort();
+    CanaryResult { breaches, contained }
+}
+
 #[cfg(test)]
 mod tests {
+    #[test]
+    fn a_directly_reachable_host_is_a_breach() {
+        let probes = vec![
+            super::Probe { target: "api.openai.com:443".into(), kind: "model-api".into(), reachable_directly: true },
+            super::Probe { target: "mcp.internal:8900".into(), kind: "mcp".into(), reachable_directly: false },
+        ];
+        let r = super::evaluate_probes(&probes);
+        assert!(!r.ok());
+        assert_eq!(r.breaches.len(), 1);
+        assert_eq!(r.contained.len(), 1);
+    }
+
+    #[test]
+    fn all_refused_means_contained() {
+        let probes = vec![
+            super::Probe { target: "api.anthropic.com:443".into(), kind: "model-api".into(), reachable_directly: false },
+        ];
+        assert!(super::evaluate_probes(&probes).ok());
+    }
+
     use super::*;
 
     #[test]

@@ -13,6 +13,7 @@ pub mod apqueue;
 pub mod blast_radius;
 pub mod breakglass;
 pub mod canonical;
+pub mod coverage;
 pub mod classify;
 pub mod discovery;
 pub mod drift;

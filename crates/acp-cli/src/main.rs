@@ -45,6 +45,8 @@ fn main() -> ExitCode {
         "agent" => cmd_agent(&args[2..]),
         "native-compile" => cmd_native_compile(&args[2..]),
         "discover" => cmd_discover(&args[2..]),
+        "coverage" => cmd_coverage(&args[2..]),
+        "canary-egress" => cmd_canary_egress(&args[2..]),
         "grc-report" => cmd_grc_report(&args[2..]),
         "ledger-backup" => cmd_ledger_backup(&args[2..]),
         "verify-enforcement" => cmd_verify_enforcement(&args[2..]),
@@ -57,6 +59,17 @@ fn main() -> ExitCode {
 fn usage(msg: &str) -> ExitCode {
     eprintln!("usage: {msg}");
     ExitCode::from(2)
+}
+
+/// Read the value following a `--flag` in an argv slice, if present.
+fn flag_value(rest: &[String], flag: &str) -> Option<String> {
+    let mut it = rest.iter();
+    while let Some(a) = it.next() {
+        if a == flag {
+            return it.next().cloned();
+        }
+    }
+    None
 }
 
 fn load(path: &str) -> Result<PolicyEngine, ExitCode> {
@@ -883,6 +896,162 @@ fn cmd_discover(rest: &[String]) -> ExitCode {
     }
     println!("\nnext: sanction (route through a PEP) or block (egress deny) each.");
     ExitCode::SUCCESS
+}
+
+/// Compute a coverage attestation: cross-reference observed AI endpoints against the governed
+/// (enrolled) set, list ungoverned or leaky paths, and optionally sign the report.
+///   acp coverage <observed.txt> <governed.txt> [--fail-open] [--leaky <msg>]... [--key <hex>] [--require-full]
+/// Prints the (signed) report JSON to stdout and a summary to stderr. With --require-full, exits 3
+/// when the estate is not fully contained (useful as a CI/rollout gate).
+fn cmd_coverage(rest: &[String]) -> ExitCode {
+    use acp_core::coverage::compute;
+    use acp_core::discovery::{classify_ai, AiKind};
+    use std::collections::BTreeSet;
+
+    let positionals: Vec<&String> = rest.iter().filter(|a| !a.starts_with("--")).collect();
+    let Some(obs_file) = positionals.first() else {
+        return usage("acp coverage <observed.txt> <governed.txt> [--fail-open] [--leaky <msg>] [--key <hex>] [--require-full]");
+    };
+    let read_lines = |f: &str| -> Vec<String> {
+        std::fs::read_to_string(f)
+            .unwrap_or_default()
+            .lines()
+            .map(|l| l.trim().to_string())
+            .filter(|l| !l.is_empty() && !l.starts_with('#'))
+            .collect()
+    };
+    let observed_raw = read_lines(obs_file);
+    let governed: BTreeSet<String> = positionals
+        .get(1)
+        .map(|f| read_lines(f).into_iter().collect())
+        .unwrap_or_default();
+
+    // Derive a kind for each observed endpoint via the discovery classifier; unknown otherwise.
+    let observed: Vec<(String, String)> = observed_raw
+        .iter()
+        .map(|ep| {
+            let kind = match classify_ai(ep).map(|e| e.kind) {
+                Some(AiKind::ModelApi) => "model-api",
+                Some(AiKind::Mcp) => "mcp",
+                None => "unknown",
+            };
+            (ep.clone(), kind.to_string())
+        })
+        .collect();
+
+    // Leaky containment signals.
+    let mut leaky: Vec<String> = Vec::new();
+    if rest.iter().any(|a| a == "--fail-open") {
+        leaky.push("a PEP is running with --fail-open (unrecorded calls possible)".into());
+    }
+    let mut it = rest.iter();
+    while let Some(a) = it.next() {
+        if a == "--leaky" {
+            if let Some(m) = it.next() {
+                leaky.push(m.clone());
+            }
+        }
+    }
+
+    let now_ms = std::time::SystemTime::now()
+        .duration_since(std::time::UNIX_EPOCH)
+        .map(|d| d.as_millis() as u64)
+        .unwrap_or(0);
+    let report = compute(&observed, &governed, leaky, now_ms);
+
+    // Optional signing.
+    let key_hex = flag_value(rest, "--key");
+    let out = match key_hex {
+        Some(h) => match hex::decode(&h).ok().and_then(|b| b.try_into().ok()) {
+            Some(seed) => {
+                let s = acp_core::sign::Ed25519Signer::from_seed(&seed);
+                serde_json::to_string_pretty(&report.clone().sign(&s)).unwrap_or_default()
+            }
+            None => {
+                eprintln!("acp: --key must be 32-byte hex");
+                return ExitCode::from(2);
+            }
+        },
+        None => serde_json::to_string_pretty(&report).unwrap_or_default(),
+    };
+    println!("{out}");
+    eprintln!(
+        "coverage: {}% ({}/{} governed); {} ungoverned; {} leaky signal(s)",
+        report.coverage_pct,
+        report.governed,
+        report.total,
+        report.ungoverned().len(),
+        report.leaky.len()
+    );
+    for u in report.ungoverned() {
+        eprintln!("  UNGOVERNED [{:9}] {}", u.kind, u.endpoint);
+    }
+    for l in &report.leaky {
+        eprintln!("  LEAKY  {l}");
+    }
+    if rest.iter().any(|a| a == "--require-full") && !report.fully_contained() {
+        return ExitCode::from(3);
+    }
+    ExitCode::SUCCESS
+}
+
+/// Egress canary: attempt a DIRECT (un-proxied) TCP connection to each governed model/tool host and
+/// assert it is refused. The network allowlist should make direct access impossible, so a reachable
+/// host is a containment breach. Exits 3 if any breach is found.
+///   acp canary-egress <targets.txt> [--timeout-ms <n>]
+/// targets.txt: one "host:port [kind]" per line (the hosts that must NOT be directly reachable).
+fn cmd_canary_egress(rest: &[String]) -> ExitCode {
+    use acp_core::egress::{evaluate_probes, Probe};
+    use std::net::{TcpStream, ToSocketAddrs};
+    use std::time::Duration;
+
+    let Some(targets_file) = rest.iter().find(|a| !a.starts_with("--")) else {
+        return usage("acp canary-egress <targets.txt> [--timeout-ms <n>]");
+    };
+    let timeout_ms: u64 = flag_value(rest, "--timeout-ms")
+        .and_then(|s| s.parse().ok())
+        .unwrap_or(1500);
+
+    let lines: Vec<String> = std::fs::read_to_string(targets_file)
+        .unwrap_or_default()
+        .lines()
+        .map(|l| l.trim().to_string())
+        .filter(|l| !l.is_empty() && !l.starts_with('#'))
+        .collect();
+    if lines.is_empty() {
+        eprintln!("acp: no targets in {targets_file}");
+        return ExitCode::from(2);
+    }
+
+    let mut probes = Vec::new();
+    for line in &lines {
+        let mut parts = line.split_whitespace();
+        let target = parts.next().unwrap_or("").to_string();
+        let kind = parts.next().unwrap_or("endpoint").to_string();
+        // Try to resolve+connect directly; success means the host is reachable off-ACP.
+        let reachable = match target.to_socket_addrs() {
+            Ok(mut addrs) => addrs.any(|addr| {
+                TcpStream::connect_timeout(&addr, Duration::from_millis(timeout_ms)).is_ok()
+            }),
+            Err(_) => false, // cannot resolve => not directly reachable from here
+        };
+        probes.push(Probe { target, kind, reachable_directly: reachable });
+    }
+
+    let result = evaluate_probes(&probes);
+    if result.ok() {
+        println!("egress canary OK: {} target(s) all refused direct access", probes.len());
+        ExitCode::SUCCESS
+    } else {
+        println!("egress canary BREACH: {} host(s) reachable off-ACP:", result.breaches.len());
+        for b in &result.breaches {
+            println!("  BREACH {b}");
+        }
+        for c in &result.contained {
+            println!("  ok     {c}");
+        }
+        ExitCode::from(3)
+    }
 }
 
 /// Compile one ACP policy into a coding agent's native managed-settings (phase D):
