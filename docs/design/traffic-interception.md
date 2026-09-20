@@ -1,7 +1,7 @@
 # Configuration-driven traffic interception
 
 Date: 2026-09-20
-Status: design, phases 1 and 2 IMPLEMENTED (see the phasing section). Generalises the explicit gateway and MCP proxy into a universal, endpoint-registry-driven interception layer, so ACP governs what agents, IDEs and browsers send to any AI endpoint, not only the ones wired to talk to ACP directly. Reads with `docs/design/ml-based-content-engine.md` (the analysis behind the inspection), `docs/design/enforcement.md` (unavoidability), and the discovery/enrollment/coverage work in `docs/design/gap-closure.md`.
+Status: design, phases 1, 2 and 3 IMPLEMENTED (see the phasing section). Generalises the explicit gateway and MCP proxy into a universal, endpoint-registry-driven interception layer, so ACP governs what agents, IDEs and browsers send to any AI endpoint, not only the ones wired to talk to ACP directly. Reads with `docs/design/ml-based-content-engine.md` (the analysis behind the inspection), `docs/design/enforcement.md` (unavoidability), and the discovery/enrollment/coverage work in `docs/design/gap-closure.md`.
 
 ## 1. What this is, and the ask
 
@@ -143,7 +143,7 @@ The coverage report (`acp coverage`) already cross-references observed endpoints
 
 1. The endpoint rule registry: the config schema, signed and versioned, plus the matcher (SNI and host and path predicates, first-match). Pure and unit-testable. DONE (`acp_core::interception`, `acp intercept`).
 2. Explicit forward-proxy interception for the no-MITM surfaces: `HTTPS_PROXY` plus base-URL pinning for agents and IDEs, applying `inspect-prompt` and `govern-tool-call` by reusing the gateway and proxy decision paths. DONE (`acp-intercept`): CONNECT block/pass without decryption, full plain-HTTP body inspection, decisions recorded to the ledger.
-3. TLS-interception mode (ACP CA) for body-inspecting rules on managed devices, with the cert-pinning limits documented and detected (a pinned endpoint is reported, not silently failed). NEXT.
+3. TLS-interception mode (ACP CA) for body-inspecting rules on managed devices, with the cert-pinning limits documented and detected (a pinned endpoint is reported, not silently failed). DONE (`acp_intercept::mitm`, `acp-intercept gen-ca`, `--ca-cert`/`--ca-key`): per-host leaf minting, HTTP/1.1-only ALPN, pinning/handshake-failure detection, ledger outcomes.
 4. The browser surface: an extension or PAC-based path.
 5. Wire discovery, enrollment and coverage to the registry so the loop is find, decide, measure.
 
