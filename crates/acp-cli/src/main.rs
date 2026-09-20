@@ -52,6 +52,10 @@ fn main() -> ExitCode {
         "siem" => cmd_siem(&args[2..]),
         "risk" => cmd_risk(&args[2..]),
         "content-scan" => cmd_content_scan(&args[2..]),
+        "controls" => cmd_controls(&args[2..]),
+        "assess" => cmd_assess(&args[2..]),
+        "attest" => cmd_attest(&args[2..]),
+        "usecase" => cmd_usecase(&args[2..]),
         "grc-report" => cmd_grc_report(&args[2..]),
         "ledger-backup" => cmd_ledger_backup(&args[2..]),
         "verify-enforcement" => cmd_verify_enforcement(&args[2..]),
@@ -1433,6 +1437,164 @@ fn cmd_content_scan(rest: &[String]) -> ExitCode {
     let v = scan_text(&policy, &text);
     println!("{}", serde_json::to_string_pretty(&v).unwrap_or_default());
     if v.block { ExitCode::from(3) } else { ExitCode::SUCCESS }
+}
+
+/// List the built-in control library (all frameworks, or one).
+///   acp controls [eu-ai-act|nist-ai-rmf|iso-42001]
+fn cmd_controls(rest: &[String]) -> ExitCode {
+    let controls = match rest.first() {
+        Some(fw) => acp_core::controls::for_framework(fw),
+        None => acp_core::controls::library(),
+    };
+    for c in controls {
+        println!("[{:11}] {:6} {}  -- evidence: {}", c.framework, c.id, c.title, c.required_evidence);
+    }
+    ExitCode::SUCCESS
+}
+
+/// Assess an AI system against the EU AI Act risk tiers and print its obligations.
+///   acp assess <system> [--prohibited] [--safety-component] [--biometric] [--critical-infra]
+///     [--employment] [--essential-services] [--law-enforcement] [--interacts] [--generates] [--key <hex>]
+fn cmd_assess(rest: &[String]) -> ExitCode {
+    use acp_core::assessment::{assess, Screening};
+    let Some(system) = rest.iter().find(|a| !a.starts_with("--")) else {
+        return usage("acp assess <system> [--safety-component|--biometric|--employment|--interacts|...] [--key <hex>]");
+    };
+    let has = |f: &str| rest.iter().any(|a| a == f);
+    let screening = Screening {
+        prohibited_practice: has("--prohibited"),
+        safety_component: has("--safety-component"),
+        biometric_identification: has("--biometric"),
+        critical_infrastructure: has("--critical-infra"),
+        employment_or_education: has("--employment"),
+        essential_services: has("--essential-services"),
+        law_enforcement: has("--law-enforcement"),
+        interacts_with_humans: has("--interacts"),
+        generates_content: has("--generates"),
+    };
+    let now_ms = std::time::SystemTime::now().duration_since(std::time::UNIX_EPOCH).map(|d| d.as_millis() as u64).unwrap_or(0);
+    let a = assess(system, &screening, now_ms);
+    let out = match flag_value(rest, "--key") {
+        Some(h) => match hex::decode(&h).ok().and_then(|b| b.try_into().ok()) {
+            Some(seed) => serde_json::to_string_pretty(&a.clone().sign(&acp_core::sign::Ed25519Signer::from_seed(&seed))).unwrap_or_default(),
+            None => { eprintln!("acp: --key must be 32-byte hex"); return ExitCode::from(2); }
+        },
+        None => serde_json::to_string_pretty(&a).unwrap_or_default(),
+    };
+    println!("{out}");
+    eprintln!("assessment: {} -> {} risk; {} obligation(s): {}", a.system, a.tier.as_str(),
+        a.obligations.len(), a.obligations.iter().map(|o| o.control_id.clone()).collect::<Vec<_>>().join(", "));
+    ExitCode::SUCCESS
+}
+
+/// Record or verify signed attestations (governance sign-offs).
+///   acp attest add <log.json> <subject> <statement> --attestor <who> --role <role> --key <hex>
+///   acp attest verify <log.json>
+fn cmd_attest(rest: &[String]) -> ExitCode {
+    use acp_core::attestation::{attest, AttestationLog};
+    let load = |path: &str| -> AttestationLog {
+        std::fs::read_to_string(path).ok().and_then(|s| serde_json::from_str(&s).ok()).unwrap_or_default()
+    };
+    match rest.first().map(String::as_str).unwrap_or("") {
+        "add" => {
+            let (Some(log_path), Some(subject), Some(statement)) = (rest.get(1), rest.get(2), rest.get(3)) else {
+                return usage("acp attest add <log.json> <subject> <statement> --attestor <who> --role <role> --key <hex>");
+            };
+            let attestor = flag_value(rest, "--attestor").unwrap_or_else(|| "unknown".into());
+            let role = flag_value(rest, "--role").unwrap_or_else(|| "reviewer".into());
+            let key_hex = match flag_value(rest, "--key") { Some(h)=>h, None=>{ eprintln!("acp: attest add requires --key <hex>"); return ExitCode::from(2);} };
+            let seed: [u8;32] = match hex::decode(&key_hex).ok().and_then(|b| b.try_into().ok()) { Some(s)=>s, None=>{eprintln!("acp: --key must be 32-byte hex");return ExitCode::from(2);} };
+            let signer = acp_core::sign::Ed25519Signer::from_seed(&seed);
+            let now_ms = std::time::SystemTime::now().duration_since(std::time::UNIX_EPOCH).map(|d| d.as_millis() as u64).unwrap_or(0);
+            let mut log = load(log_path);
+            log.add(attest(&signer, subject, statement, &attestor, &role, now_ms));
+            if std::fs::write(log_path, serde_json::to_string_pretty(&log).unwrap_or_default()).is_err() {
+                eprintln!("acp: cannot write {log_path}"); return ExitCode::from(1);
+            }
+            eprintln!("attested '{subject}' by {attestor} ({role}); {} attestation(s)", log.attestations.len());
+            ExitCode::SUCCESS
+        }
+        "verify" => {
+            let Some(log_path) = rest.get(1) else { return usage("acp attest verify <log.json>"); };
+            let log = load(log_path);
+            if log.verify_all() {
+                println!("OK: {} attestation(s) all verify", log.attestations.len());
+                ExitCode::SUCCESS
+            } else {
+                println!("FAIL: at least one attestation does not verify");
+                ExitCode::from(3)
+            }
+        }
+        _ => usage("acp attest <add|verify> ..."),
+    }
+}
+
+/// Manage the AI use-case registry with lifecycle gates.
+///   acp usecase register <reg.json> --id X --name N --owner O [--model-class C]...
+///   acp usecase link-assessment <reg.json> <id> <assessment-id>
+///   acp usecase advance <reg.json> <id> <proposed|assessed|approved|deployed|retired> [--attestations <log.json>]
+///   acp usecase list <reg.json>
+fn cmd_usecase(rest: &[String]) -> ExitCode {
+    use acp_core::usecase::{Stage, UseCase, UseCaseRegistry};
+    let load = |path: &str| -> UseCaseRegistry {
+        std::fs::read_to_string(path).ok().and_then(|s| serde_json::from_str(&s).ok()).unwrap_or_default()
+    };
+    let save = |path: &str, r: &UseCaseRegistry| -> bool {
+        std::fs::write(path, serde_json::to_string_pretty(r).unwrap_or_default()).is_ok()
+    };
+    let now_ms = std::time::SystemTime::now().duration_since(std::time::UNIX_EPOCH).map(|d| d.as_millis() as u64).unwrap_or(0);
+    match rest.first().map(String::as_str).unwrap_or("") {
+        "register" => {
+            let Some(path) = rest.get(1) else { return usage("acp usecase register <reg.json> --id X --name N --owner O [--model-class C]..."); };
+            let id = match flag_value(rest, "--id") { Some(v)=>v, None=>return usage("acp usecase register ... --id <id>") };
+            let mut classes = Vec::new();
+            let mut it = rest.iter();
+            while let Some(a) = it.next() { if a == "--model-class" { if let Some(v)=it.next(){ classes.push(v.clone()); } } }
+            let mut r = load(path);
+            r.upsert(UseCase { id: id.clone(), name: flag_value(rest,"--name").unwrap_or_default(), owner: flag_value(rest,"--owner").unwrap_or_default(), stage: Stage::Proposed, tier: None, assessment_id: None, model_classes: classes, created_ms: now_ms });
+            if !save(path,&r) { eprintln!("acp: cannot write {path}"); return ExitCode::from(1); }
+            eprintln!("registered use case '{id}' (proposed)");
+            ExitCode::SUCCESS
+        }
+        "link-assessment" => {
+            let (Some(path), Some(id), Some(aid)) = (rest.get(1), rest.get(2), rest.get(3)) else { return usage("acp usecase link-assessment <reg.json> <id> <assessment-id>"); };
+            let mut r = load(path);
+            let Some(uc) = r.use_cases.iter_mut().find(|u| &u.id == id) else { eprintln!("acp: no such use case '{id}'"); return ExitCode::from(1); };
+            uc.assessment_id = Some(aid.clone());
+            if !save(path,&r) { return ExitCode::from(1); }
+            eprintln!("linked assessment '{aid}' to '{id}'");
+            ExitCode::SUCCESS
+        }
+        "advance" => {
+            let (Some(path), Some(id), Some(stage_s)) = (rest.get(1), rest.get(2), rest.get(3)) else { return usage("acp usecase advance <reg.json> <id> <stage> [--attestations <log.json>]"); };
+            let Some(to) = Stage::parse(stage_s) else { eprintln!("acp: unknown stage '{stage_s}'"); return ExitCode::from(2); };
+            let mut r = load(path);
+            let has_assessment = r.get(id).map(|u| u.assessment_id.is_some()).unwrap_or(false);
+            let has_attestation = match flag_value(rest, "--attestations") {
+                Some(logp) => std::fs::read_to_string(&logp).ok()
+                    .and_then(|s| serde_json::from_str::<acp_core::attestation::AttestationLog>(&s).ok())
+                    .map(|l| l.has_valid(id)).unwrap_or(false),
+                None => false,
+            };
+            let t = r.advance(id, to, has_assessment, has_attestation);
+            match t {
+                acp_core::usecase::Transition::Ok => {
+                    if !save(path,&r) { return ExitCode::from(1); }
+                    eprintln!("use case '{id}' advanced to {}", stage_s);
+                    ExitCode::SUCCESS
+                }
+                acp_core::usecase::Transition::Refused(why) => { eprintln!("REFUSED: {why}"); ExitCode::from(3) }
+            }
+        }
+        "list" => {
+            let Some(path) = rest.get(1) else { return usage("acp usecase list <reg.json>"); };
+            for u in load(path).use_cases {
+                println!("{:8} [{:9}] owner={} assessment={} {}", u.id, format!("{:?}", u.stage).to_lowercase(), u.owner, u.assessment_id.unwrap_or_else(|| "-".into()), u.name);
+            }
+            ExitCode::SUCCESS
+        }
+        _ => usage("acp usecase <register|link-assessment|advance|list> ..."),
+    }
 }
 
 /// Compile one ACP policy into a coding agent's native managed-settings (phase D):
