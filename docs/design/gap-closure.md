@@ -1,7 +1,7 @@
 # Gap closure design: making ACP the single product
 
 Date: 2026-09-20
-Status: design. Closes the genuine build-gaps named in `docs/gap-analysis.md` section 7.1. Defers to `docs/positioning.md` (the anchor: build the wedge, integrate the rest) and builds on `docs/design/enforcement.md`, `docs/design/p2-operations.md` and `docs/design/entra-setup.md` rather than repeating them.
+Status: design, now IMPLEMENTED. The three build items below shipped and are tested (acp-core 143 tests, acp-guard e2e); see the status notes in section 6. Closes the genuine build-gaps named in `docs/gap-analysis.md` section 7.1. Defers to `docs/positioning.md` (the anchor: build the wedge, integrate the rest) and builds on `docs/design/enforcement.md`, `docs/design/p2-operations.md` and `docs/design/entra-setup.md` rather than repeating them.
 
 ## 1. Scope and the build-versus-integrate decision
 
@@ -200,10 +200,11 @@ Per positioning, these are not ACP's to build. Each has a defined seam so the en
 
 Ordered by the positioning north star: unavoidability first, because it makes everything else real.
 
-1. Containment plane (section 2). Ship `acp-guard`; extend `acp-nativecompile` for egress-deny; build `acp coverage` and the canary. Acceptance: `acp coverage` reports 100 percent on a fully-deployed test estate and correctly flags a deliberately-leaked endpoint; the canary records a refusal for a direct model call and a direct tool call.
-2. Supply-chain admission gate and AI-BOM (section 3). Extend the registry with provenance and admission; wire one external scanner (ModelScan); emit a signed CycloneDX AI-BOM. Acceptance: a tampered model artifact is denied at admission and recorded; `acp aibom` exports a signed BOM that validates and cross-references ledger records.
-3. Shadow-AI enrollment loop (section 4). Add signed dispositions to `acp discover`; export the allowlist and blocklist for MDM and CASB. Acceptance: a discovered ungoverned endpoint can be enrolled, quarantined or accepted-with-expiry, each recorded and reflected in the coverage report.
-4. Ops closure (references only). Complete the real-Entra cutover (`entra-setup.md`) and the P2 infrastructure (`p2-operations.md`).
+1. Containment plane (section 2). DONE. Shipped `acp-guard` (verifies x-acp-enforcement, records refused attempts); `acp coverage` (signed report, --require-full gate); `acp canary-egress` (exit 3 on a reachable host); `native-compile --gateway` base-URL pinning. Acceptance met: coverage reports the ungoverned endpoint and the fail-open leaky signal; the canary passes on a closed port and returns BREACH exit-3 on an open one.
+2. Supply-chain admission gate and AI-BOM (section 3). DONE. `acp_core::supplychain::admit` (fail-closed on no provenance / findings / unscanned high-impact); `acp aibom` emits a signed CycloneDX BOM. External scanner stays integrate (ScanVerdict supplied, not built). Acceptance met: a no-digest MCP server and a scanner-flagged tool are denied, exit 3 under --strict; the signed BOM verifies.
+3. Shadow-AI enrollment loop (section 4). DONE. `acp enroll record|governed|export-mdm` with signed dispositions feeding coverage and an MDM/CASB allow+block export. Acceptance met: three dispositions yield governed=2/blocked=1; `enroll governed` feeds coverage; export-mdm yields the allow/block lists.
+4. Also delivered beyond the original three: `acp_core::riskregister` (`acp risk`) and `acp_core::siem` (`acp siem`, CEF/OCSF/syslog) close the GRC-lifecycle and SIEM-connector items from gap-analysis 7.1.
+5. Ops closure (references only, STILL OPEN). Complete the real-Entra cutover (`entra-setup.md`) and the P2 infrastructure (`p2-operations.md`).
 
 Crates touched: new `acp-guard`; extend `acp-registry` (provenance, admission, AI-BOM), `acp-cli` (`coverage`, `aibom`, `enroll` subcommands), `acp-nativecompile` (egress-deny), `acp-core` (admission and scan verdict types, coverage report type). No change to the policy engine or the ledger format; this is all composition over mechanisms that already exist.
 

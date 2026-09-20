@@ -128,12 +128,14 @@ Deliberately excluded, because another category owns it and ACP integrates rathe
 - In-IDE interactive approve and deny prompts, per-keystroke confirmation, and OS process sandboxing. The coding agents already do these well.
 - Model bias, fairness, drift and explainability dashboards. The GRC monitoring vendors (Monitaur, Holistic AI, IBM OpenScale) own this. ACP produces the runtime-decision evidence they lack, not the statistical monitoring they have.
 
-Genuine gaps to be honest about, if ACP is to be sold as the single product:
+Genuine gaps to be honest about, if ACP is to be sold as the single product. The gap-closure work (see `docs/design/gap-closure.md`) has since addressed most of these; the status is noted inline:
 
-- Model and supply-chain scanning (the Protect AI and HiddenLayer strength: model-artifact scanning, ML-BOM). Not built. Candidate for integrate rather than build.
-- The full GRC lifecycle (risk register, impact and conformity assessment workflows, model-card lifecycle). ACP produces the evidence and the framework reports, but not the assessment-workflow product. This is correctly left to the GRC platform ACP feeds.
-- Breadth of connectors. Microsoft's native mesh (IdP, SIEM, ticketing, CASB) is deep. ACP has SIEM export (CEF, OCSF, OTLP, syslog) and OIDC, and treats the rest as integrate.
-- Production hardening. HA, DR and shared-state operation are designed, not yet built.
+- Model and supply-chain scanning (the Protect AI and HiddenLayer strength: model-artifact scanning, ML-BOM). CLOSED as a seam: a supply-chain admission gate (`acp_core::supplychain`) and a signed CycloneDX AI-BOM (`acp_core::aibom`, `acp aibom`) now gate registration on provenance and an external scanner verdict. ACP still does not build the scanner (positioning); it calls one.
+- The full GRC lifecycle (risk register, impact and conformity assessment workflows, model-card lifecycle). PARTIALLY CLOSED: an evidence-linked risk register (`acp_core::riskregister`, `acp risk`) is now built alongside the existing framework reports. The heavier assessment-workflow product is still correctly left to the GRC platform ACP feeds.
+- Breadth of connectors. CLOSED for SIEM: CEF, OCSF and RFC 5424 syslog formatters (`acp_core::siem`, `acp siem`) now join the existing OTLP span, making the SIEM-export claim real. Other connectors (ticketing, CASB) remain integrate; the shadow-AI MDM/CASB export (`acp enroll export-mdm`) is built.
+- Unavoidability. CLOSED as a measured posture: the enforcement guard sidecar (`acp-guard`), a signed coverage attestation (`acp_core::coverage`, `acp coverage`), an egress canary (`acp canary-egress`), and gateway base-URL pinning in `native-compile --gateway` together turn "unavoidable is a deployment property" into something measured, probed and provable.
+- Shadow-AI. CLOSED: the discovery loop now ends in signed dispositions (`acp_core::enrollment`, `acp enroll`) that feed the coverage report and an MDM/CASB allow+block export.
+- Production hardening. STILL OPEN (ops, not code): HA, DR and shared-state operation are designed in `docs/design/p2-operations.md` and remain a deployment task, not an in-process build.
 
 ## 8. Conclusion and recommendation
 

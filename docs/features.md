@@ -45,24 +45,36 @@ unavoidable. On-prem, vendor-neutral. See `docs/positioning.md` and `docs/design
 
 ## Unavoidability and containment
 - Credential brokering: the gateway holds the model key; callers cannot reach the model directly
-- Enforcement attestation: guarded tool servers reject un-proxied calls (deployment)
+- Enforcement attestation: guarded tool servers reject un-proxied calls
+- Enforcement guard sidecar (acp-guard): verifies the x-acp-enforcement attestation in front of a tool server; refused un-proxied attempts are recorded to the ledger
+- Coverage attestation (acp coverage): a signed report cross-referencing observed vs governed endpoints; lists ungoverned and leaky paths; --require-full gates a rollout
+- Egress canary (acp canary-egress): probes direct model / tool access and fails (exit 3) on any host reachable off-ACP
+- Gateway base-URL pinning (native-compile --gateway): forces a coding agent's own model traffic through the gateway
 - Fail-closed posture; stdio is a structural chokepoint
+
+## Supply chain and AI-BOM
+- Admission gate (acp_core::supplychain): registration fails closed on no provenance (digest), any scanner finding, or an unscanned high-impact artifact; the scanner verdict is supplied by an external scanner (integrate), not built
+- Signed AI bill of materials (acp aibom): CycloneDX over every agent / MCP server / tool / model-class with provenance, admission verdict, scan result, integrity pin and policy in force
 
 ## Content safety (integrate)
 - Content-scan hook: external firewall (Lakera / Azure AI Content Safety) on prompts; blocks, fail-closed
 - Redact obligation for sensitive fields
 
-## Discovery
-- Shadow-AI detection: classifies un-governed model-API / MCP endpoints by provider (acp discover) to sanction or block
+## Discovery and enrollment
+- Shadow-AI detection: classifies un-governed model-API / MCP endpoints by provider (acp discover)
+- Enrollment loop (acp enroll): signed dispositions (enroll / quarantine / accept-risk with expiry) over discovered endpoints; feeds the coverage report
+- MDM / CASB export (acp enroll export-mdm): an allow + block list ACP hands to the org's endpoint tools to enforce on the device
 
 ## Compliance and GRC
 - Evidence-backed framework reports: EU AI Act (Art. 14 / 12 / 9), NIST AI RMF, ISO 42001, each control cited by real ledger records (acp grc-report)
 - Idempotent control-evidence export for GRC platforms (ServiceNow / Archer / OneTrust)
+- Evidence-linked AI risk register (acp risk): risk items scored likelihood x impact, with treatment, lifecycle status and links to the controls and ledger decisions bearing on them; signed snapshot
+- SIEM export in CEF, OCSF and RFC 5424 syslog, plus OTLP (acp siem)
 
 ## Operations and posture
 - Admin console: overview, approvals, evidence timeline, teams, agents, policy authoring, kill-switch
 - Registration: teams / apps, agents, human principals
-- CLI: policy compile / test, verify / export, break-glass, native-compile, discover, grc-report
+- CLI: policy compile / test, verify / export, break-glass, native-compile, discover, grc-report, coverage, canary-egress, aibom, enroll, risk, siem
 - Liveness and bypass detection (dead-man's-switch)
 - Fully on-prem, no cloud dependency; vendor-neutral (one policy across Copilot / Claude / Codex / Gemini / custom and any model provider)
 
