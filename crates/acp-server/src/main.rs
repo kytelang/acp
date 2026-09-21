@@ -249,6 +249,7 @@ async fn main() {
     let app = Router::new()
         .route("/", get(inbox))
         .route("/healthz", get(|| async { "ok" }))
+        .route("/readyz", get(|| async { "ready" }))
         .route("/approvals/:id/approve", post(approve))
         .route("/approvals/:id/deny", post(deny))
         .route("/policy/current", get(policy_current))

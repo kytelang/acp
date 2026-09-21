@@ -148,3 +148,10 @@ The coverage report (`acp coverage`) already cross-references observed endpoints
 5. Wire discovery, enrollment and coverage to the registry so the loop is find, decide, measure. DONE: `acp intercept suggest` (discovery -> candidate rules), `acp intercept from-enrollment` (dispositions -> registry), `acp coverage --registry` (registry -> measured coverage).
 
 The through-line: one signed registry says which endpoints to inspect and how; one interception point gets the body only where configured; and from there it is the content engine, the policy engine and the evidence ledger ACP already has. That is how ACP comes to govern everything sent via agents, IDEs and browsers, by configuration, not by hoping every client was pointed at it.
+
+
+## HTTP/2 and high availability (status)
+
+HTTP/2 on the MITM path: the client-facing TLS offers ALPN http/1.1 only, so clients negotiate down to HTTP/1.1 (the common case). An HTTP/2-only client fails the handshake and is recorded as `pinning-or-handshake-failed`, i.e. fail-closed, never silently passed. A full HTTP/2 MITM (HPACK, stream multiplexing, re-origination) is a substantial future enhancement; until then the workarounds are base-URL pinning for agents and IDEs (no MITM needed) or configuring the client to allow HTTP/1.1. This is a deliberate, documented limitation, not a silent gap.
+
+High availability and DR: the control-plane and PEPs expose `/healthz` and `/readyz` for load-balancer failover (the control plane, `acp-server`, now includes both). Shared state across replicas is done in code (budgets and tool pins via `acp-pgstate`, verified against Postgres). The ledger is backed up and re-verified with `acp ledger-backup`. Replication, VIP/failover and object-storage backup are deployment concerns documented in `docs/design/p2-operations.md`; the in-process code needed to support HA (shared state, health, readiness) is in place.
