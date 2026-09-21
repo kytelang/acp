@@ -170,3 +170,8 @@ The raw scanned text is never stored in the clear; only its hash and the derived
 5. Optional: the guard-LLM heavy detector for customers who accept its latency.
 
 The through-line: keep the seam, keep the signature layer as the floor, put trained models behind it as the primary detector, run them fully on-prem, and make every score reproducible evidence.
+
+
+## Adversarial hardening (implemented)
+
+Detection now runs on a normalised view of the text so common evasions do not bypass every detector at once: zero-width and invisible characters are stripped, a set of Cyrillic/Greek/fullwidth homoglyphs is folded to ASCII, embedded base64 blobs are decoded and appended, and whitespace runs are collapsed. Tool RESULTS are screened for indirect prompt injection (a poisoned fetched document or API response), not only prompts and tool arguments. This raises the bar against obfuscation and indirect injection, but it is defence in depth, not a guarantee. The layer that actually survives a determined attack is authorisation: even a fully-fooled agent cannot perform an unauthorised action on a resource, and every attempt is written to the tamper-evident ledger.
