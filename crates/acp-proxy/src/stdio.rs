@@ -59,6 +59,7 @@ pub async fn run(cmd: &str, args: &[String], controller: Arc<Controller>) -> any
             // Inspect server->client frames for tool-integrity (tools/list), then screen tool
             // results for injected content (indirect injection); relay verbatim unless blocked.
             s2c_ctl.inspect_response(line.as_bytes());
+            s2c_ctl.inspect_response_shared(line.as_bytes()).await;
             let outline = match s2c_ctl.screen_response(line.as_bytes()) {
                 Some(replacement) => replacement,
                 None => line,

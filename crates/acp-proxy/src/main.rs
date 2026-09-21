@@ -54,6 +54,7 @@ struct Opts {
     block_secrets: bool,
     deny_topics: Vec<String>,
     content_ml: Option<String>,
+    pin_pg: Option<String>,
 }
 
 fn parse_opts(items: &[String]) -> Result<(Opts, Vec<String>), String> {
@@ -97,6 +98,7 @@ fn parse_opts(items: &[String]) -> Result<(Opts, Vec<String>), String> {
             "--block-secrets" => { o.content_firewall = true; o.block_secrets = true; }
             "--deny-topic" => { o.content_firewall = true; if let Some(v) = it.next() { o.deny_topics.push(v.clone()); } }
             "--content-ml" => { o.content_firewall = true; o.content_ml = it.next().cloned(); }
+            "--pin-pg" => o.pin_pg = it.next().cloned(),
             other => return Err(format!("unknown option '{other}'")),
         }
     }
@@ -112,7 +114,7 @@ async fn load_jwks(source: &str) -> Result<acp_auth::Jwks, String> {
     acp_auth::Jwks::from_jwks_json(&body).map_err(|e| format!("{e:?}"))
 }
 
-fn build_controller(o: &Opts) -> Result<Arc<Controller>, String> {
+async fn build_controller(o: &Opts) -> Result<Arc<Controller>, String> {
     let engine = if let Some(dir) = &o.policy_dir {
         let eng = acp_policy::store::load_current(dir)
             .map_err(|e| format!("cannot load current policy from {dir}: {e}"))?;
@@ -261,6 +263,12 @@ fn build_controller(o: &Opts) -> Result<Arc<Controller>, String> {
             None => return Err(format!("cannot load --content-ml model {mlp}")),
         }
     }
+    if let Some(conn) = o.pin_pg.as_ref() {
+        match acp_pgstate::PgState::connect(conn).await {
+            Ok(pg) => { controller.set_pin_pg(pg).await; eprintln!("acp-proxy: shared tool pins via Postgres ({conn})"); }
+            Err(e) => return Err(format!("cannot connect --pin-pg: {e}")),
+        }
+    }
     // Verified caller identity: when a registry is configured, the presented (agent-id, token) MUST
     // verify. Fail closed on a missing/invalid/revoked credential so a mis-enrolled agent cannot run
     // un-governed. Without a registry the proxy runs unidentified (agent/app rules simply do not match).
@@ -313,7 +321,7 @@ async fn main() -> ExitCode {
         }
     };
 
-    let controller = match build_controller(&opts) {
+    let controller = match build_controller(&opts).await {
         Ok(c) => c,
         Err(e) => {
             eprintln!("acp-proxy: {e}");

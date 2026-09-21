@@ -77,6 +77,7 @@ pub struct Controller {
     // scanned before forwarding; injection/denied-topic block the call, secrets are recorded.
     content: Mutex<Option<acp_core::content::ContentPolicy>>,
     content_ml: Mutex<Option<std::sync::Arc<acp_core::content::LinearScorer>>>,
+    pin_pg: tokio::sync::Mutex<Option<acp_pgstate::PgState>>,
     // Per-request human identity (phase B): when set, the HTTP transport verifies each request's
     // bearer token and stamps the resulting human principal onto that call, overriding the startup
     // default. An invalid/absent token degrades to the startup principal (unattributed), never an
@@ -130,6 +131,7 @@ impl Controller {
             enforcement_signer: Mutex::new(None),
             content: Mutex::new(None),
             content_ml: Mutex::new(None),
+            pin_pg: tokio::sync::Mutex::new(None),
             oidc: Mutex::new(None),
         }
     }
@@ -205,6 +207,35 @@ impl Controller {
     /// Add a trained ML content detector alongside the signature firewall.
     pub fn set_content_ml(&self, scorer: std::sync::Arc<acp_core::content::LinearScorer>) {
         *self.content_ml.lock().unwrap() = Some(scorer);
+    }
+
+    /// Enable shared tool-integrity pins via Postgres, so a rug-pull seen on one replica is caught
+    /// on all of them (complements the in-process TOFU pins).
+    pub async fn set_pin_pg(&self, pg: acp_pgstate::PgState) {
+        *self.pin_pg.lock().await = Some(pg);
+    }
+
+    /// Async companion to inspect_response: check tools/list fingerprints against the SHARED pin
+    /// store and quarantine any that changed versus what another replica pinned. No-op if not set.
+    pub async fn inspect_response_shared(&self, raw: &[u8]) {
+        let mut guard = self.pin_pg.lock().await;
+        let Some(pg) = guard.as_mut() else { return };
+        let v: Value = match serde_json::from_slice(raw) {
+            Ok(v) => v,
+            Err(_) => return,
+        };
+        let result = match v.get("result") {
+            Some(r) => r,
+            None => return,
+        };
+        for (name, desc, schema) in tools_from_list_result(result) {
+            let fp = tool_fingerprint(&name, &desc, &schema);
+            let key = format!("pin:tool:{name}");
+            if let Ok(PinResult::Changed) = pg.check_and_pin(&key, &fp).await {
+                self.quarantined.lock().unwrap().insert(name.clone());
+                eprintln!("acp-proxy: tool '{name}' changed vs SHARED pin (quarantined across replicas)");
+            }
+        }
     }
 
     /// Configure per-request human-identity verification (the org IdP JWKS + issuer/audience).

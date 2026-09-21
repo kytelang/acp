@@ -17,6 +17,7 @@ path = "src/bin/mock_mcp_server.rs"
 hex.workspace = true
 acp-auth = { path = "../acp-auth" }
 acp-core = { path = "../acp-core" }
+acp-pgstate = { path = "../acp-pgstate" }
 acp-registry = { path = "../acp-registry" }
 acp-jsonrpc = { path = "../acp-jsonrpc" }
 acp-policy = { path = "../acp-policy" }

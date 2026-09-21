@@ -195,6 +195,7 @@ dependencies = [
  "acp-core",
  "acp-jsonrpc",
  "acp-ledger",
+ "acp-pgstate",
  "acp-policy",
  "acp-registry",
  "anyhow",
