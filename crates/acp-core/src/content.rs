@@ -229,6 +229,40 @@ impl LinearScorer {
     }
 }
 
+/// Precision, recall, false-positive rate and accuracy of a detector over a labelled set.
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+pub struct EvalMetrics {
+    pub precision: f32,
+    pub recall: f32,
+    pub fpr: f32,
+    pub accuracy: f32,
+    pub n: usize,
+}
+
+/// Evaluate a LinearScorer against labelled samples (text, is_injection). A prediction is positive
+/// when the model probability is at or above the scorer threshold. Used by the CI gate so a model
+/// regression cannot ship.
+pub fn eval_injection(scorer: &LinearScorer, samples: &[(String, bool)]) -> EvalMetrics {
+    let (mut tp, mut fp, mut fn_, mut tn) = (0usize, 0usize, 0usize, 0usize);
+    for (text, y) in samples {
+        let pred = scorer.predict(text) >= scorer.threshold;
+        match (pred, *y) {
+            (true, true) => tp += 1,
+            (true, false) => fp += 1,
+            (false, true) => fn_ += 1,
+            (false, false) => tn += 1,
+        }
+    }
+    let div = |a: usize, b: usize| if b == 0 { 1.0 } else { a as f32 / b as f32 };
+    EvalMetrics {
+        precision: div(tp, tp + fp),
+        recall: div(tp, tp + fn_),
+        fpr: div(fp, fp + tn),
+        accuracy: div(tp + tn, samples.len()),
+        n: samples.len(),
+    }
+}
+
 /// Tokenise as the trainer does: contiguous ASCII-alphanumeric runs, lowercased.
 fn ml_tokens(text: &str) -> Vec<String> {
     let mut out = Vec::new();
@@ -490,6 +524,20 @@ mod tests {
         assert!(v.findings.iter().any(|f| f.kind == "prompt-injection"));
         // Benign passes.
         assert!(engine.scan(&policy, "what is the tallest mountain in the world").allowed());
+    }
+
+    #[test]
+    fn shipped_model_passes_the_eval_gate_on_held_out_data() {
+        let s = trained_model();
+        let ds = concat!(env!("CARGO_MANIFEST_DIR"), "/models/injection-eval.json");
+        let raw = std::fs::read_to_string(ds).unwrap();
+        let items: Vec<serde_json::Value> = serde_json::from_str(&raw).unwrap();
+        let samples: Vec<(String, bool)> = items.iter()
+            .map(|v| (v["text"].as_str().unwrap().to_string(), v["label"].as_i64().unwrap() == 1))
+            .collect();
+        let m = eval_injection(&s, &samples);
+        assert!(m.recall >= 0.8, "recall {} below gate 0.8", m.recall);
+        assert!(m.precision >= 0.8, "precision {} below gate 0.8", m.precision);
     }
 
     #[test]

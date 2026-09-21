@@ -52,6 +52,7 @@ fn main() -> ExitCode {
         "siem" => cmd_siem(&args[2..]),
         "risk" => cmd_risk(&args[2..]),
         "content-scan" => cmd_content_scan(&args[2..]),
+        "content-eval" => cmd_content_eval(&args[2..]),
         "controls" => cmd_controls(&args[2..]),
         "assess" => cmd_assess(&args[2..]),
         "attest" => cmd_attest(&args[2..]),
@@ -1863,6 +1864,37 @@ fn cmd_modelcard(rest: &[String]) -> ExitCode {
         }
         _ => usage("acp modelcard <add|list> ..."),
     }
+}
+
+/// Evaluate a trained content model against a labelled dataset (the CI gate for ML models).
+///   acp content-eval <model.json> <dataset.json> [--min-recall <r>] [--min-precision <p>]
+/// dataset.json is an array of {"text": "...", "label": 0|1}. Exits 3 if below either threshold.
+fn cmd_content_eval(rest: &[String]) -> ExitCode {
+    use acp_core::content::{eval_injection, LinearScorer};
+    let pos: Vec<&String> = rest.iter().filter(|a| !a.starts_with("--")).collect();
+    let (Some(model_path), Some(ds_path)) = (pos.first(), pos.get(1)) else {
+        return usage("acp content-eval <model.json> <dataset.json> [--min-recall <r>] [--min-precision <p>]");
+    };
+    let scorer = match std::fs::read_to_string(model_path.as_str()).ok().and_then(|s| LinearScorer::from_json(&s).ok()) {
+        Some(s) => s, None => { eprintln!("acp: cannot load model {model_path}"); return ExitCode::from(1); }
+    };
+    let items: Vec<Value> = match std::fs::read_to_string(ds_path.as_str()).ok().and_then(|s| serde_json::from_str(&s).ok()) {
+        Some(Value::Array(a)) => a, _ => { eprintln!("acp: {ds_path} must be a JSON array of {{text,label}}"); return ExitCode::from(2); }
+    };
+    let samples: Vec<(String, bool)> = items.iter()
+        .filter_map(|v| Some((v.get("text")?.as_str()?.to_string(), v.get("label")?.as_i64()? == 1)))
+        .collect();
+    if samples.is_empty() { eprintln!("acp: no samples in {ds_path}"); return ExitCode::from(2); }
+    let m = eval_injection(&scorer, &samples);
+    let min_recall: f32 = flag_value(rest, "--min-recall").and_then(|s| s.parse().ok()).unwrap_or(0.8);
+    let min_precision: f32 = flag_value(rest, "--min-precision").and_then(|s| s.parse().ok()).unwrap_or(0.8);
+    println!("content-eval: n={} precision={:.3} recall={:.3} fpr={:.3} accuracy={:.3}", m.n, m.precision, m.recall, m.fpr, m.accuracy);
+    if m.recall < min_recall || m.precision < min_precision {
+        eprintln!("GATE FAILED: recall {:.3} (min {:.3}) precision {:.3} (min {:.3})", m.recall, min_recall, m.precision, min_precision);
+        return ExitCode::from(3);
+    }
+    eprintln!("gate passed (min recall {min_recall}, min precision {min_precision})");
+    ExitCode::SUCCESS
 }
 
 /// Compile one ACP policy into a coding agent's native managed-settings (phase D):
