@@ -1,5 +1,8 @@
 # Cross-border transfers and the product's own AI status (H1.7)
 
+Note: the international-transfer and DPIA content here overlaps `dpa-and-subprocessors.md`; that document is the fuller source. This file keeps the AI-status self-assessment as its distinct content.
+
+
 Two obligations that a monitoring product operating across borders must state explicitly. Drafted
 for legal review, which is the open leg.
 

@@ -7,6 +7,8 @@ are consolidated here and in `PLAN.md`; their long-form history remains in git.)
 
 Doc style: Indian English, plain punctuation, no em dashes.
 
+Status note (2026-09-21): this is the v0 design record and parts are superseded. The current authoritative sources are `docs/design/model-v2.md` (policy model), `docs/design/platform-architecture.md` (platform architecture), and `docs/positioning.md` (scope). Since v0, the content firewall and the GRC lifecycle were built into the product (2026-09-20), the human principal is now verified (not "unverified"), and the workspace has ~19 crates. Where this document disagrees with those, they are current and this is history.
+
 ---
 
 ## 0. Why this exists (the wedge)
@@ -22,7 +24,7 @@ v0 is one job done well: **stop an agent taking an irreversible or expensive act
 recorded, provable decision.** The moat is evidence gravity (a verifiable history that
 compounds), being the neutral cross-model/cross-cloud standard early, and regulatory depth.
 
-Non-goals (by design): text-level content safety, jailbreak detection, model-output filtering,
+Non-goals in v0 (later reversed on 2026-09-20, when the content firewall was built in): text-level content safety, jailbreak detection, model-output filtering,
 governance of agents that never pass through the proxy. We gate what an agent *does*, not what
 a model *says*.
 
@@ -122,7 +124,7 @@ class), and the impact score (section 5). Each maps to a Cedar operator; the YAM
 - **Typed guards, fail-closed:** a type mismatch (`amount_cents` sent as `"50000"`/`5e4`) never
   silently no-matches into `default: allow`.
 - **Verdict precedence:** Cedar returns a set of determining policies; resolution is
-  **deny > step_up > shadow > allow**; ambiguous sets rejected at compile time.
+  **deny > step_up > shadow > allow** (superseded by model-v2: deny > step_up > allow_with_obligations > allow); ambiguous sets rejected at compile time.
 - **Safe entity ids** from the untrusted tool name; **regex** uses a linear-time engine with a
   per-eval bound; **Cedar eval errors are fail-closed + alert** (decision D13), never a
   fall-through.
@@ -176,7 +178,7 @@ fields (decisions D7/D11/D12):
   "hlc": "7ffe:0003:host-7",                 // cross-proxy causal ordering (D12/F11)
   "tool_server_fingerprint": "sha256:...",   // verified executor identity (D12/B5)
   "agent_id": "...", "session_id": "...",
-  "principal": { "id": "kamlesh@example.com", "verified": false }, // D10 unverified in v0
+  "principal": { "id": "kamlesh@example.com", "verified": true }, // now verified via OIDC/Entra (supersedes D10 v0)
   "action": { "tool": "payments.charge", "args_hash": "sha256:...",
               "impact": { "level": "high", "taxonomy": "impact@1.3" } }, // D12/D13
   "decision": { "verdict": "step_up", "rule_id": "cap-spend",

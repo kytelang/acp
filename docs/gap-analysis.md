@@ -1,4 +1,4 @@
-# AI governance and AI firewall: feature and gap analysis
+# Varman (ACP): AI governance and AI firewall feature and gap analysis
 
 Status note: this is a point-in-time market analysis (September 2026). Section 9 records that Varman (ACP) later became a complete platform with the content firewall and the GRC lifecycle built in, which SUPERSEDES the "missing middle / integrate, do not rebuild" framing in sections 5 to 8. Read section 9 as the current position.
 

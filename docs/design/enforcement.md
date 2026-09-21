@@ -1,5 +1,7 @@
 # Making enforcement unavoidable and fail-closed (model v2, phase 4b)
 
+Status (2026-09-21): the HTTP guard this note describes now ships as a first-class sidecar, the `acp-guard` crate (verifies the `x-acp-enforcement` attestation and records refused un-proxied attempts). The manual "build a guard in front of your server" instructions below are the predecessor; prefer `acp-guard`.
+
 Governance is only real if an agent cannot skip it. This note states exactly what ACP guarantees today, how, and where the boundary of that guarantee lies. It is deliberately honest: some of "unavoidable" is a deployment property, not something a proxy can assert alone.
 
 ## Fail-closed when ACP is down

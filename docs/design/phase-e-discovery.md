@@ -1,5 +1,8 @@
 # Phase E: the discovery plane
 
+Historical build-phase record. This shipped as acp_core::discovery plus the enrollment loop (acp enroll), NOT a standalone acp-discovery crate. Current architecture: docs/design/platform-architecture.md.
+
+
 Date: 2026-09-18
 Status: design. Governance starts with knowing what exists. Discovery finds AI usage across the org (including shadow AI) and feeds it into the registry, so the platform governs what it finds, not only what was registered.
 

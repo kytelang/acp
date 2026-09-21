@@ -7,9 +7,15 @@ are operational and are documented here with concrete choices.
 
 ## #13 Shared / distributed state (multiple PEP instances)
 
-Each proxy/gateway instance keeps its own in-process state: token/cost budgets (persisted per
-instance via --budget-state) and tool-integrity pins. Running several replicas therefore splits
-budgets and pins per instance. Options, cheapest first:
+Update (2026-09-21): shared state SHIPPED as Postgres, not Redis. The `acp-pgstate` crate backs
+budgets and tool-integrity pins in Postgres (atomic token bucket under a row lock), wired via
+`--budget-pg` on the gateway and `--pin-pg` on the proxy, and verified across two replicas. The
+Redis-first recommendation below is superseded; the in-process path remains the single-instance
+default.
+
+Each proxy/gateway instance keeps its own in-process state by default: token/cost budgets (persisted
+per instance via --budget-state) and tool-integrity pins. Running several replicas without a shared
+store therefore splits them per instance. Options, cheapest first:
 
 - Partition by scope: run one gateway per model-class or per team, so each budget lives in one place.
 - Shared store: back the budgets and pins with Redis (or a small Postgres). The TokenBucket state is

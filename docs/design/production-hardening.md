@@ -1,6 +1,7 @@
 # Production hardening
 
 Date: 2026-09-19
+Status: the P2 items (#13-#17) overlap `docs/design/p2-operations.md`, which is the consolidated operations reference; read that for the current state. Update (2026-09-21): #13 shared state SHIPPED as Postgres via the `acp-pgstate` crate (`--budget-pg`/`--pin-pg`), verified across replicas.
 Status: prioritised hardening plan for taking ACP from feature-complete (all 6 phases built and
 tested) to production. Grounded in a review of the actual code; P0 = before real traffic, P1 = before
 broad rollout, P2 = scale and resilience. On-prem single-org, so no multi-tenant work is implied.

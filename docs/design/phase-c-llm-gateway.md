@@ -1,5 +1,8 @@
 # Phase C: the LLM gateway PEP
 
+Historical build-phase record. This shipped as the acp-gateway crate. Current architecture: docs/design/platform-architecture.md.
+
+
 Date: 2026-09-18
 Status: design. Adds a second enforcement point that governs direct model API usage (apps and services calling OpenAI, Anthropic, Bedrock, and self-hosted models), the single largest surface ACP does not yet cover. It runs on the exact machinery already built: the same PDP, identity, evidence ledger, kill-switch, and obligations.
 

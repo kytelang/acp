@@ -1,5 +1,8 @@
 # Phase D: agent-native policy sync
 
+Historical build-phase record. This shipped as the acp-nativecompile crate. Current architecture: docs/design/platform-architecture.md.
+
+
 Date: 2026-09-18
 Status: design. Governs a coding agent's non-MCP powers (shell, file edits, direct network) without re-implementing its sandbox, by making ACP the single source of policy that compiles down into each vendor's own managed-settings. The agent stays the enforcer; ACP becomes the origin.
 

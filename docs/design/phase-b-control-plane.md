@@ -1,5 +1,8 @@
 # Phase B: platform-ready control plane
 
+Historical build-phase record. Most of this shipped (acp-auth, acp-registry, acp-server, RBAC, SIEM export). NOT built: SPIFFE/SPIRE workload identity (the proposed acp-workload-id crate does not exist); multi-tenancy was dropped (on-prem single-org). Current architecture: docs/design/platform-architecture.md.
+
+
 Date: 2026-09-18
 Status: design. Makes the control plane safe for a whole org: real identity (so the human principal stops being mocked), multi-tenancy, role-based access, and a decision stream to the SIEM. Prerequisite for every later phase, because they all rely on verified identity and tenant isolation.
 

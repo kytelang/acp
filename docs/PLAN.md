@@ -1,5 +1,7 @@
 # ACP: Delivery Plan
 
+Status note (2026-09-21): this is the v0-onward delivery record. Since it was written, the platform phases (LLM gateway, agent-native sync, discovery, GRC), the first-party content firewall, and the traffic-interception layer all shipped, and the human principal is now verified. For the current built state see `docs/pending.md` and `docs/design/platform-architecture.md`; for the policy model see `docs/design/model-v2.md`. Treat any "not yet built / BLOCKED" narrative here that disagrees with those as stale.
+
 The single delivery plan, organised around `DESIGN.md`. Every task has a completion
 checkbox and independently-checkable acceptance criteria. Design rationale, decisions
 (D1-D15), and the threat model live in `DESIGN.md`; this doc is the what-and-when.

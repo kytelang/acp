@@ -1,5 +1,8 @@
 # Phase F: GRC projection
 
+Historical build-phase record. This shipped as acp_core::grc plus controls/conformity/assessment/attestation/usecase modules, NOT a standalone acp-grc crate. Current architecture: docs/design/platform-architecture.md.
+
+
 Date: 2026-09-18
 Status: design. Projects the signed evidence ledger and the deployed policy into compliance artifacts. ACP is uniquely placed to make governance evidence-backed rather than questionnaire-backed, because it holds the tamper-evident runtime record of what every agent and app actually did.
 

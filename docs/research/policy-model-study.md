@@ -1,7 +1,7 @@
 # Policy model study: what "policy" means across the field, and where ACP fits
 
 Date: 2026-09-18
-Status: research input for the ACP policy-model redesign (agent as subject, resource as object). No code has changed on the back of this document; it exists to inform the design decision.
+Status: ARCHIVED research input (2026-09-18). The policy-model redesign it proposes (agent as subject, resource as object, effect allow/deny/step-up/allow-with-obligations, default-deny with deny-overrides) has since been BUILT and is documented in `docs/design/model-v2.md`; its open questions are resolved in shipped code. Kept for historical context only. Note: this file predates the house style and contains some American spellings and ASCII diagrams.
 
 ## Sourcing caveat (read first)
 

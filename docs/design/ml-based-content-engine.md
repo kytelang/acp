@@ -71,7 +71,7 @@ Rust-native and on-prem, no Python at runtime:
 - Alternative: Candle (Rust-native tensors) for a pure-Rust build with no C++ runtime, at the cost of supporting fewer model formats.
 - Guard LLM option: llama.cpp via a Rust binding, GGUF-quantised, for the optional heavier detector.
 
-Deployment shape: an inference sidecar (`acp-content`) that loads the models once and exposes a tiny local scoring endpoint over loopback, so the gateway and proxy share one warmed model pool and model loading never blocks the reactor. In-process embedding is possible for a single-binary install but the sidecar is the default because it isolates model memory and lets the engine scale and restart independently.
+Deployment shape: an inference sidecar (`acp-content`, NOT YET BUILT; there is no acp-content crate today) that loads the models once and exposes a tiny local scoring endpoint over loopback, so the gateway and proxy share one warmed model pool and model loading never blocks the reactor. In-process embedding is possible for a single-binary install but the sidecar is the default because it isolates model memory and lets the engine scale and restart independently.
 
 ### 4.4 Model registry and provenance
 

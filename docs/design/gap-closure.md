@@ -1,7 +1,7 @@
 # Gap closure design: making ACP the single product
 
 Date: 2026-09-20
-Status: design, now IMPLEMENTED. The three build items below shipped and are tested (acp-core 143 tests, acp-guard e2e); see the status notes in section 6. Closes the genuine build-gaps named in `docs/gap-analysis.md` section 7.1. Defers to `docs/positioning.md` (the anchor: build the wedge, integrate the rest) and builds on `docs/design/enforcement.md`, `docs/design/p2-operations.md` and `docs/design/entra-setup.md` rather than repeating them.
+Status: design, now IMPLEMENTED. The three build items below shipped and are tested (acp-core unit tests plus acp-guard e2e); see the status notes in section 6. Closes the genuine build-gaps named in `docs/gap-analysis.md` section 7.1. Defers to `docs/positioning.md` (the anchor: build the wedge, integrate the rest) and builds on `docs/design/enforcement.md`, `docs/design/p2-operations.md` and `docs/design/entra-setup.md` rather than repeating them.
 
 ## 1. Scope and the build-versus-integrate decision
 
