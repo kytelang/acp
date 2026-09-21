@@ -20,8 +20,8 @@ proves the sign -> anchor -> verify chain completes with no network calls at all
 
 Two binaries and two files:
 
-- `acp-proxy` — sits in front of the agent's MCP tool server, gates every `tools/call`.
-- `acp-server` — the control plane: approval inbox, reporting, liveness/alerts, meta-audit.
+- `acp-proxy`: sits in front of the agent's MCP tool server, gates every `tools/call`.
+- `acp-server`: the control plane: approval inbox, reporting, liveness/alerts, meta-audit.
 - a local **SQLite** evidence ledger (embedded, no database server required).
 - a local **Ed25519** signing key file (0600).
 
