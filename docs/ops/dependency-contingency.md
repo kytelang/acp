@@ -1,17 +1,19 @@
 # Young-dependency EOL contingency (A7)
 
-Two trust-critical dependencies are young enough that their long-term maintenance is a real risk:
-`ct-merkle` (the RFC 6962 transparency-log primitives) and `rmcp` (the MCP protocol types). If
-either is abandoned, ACP must not be stranded. This note is the documented fork-or-vendor plan and
-the standing fallback that keeps us able to move.
+One trust-critical dependency is young enough that its long-term maintenance is a real risk:
+`ct-merkle` (the RFC 6962 transparency-log primitives). If it is abandoned, ACP must not be stranded.
+This note is the documented fallback and the trigger that keeps us able to move.
 
 ## The exposure
 
 - `ct-merkle`: supplies Merkle inclusion and consistency proof logic. It sits directly under the
-  evidence-integrity guarantee, so a bug or an EOL here is a trust problem, not just a build
-  problem.
-- `rmcp`: supplies MCP JSON-RPC types and transport glue. It sits on the interception path. An EOL
-  here is a compatibility problem: new MCP methods would stop being modelled.
+  evidence-integrity guarantee, so a bug or an EOL here is a trust problem, not just a build problem.
+
+MCP is not on this list, deliberately. ACP does not depend on an external MCP-types crate: the MCP
+JSON-RPC framing is a first-party crate, `acp-jsonrpc` ("thin JSON-RPC framing for transparent MCP
+interception"). There is no third-party MCP library to fork or vendor, so the interception path
+carries no young-dependency risk from the protocol side. New action-bearing MCP methods are handled by
+extending `acp-jsonrpc`, which we own.
 
 ## Standing fallback: acp-core::merkle
 
@@ -23,28 +25,16 @@ exercised in CI, and produces identical roots and proofs. If `ct-merkle` is aban
 to `acp-core::merkle` behind the same interface, and the A2 cross-implementation test is what proves
 the cut-over changed no hashes.
 
-## Fork-or-vendor plan for rmcp
-
-`rmcp` has no in-repo twin, so its contingency is a vendor-in plan rather than a standing fallback:
-
-1. The interception surface depends on a thin internal adapter, not on `rmcp` types spread through
-   the codebase, so the blast radius of replacing it is one module.
-2. If `rmcp` is abandoned, vendor the last good version into the tree under a pinned, audited copy,
-   and take over maintenance of only the subset ACP uses (the JSON-RPC framing and the method set
-   we intercept), not the whole crate.
-3. The MCP-version-drift process (a tracked obligation) is what tells us when a new action-bearing
-   method appears, so a vendored copy does not silently fall behind the protocol.
-
 ## What CI guarantees today
 
 - `acp-core::merkle` builds and passes the A2 known-answer and cross-implementation tests on every
   merge, so the `ct-merkle` fallback is always ready, not theoretical.
-- Dependency scanning (cargo-audit in CI) flags an unmaintained or vulnerable advisory on either
-  crate, which is the trigger to execute the matching plan above.
+- Dependency scanning (cargo-audit in CI) flags an unmaintained or vulnerable advisory on the crate,
+  which is the trigger to execute the fallback above.
 
 ## Trigger and owner
 
-The trigger for either plan is a maintenance-status signal: an RUSTSEC unmaintained advisory, a
-year without releases against open security issues, or an incompatible ecosystem move. When the
-trigger fires, the owner executes the standing fallback (ct-merkle) or the vendor-in (rmcp) and
-records the change in the meta-audit log, since it touches the trust core.
+The trigger is a maintenance-status signal: an RUSTSEC unmaintained advisory, a year without releases
+against open security issues, or an incompatible ecosystem move. When the trigger fires, the owner
+executes the standing fallback (cut over to `acp-core::merkle`) and records the change in the
+meta-audit log, since it touches the trust core.

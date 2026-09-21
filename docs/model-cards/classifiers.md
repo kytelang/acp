@@ -3,7 +3,7 @@
 ## Identity
 - Name: acp data-class classifiers
 - Version: rules-v1 (see `acp-core::classify`)
-- Type: deterministic, versioned rule-sets (regex), NOT trained or opaque ML (decision D15).
+- Type: a mix: deterministic regex rule-sets for PII and secrets (decision D15), plus a trained ML classifier for prompt injection (see below).
   Chosen so every gated decision is reproducible, verifiable, explainable, and auditable.
 
 ## Intended use
@@ -26,8 +26,8 @@ samples; reproduce any time). Baselines enforced by the CI regression gate
 
 | Class | Precision | Recall | FPR | Target |
 |---|---|---|---|---|
-| pii | 1.00 | 1.00 | 0.00 | recall >= 0.80, fpr <= 0.30 |
-| secret | 1.00 | 1.00 | 0.00 | recall >= 0.80, fpr <= 0.30 |
+| pii | 1.00 | 1.00 | 0.00 | recall >= 0.80, accuracy >= 0.80 (FPR reported, not gated) |
+| secret | 1.00 | 1.00 | 0.00 | recall >= 0.80, accuracy >= 0.80 (FPR reported, not gated) |
 | overall accuracy | | 1.00 | | >= 0.80 |
 
 ## Locales tested
@@ -45,3 +45,36 @@ on deny paths, non-zero evasion is expected and must not be relied upon as the o
   the eval harness (D1/D2) and the production feedback loop (D3, governed like `args_blob`).
 - Versioned: the classifier version is stamped into evidence provenance so a historical decision
   is reproducible.
+
+## Trained injection classifier (ML)
+
+The content firewall's primary injection and jailbreak detector is a trained machine-learning model,
+not a rule-set:
+
+- Model: hashed word and character n-gram logistic regression (`acp_core::content::LinearScorer`,
+  detector id `logreg-hashed-ngram`), trained by `scripts/train_injection_lr.py`, shipped at
+  `crates/acp-core/models/injection-lr.json`.
+- Featurisation: lowercase, alphanumeric tokens, word uni and bi-grams plus character 4-grams over the
+  de-spaced text, FNV-1a hashed into a fixed space, binary presence; sigmoid over learned weights.
+- Robustness: it runs on a normalised view of the text (base64 decode, zero-width strip, homoglyph
+  fold, de-spacing), so common obfuscations do not evade it, and it is applied to tool results as well
+  as prompts and arguments.
+- Evaluation and CI gate: a held-out set (`crates/acp-core/models/injection-eval.json`) plus
+  `acp content-eval` and the adversarial corpus `acp redteam` gate the model so a regression cannot
+  ship. On the shipped corpus, signatures plus the model catch every obfuscation variant with no false
+  positives.
+- Honest boundary: this is a lightweight trained classifier, not a heavyweight transformer. It is
+  defence in depth; the authorisation layer is what contains a successful injection.
+
+## Content firewall detectors (signatures and topics)
+
+Alongside the trained model, `acp_core::content` ships a `SignatureScorer` (prompt-injection and
+jailbreak signatures, denied-topic rules) and reuses the PII and secret classifiers above for
+redaction. All detectors sit behind one `Scorer` seam.
+
+## Groundedness detector (baseline)
+
+`acp_core::groundedness` scores an answer against its source context by per-sentence content-word
+support, flagging unsupported claims. It is a lexical baseline for on-premises and air-gapped use;
+production-grade groundedness is delegated to an external specialist service. See
+`docs/design/groundedness.md`.

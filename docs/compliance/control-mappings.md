@@ -54,7 +54,7 @@ specialist before it is used in a formal audit; that review is the only open leg
 | AC-3 access enforcement | Policy engine denies/steps-up gated calls | Ledger: decision; Module: grc maps to AC-3 |
 | AU-2 / AU-9 audit events + protection | Tamper-evident Merkle log with signed heads | Ledger: STH; `acp verify`; Module: grc -> AU-2 |
 | AU-10 non-repudiation | Ed25519-signed tree head, key-id rotation history | Module: sign, keymgr (H0.3) |
-| SC-8 transmission integrity | mTLS between proxy and server (planned), signed webhooks | Module: webhook (F10); [ ] mTLS |
+| SC-8 transmission integrity | mTLS between proxy and server, signed webhooks | Module: acp-mtls, webhook (F10); [x] mTLS |
 | CP-9 / CP-10 backup + restore | Restore drill re-verifies the ledger | Ledger: backup/restore drill test (H0.4) |
 | SI-4 monitoring | Liveness gap + fail-open spike detection | Module: liveness (B1), anomaly (B3) |
 | SI-7 software/firmware integrity | Tool-server fingerprint recorded in evidence | Ledger: tool_server_fingerprint (B5) |

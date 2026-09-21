@@ -23,7 +23,7 @@ the named script or test, and see the control operate.
 | CC7.4 incident response | break-glass drill; runbook (shakedown) | `scripts/shakedown.sh` |
 | CC8.1 change management | signed policy provenance; meta-audit of policy/key/RBAC changes | `policyprov`, `metaaudit` |
 | A1.2 backup / recovery | tested backup+restore drill | `scripts/shakedown.sh`; ledger DR test |
-| C1.1 / C1.2 confidentiality | args stored as hashes; redaction; encryption at rest (BYOK) | `redact`, `acp-encrypt` |
+| C1.1 / C1.2 confidentiality | args stored as hashes; redaction; encryption at rest (BYOK) is a built module, integration into the ledger and stores pending | `redact`; `acp-encrypt` (module built, not yet wired) |
 | CC7.1 (integrity) | append-only DB trigger + Merkle tamper detection | `scripts/pentest.sh` (two layers) |
 
 ## ISO 27001 Annex A (2022)
@@ -36,7 +36,7 @@ the named script or test, and see the control operate.
 | A.8.13 information backup | backup + tested restore | `scripts/shakedown.sh` |
 | A.8.15 logging | tamper-evident, independently verifiable log | `acp verify` |
 | A.8.16 monitoring | liveness / spike / drift | server endpoints; `drift` |
-| A.8.24 use of cryptography | Ed25519 signing, AES-256-GCM at rest, crypto-agility | `sign`, `acp-encrypt`, `agility` |
+| A.8.24 use of cryptography | Ed25519 signing, crypto-agility; AES-256-GCM at rest available in acp-encrypt (integration pending) | `sign`, `agility`; `acp-encrypt` (built, not yet wired) |
 | A.8.28 secure coding | clippy -D warnings, fuzz, model check, review | CI; `docs/ops/secure-sdlc.md` |
 | A.5.7 threat intelligence / A.5.24 incident mgmt | pen-test harness + break-glass | `scripts/pentest.sh` |
 

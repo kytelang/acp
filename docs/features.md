@@ -58,9 +58,12 @@ unavoidable. On-prem, vendor-neutral. See `docs/positioning.md` and `docs/design
 - Signed AI bill of materials (acp aibom): CycloneDX over every agent / MCP server / tool / model-class with provenance, admission verdict, scan result, integrity pin and policy in force
 
 ## Content firewall (first-party, in-path)
-- Native content engine (acp_core::content): prompt-injection / jailbreak signature detection, PII and secret detection, span-level redaction, denied-topic rules; block or redact
-- Enforced on BOTH surfaces: the gateway prompt path (--content-firewall) and the MCP proxy tool-call arguments (--content-firewall)
-- Honest boundary: signatures and regexes, not a trained classifier; the external content-scan hook (Lakera / Azure AI Content Safety) stays available for ML-grade detection
+- Native content engine (acp_core::content): a trained ML injection detector (hashed n-gram logistic regression, acp_core::content::LinearScorer) plus signature detection, PII and secret detection, span-level redaction, and denied-topic rules; block or redact
+- Hardened to survive attacks: input normalisation (base64 decode, zero-width strip, homoglyph fold, de-spacing) and tool-result screening for indirect injection (poisoned fetched documents), not just prompts and arguments
+- Continuous adversarial testing gate (acp_core::redteam, acp redteam) and an eval gate (acp content-eval) so a weakened model cannot ship
+- Enforced on BOTH surfaces: the gateway prompt path (--content-firewall / --content-ml) and the MCP proxy tool-call arguments (--content-firewall / --content-ml)
+- Groundedness / hallucination: a baseline on-premises detector (acp_core::groundedness, acp groundedness) flags an answer unsupported by its source context; production-grade groundedness is delegated to an external specialist (Azure or Bedrock) through the content-scan hook
+- Honest boundary: detection is defence in depth; the authorisation layer is what actually contains a successful attack. The external content-scan hook stays available for stronger ML-grade detection
 - Redact obligation for sensitive fields
 
 ## Discovery and enrollment

@@ -34,6 +34,8 @@ project. It is also the index of what the trust portal hosts.
 
 ## Known gaps stated honestly
 
-Encryption at rest, mTLS between internal services, and the external attestations (SOC 2, ISO 27001,
-penetration test) are on the roadmap and are not claimed as complete. A questionnaire answer that is
+Mutual TLS between internal services is implemented (the acp-mtls crate, client certificate required).
+Encryption at rest with customer-managed keys is a built module (acp-encrypt) whose integration into
+the ledger and stores is pending, and the external attestations (SOC 2, ISO 27001, penetration test)
+are on the roadmap and are not claimed as complete. A questionnaire answer that is
 not yet true is marked "in progress" with the target, never asserted.
