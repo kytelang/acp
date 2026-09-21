@@ -16,7 +16,7 @@ Each item has: what it is, why it matters, current status, whether it is code or
 - Type: code (large), plus a training and evaluation pipeline and model artifacts.
 - No LLM required for the baseline: small encoder classifiers on CPU via ONNX Runtime, fully on-prem. A small local guard LLM is optional and opt-in, never a cloud LLM.
 - Phasing (from the design doc):
-  1. Introduce the `Scorer` seam and refactor the current engine into `SignatureScorer` behind it. Pure refactor, zero behaviour change, no models needed. Safe first step.
+  1. Introduce the `Scorer` seam and refactor the current engine into `SignatureScorer` behind it. Pure refactor, zero behaviour change, no models needed. Safe first step. DONE (`acp_core::content`: Scorer/Signal/ContentEngine/verdict_from; scan_text unchanged; 339 workspace tests).
   2. Build the `acp-content` sidecar (ONNX Runtime) with the injection or jailbreak detector only; wire the gateway and proxy to call it with the signature pre-filter and fail-closed fallback; ship in shadow mode.
   3. Add the PII or secret NER detector plus the redaction path, then the safety or toxicity detector, then the topical guard.
   4. Wire evidence (model id, version, score, threshold), the classify-eval CI gate, and the tuning, shadoweval, drift and posture loops for promotion.
