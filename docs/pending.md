@@ -85,10 +85,14 @@ For contrast, so the pending list is read against the whole. All of the followin
 - GRC: control library, EU AI Act assessment and conformity obligations, signed attestations, use-case lifecycle with gates, evidence-linked risk register, framework reports.
 - The full configuration-driven traffic-interception layer: endpoint registry and matcher, forward proxy (block, pass, inspect), TLS interception (MITM) with per-host leaf minting and pinning detection, PAC and browser-extension generation, and the discovery to enrollment to coverage loop.
 
-## Suggested order
+## Status of the order
 
-1. ML-engine phase 1 (the `Scorer` seam refactor): safe, no models, unblocks the firewall upgrade.
-2. Shared-state abstraction for budgets and pins (the code half of production hardening).
-3. ML-engine phases 2 to 4 (the actual classifiers), once a training and evaluation pipeline is in place.
-4. Real-Entra cutover, when a tenant token is available.
-5. GRC assessment-workflow depth and browser-extension verification, as needed.
+1. ML-engine phase 1 (the `Scorer` seam refactor): DONE.
+2. Shared-state abstraction for budgets and pins (trait + in-process stores): DONE. Redis/Postgres implementation and hot-path adoption remain (need a live server to verify).
+3. GRC assessment-workflow depth (conformity workflow + model cards): DONE.
+4. ML-engine phases 2 to 4 (the actual classifiers): BLOCKED on trained model artifacts and an ONNX/Candle runtime plus a training and evaluation pipeline. The seam is ready for them.
+5. Real-Entra cutover: BLOCKED on a tenant access token from the operator.
+6. Browser-extension run-verification: BLOCKED on a real browser.
+7. HTTP/2 in the interception proxy: deferred (complex, marginal); working as designed on HTTP/1.1.
+
+Nothing further can be finished and verified in-repo without one of the external inputs above.
