@@ -5,7 +5,7 @@ Audience: a security, platform, risk or compliance leader evaluating whether ACP
 
 ## 1. What ACP is, in one paragraph
 
-ACP (Agent Control Plane) is a vendor-neutral, on-premises layer that sits in the path of what your AI agents and applications actually do, decides whether each action is allowed, and records every decision as tamper-evident evidence that a third party can verify with a public key alone. It governs the action, not just the words: which database, secret, file, model or network an agent may touch, for which human, and in what sequence. It is not a chatbot filter and it is not a compliance spreadsheet. It is the enforcement and evidence layer in between.
+ACP (Agent Control Plane) is a vendor-neutral, on-premises layer that sits in the path of what your AI agents and applications actually do, decides whether each action is allowed, and records every decision as tamper-evident evidence that a third party can verify with a public key alone. It governs the action, not just the words: which database, secret, file, model or network an agent may touch, for which human, and in what sequence. It is not a chatbot filter and it is not a compliance spreadsheet. It is a single, complete product that combines what an AI firewall does, what a GRC platform does, and the runtime authorization and verifiable evidence that neither of them provides, so you do not have to assemble three tools.
 
 ## 2. The problem it solves
 
@@ -25,12 +25,16 @@ In buyer terms, grouped by outcome:
 - Cover every surface. Agent tool calls (MCP), direct model API calls, arbitrary HTTP/API traffic (a configuration-driven forward proxy with optional TLS interception), and the coding agents' own shell, file and network powers.
 - Satisfy the auditors. Evidence-backed reports for the EU AI Act, NIST AI RMF and ISO 42001, a control library, risk assessments, a worked conformity checklist, model cards, and SIEM export, all sourced from what actually happened at runtime.
 
-## 4. Where ACP fits alongside what you may already have
+## 4. One complete product, with optional interoperability
 
-ACP is the neutral middle between the two categories, and it interoperates with both rather than replacing them.
+ACP is designed to be the whole thing, not a piece you bolt onto other tools. It has its own content firewall and its own GRC lifecycle built in, plus the runtime authorization and tamper-evident evidence that neither an AI firewall nor a GRC platform provides. You do not need to buy a separate firewall or a separate GRC platform for ACP to be complete.
 
-- With an AI firewall: ACP has its own content engine, and can also call an external firewall as an obligation if you have standardised on one. Use the firewall for content, ACP for authorization and evidence.
-- With a GRC platform (Credo, OneTrust): ACP feeds them the signed runtime evidence they lack. Keep your GRC programme, add ACP as its source of truth for what agents did.
+Interoperability is optional, for organisations that have already invested:
+
+- If you already run an AI firewall (Lakera, Azure AI Content Safety) and want to keep it, ACP can call it as an obligation instead of, or in addition to, its own content engine.
+- If you already run a GRC platform (Credo, OneTrust), ACP can feed it the signed runtime evidence it lacks, so your existing programme keeps working with a better source of truth.
+
+Neither is required. Left to itself, ACP covers all three jobs.
 
 ## 5. Is ACP fit for your purpose?
 
@@ -46,7 +50,7 @@ ACP is the neutral middle between the two categories, and it interoperates with 
 
 - You want a fully-managed cloud SaaS that you switch on with no deployment. ACP is on-premises by design; you run it.
 - You need a turnkey, polished commercial product today with vendor support, certifications and references. ACP is a strong, tested reference implementation, not yet a hardened commercial product (see section 7).
-- Your primary need is best-in-class ML content detection against novel attacks as the main line of defence. ACP's detection is deliberately lightweight defence in depth; pair it with a specialist firewall if content is your core risk.
+- Your primary, dominant risk is best-in-class ML content detection against novel and evolving attacks. ACP's built-in content firewall (a trained classifier plus signatures, hardened against obfuscation and indirect injection) is complete for most needs, but its detection is deliberately lightweight rather than a heavyweight model. If content detection against novel attacks is your single biggest concern, you can augment ACP's engine with a specialist ML classifier through its built-in hook. This is optional augmentation, not a separate product you must run.
 - You are standardised on a single agent vendor and its native, centrally-managed controls already meet your needs. ACP's cross-vendor value is smaller for you.
 - You want bias, fairness, drift and explainability dashboards as the product. ACP produces the runtime-decision evidence those tools lack; it does not replace statistical model monitoring.
 
