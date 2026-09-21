@@ -35,6 +35,7 @@ dependencies = [
  "acp-registry",
  "hex",
  "serde_json",
+ "serde_yaml",
 ]
 
 [[package]]
