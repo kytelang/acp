@@ -12,7 +12,7 @@ ACP is a runtime authorization and evidence layer for AI actions. Its security v
 3. Verified identity. Actions are bound to a registry-verified agent and, when configured, an OIDC-verified human principal.
 4. Unavoidability. Deployed correctly, an agent cannot reach a governed resource except through ACP.
 
-The trust core is deliberately small and pure. The crypto-critical logic lives in `acp-core` (no sockets, no filesystem in the hot logic) so it is unit-testable and auditable in isolation: `merkle.rs` (the verifiable log), `sign.rs` (signing and tree heads), `canonical.rs` (canonical hashing), `attest.rs` (enforcement attestation), `breakglass.rs` (signed emergency grants), `toolintegrity.rs` (tool pinning). The ledger persistence is in `acp-ledger`, identity in `acp-registry` and `acp-auth`, transport security in `acp-mtls`, and key custody in `acp-hsm`.
+The trust core is deliberately small and pure. The crypto-critical logic lives in `acp-core` (no sockets, no filesystem in the hot logic) so it is unit-testable and auditable in isolation: `merkle.rs` (the verifiable log), `sign.rs` (signing and tree heads), `canonical.rs` (canonical hashing), `attest.rs` (enforcement attestation), `breakglass.rs` (signed emergency grants), `toolintegrity.rs` (tool pinning). The ledger persistence is in `acp-ledger`, identity in `acp-registry` and `acp-auth`, transport security in `acp-mtls`, and a PKCS#11 key-custody signer in `acp-hsm` (implemented, not yet wired). Envelope encryption of data at rest lives in `acp-encrypt` (implemented, not yet wired: the ledger stores argument blobs as plaintext JSON today).
 
 ## 2. Architecture (one paragraph)
 
@@ -36,7 +36,7 @@ Auditor procedure (independent evidence check):
 ### 3.2 Keys and signing
 
 - Algorithm: Ed25519 throughout (evidence tree heads, enforcement attestation, break-glass grants, policy and artifact signing). Content hashing is SHA-256 over canonical JSON (`canonical.rs`, sorted-key JCS-style serialisation) for stable, reproducible hashes.
-- Key generation and custody: `Ed25519Signer::generate` and `from_seed`; seeds written with 0600 permissions on unix (`secret::write_key_secure`). For production, keys belong in an HSM or KMS; `acp-hsm` integrates PKCS#11 (`cryptoki`) so the private key never leaves the token.
+- Key generation and custody: `Ed25519Signer::generate` and `from_seed`; seeds written with 0600 permissions on unix (`secret::write_key_secure`). For production, keys belong in an HSM or KMS. `acp-hsm` implements a real PKCS#11 (`cryptoki`) Ed25519 signer whose private key never leaves the token. Honest status: this crate is complete and tested but is NOT yet wired into the ledger's signing path (no crate depends on it, and its tests are gated on a hardware or SoftHSM module). Today the ledger signs with an `Ed25519Signer` from a 0600 seed; HSM custody is a deploy-time wiring step, not the current default.
 - Rotation and agility: the record provenance stamps the algorithm identifiers (`algo_hash`, `algo_sig`) so the scheme is explicit in every record and can evolve without ambiguity.
 
 ### 3.3 Enforcement attestation
@@ -77,7 +77,7 @@ Trust boundary: only the `arg` namespace of a request is agent-controlled and th
 | Replay | Reuse an attestation token | Freshness bound (`max_age_ms`) on the signed attestation |
 | Confused deputy (MCP) | Token passthrough, consent abuse | ACP terminates and does not pass client tokens through; MCP OAuth audience binding is honoured |
 | Supply chain | Rug-pull or poisoned tool or model | Tool-integrity pinning, admission gate with provenance and an external scanner verdict, signed AI-BOM |
-| Key compromise | Steal the signing key | 0600 seeds, HSM or KMS custody via `acp-hsm`; the append-only store and separation of duty limit blast radius |
+| Key compromise | Steal the signing key | 0600 seeds today (HSM/KMS custody via `acp-hsm` is implemented but not yet wired); the append-only store and separation of duty limit blast radius |
 
 ## 6. What ACP does not claim (honest scope)
 

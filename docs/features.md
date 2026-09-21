@@ -1,103 +1,226 @@
 # Varman (ACP) platform features
 
-What ACP provides to govern the AI landscape. Everything below is built and tested unless tagged
-(integrate) = connects an external system, or (deployment) = needs a rollout step to be fully
-unavoidable. On-prem, vendor-neutral. See `docs/positioning.md` and `docs/design/*`.
+An honest capability map, written from the code, not from memory. Every item names the module or
+crate that implements it so you can check the claim.
 
-## Coverage: the surfaces it governs
-- Agent tool calls (MCP), transparent proxy over stdio and streamable-HTTP
-- Direct model API calls, reverse-proxy gateway (OpenAI / Anthropic / Bedrock / Gemini / ...)
-- Anything from agents / IDEs / browsers via the config-driven forward proxy (acp-intercept): a signed endpoint registry matches each destination (host / sni / path) and governs or tunnels per rule; optional TLS interception (ACP CA on managed devices) decrypts and inspects body-inspecting HTTPS endpoints, with cert-pinning detected and reported
-- Coding agents' own powers (shell / file / network): one ACP policy compiled into Copilot / Claude / Gemini managed-settings
-- SaaS / embedded AI via connectors (integrate)
+Read the tags carefully, because they are the point of this document:
 
-## Policy and authorization
-- One policy language across every surface (model-v2 DSL)
-- Subject = agent + human principal; object = resource (database, filesystem, secrets, model-class, ...); operation (read / write / delete / egress / ...)
-- Trusted tool-to-resource and model-to-class taxonomies (derived, never agent-asserted)
-- Verdicts: allow / deny / step-up / allow-with-obligations
+- (enforced) means the capability runs inside a running binary (the proxy, the gateway, the guard,
+  the intercept proxy, the control-plane server, or the CLI) and is exercised end to end.
+- (primitive) means the logic is implemented and unit-tested in `acp-core` but is NOT yet called by
+  any running binary. It is real, tested code you could wire up, not a shipping feature. We list these
+  because they were genuinely built, but we will not pretend they are in the request path.
+- (local-only) means only a local or in-memory backend exists; the external backend (cloud KMS, a
+  transparency log, and so on) is a seam, not an implementation.
+- (integrate) means it connects an external system you supply.
+- (deployment) means it needs a rollout step to become fully unavoidable.
+
+On-prem, vendor-neutral. See `docs/positioning.md`, `docs/evaluation-guide.md` and `docs/design/*`.
+
+## Coverage: the surfaces it governs (enforced)
+- Agent tool calls (MCP): a transparent proxy over stdio and streamable-HTTP (`acp-proxy`)
+- Direct model API calls: a reverse-proxy gateway holding the upstream key (`acp-gateway`)
+- Arbitrary HTTP/API traffic from agents, IDEs and browsers: a configuration-driven forward proxy
+  (`acp-intercept`) with a signed endpoint registry and a real rustls TLS-interception CA (`mitm.rs`,
+  built on `rcgen`/`rustls`) that decrypts and inspects body-inspecting endpoints on managed devices,
+  detects cert-pinning and HTTP/2 handshake failures honestly rather than silently passing
+- Coding agents' own powers (shell, file, network): one ACP policy compiled into Claude, Copilot and
+  Gemini managed-settings JSON (`acp-nativecompile`). Note: this emits vendor settings, not machine
+  code; the agent stays the enforcer of its own sandbox
+- SaaS and embedded AI via connectors (integrate)
+
+## Policy and authorization (enforced)
+- One policy language across every surface: the model-v2 YAML DSL, compiled to Cedar (`acp-policy`)
+- Subject = agent plus human principal; object = resource (database, filesystem, secrets, model-class,
+  network, ...); operation (read, write, delete, egress, ...)
+- Trusted tool-to-resource taxonomy (`resource.rs`) and model-to-class taxonomy (`modelclass.rs`),
+  derived from names only, never agent-asserted, fail-safe to most-privileged on ambiguity
+- Verdicts: allow, deny, step-up, allow-with-obligations
 - Obligations: confirm, redact, rate-limit and token/cost budgets
-- Default-deny with deny-overrides
-- Signed, versioned policy; hot-reload; fail-closed on a bad deploy
+- Default-deny with deny-overrides; multi-policy precedence deny > step-up > shadow > allow
+- Signed, versioned policy with tamper detection on load; fail-closed on any evaluation or context
+  error (`acp-policy::eval`, `store.rs`)
 
-## Identity
-- Verified agent identity (registry tokens, un-spoofable)
-- Verified human principal via OIDC / Entra (RS256 + JWKS auto-fetch and rotation); degrades to unattributed
-- Delegation: agent acting for a human
-- Per-request identity on both the control plane and the enforcement path
+## Identity (enforced)
+- Verified agent identity: registry tokens stored only as SHA-256, verify is fail-closed, immediate
+  revocation (`acp-registry`)
+- Verified human principal via OIDC/Entra: real RS256 and EdDSA with JWKS fetch and hourly refresh,
+  algorithm and key-confusion checked, degrades to unattributed (`acp-auth`)
+- Delegation: an agent acting for a human, with a TTL binding (`acp-registry`)
+- Per-request identity on both the control plane (`acp-server`) and the enforcement path (`acp-proxy`,
+  `acp-gateway`)
 
-## Access control and human oversight
-- RBAC on the control plane (PolicyAdmin / Approver / BreakGlassOperator / Auditor / Registrar)
-- Separation of duty (a policy admin cannot trip the kill-switch, and the reverse)
-- Step-up approvals, human-in-the-loop with an approvals inbox
+## Access control and human oversight (enforced)
+- RBAC on the control plane: PolicyAdmin, Approver, BreakGlassOperator, Auditor, Registrar capabilities
+  (`acp-auth`, gated in `acp-server`). With no auth flags, RBAC is off for local demo use; if auth is
+  requested and JWKS fails to load, the server refuses to start
+- Separation of duty: a policy admin cannot trip the kill-switch, and the reverse
+- Step-up approvals with an approvals inbox: single-use, bound to session, principal, argument-hash and
+  TTL, enforced by one atomic update (`acp-approvals`)
+- mutual TLS between components, requiring a CA-signed client certificate (`acp-mtls`, wired in
+  `acp-server`)
 
-## Emergency controls
-- Kill-switch (break-glass): scoped (global / agent / resource / tool / model), signed, lockdown persists until cleared, TTL-aware
-- Reaches every surface (tool calls and model calls)
+## Emergency controls (enforced)
+- Kill-switch (break-glass): scoped (global, agent, resource, tool), signed grant files with optional
+  pinned-key verification, mandatory reason and TTL; lockdown persists past its TTL until cleared
+  (fail-safe); emits a meta-audit event (`breakglass.rs`, wired in proxy and gateway)
 
-## Evidence and audit
-- Tamper-evident Merkle ledger with signed tree heads; every decision recorded (who / what / which resource / verdict / obligations)
-- Re-derivable and verifiable (acp verify)
-- SIEM export: CEF / OCSF files, OTLP, and syslog
+## Evidence and audit (enforced)
+- Tamper-evident Merkle ledger: RFC 6962 tree over SHA-256 with correct leaf/node domain separation,
+  inclusion and consistency proofs, signed tree heads (Ed25519), durable append-only SQLite with
+  trigger-enforced immutability, idempotent append by decision id, a crash-safe evidence spool with
+  replay (`acp-ledger`, `merkle.rs`, `sign.rs`)
+- Independently verifiable with a public key alone: `acp verify` opens the store read-only and
+  re-derives leaves, so removing the database triggers does not defeat detection
+- Right-to-erasure without breaking verification: argument blobs are separately purgeable
+- SIEM export that is a faithful projection of real ledger decision records: CEF, OCSF (class 6003) and
+  RFC 5424 syslog (`acp siem`), plus OTLP, CEF and syslog event sinks in the proxy
+- Honest boundary on evidence-at-rest: argument blobs are currently stored as plaintext JSON. AES-256
+  -GCM envelope encryption is implemented (`acp-encrypt`) but is NOT yet wired into the ledger. See the
+  primitives section.
 
-## Integrity and anti-tamper
-- Tool-integrity pinning: rug-pull / tool-poisoning to quarantine and deny
-- Tool-server binary fingerprint check; MCP method-drift detection
+## Integrity and anti-tamper (enforced)
+- Tool-integrity pinning: a SHA-256 fingerprint over name, description and input schema, trust-on-first
+  -use, and a changed tool stays quarantined until an explicit re-pin (`toolintegrity.rs`, wired in the
+  proxy and shared across replicas via Postgres)
 
-## Unavoidability and containment
-- Credential brokering: the gateway holds the model key; callers cannot reach the model directly
-- Enforcement attestation: guarded tool servers reject un-proxied calls
-- Enforcement guard sidecar (acp-guard): verifies the x-acp-enforcement attestation in front of a tool server; refused un-proxied attempts are recorded to the ledger
-- Coverage attestation (acp coverage): a signed report cross-referencing observed vs governed endpoints; lists ungoverned and leaky paths; --require-full gates a rollout
-- Egress canary (acp canary-egress): probes direct model / tool access and fails (exit 3) on any host reachable off-ACP
-- Gateway base-URL pinning (native-compile --gateway): forces a coding agent's own model traffic through the gateway
-- Fail-closed posture; stdio is a structural chokepoint
+## Unavoidability and containment (enforced, some deployment-gated)
+- Credential brokering: the gateway holds the model key, so callers cannot reach the model directly
+- Enforcement attestation: a signed, freshness-bound token proves a call came through ACP
+  (`attest.rs`); the guard sidecar (`acp-guard`) verifies it in front of a tool server and records
+  refused un-proxied attempts to the ledger
+- Coverage attestation (`acp coverage`): a signed report joining observed against governed endpoints,
+  listing ungoverned and leaky paths; `--require-full` gates a rollout. Honest boundary: the observed
+  and governed sets come from operator-supplied files, so the number is only as complete as those inputs
+- Egress canary (`acp canary-egress`): probes direct model or tool access and fails on any host
+  reachable off-ACP
+- Gateway base-URL pinning (`native-compile --gateway`): forces a coding agent's own model traffic
+  through the gateway (deployment)
+- SSRF hardening: an egress allowlist that hard-blocks loopback, private, link-local and cloud-metadata
+  targets is implemented and tested (`egress.rs`), but is NOT yet wired into an outbound-dial path; only
+  the canary half is in use today
 
-## Supply chain and AI-BOM
-- Admission gate (acp_core::supplychain): registration fails closed on no provenance (digest), any scanner finding, or an unscanned high-impact artifact; the scanner verdict is supplied by an external scanner (integrate), not built
-- Signed AI bill of materials (acp aibom): CycloneDX over every agent / MCP server / tool / model-class with provenance, admission verdict, scan result, integrity pin and policy in force
+## Content firewall (first-party, in-path) (enforced)
+- Native content engine (`content.rs`): a genuinely trained linear classifier over hashed word and
+  char n-grams (`LinearScorer`, from a shipped `models/injection-lr.json`) plus signature detection,
+  PII and secret detection, span-level redaction and denied-topic rules; block or redact
+- Hardened against obfuscation: input normalisation decodes base64, strips zero-width characters, folds
+  homoglyphs and rejoins de-spaced letter runs; tool-result screening catches indirect injection in
+  poisoned fetched documents, not just prompts and arguments
+- Gated so a weakened model cannot ship: an adversarial red-team gate (`acp redteam`) and an eval gate
+  (`acp content-eval`) with recall and precision thresholds on held-out data
+- Enforced on both surfaces: the gateway prompt path and the proxy tool-call arguments
+- Groundedness and hallucination: a zero-dependency lexical baseline flags an answer unsupported by its
+  source context (`groundedness.rs`, `acp groundedness`); it does context-grounded faithfulness, not
+  reference-free factuality. Production-grade groundedness is delegated to an external service (Azure or
+  Bedrock) through the content-scan hook (integrate)
+- Honest boundary: detection is defence in depth; the authorization layer is what actually contains a
+  successful attack. Also note the PII/secret classifier (`classify.rs`) uses broad regexes: its secret
+  pattern matches any 32-plus character alphanumeric run and will over-match
 
-## Content firewall (first-party, in-path)
-- Native content engine (acp_core::content): a trained ML injection detector (hashed n-gram logistic regression, acp_core::content::LinearScorer) plus signature detection, PII and secret detection, span-level redaction, and denied-topic rules; block or redact
-- Hardened to survive attacks: input normalisation (base64 decode, zero-width strip, homoglyph fold, de-spacing) and tool-result screening for indirect injection (poisoned fetched documents), not just prompts and arguments
-- Continuous adversarial testing gate (acp_core::redteam, acp redteam) and an eval gate (acp content-eval) so a weakened model cannot ship
-- Enforced on BOTH surfaces: the gateway prompt path (--content-firewall / --content-ml) and the MCP proxy tool-call arguments (--content-firewall / --content-ml)
-- Groundedness / hallucination: a baseline on-premises detector (acp_core::groundedness, acp groundedness) flags an answer unsupported by its source context; production-grade groundedness is delegated to an external specialist (Azure or Bedrock) through the content-scan hook
-- Honest boundary: detection is defence in depth; the authorisation layer is what actually contains a successful attack. The external content-scan hook stays available for stronger ML-grade detection
-- Redact obligation for sensitive fields
-
-## Discovery and enrollment
-- Shadow-AI detection: classifies un-governed model-API / MCP endpoints by provider (acp discover)
-- Enrollment loop (acp enroll): signed dispositions (enroll / quarantine / accept-risk with expiry) over discovered endpoints; feeds the coverage report
-- MDM / CASB export (acp enroll export-mdm): an allow + block list ACP hands to the org's endpoint tools to enforce on the device
+## Discovery and enrollment (enforced)
+- Shadow-AI detection: classifies un-governed model-API and MCP endpoints by provider against a static
+  host table of about twenty providers (`discover`)
+- Enrollment loop (`acp enroll`): append-only signed dispositions (enroll, quarantine, accept-risk with
+  expiry) over discovered endpoints; feeds the coverage report
+- MDM/CASB export (`acp enroll export-mdm`): an allow and block list ACP hands to the org's endpoint
+  tools
 
 ## Compliance and GRC
-- Evidence-backed framework reports: EU AI Act (Art. 14 / 12 / 9), NIST AI RMF, ISO 42001, each control cited by real ledger records (acp grc-report)
-- Idempotent control-evidence export for GRC platforms (ServiceNow / Archer / OneTrust)
-- Evidence-linked AI risk register (acp risk): risk items scored likelihood x impact, with treatment, lifecycle status and links to the controls and ledger decisions bearing on them; signed snapshot
-- Control library across EU AI Act, NIST AI RMF and ISO 42001 (acp controls)
-- EU AI Act risk assessment and conformity obligations (acp assess): tiers a system unacceptable / high / limited / minimal and lists the controls it must satisfy; signed
-- Signed attestations and sign-offs (acp attest): a named attestor and role bound to a subject, non-repudiable
-- AI use-case registry with lifecycle gates (acp usecase): proposed -> assessed -> approved -> deployed -> retired, refusing a transition without a linked assessment or a valid attestation
-- SIEM export in CEF, OCSF and RFC 5424 syslog, plus OTLP (acp siem)
+Two honestly different things live here. Read the tags.
 
-## Operations and posture
-- Admin console: overview, approvals, evidence timeline, teams, agents, policy authoring, kill-switch
-- Registration: teams / apps, agents, human principals
-- CLI: policy compile / test, verify / export, break-glass, native-compile, discover, grc-report, coverage, canary-egress, aibom, enroll, risk, siem, content-scan, content-eval, redteam, controls, assess, attest, usecase, intercept
-- Liveness and bypass detection (dead-man's-switch)
-- Fully on-prem, no cloud dependency; vendor-neutral (one policy across Copilot / Claude / Codex / Gemini / custom and any model provider)
+Ledger-backed (derived from real signed ledger records):
+- Framework reports (`acp grc-report`, enforced): grades EU AI Act, NIST AI RMF and ISO 42001 controls
+  from counts decoded out of real ledger decision records. Note: the control-to-evidence id mapping in
+  `export_evidence` is currently a small hardcoded demo, not a configured production mapping
+- SIEM projection (`acp siem`, enforced): see Evidence above
+- Warehouse re-verification (`warehouse.rs`, enforced): re-verifies an exported evidence row against a
+  Merkle inclusion proof and a signed tree head, so a warehoused copy can be checked independently
 
-## Intent, sequence and data-boundary governance
-- Intent / trajectory governance (acp_core::trajectory): denies the action that completes a toxic combination (read a secret then egress) or exceeds a high-impact velocity budget, across the session
-- Data-boundary enforcement (acp_core::databoundary): classified data (secret / PII) may not cross to a lower-trust destination (secret to external egress is blocked; PII redacted), destination-aware unlike the content firewall
-- Continuous adversarial testing (acp_core::redteam, acp redteam): an obfuscation corpus (base64 / zero-width / homoglyph / despace) with a catch-rate + false-positive gate for CI
+Signed operator documents (authored by a human, Ed25519-signed, but NOT reconciled against the ledger).
+The signature proves the document was not altered after signing. It does not prove that the "evidence"
+strings or "linked decisions" inside it correspond to anything in the tamper-evident ledger; those are
+free-text references today:
+- EU AI Act risk assessment and tiering from a questionnaire (`acp assess`)
+- Conformity checklist (`acp conformity`)
+- AI risk register with likelihood x impact scoring (`acp risk`); linked decisions are free-text
+- Model-card registry (`acp modelcard`)
+- Use-case lifecycle registry with gated transitions (`acp usecase`)
+- Signed attestations and sign-offs (`acp attest`)
+- Signed AI bill of materials in CycloneDX (`acp aibom`) over an operator-supplied inventory
+- Static control library across the three frameworks (`acp controls`)
+- Policy-hash signing and a push allowlist (`policyprov.rs`): genuine cryptographic policy integrity
 
-## End-to-end vertical
-- One acceptance test (demo/vertical/run.sh) proves the spine bulletproof: Agent -> Action -> Policy -> Decision -> Human approval -> Execution -> Evidence -> Independent verification, with fail-closed checks (tampered ledger fails verification; invalid token rejected)
+## Operations and posture (enforced)
+- Control-plane console (`acp-server`): an approval inbox, policy view and signed deploy, verify and
+  report endpoints, break-glass engage and clear, evidence timeline (via `acp-ledger`), agents and apps
+  listing, Prometheus metrics. Single-tenant; liveness and spike state is in-memory and resets on
+  restart
+- Liveness and bypass detection: a dead-man's-switch over proxy heartbeats (`liveness.rs`) and a spike
+  detector (`anomaly.rs`), both wired into the server
+- Shared state across replicas: Postgres-backed token budgets and tool-integrity pins with row-locked
+  atomic refills (`acp-pgstate`), and tenant isolation enforced by Postgres row-level security
+  (`acp-pgstore`). Both are real tokio-postgres code; their tests are gated on a reachable database and
+  skip cleanly without one
+- Configurable impact taxonomy for blast-radius scoring (`impact.rs`), wired into the proxy and policy
+- Self-governance meta-audit of policy, key, RBAC and break-glass changes, appended to the real ledger
+  (`metaaudit.rs`)
+- Fully on-prem, no cloud dependency; vendor-neutral
+
+## Intent, sequence and data-boundary governance (enforced via proxy flags)
+These are enforced when the proxy is launched with the matching flag, not as standalone CLI commands:
+- Intent/trajectory governance (`trajectory.rs`, `--trajectory`): denies the action that completes a
+  toxic combination (read a secret then egress) or exceeds a high-impact velocity budget, per session
+- Data-boundary enforcement (`databoundary.rs`, `--data-boundary`): classified data may not cross to a
+  lower-trust destination, most-restrictive-wins, destination-aware unlike the content firewall
+- Continuous adversarial testing (`redteam.rs`, `acp redteam`): an obfuscation corpus with a catch-rate
+  and false-positive gate for CI
+
+## Implemented but NOT yet integrated (primitive)
+These modules were genuinely built and are unit-tested, but no running binary calls them yet. We list
+them so the inventory is honest, not to imply they are in the request path. Wiring each is a known,
+bounded task:
+- HA leader lease with fencing tokens (`ha.rs`)
+- Staged policy rollout state machine (`rollout.rs`) and default-deny maturity path (`posture.rs`)
+- Fleet registry (`fleet.rs`), classifier feedback and tuning (`tuning.rs`), classifier drift monitor
+  (`drift.rs`), usage metering (`metering.rs`)
+- Crypto-agility verifier registry (`agility.rs`)
+- Four-eyes dual control (`dualcontrol.rs`), ITSM hold tickets (`ticket.rs`), SCIM approver directory
+  (`scim.rs`; there is no SCIM REST endpoint in this tree), tenant offboarding and certificate of
+  destruction (`offboarding.rs`)
+- MCP method-drift tracker (`mcpdrift.rs`), non-MCP adapter normaliser (`adapter.rs`), host step-up
+  retry shim (`hostshim.rs`), cross-proxy forensic timeline helper (`timeline.rs`)
+- Real HMAC-SHA256 webhook signing and Slack verification (`webhook.rs`), correct but not plumbed to
+  any endpoint
+- `blast_radius.rs` is the v0 heuristic, superseded by the wired `impact.rs`
+
+## Cryptographic primitives built but not wired (primitive, local-only)
+- HSM/PKCS#11 signer (`acp-hsm`): a real `cryptoki` Ed25519 signer whose key never leaves the token,
+  including a `Send` threaded wrapper. But no crate depends on it and the ledger does not use it yet; its
+  tests are gated on a hardware or SoftHSM module. So HSM key custody exists in code, not in the signing
+  path
+- Encryption-at-rest (`acp-encrypt`): real AES-256-GCM envelope encryption with per-blob keys and AAD
+  binding. Nothing depends on it; the ledger stores argument blobs as plaintext
+- Key rotation with historical verification (`keymgr.rs`): a local KMS that keeps every key so old
+  records still verify after rotation; not wired to the ledger, which uses a single signer
+- External transparency anchoring (`anchor.rs`): only a local in-memory anchor exists; Rekor or an
+  RFC 3161 TSA would be a new backend behind the same seam
+
+## Not built (explicit non-goals or gaps)
+- OS-level process sandboxing of shell commands: `sandbox.rs` is a portable default-deny profile (a
+  data structure) only. There is no seccomp, landlock or cgroups enforcement. The coding agents enforce
+  their own sandboxes; ACP does not re-implement them
+- A fully-managed cloud SaaS: ACP is on-prem by design
+- Statistical model monitoring (bias, fairness, explainability dashboards)
+
+## End-to-end vertical (enforced)
+One acceptance test (`demo/vertical/run.sh`) proves the spine end to end: Agent, Action, Policy,
+Decision, Human approval, Execution, Evidence, Independent verification, with fail-closed checks (a
+tampered ledger fails verification; an invalid token is rejected).
 
 ## The through-line
-One policy, one identity model, one tamper-evident ledger, one kill-switch, a first-party content
-firewall and a full GRC lifecycle, applied to every place AI acts. A single product for AI
-governance, still interoperating outward (IdP, SIEM, external content ML, external GRC) where an
-enterprise already runs those.
+One policy language, one identity model, one tamper-evident ledger, one kill-switch, a first-party
+content firewall with a trained classifier, and a GRC surface, applied to every place AI acts. The
+runtime authorization and cryptographic evidence are the core and are genuinely wired. The GRC document
+surface is real and signed but operator-authored. A meaningful set of governance primitives are built
+and tested but not yet in the request path, and this document says which is which.

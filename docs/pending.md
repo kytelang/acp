@@ -1,7 +1,7 @@
 # Pending work
 
 Date: 2026-09-20
-Status: the single list of what is left to make ACP a complete, single-product AI governance platform (Credo-class GRC plus an AI firewall plus the neutral runtime-authorisation gaps). Everything not listed here is built and tested. Reads with `docs/gap-analysis.md` (section 7.1 and 9), `docs/positioning.md`, and the design docs referenced below.
+Status: the single list of what is left to make ACP a complete, single-product AI governance platform (Credo-class GRC plus an AI firewall plus the neutral runtime-authorisation gaps). Most of what is not listed here is built and tested, but read `docs/features.md` for the honest split: some capabilities are enforced in a running binary, while a set of governance primitives (HA, rollout, SCIM, dual-control, webhook signing, HSM custody, encryption-at-rest, and others) are implemented and unit-tested but not yet wired into the request path. Reads with `docs/gap-analysis.md` (section 7.1 and 9), `docs/positioning.md`, and the design docs referenced below.
 
 ## How to read this
 

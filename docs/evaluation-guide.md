@@ -24,7 +24,7 @@ In buyer terms, grouped by outcome:
 - Make enforcement unavoidable and measurable. Credential brokering, an enforcement guard, a coverage report and an egress canary that measure whether anything is talking to a model or tool without going through ACP.
 - Discover and enrol shadow AI. Find ungoverned model and agent endpoints and bring them under one policy, or block them.
 - Cover every surface. Agent tool calls (MCP), direct model API calls, arbitrary HTTP/API traffic (a configuration-driven forward proxy with optional TLS interception), and the coding agents' own shell, file and network powers.
-- Satisfy the auditors. Evidence-backed reports for the EU AI Act, NIST AI RMF and ISO 42001, a control library, risk assessments, a worked conformity checklist, model cards, and SIEM export, all sourced from what actually happened at runtime.
+- Satisfy the auditors. Two honestly different things. The framework report (acp grc-report) and SIEM export are derived from real signed ledger records, and warehouse rows are re-verified against Merkle proofs. The rest of the GRC surface (a control library, risk assessments, a worked conformity checklist, model cards, use-case registry, AI-BOM) are Ed25519-signed documents you author; the signature proves they were not altered, but their internal evidence and linked-decision references are free-text today, not cross-checked against the ledger. Both are useful; they are not the same strength of proof.
 
 ## 4. One complete product, with optional interoperability
 
@@ -59,7 +59,7 @@ Neither is required. Left to itself, ACP covers all three jobs.
 
 - Runs on-premises (Linux; develop on WSL2 on Windows). Not a cloud service.
 - Single node works out of the box. For high availability, a Postgres instance backs shared state (rate-limit budgets and tool-integrity pins), verified across replicas.
-- Optional: Microsoft Entra or any OIDC provider for verified human identity; an HSM or KMS (PKCS#11) for key custody; mutual TLS between components.
+- Optional: Microsoft Entra or any OIDC provider for verified human identity (real and wired); mutual TLS between components (real and wired). PKCS#11 HSM key custody and encryption of evidence at rest are implemented in code but not yet wired into the signing and storage paths; treat them as available-to-integrate, not on by default.
 - Governs by sitting in the path: a transparent MCP proxy, an LLM gateway, and a forward proxy; and by compiling one policy into coding agents' managed settings.
 
 ## 7. Maturity and honest status
