@@ -56,6 +56,7 @@ struct Opts {
     content_ml: Option<String>,
     pin_pg: Option<String>,
     trajectory: Option<String>,
+    data_boundary: Option<String>,
 }
 
 fn parse_opts(items: &[String]) -> Result<(Opts, Vec<String>), String> {
@@ -101,6 +102,7 @@ fn parse_opts(items: &[String]) -> Result<(Opts, Vec<String>), String> {
             "--content-ml" => { o.content_firewall = true; o.content_ml = it.next().cloned(); }
             "--pin-pg" => o.pin_pg = it.next().cloned(),
             "--trajectory" => o.trajectory = it.next().cloned(),
+            "--data-boundary" => o.data_boundary = it.next().cloned(),
             other => return Err(format!("unknown option '{other}'")),
         }
     }
@@ -276,6 +278,12 @@ async fn build_controller(o: &Opts) -> Result<Arc<Controller>, String> {
         let policy: acp_core::trajectory::TrajectoryPolicy = serde_yaml::from_str(&src).map_err(|e| format!("invalid trajectory policy: {e}"))?;
         controller.set_trajectory_policy(policy);
         eprintln!("acp-proxy: intent/trajectory governance enabled from {tp}");
+    }
+    if let Some(dp) = o.data_boundary.as_ref() {
+        let src = std::fs::read_to_string(dp).map_err(|e| format!("cannot read --data-boundary {dp}: {e}"))?;
+        let policy: acp_core::databoundary::DataBoundaryPolicy = serde_yaml::from_str(&src).map_err(|e| format!("invalid data-boundary policy: {e}"))?;
+        controller.set_data_boundary(policy);
+        eprintln!("acp-proxy: data-boundary enforcement enabled from {dp}");
     }
     // Verified caller identity: when a registry is configured, the presented (agent-id, token) MUST
     // verify. Fail closed on a missing/invalid/revoked credential so a mis-enrolled agent cannot run

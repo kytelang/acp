@@ -20,6 +20,7 @@ pub mod coverage;
 pub mod classify;
 pub mod conformity;
 pub mod content;
+pub mod databoundary;
 pub mod controls;
 pub mod discovery;
 pub mod drift;

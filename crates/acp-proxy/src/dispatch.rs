@@ -79,6 +79,7 @@ pub struct Controller {
     content_ml: Mutex<Option<std::sync::Arc<acp_core::content::LinearScorer>>>,
     pin_pg: tokio::sync::Mutex<Option<acp_pgstate::PgState>>,
     trajectory: Mutex<Option<acp_core::trajectory::TrajectoryMonitor>>,
+    data_boundary: Mutex<Option<acp_core::databoundary::DataBoundaryPolicy>>,
     // Per-request human identity (phase B): when set, the HTTP transport verifies each request's
     // bearer token and stamps the resulting human principal onto that call, overriding the startup
     // default. An invalid/absent token degrades to the startup principal (unattributed), never an
@@ -134,6 +135,7 @@ impl Controller {
             content_ml: Mutex::new(None),
             pin_pg: tokio::sync::Mutex::new(None),
             trajectory: Mutex::new(None),
+            data_boundary: Mutex::new(None),
             oidc: Mutex::new(None),
         }
     }
@@ -214,6 +216,11 @@ impl Controller {
     /// Enable intent / trajectory governance (toxic combinations, velocity) for this session.
     pub fn set_trajectory_policy(&self, policy: acp_core::trajectory::TrajectoryPolicy) {
         *self.trajectory.lock().unwrap() = Some(acp_core::trajectory::TrajectoryMonitor::new(policy));
+    }
+
+    /// Enable destination-aware data-boundary enforcement (classified data crossing to a resource).
+    pub fn set_data_boundary(&self, policy: acp_core::databoundary::DataBoundaryPolicy) {
+        *self.data_boundary.lock().unwrap() = Some(policy);
     }
 
     /// Enable shared tool-integrity pins via Postgres, so a rug-pull seen on one replica is caught
@@ -529,6 +536,42 @@ impl Controller {
             }
             // Redact obligation may rewrite the forwarded frame; captured here, applied at forward.
             let mut redacted_frame: Option<String> = None;
+            // Data-boundary enforcement: classified data (secret/pii) crossing to a destination.
+            if a.outcome.verdict == Verdict::Allow {
+                if let Some(dbp) = self.data_boundary.lock().unwrap().as_ref() {
+                    let mut classes = std::collections::BTreeSet::new();
+                    if let Some(obj) = tc.arguments.as_object() {
+                        for v in obj.values() {
+                            if let Some(s) = v.as_str() {
+                                if let Some(c) = acp_core::classify::classify(s) {
+                                    classes.insert(c.to_string());
+                                }
+                            }
+                        }
+                    }
+                    if !classes.is_empty() {
+                        let classes: Vec<String> = classes.into_iter().collect();
+                        match acp_core::databoundary::evaluate(dbp, &classes, ev_res) {
+                            acp_core::databoundary::BoundaryAction::Deny => {
+                                a.outcome.verdict = Verdict::Deny;
+                                a.outcome.rule_id = Some("data-boundary".to_string());
+                                a.outcome.reason = Some(format!("data boundary: {} may not cross to {}", classes.join(","), ev_res));
+                                a.enforce = policy::enforce_for(Verdict::Deny, &tc, &a.outcome, a.impact);
+                            }
+                            acp_core::databoundary::BoundaryAction::Redact => {
+                                let redacted = acp_core::redact::redact_args(&tc.arguments, &[]);
+                                if let Ok(mut frame) = serde_json::from_slice::<Value>(raw) {
+                                    if let Some(o) = frame.get_mut("params").and_then(|pp| pp.as_object_mut()) {
+                                        o.insert("arguments".to_string(), redacted);
+                                    }
+                                    redacted_frame = Some(frame.to_string());
+                                }
+                            }
+                            acp_core::databoundary::BoundaryAction::Allow => {}
+                        }
+                    }
+                }
+            }
             // Obligations (model v2, D4): only meaningful when the (post break-glass) verdict is
             // still Allow. confirm -> route to human approval (step-up); rate_limit -> deny once the
             // per-(agent, resource) budget is spent. Deny-overrides among obligations. redact (a
