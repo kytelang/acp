@@ -66,7 +66,8 @@ pub struct EvidenceSummary {
     pub policy_in_force: bool,
 }
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
+#[serde(rename_all = "lowercase")]
 pub enum Status {
     Satisfied,
     Partial,

@@ -56,6 +56,8 @@ fn main() -> ExitCode {
         "assess" => cmd_assess(&args[2..]),
         "attest" => cmd_attest(&args[2..]),
         "usecase" => cmd_usecase(&args[2..]),
+        "conformity" => cmd_conformity(&args[2..]),
+        "modelcard" => cmd_modelcard(&args[2..]),
         "intercept" => cmd_intercept(&args[2..]),
         "grc-report" => cmd_grc_report(&args[2..]),
         "ledger-backup" => cmd_ledger_backup(&args[2..]),
@@ -1766,6 +1768,100 @@ fn emit_registry(registry: &acp_core::interception::EndpointRegistry, key: Optio
             None => { eprintln!("acp: --key must be 32-byte hex"); ExitCode::from(2) }
         },
         None => { println!("{}", serde_yaml::to_string(registry).unwrap_or_default()); ExitCode::SUCCESS }
+    }
+}
+
+/// Work an EU AI Act conformity checklist: seed it from an assessment, mark controls, and report.
+///   acp conformity init <out.json> <system> [--employment|--biometric|--interacts|...]
+///   acp conformity set <file.json> <control-id> <satisfied|partial|gap> [--evidence <id>]... [--owner <who>]
+///   acp conformity report <file.json>
+fn cmd_conformity(rest: &[String]) -> ExitCode {
+    use acp_core::assessment::{assess, Screening};
+    use acp_core::conformity::ConformityAssessment;
+    use acp_core::grc::Status;
+    let now_ms = std::time::SystemTime::now().duration_since(std::time::UNIX_EPOCH).map(|d| d.as_millis() as u64).unwrap_or(0);
+    let load = |f: &str| -> Option<ConformityAssessment> { std::fs::read_to_string(f).ok().and_then(|s| serde_json::from_str(&s).ok()) };
+    let save = |f: &str, c: &ConformityAssessment| std::fs::write(f, serde_json::to_string_pretty(c).unwrap_or_default()).is_ok();
+    match rest.first().map(String::as_str).unwrap_or("") {
+        "init" => {
+            let (Some(out), Some(system)) = (rest.get(1), rest.get(2)) else { return usage("acp conformity init <out.json> <system> [assess flags]"); };
+            let has = |x: &str| rest.iter().any(|a| a == x);
+            let screening = Screening {
+                prohibited_practice: has("--prohibited"), safety_component: has("--safety-component"),
+                biometric_identification: has("--biometric"), critical_infrastructure: has("--critical-infra"),
+                employment_or_education: has("--employment"), essential_services: has("--essential-services"),
+                law_enforcement: has("--law-enforcement"), interacts_with_humans: has("--interacts"), generates_content: has("--generates"),
+            };
+            let a = assess(system, &screening, now_ms);
+            let c = ConformityAssessment::from_assessment(&a, now_ms);
+            if !save(out, &c) { eprintln!("acp: cannot write {out}"); return ExitCode::from(1); }
+            let (s,tot,pct)=c.completeness();
+            eprintln!("seeded conformity for {system} ({}): {tot} control(s), {s}/{tot} satisfied ({pct}%)", c.tier);
+            ExitCode::SUCCESS
+        }
+        "set" => {
+            let (Some(f), Some(cid), Some(st)) = (rest.get(1), rest.get(2), rest.get(3)) else { return usage("acp conformity set <file.json> <control-id> <satisfied|partial|gap> [--evidence <id>] [--owner <who>]"); };
+            let status = match st.as_str() { "satisfied"=>Status::Satisfied, "partial"=>Status::Partial, "gap"=>Status::Gap, o=>{eprintln!("acp: unknown status '{o}'"); return ExitCode::from(2);} };
+            let mut evidence=Vec::new(); let mut it=rest.iter();
+            while let Some(a)=it.next() { if a=="--evidence" { if let Some(v)=it.next(){evidence.push(v.clone());} } }
+            let owner = flag_value(rest, "--owner").unwrap_or_default();
+            let Some(mut c)=load(f) else { eprintln!("acp: cannot read {f}"); return ExitCode::from(1); };
+            if !c.set_status(cid, status, evidence, &owner, now_ms) { eprintln!("acp: no such control '{cid}'"); return ExitCode::from(1); }
+            if !save(f,&c) { return ExitCode::from(1); }
+            let (s,tot,pct)=c.completeness();
+            eprintln!("{cid} -> {st}; {s}/{tot} satisfied ({pct}%)"); ExitCode::SUCCESS
+        }
+        "report" => {
+            let Some(f)=rest.get(1) else { return usage("acp conformity report <file.json>"); };
+            let Some(c)=load(f) else { eprintln!("acp: cannot read {f}"); return ExitCode::from(1); };
+            let (s,tot,pct)=c.completeness();
+            println!("Conformity: {} ({}) -- {s}/{tot} satisfied ({pct}%){}", c.system, c.tier, if c.is_conformant(){"  [CONFORMANT]"}else{""});
+            for i in &c.items {
+                println!("  [{:9}] {:6} {}  evidence: {}", format!("{:?}", i.status).to_lowercase(), i.control_id, i.title, i.evidence.join(","));
+            }
+            ExitCode::SUCCESS
+        }
+        _ => usage("acp conformity <init|set|report> ..."),
+    }
+}
+
+/// Maintain model cards (a core GRC artifact).
+///   acp modelcard add <reg.json> --id X --name N --provider P --version V --intended-use "..." --limitations "..." --eval "..." --owner O [--risk-tier <t>] [--usecase <id>]
+///   acp modelcard list <reg.json>
+fn cmd_modelcard(rest: &[String]) -> ExitCode {
+    use acp_core::modelcard::{ModelCard, ModelCardRegistry};
+    let load = |f: &str| -> ModelCardRegistry { std::fs::read_to_string(f).ok().and_then(|s| serde_json::from_str(&s).ok()).unwrap_or_default() };
+    match rest.first().map(String::as_str).unwrap_or("") {
+        "add" => {
+            let Some(f)=rest.get(1) else { return usage("acp modelcard add <reg.json> --id X --name N ..."); };
+            let id=match flag_value(rest,"--id"){Some(v)=>v,None=>return usage("acp modelcard add ... --id <id>")};
+            let card = ModelCard {
+                id: id.clone(),
+                name: flag_value(rest,"--name").unwrap_or_default(),
+                provider: flag_value(rest,"--provider").unwrap_or_default(),
+                version: flag_value(rest,"--version").unwrap_or_default(),
+                intended_use: flag_value(rest,"--intended-use").unwrap_or_default(),
+                limitations: flag_value(rest,"--limitations").unwrap_or_default(),
+                training_data: flag_value(rest,"--training-data").unwrap_or_default(),
+                eval_summary: flag_value(rest,"--eval").unwrap_or_default(),
+                owner: flag_value(rest,"--owner").unwrap_or_default(),
+                risk_tier: flag_value(rest,"--risk-tier"),
+                linked_usecase: flag_value(rest,"--usecase"),
+            };
+            let mut r=load(f); r.upsert(card);
+            if std::fs::write(f, serde_json::to_string_pretty(&r).unwrap_or_default()).is_err(){eprintln!("acp: cannot write {f}");return ExitCode::from(1);}
+            eprintln!("model card '{id}' saved; {} card(s), {} incomplete", r.cards.len(), r.incomplete().len());
+            ExitCode::SUCCESS
+        }
+        "list" => {
+            let Some(f)=rest.get(1) else { return usage("acp modelcard list <reg.json>"); };
+            for c in load(f).cards {
+                let flag = if c.intended_use.is_empty()||c.limitations.is_empty()||c.eval_summary.is_empty()||c.owner.is_empty() {"INCOMPLETE"} else {"ok"};
+                println!("{:8} [{:10}] {} v{} ({}) tier={} {}", c.id, flag, c.name, c.version, c.provider, c.risk_tier.unwrap_or_else(||"-".into()), c.owner);
+            }
+            ExitCode::SUCCESS
+        }
+        _ => usage("acp modelcard <add|list> ..."),
     }
 }
 
