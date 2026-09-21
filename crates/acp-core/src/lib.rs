@@ -49,6 +49,7 @@ pub mod policyprov;
 pub mod posture;
 pub mod ratelimit;
 pub mod redact;
+pub mod redteam;
 pub mod render;
 pub mod resource;
 pub mod residency;

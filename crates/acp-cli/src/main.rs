@@ -53,6 +53,7 @@ fn main() -> ExitCode {
         "risk" => cmd_risk(&args[2..]),
         "content-scan" => cmd_content_scan(&args[2..]),
         "content-eval" => cmd_content_eval(&args[2..]),
+        "redteam" => cmd_redteam(&args[2..]),
         "controls" => cmd_controls(&args[2..]),
         "assess" => cmd_assess(&args[2..]),
         "attest" => cmd_attest(&args[2..]),
@@ -1894,6 +1895,35 @@ fn cmd_content_eval(rest: &[String]) -> ExitCode {
         return ExitCode::from(3);
     }
     eprintln!("gate passed (min recall {min_recall}, min precision {min_precision})");
+    ExitCode::SUCCESS
+}
+
+/// Continuous adversarial testing: run the built-in obfuscation corpus through the content engine.
+///   acp redteam [model.json] [--min-catch <r>]
+/// With a model, uses signatures + ML; without, signatures only. Exits 3 below the catch threshold
+/// or on any false positive.
+fn cmd_redteam(rest: &[String]) -> ExitCode {
+    use acp_core::content::{ContentPolicy, LinearScorer};
+    use acp_core::redteam::{corpus, run};
+    let model = rest.iter().find(|a| !a.starts_with("--"))
+        .and_then(|p| std::fs::read_to_string(p).ok())
+        .and_then(|s| LinearScorer::from_json(&s).ok());
+    let min_catch: f32 = flag_value(rest, "--min-catch").and_then(|s| s.parse().ok()).unwrap_or(1.0);
+    let cases = corpus();
+    let r = run(&ContentPolicy::default(), model.as_ref(), &cases);
+    println!("redteam: {}/{} attacks caught ({:.1}%), {} false positive(s) on {} benign",
+        r.caught, r.attacks, r.catch_rate * 100.0, r.false_positives, r.benign);
+    for (name, caught, n) in &r.per_transform {
+        println!("  {:12} {}/{}", name, caught, n);
+    }
+    for m in &r.missed {
+        println!("  MISSED {m}");
+    }
+    if r.catch_rate < min_catch || r.false_positives > 0 {
+        eprintln!("GATE FAILED: catch-rate {:.3} (min {:.3}), false positives {}", r.catch_rate, min_catch, r.false_positives);
+        return ExitCode::from(3);
+    }
+    eprintln!("gate passed (min catch {min_catch}, zero false positives)");
     ExitCode::SUCCESS
 }
 

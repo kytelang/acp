@@ -116,7 +116,31 @@ pub fn normalize(text: &str) -> String {
         out.push(' ');
         out.push_str(&dec);
     }
-    out.split_whitespace().collect::<Vec<_>>().join(" ")
+    // Collapse whitespace, then merge runs of 4+ single-character tokens ("i g n o r e" -> "ignore")
+    // so despacing does not evade the signature layer either.
+    let toks: Vec<&str> = out.split_whitespace().collect();
+    let mut result: Vec<String> = Vec::new();
+    let mut i = 0;
+    while i < toks.len() {
+        if toks[i].chars().count() == 1 {
+            let mut j = i;
+            while j < toks.len() && toks[j].chars().count() == 1 {
+                j += 1;
+            }
+            if j - i >= 4 {
+                result.push(toks[i..j].concat());
+            } else {
+                for k in i..j {
+                    result.push(toks[k].to_string());
+                }
+            }
+            i = j;
+        } else {
+            result.push(toks[i].to_string());
+            i += 1;
+        }
+    }
+    result.join(" ")
 }
 
 /// Map a character: None to drop it (zero-width), Some(c) to keep or fold it.
