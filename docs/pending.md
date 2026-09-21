@@ -36,7 +36,7 @@ Each item has: what it is, why it matters, current status, whether it is code or
 - Why: to be resilient and correct when running more than one gateway or proxy replica.
 - Status: designed, not built. `docs/design/p2-operations.md`.
 - Type: mostly ops and deployment. The in-process part that is code is the shared-state abstraction (Redis or Postgres backed budgets and pins); the rest (replication, failover, VIP, backups) is deployment.
-- Concrete next code step: a `Store` trait for budgets and pins with an in-process default and a Redis-backed implementation, keyed `budget:{app}:{resource}` and `pin:{server}:{tool}`, check-and-decrement done atomically.
+- Concrete next code step: a `Store` trait for budgets and pins with an in-process default and a Redis-backed implementation, keyed `budget:{app}:{resource}` and `pin:{server}:{tool}`, check-and-decrement done atomically. DONE (trait + in-process): `acp_core::sharedstate` (BudgetStore/PinStore, MemBudgetStore/MemPinStore, 3 tests). REMAINING: the Redis/Postgres implementation and wiring the gateway/proxy hot paths to it (deployment).
 
 ### 4. Real-Entra cutover
 - What: switch verified-human-principal from the mock OIDC path to a real Microsoft Entra tenant.
