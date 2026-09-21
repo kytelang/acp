@@ -58,6 +58,7 @@ pub mod scim;
 pub mod secret;
 pub mod shadoweval;
 pub mod siem;
+pub mod sharedstate;
 pub mod sign;
 pub mod supplychain;
 pub mod ticket;
