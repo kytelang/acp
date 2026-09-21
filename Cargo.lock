@@ -155,6 +155,15 @@ dependencies = [
 ]
 
 [[package]]
+name = "acp-pgstate"
+version = "0.0.0"
+dependencies = [
+ "acp-core",
+ "tokio",
+ "tokio-postgres",
+]
+
+[[package]]
 name = "acp-pgstore"
 version = "0.0.0"
 dependencies = [
