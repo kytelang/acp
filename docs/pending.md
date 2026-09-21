@@ -92,7 +92,7 @@ For contrast, so the pending list is read against the whole. All of the followin
 3. GRC assessment-workflow depth (conformity workflow + model cards): DONE.
 4. ML-engine phases 2 to 4 (the actual classifier + eval gate): DONE (baseline). A trained hashed-n-gram logistic-regression detector (`LinearScorer` + `scripts/train_injection_lr.py`, `--content-ml`) blocks paraphrases the signatures miss (verified e2e), with an eval harness and CI gate (`eval_injection`, `acp content-eval`, held-out set at models/injection-eval.json). Hardened against obfuscation: detection runs on a normalised view (zero-width strip, homoglyph fold, base64 decode, whitespace collapse) and tool RESULTS are screened for indirect injection (`screen_response`), not just prompts and arguments. Upgrade path (small-encoder / ONNX Runtime, guard LLM) remains optional for broader coverage. Note: detection is defence in depth; the authorisation layer is what actually contains a successful injection.
 5. Real-Entra cutover: DEFERRED by decision (mock Entra for now); the code path is built and tested against the mock. Flip when a tenant token is provided.
-6. Browser-extension run-verification: BLOCKED on a real browser.
+6. Browser-extension: routing logic run-verified via scripts/verify_pac.js (emulates Chrome PAC helpers; governed->PROXY, benign/spoofed->DIRECT). REMAINING: loading the unpacked extension in a real Chrome (native file picker, not automatable here) and enterprise packaging.
 7. HTTP/2 in the interception proxy: deferred (complex, marginal); working as designed on HTTP/1.1.
 
 Nothing further can be finished and verified in-repo without one of the external inputs above.
