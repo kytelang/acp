@@ -49,6 +49,7 @@ struct GwState {
     bg_key: Option<Vec<u8>>,
     content_scan: Option<String>,
     content_fw: Option<acp_core::content::ContentPolicy>,
+    content_ml: Option<std::sync::Arc<acp_core::content::LinearScorer>>,
     sem: std::sync::Arc<tokio::sync::Semaphore>,
     budget_state: Option<String>,
     metrics: Metrics,
@@ -66,6 +67,7 @@ async fn main() -> std::process::ExitCode {
     let mut content_fw = false;
     let mut fw_block_secrets = false;
     let mut fw_deny_topics: Vec<String> = Vec::new();
+    let mut content_ml_path: Option<String> = None;
     let mut budget_state: Option<String> = None;
     let (mut entra_tenant, mut entra_audience): (Option<String>, Option<String>) = (None, None);
     let mut it = args.iter().skip(1);
@@ -82,6 +84,7 @@ async fn main() -> std::process::ExitCode {
             "--content-firewall" => content_fw = true,
             "--block-secrets" => { content_fw = true; fw_block_secrets = true; }
             "--deny-topic" => { content_fw = true; if let Some(v) = it.next() { fw_deny_topics.push(v.clone()); } }
+            "--content-ml" => { content_fw = true; content_ml_path = it.next().cloned(); }
             "--budget-state" => budget_state = it.next().cloned(),
             "--env" => env = it.next().cloned().unwrap_or(env),
             "--entra-tenant" => entra_tenant = it.next().cloned(),
@@ -140,6 +143,13 @@ async fn main() -> std::process::ExitCode {
     let content_fw = if content_fw {
         Some(acp_core::content::ContentPolicy { block_injection: true, block_secrets: fw_block_secrets, redact_pii: true, denied_topics: fw_deny_topics })
     } else { None };
+    let content_ml = match content_ml_path.as_ref() {
+        Some(path) => match std::fs::read_to_string(path).ok().and_then(|s| acp_core::content::LinearScorer::from_json(&s).ok()) {
+            Some(s) => { eprintln!("acp-gateway: ML content detector loaded from {path}"); Some(std::sync::Arc::new(s)) }
+            None => { eprintln!("acp-gateway: cannot load --content-ml model {path}"); return std::process::ExitCode::from(1); }
+        },
+        None => None,
+    };
     let st = Arc::new(GwState {
         engine,
         tax: ModelTaxonomy::default(),
@@ -163,6 +173,7 @@ async fn main() -> std::process::ExitCode {
         bg_key,
         content_scan,
         content_fw,
+        content_ml,
         budget_state,
         metrics: Metrics::default(),
     });
@@ -254,7 +265,7 @@ fn native_content_blocked(st: &GwState, body: &serde_json::Value) -> Option<Stri
     if text.is_empty() {
         return None;
     }
-    let v = acp_core::content::scan_text(policy, &text);
+    let v = acp_core::content::scan_with_ml(policy, &text, st.content_ml.as_deref());
     if v.block {
         let kinds: Vec<String> = v.findings.iter().map(|f| f.kind.clone()).collect();
         Some(format!("content firewall: {}", kinds.join(", ")))

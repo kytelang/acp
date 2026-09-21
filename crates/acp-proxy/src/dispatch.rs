@@ -76,6 +76,7 @@ pub struct Controller {
     // First-party content firewall (complete-platform): when set, tool-call argument strings are
     // scanned before forwarding; injection/denied-topic block the call, secrets are recorded.
     content: Mutex<Option<acp_core::content::ContentPolicy>>,
+    content_ml: Mutex<Option<std::sync::Arc<acp_core::content::LinearScorer>>>,
     // Per-request human identity (phase B): when set, the HTTP transport verifies each request's
     // bearer token and stamps the resulting human principal onto that call, overriding the startup
     // default. An invalid/absent token degrades to the startup principal (unattributed), never an
@@ -128,6 +129,7 @@ impl Controller {
             tool_pins_file: Mutex::new(None),
             enforcement_signer: Mutex::new(None),
             content: Mutex::new(None),
+            content_ml: Mutex::new(None),
             oidc: Mutex::new(None),
         }
     }
@@ -198,6 +200,11 @@ impl Controller {
     /// Enable the first-party content firewall over tool-call arguments.
     pub fn set_content_policy(&self, policy: acp_core::content::ContentPolicy) {
         *self.content.lock().unwrap() = Some(policy);
+    }
+
+    /// Add a trained ML content detector alongside the signature firewall.
+    pub fn set_content_ml(&self, scorer: std::sync::Arc<acp_core::content::LinearScorer>) {
+        *self.content_ml.lock().unwrap() = Some(scorer);
     }
 
     /// Configure per-request human-identity verification (the org IdP JWKS + issuer/audience).
@@ -442,7 +449,8 @@ impl Controller {
                         }
                     }
                     if !argtext.is_empty() {
-                        let cv = acp_core::content::scan_text(cp, &argtext);
+                        let ml = self.content_ml.lock().unwrap().clone();
+                        let cv = acp_core::content::scan_with_ml(cp, &argtext, ml.as_deref());
                         if cv.block {
                             let kinds: Vec<String> = cv.findings.iter().map(|f| f.kind.clone()).collect();
                             a.outcome.verdict = Verdict::Deny;

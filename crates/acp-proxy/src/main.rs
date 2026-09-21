@@ -53,6 +53,7 @@ struct Opts {
     content_firewall: bool,
     block_secrets: bool,
     deny_topics: Vec<String>,
+    content_ml: Option<String>,
 }
 
 fn parse_opts(items: &[String]) -> Result<(Opts, Vec<String>), String> {
@@ -95,6 +96,7 @@ fn parse_opts(items: &[String]) -> Result<(Opts, Vec<String>), String> {
             "--content-firewall" => o.content_firewall = true,
             "--block-secrets" => { o.content_firewall = true; o.block_secrets = true; }
             "--deny-topic" => { o.content_firewall = true; if let Some(v) = it.next() { o.deny_topics.push(v.clone()); } }
+            "--content-ml" => { o.content_firewall = true; o.content_ml = it.next().cloned(); }
             other => return Err(format!("unknown option '{other}'")),
         }
     }
@@ -252,6 +254,12 @@ fn build_controller(o: &Opts) -> Result<Arc<Controller>, String> {
             denied_topics: o.deny_topics.clone(),
         });
         eprintln!("acp-proxy: first-party content firewall enabled over tool-call arguments");
+    }
+    if let Some(mlp) = o.content_ml.as_ref() {
+        match std::fs::read_to_string(mlp).ok().and_then(|s| acp_core::content::LinearScorer::from_json(&s).ok()) {
+            Some(s) => { controller.set_content_ml(std::sync::Arc::new(s)); eprintln!("acp-proxy: ML content detector loaded from {mlp}"); }
+            None => return Err(format!("cannot load --content-ml model {mlp}")),
+        }
     }
     // Verified caller identity: when a registry is configured, the presented (agent-id, token) MUST
     // verify. Fail closed on a missing/invalid/revoked credential so a mis-enrolled agent cannot run
