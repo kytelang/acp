@@ -1,7 +1,9 @@
 # Groundedness and hallucination detection
 
 Date: 2026-09-21
-Status: design and honest positioning. A baseline is implemented (`acp_core::groundedness`, the `GroundednessScorer`, and `acp groundedness`); this document records how the market does it, what ACP does, and the upgrade path, so the capability is positioned honestly.
+Status: design and honest positioning. A baseline is implemented (`acp_core::groundedness`, the `GroundednessScorer`, and `acp groundedness`); this document records how the market does it, what ACP does, and the upgrade path.
+
+Decision (2026-09-21): ACP does not build or maintain its own fine-tuned NLI groundedness model. The built-in lexical detector stays as the zero-dependency on-premises and air-gapped floor; production-grade groundedness is delegated to an external specialist service (Azure AI Content Safety groundedness, AWS Bedrock contextual grounding) called through the content-scan hook. This keeps ACP free of a heavy ML inference dependency and multi-hundred-MB model artifacts, and lets a customer's RAG use-case pull and fund the integration when they need it. Building an on-premises NLI or SLM detector remains an option behind the same Scorer seam if a future air-gapped customer requires groundedness with no external call, but it is not on the roadmap by default.
 
 ## 1. The distinction that governs everything
 
@@ -41,14 +43,14 @@ Consensus: grounded faithfulness is deployable; reference-free factuality is not
 - Built baseline: `acp_core::groundedness` scores an answer against a source context by per-sentence content-word support (a lexical baseline), flags the unsupported sentences, and exposes it two ways: the `GroundednessScorer` behind the content Scorer seam (using a source field on the scan context), and the `acp groundedness <answer> <context>` command. It emits an "ungrounded" signal that blocks above a configurable threshold, and it runs only when a source context is present.
 - Honest boundary: the baseline is lexical, not semantic. It catches an answer that invents content absent from the source, and it can flag a heavy paraphrase that reuses few source words (a false positive). It is a first cut, not a fine-tuned model.
 
-## 5. The upgrade path (recommended, matches the market)
+## 5. The chosen approach and the seam
 
-The Scorer seam means the detector can be upgraded without changing any caller:
+Production-grade groundedness is delegated to an external service; the on-premises baseline is the fallback. The Scorer seam keeps the door open for a local model later, without changing any caller:
 
-- On-premises primary: a fine-tuned NLI or small-model groundedness scorer (HHEM-style T5 or AlignScore-style RoBERTa) exported to the same ONNX or Candle runtime the ML content engine uses. Millisecond-scale, local, air-gap friendly, and strong enough to gate inline. This is the recommended production detector for ACP's on-premises posture.
+- External integration (the chosen production path): call Azure groundedness or Bedrock contextual grounding through the content-scan hook, passing the answer and its source context; block or flag on the returned verdict or score. No model to ship or maintain.
+- On-premises option, only if a future air-gapped customer requires it: a fine-tuned NLI or small-model scorer (HHEM-style T5 or AlignScore-style RoBERTa) via Candle (pure-Rust, no native library) or ONNX Runtime, behind the same seam. Not default roadmap; verify the model's licence before shipping.
 - Optional explainability tier: an LLM-as-judge (a fine-tuned judge such as Lynx) for cases that need a reasoned explanation, run asynchronously or for review rather than in the hot path.
 - Claim decomposition: split the answer into claims (RAGAS-style) and ground each, for finer localisation.
-- External integration: call Azure groundedness or Bedrock contextual grounding through the content-scan hook when a customer prefers a managed detector.
 - Behaviour: inline block for the fast NLI or small-model tier; monitor-and-flag for the slower LLM-judge tier; fail-closed on evaluator errors.
 
 ## 6. Where this fits in ACP, and the honest caveat
