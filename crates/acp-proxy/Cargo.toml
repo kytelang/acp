@@ -25,6 +25,7 @@ acp-ledger = { path = "../acp-ledger" }
 acp-approvals = { path = "../acp-approvals" }
 tokio = { workspace = true }
 serde_json.workspace = true
+serde_yaml.workspace = true
 anyhow.workspace = true
 axum.workspace = true
 reqwest.workspace = true

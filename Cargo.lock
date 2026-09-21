@@ -204,6 +204,7 @@ dependencies = [
  "hex",
  "reqwest",
  "serde_json",
+ "serde_yaml",
  "tokio",
 ]
 

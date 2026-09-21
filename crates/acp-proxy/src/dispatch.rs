@@ -78,6 +78,7 @@ pub struct Controller {
     content: Mutex<Option<acp_core::content::ContentPolicy>>,
     content_ml: Mutex<Option<std::sync::Arc<acp_core::content::LinearScorer>>>,
     pin_pg: tokio::sync::Mutex<Option<acp_pgstate::PgState>>,
+    trajectory: Mutex<Option<acp_core::trajectory::TrajectoryMonitor>>,
     // Per-request human identity (phase B): when set, the HTTP transport verifies each request's
     // bearer token and stamps the resulting human principal onto that call, overriding the startup
     // default. An invalid/absent token degrades to the startup principal (unattributed), never an
@@ -132,6 +133,7 @@ impl Controller {
             content: Mutex::new(None),
             content_ml: Mutex::new(None),
             pin_pg: tokio::sync::Mutex::new(None),
+            trajectory: Mutex::new(None),
             oidc: Mutex::new(None),
         }
     }
@@ -207,6 +209,11 @@ impl Controller {
     /// Add a trained ML content detector alongside the signature firewall.
     pub fn set_content_ml(&self, scorer: std::sync::Arc<acp_core::content::LinearScorer>) {
         *self.content_ml.lock().unwrap() = Some(scorer);
+    }
+
+    /// Enable intent / trajectory governance (toxic combinations, velocity) for this session.
+    pub fn set_trajectory_policy(&self, policy: acp_core::trajectory::TrajectoryPolicy) {
+        *self.trajectory.lock().unwrap() = Some(acp_core::trajectory::TrajectoryMonitor::new(policy));
     }
 
     /// Enable shared tool-integrity pins via Postgres, so a rug-pull seen on one replica is caught
@@ -499,6 +506,24 @@ impl Controller {
                             a.outcome.reason = Some(format!("content firewall: {}", kinds.join(", ")));
                             a.enforce = policy::enforce_for(Verdict::Deny, &tc, &a.outcome, a.impact);
                         }
+                    }
+                }
+            }
+            // Intent / trajectory governance: deny an action that completes a toxic combination or
+            // exceeds a velocity budget across the session, even when individually allowed.
+            if a.outcome.verdict == Verdict::Allow {
+                if let Some(tm) = self.trajectory.lock().unwrap().as_mut() {
+                    let tv = tm.record_and_check(acp_core::trajectory::ActionEvent {
+                        resource: ev_res.to_string(),
+                        operation: ev_op.to_string(),
+                        impact: a.impact.to_string(),
+                        ts_ms: dispatch_now_ms(),
+                    });
+                    if let acp_core::trajectory::TrajectoryVerdict::Deny(reason) = tv {
+                        a.outcome.verdict = Verdict::Deny;
+                        a.outcome.rule_id = Some("trajectory".to_string());
+                        a.outcome.reason = Some(reason);
+                        a.enforce = policy::enforce_for(Verdict::Deny, &tc, &a.outcome, a.impact);
                     }
                 }
             }

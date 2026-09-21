@@ -55,6 +55,7 @@ struct Opts {
     deny_topics: Vec<String>,
     content_ml: Option<String>,
     pin_pg: Option<String>,
+    trajectory: Option<String>,
 }
 
 fn parse_opts(items: &[String]) -> Result<(Opts, Vec<String>), String> {
@@ -99,6 +100,7 @@ fn parse_opts(items: &[String]) -> Result<(Opts, Vec<String>), String> {
             "--deny-topic" => { o.content_firewall = true; if let Some(v) = it.next() { o.deny_topics.push(v.clone()); } }
             "--content-ml" => { o.content_firewall = true; o.content_ml = it.next().cloned(); }
             "--pin-pg" => o.pin_pg = it.next().cloned(),
+            "--trajectory" => o.trajectory = it.next().cloned(),
             other => return Err(format!("unknown option '{other}'")),
         }
     }
@@ -268,6 +270,12 @@ async fn build_controller(o: &Opts) -> Result<Arc<Controller>, String> {
             Ok(pg) => { controller.set_pin_pg(pg).await; eprintln!("acp-proxy: shared tool pins via Postgres ({conn})"); }
             Err(e) => return Err(format!("cannot connect --pin-pg: {e}")),
         }
+    }
+    if let Some(tp) = o.trajectory.as_ref() {
+        let src = std::fs::read_to_string(tp).map_err(|e| format!("cannot read --trajectory {tp}: {e}"))?;
+        let policy: acp_core::trajectory::TrajectoryPolicy = serde_yaml::from_str(&src).map_err(|e| format!("invalid trajectory policy: {e}"))?;
+        controller.set_trajectory_policy(policy);
+        eprintln!("acp-proxy: intent/trajectory governance enabled from {tp}");
     }
     // Verified caller identity: when a registry is configured, the presented (agent-id, token) MUST
     // verify. Fail closed on a missing/invalid/revoked credential so a mis-enrolled agent cannot run

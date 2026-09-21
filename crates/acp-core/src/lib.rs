@@ -67,6 +67,7 @@ pub mod supplychain;
 pub mod ticket;
 pub mod timeline;
 pub mod toolintegrity;
+pub mod trajectory;
 pub mod tuning;
 pub mod usecase;
 pub mod types;
