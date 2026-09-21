@@ -36,7 +36,7 @@ Each item has: what it is, why it matters, current status, whether it is code or
 - Why: to be resilient and correct when running more than one gateway or proxy replica.
 - Status: designed, not built. `docs/design/p2-operations.md`.
 - Type: mostly ops and deployment. The in-process part that is code is the shared-state abstraction (Redis or Postgres backed budgets and pins); the rest (replication, failover, VIP, backups) is deployment.
-- Concrete next code step: a `Store` trait for budgets and pins with an in-process default and a Redis-backed implementation, keyed `budget:{app}:{resource}` and `pin:{server}:{tool}`, check-and-decrement done atomically. DONE (trait + in-process): `acp_core::sharedstate` (BudgetStore/PinStore, MemBudgetStore/MemPinStore, 3 tests). REMAINING: the Redis/Postgres implementation and wiring the gateway/proxy hot paths to it (deployment).
+- DONE (trait + in-process + Postgres): `acp_core::sharedstate` (traits + in-process stores) and `acp-pgstate` (Postgres-backed budgets and pins, atomic token bucket under a row lock, verified against a live local Postgres). REMAINING: wiring the gateway/proxy hot paths to the shared store at deployment (the in-process default stays for single-instance).
 
 ### 4. Real-Entra cutover
 - What: switch verified-human-principal from the mock OIDC path to a real Microsoft Entra tenant.
@@ -90,8 +90,8 @@ For contrast, so the pending list is read against the whole. All of the followin
 1. ML-engine phase 1 (the `Scorer` seam refactor): DONE.
 2. Shared-state abstraction for budgets and pins (trait + in-process stores): DONE. Redis/Postgres implementation and hot-path adoption remain (need a live server to verify).
 3. GRC assessment-workflow depth (conformity workflow + model cards): DONE.
-4. ML-engine phases 2 to 4 (the actual classifiers): BLOCKED on trained model artifacts and an ONNX/Candle runtime plus a training and evaluation pipeline. The seam is ready for them.
-5. Real-Entra cutover: BLOCKED on a tenant access token from the operator.
+4. ML-engine phases 2 to 4 (the actual classifier): DONE (baseline). A trained hashed-n-gram logistic-regression detector (`LinearScorer` + `scripts/train_injection_lr.py`, `--content-ml`) blocks paraphrases the signatures miss, verified e2e. Upgrade path (small-encoder / ONNX Runtime, guard LLM) remains optional for broader coverage.
+5. Real-Entra cutover: DEFERRED by decision (mock Entra for now); the code path is built and tested against the mock. Flip when a tenant token is provided.
 6. Browser-extension run-verification: BLOCKED on a real browser.
 7. HTTP/2 in the interception proxy: deferred (complex, marginal); working as designed on HTTP/1.1.
 

@@ -1,7 +1,7 @@
 # ML-based content engine
 
 Date: 2026-09-20
-Status: design. Supersedes the honest boundary noted in `docs/design/gap-closure.md` and `docs/positioning.md`: the first-party content firewall (`acp_core::content`) is signature and regex based, which misses novel, paraphrased and obfuscated attacks. This document designs the trained-ML content engine that replaces signatures as the primary detector while keeping them as a fast pre-filter. Reads with `docs/positioning.md` (on-prem, no cloud) and `docs/model-cards/classifiers.md`.
+Status: design; a dependency-light baseline is now IMPLEMENTED. A trained hashed word-n-gram logistic-regression detector (`acp_core::content::LinearScorer`, trained by `scripts/train_injection_lr.py`, wired via `--content-ml` on the gateway and proxy) ships behind the `Scorer` seam and blocks paraphrases the signatures miss. The small-encoder / ONNX Runtime and guard-LLM options described below remain the upgrade path for broader coverage; they are the future drop-in behind the same seam. Supersedes the honest boundary noted in `docs/design/gap-closure.md` and `docs/positioning.md`: the first-party content firewall (`acp_core::content`) is signature and regex based, which misses novel, paraphrased and obfuscated attacks. This document designs the trained-ML content engine that replaces signatures as the primary detector while keeping them as a fast pre-filter. Reads with `docs/positioning.md` (on-prem, no cloud) and `docs/model-cards/classifiers.md`.
 
 ## 1. What it is
 
