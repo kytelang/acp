@@ -69,6 +69,7 @@ dependencies = [
  "acp-auth",
  "acp-core",
  "acp-ledger",
+ "acp-pgstate",
  "acp-policy",
  "anyhow",
  "axum",

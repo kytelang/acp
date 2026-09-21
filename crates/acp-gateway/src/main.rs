@@ -50,6 +50,7 @@ struct GwState {
     content_scan: Option<String>,
     content_fw: Option<acp_core::content::ContentPolicy>,
     content_ml: Option<std::sync::Arc<acp_core::content::LinearScorer>>,
+    budget_pg: Option<tokio::sync::Mutex<acp_pgstate::PgState>>,
     sem: std::sync::Arc<tokio::sync::Semaphore>,
     budget_state: Option<String>,
     metrics: Metrics,
@@ -68,6 +69,7 @@ async fn main() -> std::process::ExitCode {
     let mut fw_block_secrets = false;
     let mut fw_deny_topics: Vec<String> = Vec::new();
     let mut content_ml_path: Option<String> = None;
+    let mut budget_pg_conn: Option<String> = None;
     let mut budget_state: Option<String> = None;
     let (mut entra_tenant, mut entra_audience): (Option<String>, Option<String>) = (None, None);
     let mut it = args.iter().skip(1);
@@ -85,6 +87,7 @@ async fn main() -> std::process::ExitCode {
             "--block-secrets" => { content_fw = true; fw_block_secrets = true; }
             "--deny-topic" => { content_fw = true; if let Some(v) = it.next() { fw_deny_topics.push(v.clone()); } }
             "--content-ml" => { content_fw = true; content_ml_path = it.next().cloned(); }
+            "--budget-pg" => budget_pg_conn = it.next().cloned(),
             "--budget-state" => budget_state = it.next().cloned(),
             "--env" => env = it.next().cloned().unwrap_or(env),
             "--entra-tenant" => entra_tenant = it.next().cloned(),
@@ -143,6 +146,13 @@ async fn main() -> std::process::ExitCode {
     let content_fw = if content_fw {
         Some(acp_core::content::ContentPolicy { block_injection: true, block_secrets: fw_block_secrets, redact_pii: true, denied_topics: fw_deny_topics })
     } else { None };
+    let budget_pg = match budget_pg_conn.as_ref() {
+        Some(conn) => match acp_pgstate::PgState::connect(conn).await {
+            Ok(s) => { eprintln!("acp-gateway: shared budgets via Postgres ({conn})"); Some(tokio::sync::Mutex::new(s)) }
+            Err(e) => { eprintln!("acp-gateway: cannot connect --budget-pg: {e}"); return std::process::ExitCode::from(1); }
+        },
+        None => None,
+    };
     let content_ml = match content_ml_path.as_ref() {
         Some(path) => match std::fs::read_to_string(path).ok().and_then(|s| acp_core::content::LinearScorer::from_json(&s).ok()) {
             Some(s) => { eprintln!("acp-gateway: ML content detector loaded from {path}"); Some(std::sync::Arc::new(s)) }
@@ -174,6 +184,7 @@ async fn main() -> std::process::ExitCode {
         content_scan,
         content_fw,
         content_ml,
+        budget_pg,
         budget_state,
         metrics: Metrics::default(),
     });
@@ -447,13 +458,26 @@ async fn handle(
                         let key = format!("{}|{}", app, d.resource);
                         let max = ob.max.unwrap_or(1_000_000);
                         let window = ob.window_ms.unwrap_or(86_400_000);
-                        let ok = {
+                        let rate = (max as f64) * 1000.0 / (window as f64);
+                        // Shared budget via Postgres when configured (multi-replica); the in-process
+                        // token bucket is the single-instance default and the fallback on a store error.
+                        let inproc = |st: &GwState, key: String| -> bool {
                             let mut lims = st.limiters.lock().unwrap();
                             let bucket = lims.entry(key).or_insert_with(|| {
-                                let rate = (max as f64) * 1000.0 / (window as f64);
                                 acp_core::ratelimit::TokenBucket::new(max as f64, rate, now_ms())
                             });
                             bucket.allow(now_ms())
+                        };
+                        let ok = if let Some(pg) = st.budget_pg.as_ref() {
+                            match pg.lock().await.allow(&key, max as f64, rate, now_ms() as i64).await {
+                                Ok(v) => v,
+                                Err(e) => {
+                                    eprintln!("acp-gateway: budget store error (falling back in-process): {e}");
+                                    inproc(&st, key.clone())
+                                }
+                            }
+                        } else {
+                            inproc(&st, key.clone())
                         };
                         if !ok {
                             over_budget = true;
