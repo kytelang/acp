@@ -90,7 +90,7 @@ For contrast, so the pending list is read against the whole. All of the followin
 1. ML-engine phase 1 (the `Scorer` seam refactor): DONE.
 2. Shared-state abstraction for budgets and pins (trait + in-process stores): DONE. Redis/Postgres implementation and hot-path adoption remain (need a live server to verify).
 3. GRC assessment-workflow depth (conformity workflow + model cards): DONE.
-4. ML-engine phases 2 to 4 (the actual classifier): DONE (baseline). A trained hashed-n-gram logistic-regression detector (`LinearScorer` + `scripts/train_injection_lr.py`, `--content-ml`) blocks paraphrases the signatures miss, verified e2e. Upgrade path (small-encoder / ONNX Runtime, guard LLM) remains optional for broader coverage.
+4. ML-engine phases 2 to 4 (the actual classifier + eval gate): DONE (baseline). A trained hashed-n-gram logistic-regression detector (`LinearScorer` + `scripts/train_injection_lr.py`, `--content-ml`) blocks paraphrases the signatures miss (verified e2e), with an eval harness and CI gate (`eval_injection`, `acp content-eval`, held-out set at models/injection-eval.json). Upgrade path (small-encoder / ONNX Runtime, guard LLM) remains optional for broader coverage.
 5. Real-Entra cutover: DEFERRED by decision (mock Entra for now); the code path is built and tested against the mock. Flip when a tenant token is provided.
 6. Browser-extension run-verification: BLOCKED on a real browser.
 7. HTTP/2 in the interception proxy: deferred (complex, marginal); working as designed on HTTP/1.1.
