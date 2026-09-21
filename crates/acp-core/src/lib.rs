@@ -28,6 +28,7 @@ pub mod dualcontrol;
 pub mod egress;
 pub mod enrollment;
 pub mod fleet;
+pub mod groundedness;
 pub mod grc;
 pub mod ha;
 pub mod hlc;

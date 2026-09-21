@@ -54,6 +54,7 @@ fn main() -> ExitCode {
         "content-scan" => cmd_content_scan(&args[2..]),
         "content-eval" => cmd_content_eval(&args[2..]),
         "redteam" => cmd_redteam(&args[2..]),
+        "groundedness" => cmd_groundedness(&args[2..]),
         "controls" => cmd_controls(&args[2..]),
         "assess" => cmd_assess(&args[2..]),
         "attest" => cmd_attest(&args[2..]),
@@ -1924,6 +1925,32 @@ fn cmd_redteam(rest: &[String]) -> ExitCode {
         return ExitCode::from(3);
     }
     eprintln!("gate passed (min catch {min_catch}, zero false positives)");
+    ExitCode::SUCCESS
+}
+
+/// Check an answer's groundedness against a source context (baseline lexical detector).
+///   acp groundedness <answer-or-@file> <context-or-@file> [--block-below <r>] [--claim-threshold <r>]
+/// Prints the score and unsupported claims; exits 3 when the score is below --block-below.
+fn cmd_groundedness(rest: &[String]) -> ExitCode {
+    use acp_core::groundedness::groundedness;
+    let pos: Vec<&String> = rest.iter().filter(|a| !a.starts_with("--")).collect();
+    let (Some(a), Some(c)) = (pos.first(), pos.get(1)) else {
+        return usage("acp groundedness <answer-or-@file> <context-or-@file> [--block-below <r>] [--claim-threshold <r>]");
+    };
+    let read = |s: &str| -> String { s.strip_prefix('@').map(|p| std::fs::read_to_string(p).unwrap_or_default()).unwrap_or_else(|| s.to_string()) };
+    let answer = read(a);
+    let context = read(c);
+    let block_below: f32 = flag_value(rest, "--block-below").and_then(|s| s.parse().ok()).unwrap_or(0.6);
+    let claim_threshold: f32 = flag_value(rest, "--claim-threshold").and_then(|s| s.parse().ok()).unwrap_or(0.5);
+    let r = groundedness(&answer, &context, claim_threshold);
+    println!("groundedness: {:.2} ({} claim(s), {} unsupported)", r.score, r.claims.len(), r.ungrounded.len());
+    for u in &r.ungrounded {
+        println!("  UNSUPPORTED  {}", u.chars().take(90).collect::<String>());
+    }
+    if r.score < block_below {
+        eprintln!("BELOW THRESHOLD: {:.2} < {:.2}", r.score, block_below);
+        return ExitCode::from(3);
+    }
     ExitCode::SUCCESS
 }
 
