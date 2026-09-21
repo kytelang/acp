@@ -1,7 +1,7 @@
-# ACP positioning and scope
+# Varman (ACP) positioning and scope
 
 Date: 2026-09-18
-Status: the anchor. Every feature and every model entity must justify itself against this. If it does not serve the gap below, it belongs in "integrate" or "exclude", not in the build.
+Status: the anchor, revised 2026-09-20. The original wedge-only framing (sections "The gap we fill" through "The failure mode to avoid") is kept for the record but is SUPERSEDED by the "Scope change" section below: the content firewall and the GRC lifecycle are now built into the product. Read the scope change as current; read the wedge sections as history.
 
 ## The gap we fill
 
@@ -25,11 +25,15 @@ The sections below describe the original wedge-only scope, kept for the record. 
 
 What changed, and the honest boundary on each:
 
-- Content firewall: BUILT natively (`acp_core::content`), in-path on both surfaces (the gateway prompt path and the proxy tool-call path). It does deterministic prompt-injection and jailbreak SIGNATURE detection, PII and secret detection, span-level redaction and denied-topic rules. It is not a trained ML classifier, so the external content-scan hook stays available for ML-grade detection against novel or obfuscated attacks. ACP no longer REQUIRES an external firewall for baseline content protection.
+- Content firewall: BUILT natively (`acp_core::content`), in-path on both surfaces (the gateway prompt path and the proxy tool-call path). It combines a trained ML injection classifier (`acp_core::content::LinearScorer`) with prompt-injection and jailbreak signatures, PII and secret detection, span-level redaction and denied-topic rules, hardened against obfuscation (base64, zero-width, homoglyph, de-spacing) and indirect injection (tool-result screening). The detection is deliberately lightweight, so the external content-scan hook stays available for stronger ML-grade detection against novel attacks. ACP no longer REQUIRES an external firewall for baseline content protection.
 - GRC lifecycle: BUILT natively. Control library (`acp_core::controls`), EU AI Act risk assessment and conformity obligations (`acp_core::assessment`), signed attestations / sign-offs (`acp_core::attestation`), an AI use-case registry with lifecycle gates (`acp_core::usecase`), and the pre-existing evidence-backed framework reports and risk register. ACP can now run a governance programme on its own; it still interoperates with an external GRC platform where one is already in place.
 - Still integrate (unchanged): the IdP (Entra/OIDC), the SIEM (ACP exports CEF/OCSF/OTLP/syslog), and model/artifact scanning (ACP runs the admission gate and AI-BOM, and calls an external scanner for the verdict).
 
 The original "failure mode to avoid" note below (do not become Credo plus a firewall) is now explicitly overridden by this decision. The trade accepted: broader scope and more surface to maintain, in exchange for a single product that meets an enterprise's AI-governance needs without assembling three tools.
+
+## Original wedge (historical, superseded 2026-09-20)
+
+The four sections that follow are the original wedge-only scope. They are kept as a record of the earlier decision. Where they say "do not build a classifier" or "do not build a GRC dashboard" or "do not become Credo plus a firewall", that guidance was reversed by the scope change above: the firewall and the GRC lifecycle are now first-party.
 
 ## Build (the wedge, and only this)
 

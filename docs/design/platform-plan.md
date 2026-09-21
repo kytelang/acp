@@ -1,7 +1,7 @@
-# ACP platform plan: from core to full-landscape governance
+# Varman (ACP) platform plan: from core to full-landscape governance
 
 Date: 2026-09-18
-Status: the sequenced build plan for the architecture in `platform-architecture.md`. Each phase ships on the same brain (control plane, PDP, evidence, kill-switch) built in Phase A, so none requires a rewrite and each is independently valuable. Designs: `phase-b-control-plane.md` ... `phase-f-grc.md`.
+Status: the sequenced build plan for the architecture in `platform-architecture.md`. Each phase ships on the same brain (control plane, PDP, evidence, kill-switch) built in Phase A, so none requires a rewrite and each is independently valuable. Designs: `phase-b-control-plane.md` ... `phase-f-grc.md`. Build-status update (2026-09-21): phases C, D, E and F have SHIPPED since this plan was written; the "design done" markers below are superseded, and the functionality landed as modules inside `acp-core` rather than the standalone `acp-discovery`/`acp-grc` crates named here.
 
 ## Phases at a glance
 
@@ -9,10 +9,10 @@ Status: the sequenced build plan for the architecture in `platform-architecture.
 |---|---|---|
 | A | MCP enforcement-and-evidence core (model-v2) | DONE, shipped and tested |
 | B | Platform control plane: real identity, RBAC, SIEM (multi-tenancy DROPPED: on-prem single-org) | mostly built |
-| C | LLM gateway PEP: govern direct model API usage | design done |
-| D | Agent-native policy sync: govern non-MCP agent powers | design done |
-| E | Discovery plane: find shadow AI, feed the registry | design done |
-| F | GRC projection: evidence-backed compliance | design done |
+| C | LLM gateway PEP: govern direct model API usage | BUILT (acp-gateway) |
+| D | Agent-native policy sync: govern non-MCP agent powers | BUILT (acp-nativecompile) |
+| E | Discovery plane: find shadow AI, feed the registry | BUILT (acp_core::discovery + acp enroll) |
+| F | GRC projection: evidence-backed compliance | BUILT (acp_core::grc + controls/conformity/assessment) |
 
 ## Dependencies
 
@@ -70,11 +70,11 @@ gantt
 
 Each phase's work items and acceptance criteria are in its design doc. Summary of the build surface:
 
-- B [acp-auth, acp-registry, acp-server, acp-console, new acp-workload-id]: OIDC validation, SPIFFE SVIDs, SCIM sync, tenant scoping, RBAC binding, SIEM export.
-- C [new acp-gateway, acp-core::resource/metering, acp-policy]: reverse proxy for model wire formats, model-class taxonomy, token/cost budgets, `scan` obligation, gateway evidence, `model:` kill-switch scope.
-- D [new acp-nativecompile]: policy-to-native compiler framework, Copilot/Claude/Gemini backends, coverage report, MDM manifest.
-- E [new acp-discovery]: egress telemetry ingestion, detector, shadow candidate lifecycle, cross-PEP bypass alarms.
-- F [new acp-grc]: control-mapping definitions, use-case inventory, report generation, Credo/OneTrust export.
+- B [acp-auth, acp-registry, acp-server, acp-console; acp-workload-id NOT built]: OIDC validation, SPIFFE SVIDs, SCIM sync, tenant scoping, RBAC binding, SIEM export.
+- C [BUILT: acp-gateway, acp-core::resource/metering, acp-policy]: reverse proxy for model wire formats, model-class taxonomy, token/cost budgets, `scan` obligation, gateway evidence, `model:` kill-switch scope.
+- D [BUILT: acp-nativecompile]: policy-to-native compiler framework, Copilot/Claude/Gemini backends, coverage report, MDM manifest.
+- E [BUILT: functionality shipped in acp-core::discovery + the enrollment loop, not a standalone acp-discovery crate]: egress telemetry ingestion, detector, shadow candidate lifecycle, cross-PEP bypass alarms.
+- F [BUILT: functionality shipped in acp-core::grc + controls/conformity/assessment, not a standalone acp-grc crate]: control-mapping definitions, use-case inventory, report generation, Credo/OneTrust export.
 
 ## Principles held across every phase
 
@@ -104,4 +104,4 @@ flowchart TB
 
 ## Definition of full-platform done
 
-Every AI action surface in the coverage matrix is either governed by a PEP or explicitly integrated; every decision across every surface lands in one tamper-evident ledger keyed by verified agent and human identity; one policy language governs all of it; a scoped kill-switch reaches every surface; and an auditor can pull an evidence-backed compliance report. At that point ACP governs the AI landscape in its entirety, without having become a content firewall or a GRC suite.
+Every AI action surface in the coverage matrix is either governed by a PEP or explicitly integrated; every decision across every surface lands in one tamper-evident ledger keyed by verified agent and human identity; one policy language governs all of it; a scoped kill-switch reaches every surface; and an auditor can pull an evidence-backed compliance report. At that point ACP governs the AI landscape in its entirety. Note: the original plan said this without becoming a content firewall or a GRC suite; the 2026-09-20 scope change reversed that, and both are now built into the product.

@@ -1,5 +1,8 @@
 # AI governance and AI firewall: feature and gap analysis
 
+Status note: this is a point-in-time market analysis (September 2026). Section 9 records that Varman (ACP) later became a complete platform with the content firewall and the GRC lifecycle built in, which SUPERSEDES the "missing middle / integrate, do not rebuild" framing in sections 5 to 8. Read section 9 as the current position.
+
+
 Date: 2026-09-20
 Status: research synthesis. Reads with `docs/positioning.md` (the anchor) and `docs/research/policy-model-study.md` (the policy-model study). Where those two documents make a call, this one defers to them.
 
@@ -118,7 +121,7 @@ Mapped honestly against the eleven requirements in Section 6. "Built" means impl
 | 8 | Shadow-AI discovery under one policy | Built (network and endpoint classification via `acp discover`). Gap versus the market: no browser or endpoint DLP agent of the Purview or Holistic Endlayer kind. |
 | 9 | Runtime-sourced compliance evidence | Built. Evidence-backed EU AI Act, NIST AI RMF and ISO 42001 reports, each control cited by real ledger records, with idempotent export for ServiceNow, Archer and OneTrust. |
 | 10 | Unbypassable, fail-closed, on-prem and air-gap | Partially built. Fail-closed posture, credential brokering (the gateway holds the model key) and stdio as a structural chokepoint are built. Enforcement attestation is built but deployment-gated: unavoidability is only as strong as the rollout that forces all traffic through ACP. Production HA, disaster recovery and shared state are documented (see `docs/design/p2-operations.md`) but not yet built. |
-| 11 | Content safety by integration | Built as an integration seam. A content-scan obligation calls an external firewall (Lakera, Azure AI Content Safety); ACP deliberately does not build classifiers. |
+| 11 | Content safety | BUILT first-party (see section 9): a trained ML injection classifier plus signatures, obfuscation normalisation and tool-result screening. The content-scan obligation can also call an external firewall (Lakera, Azure AI Content Safety) for stronger detection. |
 
 ### 7.1 What ACP is deliberately not, and what it still lacks
 
@@ -155,7 +158,7 @@ Recommended priorities to make ACP genuinely the single product an enterprise ca
 
 Section 8 argued ACP should stay the neutral middle and not become "Credo plus a firewall". That decision was subsequently reversed on purpose (see `docs/positioning.md`, scope change 2026-09-20): the content firewall and the GRC lifecycle are now built into ACP.
 
-- Content firewall: a first-party, in-path engine (`acp_core::content`) on both the gateway prompt path and the proxy tool-call path. Deterministic injection/jailbreak signatures, PII and secret detection, redaction and denied-topic rules. Not a trained classifier, so the external hook remains for ML-grade detection.
+- Content firewall: a first-party, in-path engine (`acp_core::content`) on both the gateway prompt path and the proxy tool-call path. A trained ML injection classifier plus injection/jailbreak signatures, PII and secret detection, redaction and denied-topic rules, hardened against obfuscation and indirect injection. The classifier is deliberately lightweight, so the external hook remains available for stronger ML-grade detection.
 - GRC lifecycle: control library, EU AI Act assessment and conformity obligations, signed attestations, and an AI use-case registry with lifecycle gates, alongside the existing framework reports and risk register.
 
 The practical consequence for the earlier "do we need Credo and a firewall" question: no. ACP alone now covers baseline content protection and a full governance programme. An external content ML classifier or an incumbent GRC platform is now optional, plugged in where an enterprise already runs one, not required to make ACP complete.
