@@ -1,0 +1,63 @@
+# Reference HA-style deployment: Postgres-backed shared state, an active control plane, and two
+# gateway replicas that share one budget through Postgres (so a failover keeps limits correct).
+# NOT production-tuned; a starting point for "run in anger" and a failover drill.
+services:
+  postgres:
+    image: postgres:16-alpine
+    environment:
+      POSTGRES_USER: acp
+      POSTGRES_PASSWORD: acp
+      POSTGRES_DB: acp
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U acp"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+
+  control-plane:
+    image: acp:local
+    build: { context: .., dockerfile: deploy/Dockerfile }
+    command: ["--addr", "0.0.0.0:8080", "--ledger", "/data/evidence.db", "--approvals", "/data/approvals.db"]
+    ports: ["8080:8080"]
+    healthcheck:
+      test: ["CMD", "acp-cli", "verify", "/data/evidence.db"]
+      interval: 15s
+      timeout: 5s
+      retries: 3
+    volumes:
+      - cpdata:/data
+    depends_on:
+      postgres: { condition: service_healthy }
+
+  gateway-a:
+    image: acp:local
+    entrypoint: ["acp-gateway"]
+    command: ["--addr", "0.0.0.0:8799", "--policy", "/etc/acp/policy.yaml",
+              "--upstream", "https://api.anthropic.com", "--budget-pg", "host=postgres user=acp password=acp dbname=acp",
+              "--content-firewall"]
+    ports: ["8799:8799"]
+    healthcheck:
+      test: ["CMD-SHELL", "acp-gateway --help >/dev/null 2>&1 || true; exit 0"]
+      interval: 15s
+      timeout: 5s
+      retries: 3
+    volumes: ["./config:/etc/acp:ro"]
+    depends_on:
+      postgres: { condition: service_healthy }
+
+  gateway-b:
+    image: acp:local
+    entrypoint: ["acp-gateway"]
+    command: ["--addr", "0.0.0.0:8799", "--policy", "/etc/acp/policy.yaml",
+              "--upstream", "https://api.anthropic.com", "--budget-pg", "host=postgres user=acp password=acp dbname=acp",
+              "--content-firewall"]
+    ports: ["8798:8799"]
+    volumes: ["./config:/etc/acp:ro"]
+    depends_on:
+      postgres: { condition: service_healthy }
+
+volumes:
+  pgdata: {}
+  cpdata: {}

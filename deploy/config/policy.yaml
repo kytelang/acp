@@ -1,0 +1,10 @@
+version: 1
+default: allow
+rules:
+  - id: budget
+    when: { resource: frontier }
+    verdict: allow
+    obligations:
+      - kind: rate_limit
+        max: 1000
+        window_ms: 86400000

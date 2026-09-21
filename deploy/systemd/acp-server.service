@@ -1,0 +1,20 @@
+[Unit]
+Description=ACP control plane (registry, policy store, evidence ledger, approvals)
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+User=acp
+Group=acp
+ExecStart=/usr/local/bin/acp-server --addr 127.0.0.1:8080 --ledger /var/lib/acp/evidence.db --approvals /var/lib/acp/approvals.db
+Restart=on-failure
+RestartSec=2
+# Hardening
+NoNewPrivileges=true
+ProtectSystem=strict
+ReadWritePaths=/var/lib/acp
+ProtectHome=true
+PrivateTmp=true
+
+[Install]
+WantedBy=multi-user.target

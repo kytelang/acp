@@ -1,0 +1,18 @@
+image:
+  repository: acp
+  tag: local
+  pullPolicy: IfNotPresent
+
+controlPlane:
+  replicas: 1          # active plus a warm standby is an ops choice; the ledger is append-only + replicated
+  addr: "0.0.0.0:8080"
+
+gateway:
+  replicas: 2          # replicas share one budget through Postgres
+  addr: "0.0.0.0:8799"
+  upstream: "https://api.anthropic.com"
+  contentFirewall: true
+
+postgres:
+  # Point at an external managed Postgres in production; this chart does not deploy one.
+  dsn: "host=postgres user=acp password=acp dbname=acp"

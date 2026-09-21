@@ -1,0 +1,20 @@
+[Unit]
+Description=ACP LLM gateway (governs direct model API calls; shared budgets via Postgres)
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+User=acp
+Group=acp
+EnvironmentFile=/etc/acp/gateway.env
+ExecStart=/usr/local/bin/acp-gateway --addr 0.0.0.0:8799 --policy /etc/acp/policy.yaml \
+  --upstream ${ACP_UPSTREAM} --budget-pg ${ACP_BUDGET_PG} --content-firewall --content-ml /etc/acp/injection-lr.json
+Restart=on-failure
+RestartSec=2
+NoNewPrivileges=true
+ProtectSystem=strict
+ProtectHome=true
+PrivateTmp=true
+
+[Install]
+WantedBy=multi-user.target
