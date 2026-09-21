@@ -36,7 +36,7 @@ Each item has: what it is, why it matters, current status, whether it is code or
 - Why: to be resilient and correct when running more than one gateway or proxy replica.
 - Status: designed, not built. `docs/design/p2-operations.md`.
 - Type: mostly ops and deployment. The in-process part that is code is the shared-state abstraction (Redis or Postgres backed budgets and pins); the rest (replication, failover, VIP, backups) is deployment.
-- DONE (trait + in-process + Postgres): `acp_core::sharedstate` (traits + in-process stores) and `acp-pgstate` (Postgres-backed budgets and pins, atomic token bucket under a row lock, verified against a live local Postgres). REMAINING: wiring the gateway/proxy hot paths to the shared store at deployment (the in-process default stays for single-instance).
+- DONE (trait + in-process + Postgres + gateway adoption): `acp_core::sharedstate`, `acp-pgstate` (Postgres budgets and pins, verified against live PG), and the gateway's rate_limit path now uses it via `--budget-pg` (verified: two replicas share one budget). REMAINING: proxy tool-pin sharing via PG (the proxy dispatch is sync while PgState is async; low priority since pins are TOFU-stable). The in-process default stays for single-instance.
 
 ### 4. Real-Entra cutover
 - What: switch verified-human-principal from the mock OIDC path to a real Microsoft Entra tenant.
