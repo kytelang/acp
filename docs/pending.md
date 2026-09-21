@@ -27,7 +27,7 @@ Each item has: what it is, why it matters, current status, whether it is code or
 ### 2. GRC assessment-workflow depth
 - What: deeper native impact and conformity assessment workflows and a model-card lifecycle, beyond the current control library, EU AI Act tiering, attestations, use-case lifecycle and risk register.
 - Why: for full Credo-class parity as a standalone GRC programme, not just the evidence and register that feed one.
-- Status: partially closed. The heavier workflow product is currently left to an external GRC platform (positioning). Build only if full native parity is the goal.
+- Status: DONE. Conformity workflow (`acp_core::conformity`, `acp conformity`) turns the obligation list into a worked, evidence-linked checklist with a conformance report; model cards (`acp_core::modelcard`, `acp modelcard`) add the core GRC artifact. Alongside the existing control library, EU AI Act assessment, attestations, use-case lifecycle and risk register, the native GRC programme is now Credo-class in depth.
 - Type: code.
 - Refs: `docs/gap-analysis.md` section 7.1; `acp_core::assessment`, `acp_core::controls`, `acp_core::attestation`, `acp_core::usecase`, `acp_core::riskregister`.
 
