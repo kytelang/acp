@@ -81,9 +81,17 @@ unavoidable. On-prem, vendor-neutral. See `docs/positioning.md` and `docs/design
 ## Operations and posture
 - Admin console: overview, approvals, evidence timeline, teams, agents, policy authoring, kill-switch
 - Registration: teams / apps, agents, human principals
-- CLI: policy compile / test, verify / export, break-glass, native-compile, discover, grc-report, coverage, canary-egress, aibom, enroll, risk, siem, content-scan, controls, assess, attest, usecase, intercept
+- CLI: policy compile / test, verify / export, break-glass, native-compile, discover, grc-report, coverage, canary-egress, aibom, enroll, risk, siem, content-scan, content-eval, redteam, controls, assess, attest, usecase, intercept
 - Liveness and bypass detection (dead-man's-switch)
 - Fully on-prem, no cloud dependency; vendor-neutral (one policy across Copilot / Claude / Codex / Gemini / custom and any model provider)
+
+## Intent, sequence and data-boundary governance
+- Intent / trajectory governance (acp_core::trajectory): denies the action that completes a toxic combination (read a secret then egress) or exceeds a high-impact velocity budget, across the session
+- Data-boundary enforcement (acp_core::databoundary): classified data (secret / PII) may not cross to a lower-trust destination (secret to external egress is blocked; PII redacted), destination-aware unlike the content firewall
+- Continuous adversarial testing (acp_core::redteam, acp redteam): an obfuscation corpus (base64 / zero-width / homoglyph / despace) with a catch-rate + false-positive gate for CI
+
+## End-to-end vertical
+- One acceptance test (demo/vertical/run.sh) proves the spine bulletproof: Agent -> Action -> Policy -> Decision -> Human approval -> Execution -> Evidence -> Independent verification, with fail-closed checks (tampered ledger fails verification; invalid token rejected)
 
 ## The through-line
 One policy, one identity model, one tamper-evident ledger, one kill-switch, a first-party content
