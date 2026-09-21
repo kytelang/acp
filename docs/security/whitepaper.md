@@ -1,4 +1,4 @@
-# ACP security whitepaper and threat model
+# Varman (ACP) security whitepaper and threat model
 
 Date: 2026-09-21
 Status: audit-ready reference for the security and cryptographic design of ACP. Written so an independent reviewer (cryptography or security firm) can scope and verify the claims quickly. It is precise about what is guaranteed, and honest about what is not.

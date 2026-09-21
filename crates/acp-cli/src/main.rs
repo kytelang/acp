@@ -67,6 +67,7 @@ fn main() -> ExitCode {
         "verify-enforcement" => cmd_verify_enforcement(&args[2..]),
         "registry" => cmd_registry(&args[2..]),
         "policy" => cmd_policy(&args[2..]),
+        "help" | "--help" | "-h" | "version" | "--version" | "-V" => print_help(),
         _ => usage("acp [init|verify|verify-pack|export|policy-compile|policy-test|approve|deny|approvals|canary|learn|replay|purge|classify-eval]"),
     }
 }
@@ -74,6 +75,24 @@ fn main() -> ExitCode {
 fn usage(msg: &str) -> ExitCode {
     eprintln!("usage: {msg}");
     ExitCode::from(2)
+}
+
+fn print_help() -> ExitCode {
+    println!("Varman, the Agent Control Plane (ACP)");
+    println!("Vendor-neutral, on-premises runtime authorization and verifiable evidence for AI actions.");
+    println!();
+    println!("Common commands:");
+    println!("  verify | export | verify-pack     evidence: verify a ledger, export a signed pack");
+    println!("  policy-compile | policy-test      author and test policy");
+    println!("  approve | deny | approvals        human-in-the-loop approvals");
+    println!("  coverage | canary-egress          unavoidability posture");
+    println!("  redteam | content-scan | content-eval | groundedness   content firewall + adversarial gate");
+    println!("  discover | enroll | intercept     shadow-AI discovery and traffic interception");
+    println!("  grc-report | assess | conformity | controls | attest | usecase | risk | modelcard   GRC");
+    println!("  aibom | siem | native-compile | break-glass | init      supply chain, SIEM, agents, kill-switch");
+    println!();
+    println!("Run a command with no arguments to see its usage.");
+    ExitCode::SUCCESS
 }
 
 /// Read the value following a `--flag` in an argv slice, if present.

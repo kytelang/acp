@@ -1,4 +1,4 @@
-# ACP platform features
+# Varman (ACP) platform features
 
 What ACP provides to govern the AI landscape. Everything below is built and tested unless tagged
 (integrate) = connects an external system, or (deployment) = needs a rollout step to be fully

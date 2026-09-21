@@ -1,11 +1,11 @@
-# ACP evaluation guide: is it fit for your AI governance purpose?
+# Varman evaluation guide: is it fit for your AI governance purpose?
 
 Date: 2026-09-21
-Audience: a security, platform, risk or compliance leader evaluating whether ACP fits their AI governance needs. This is a plain-language, honest overview, including where ACP is not the right choice.
+Audience: a security, platform, risk or compliance leader evaluating whether Varman (the Agent Control Plane, ACP) fits their AI governance needs. This is a plain-language, honest overview, including where Varman is not the right choice. "ACP" is the internal architecture name; "Varman" is the product.
 
 ## 1. What ACP is, in one paragraph
 
-ACP (Agent Control Plane) is a vendor-neutral, on-premises layer that sits in the path of what your AI agents and applications actually do, decides whether each action is allowed, and records every decision as tamper-evident evidence that a third party can verify with a public key alone. It governs the action, not just the words: which database, secret, file, model or network an agent may touch, for which human, and in what sequence. It is not a chatbot filter and it is not a compliance spreadsheet. It is a single, complete product that combines what an AI firewall does, what a GRC platform does, and the runtime authorization and verifiable evidence that neither of them provides, so you do not have to assemble three tools.
+Varman (the Agent Control Plane, ACP) is a vendor-neutral, on-premises layer that sits in the path of what your AI agents and applications actually do, decides whether each action is allowed, and records every decision as tamper-evident evidence that a third party can verify with a public key alone. It governs the action, not just the words: which database, secret, file, model or network an agent may touch, for which human, and in what sequence. It is not a chatbot filter and it is not a compliance spreadsheet. It is a single, complete product that combines what an AI firewall does, what a GRC platform does, and the runtime authorization and verifiable evidence that neither of them provides, so you do not have to assemble three tools.
 
 ## 2. The problem it solves
 
