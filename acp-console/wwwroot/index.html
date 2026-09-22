@@ -5,6 +5,7 @@
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>ACP Console</title>
   <script type="module" src="https://cdn.jsdelivr.net/gh/starfederation/datastar@v1.0.0/bundles/datastar.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/monaco-editor@0.52.2/min/vs/loader.js"></script>
   <style>
     :root{
       --bg:#0a0e1a; --panel:#111726; --panel2:#0d1320; --line:#1e2740; --line2:#28324f;
@@ -79,6 +80,22 @@
     .hint{color:var(--muted);font-size:.78rem;margin:.1rem 0 .4rem}
     .tbtn{background:var(--panel);border:1px solid var(--line);color:var(--txt);width:36px;height:36px;border-radius:9px;cursor:pointer;font-size:1rem;display:grid;place-items:center;transition:.15s} .tbtn:hover{background:var(--panel2)}
     .tright{display:flex;align-items:center;gap:.85rem}
+    .barwrap{margin-top:1.25rem}
+    .barlbl{display:flex;justify-content:space-between;font-size:.75rem;color:var(--dim);margin-bottom:.4rem}
+    .bar{display:flex;height:14px;border-radius:7px;overflow:hidden;background:var(--panel2);border:1px solid var(--line2)}
+    .barseg{height:100%;transition:width .4s ease}
+    .barseg.allow{background:#10b981}.barseg.step{background:#f59e0b}.barseg.shadow{background:#6366f1}.barseg.deny{background:#ef4444}
+    .barkey{display:flex;gap:1.1rem;flex-wrap:wrap;margin-top:.6rem;font-size:.76rem;color:var(--dim)}
+    .barkey i.dot,.dot{display:inline-block;width:.6rem;height:.6rem;border-radius:2px;margin-right:.35rem;vertical-align:middle}
+    .dot.allow{background:#10b981}.dot.step{background:#f59e0b}.dot.shadow{background:#6366f1}.dot.deny{background:#ef4444}
+    .repgrid{display:grid;grid-template-columns:repeat(auto-fit,minmax(180px,1fr));gap:1rem}
+    .repcard{background:var(--panel2);border:1px solid var(--line2);border-radius:12px;padding:1.1rem}
+    .rep-k{font-size:.68rem;text-transform:uppercase;letter-spacing:.07em;color:var(--muted)}
+    .rep-v{font-size:1.9rem;font-weight:750;margin:.25rem 0 .1rem;letter-spacing:-.02em}
+    .repcard .dim{font-size:.76rem}
+    #policy-editor{height:360px;border:1px solid var(--line2);border-radius:10px;overflow:hidden}
+    .polrow{display:flex;align-items:center;gap:.6rem;flex-wrap:wrap}
+    @media print{.sidebar,.topbar{display:none}.app{display:block}.content{max-width:none}}
   </style>
 </head>
 <body data-signals="{theme: 'dark', view: 'overview'}" data-class-light="$theme === 'light'">
@@ -93,6 +110,7 @@
         <div class="nav-i" data-class-active="$view === 'overview'" data-on:click="$view = 'overview'"><span class="ic">&#128202;</span> Overview</div>
         <div class="nav-i" data-class-active="$view === 'approvals'" data-on:click="$view = 'approvals'"><span class="ic">&#9995;</span> Approvals</div>
         <div class="nav-i" data-class-active="$view === 'evidence'" data-on:click="$view = 'evidence'"><span class="ic">&#128220;</span> Evidence</div>
+        <div class="nav-i" data-class-active="$view === 'reports'" data-on:click="$view = 'reports'"><span class="ic">&#128203;</span> Reports</div>
         <div class="nav-l">Identity</div>
         <div class="nav-i" data-class-active="$view === 'apps'" data-on:click="$view = 'apps'"><span class="ic">&#128230;</span> Teams</div>
         <div class="nav-i" data-class-active="$view === 'agents'" data-on:click="$view = 'agents'"><span class="ic">&#129302;</span> Agents</div>
@@ -100,12 +118,14 @@
         <div class="nav-i" data-class-active="$view === 'policy'" data-on:click="$view = 'policy'"><span class="ic">&#128271;</span> Policy</div>
         <div class="nav-l">Emergency</div>
         <div class="nav-i" data-class-active="$view === 'kill'" data-on:click="$view = 'kill'"><span class="ic">&#128721;</span> Kill-switch</div>
+        <div class="nav-l">Health</div>
+        <div class="nav-i" data-class-active="$view === 'health'" data-on:click="$view = 'health'"><span class="ic">&#128737;</span> Integrity</div>
       </nav>
     </aside>
 
     <div class="main">
       <div class="topbar">
-        <h1 data-text="$view === 'overview' ? 'Governance overview' : $view === 'approvals' ? 'Pending approvals' : $view === 'evidence' ? 'Evidence timeline' : $view === 'apps' ? 'Teams' : $view === 'agents' ? 'Registered agents' : $view === 'policy' ? 'Policy' : 'Emergency kill-switch'">Governance overview</h1>
+        <h1 data-text="$view === 'overview' ? 'Governance overview' : $view === 'approvals' ? 'Pending approvals' : $view === 'evidence' ? 'Evidence timeline' : $view === 'apps' ? 'Teams' : $view === 'agents' ? 'Registered agents' : $view === 'policy' ? 'Policy' : $view === 'reports' ? 'Governance report' : $view === 'health' ? 'Control-plane integrity' : 'Emergency kill-switch'">Governance overview</h1>
         <div class="tright">
           <button class="tbtn" data-on:click="$theme = $theme === 'dark' ? 'light' : 'dark'" title="Toggle theme">
             <span data-text="$theme === 'dark' ? '&#9728;' : '&#9790;'"></span>
@@ -118,6 +138,19 @@
         <section class="view" data-show="$view === 'overview'">
           <div class="card"><div class="card-h"><span class="ic">&#128202;</span> Posture &amp; activity</div>
             <div class="card-b"><div id="metrics" class="stats"><p class="empty">connecting to acp-server&#8230;</p></div></div></div>
+        </section>
+
+        <section class="view" data-show="$view === 'reports'">
+          <div class="card"><div class="card-h"><span class="ic">&#128203;</span> Governance report<span class="sub">every figure re-derivable from the signed ledger</span></div>
+            <div class="card-b">
+              <div id="reports"><p class="empty">connecting to acp-server&#8230;</p></div>
+              <div style="margin-top:1.1rem"><button class="btn primary" data-on:click="window.print()">Print / export PDF</button></div>
+            </div></div>
+        </section>
+
+        <section class="view" data-show="$view === 'health'">
+          <div class="card"><div class="card-h"><span class="ic">&#128737;</span> Control-plane integrity<span class="sub">acp-server verifiable endpoints</span></div>
+            <div class="card-b"><div id="health"><p class="empty">connecting to acp-server&#8230;</p></div></div></div>
         </section>
 
         <section class="view" data-show="$view === 'approvals'">
@@ -149,7 +182,8 @@
               <p class="hint">Paste a policy in the YAML DSL. acp-server validates and signs it, then the proxy hot-reloads it only after verifying that signature. A policy that does not compile is rejected and nothing is written. Scope a rule to an app or agent with <span class="mono">app:</span> / <span class="mono">agent:</span> inside its <span class="mono">when</span>.</p>
               <div class="deploy">
                 <label class="fld">Policy (YAML)
-                  <textarea data-bind="policy" spellcheck="false">version: 1
+                  <div id="policy-editor"></div>
+                  <textarea id="policy-src" data-bind="policy" spellcheck="false" style="display:none">version: 1
 default: allow
 rules:
   - id: no-db-deletes
@@ -214,5 +248,33 @@ rules:
       </div>
     </div>
   </div>
+  <script>
+  (function(){
+    function boot(){
+      if(!window.require){ return; }
+      require.config({ paths: { vs: 'https://cdn.jsdelivr.net/npm/monaco-editor@0.52.2/min/vs' } });
+      require(['vs/editor/editor.main'], function(){
+        var ta = document.getElementById('policy-src');
+        var host = document.getElementById('policy-editor');
+        if(!ta || !host){ return; }
+        function theme(){ return document.body.classList.contains('light') ? 'vs' : 'vs-dark'; }
+        var ed = monaco.editor.create(host, {
+          value: ta.value, language: 'yaml', theme: theme(),
+          minimap: { enabled: false }, fontSize: 13, scrollBeyondLastLine: false,
+          tabSize: 2, automaticLayout: true, lineNumbersMinChars: 3, renderWhitespace: 'none'
+        });
+        // Mirror edits back into the datastar-bound textarea so Deploy still posts the policy signal.
+        ed.onDidChangeModelContent(function(){
+          ta.value = ed.getValue();
+          ta.dispatchEvent(new Event('input', { bubbles: true }));
+        });
+        // Keep the editor theme in step with the console light/dark toggle.
+        new MutationObserver(function(){ monaco.editor.setTheme(theme()); })
+          .observe(document.body, { attributes: true, attributeFilter: ['class'] });
+      });
+    }
+    if(document.readyState !== 'loading'){ boot(); } else { document.addEventListener('DOMContentLoaded', boot); }
+  })();
+  </script>
 </body>
 </html>

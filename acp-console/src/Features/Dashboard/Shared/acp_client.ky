@@ -9,14 +9,38 @@ import string;
 
 pub struct AcpReport {
     pub reachable: bool,
-    pub postureScore: double,
+    pub records: long,
     pub decisions: long,
+    pub billable: long,
     pub coverage: double,
+    pub allows: long,
     pub denies: long,
     pub stepUps: long,
+    pub shadows: long,
     init() {
-        self.reachable = false; self.postureScore = 0.0; self.decisions = 0;
-        self.coverage = 0.0; self.denies = 0; self.stepUps = 0;
+        self.reachable = false; self.records = 0; self.decisions = 0; self.billable = 0;
+        self.coverage = 0.0; self.allows = 0; self.denies = 0; self.stepUps = 0; self.shadows = 0;
+    }
+}
+
+// Control-plane health, read from acp-server's own endpoints (all already served, previously unused
+// by the console): /verify (ledger re-derivation), /liveness (dead-man's-switch over proxy
+// heartbeats), /alerts (spike detector), /meta-audit (self-governance log).
+pub struct HealthStatus {
+    pub reachable: bool,
+    pub ledgerOk: bool,
+    pub ledgerDetail: string,
+    pub liveHealthy: bool,
+    pub gaps: int,
+    pub alertsHealthy: bool,
+    pub tripped: int,
+    pub metaConfigured: bool,
+    pub metaSize: long,
+    pub metaVerified: bool,
+    init() {
+        self.reachable = false; self.ledgerOk = false; self.ledgerDetail = "";
+        self.liveHealthy = true; self.gaps = 0; self.alertsHealthy = true; self.tripped = 0;
+        self.metaConfigured = false; self.metaSize = 0; self.metaVerified = false;
     }
 }
 
@@ -97,12 +121,15 @@ pub struct AcpClient {
         if (resp.status.toCode() != 200) { return r; }
         let v = json.parse(resp.body);
         r.reachable = true;
-        r.postureScore = json.asFloat(json.get(v, "posture_score")) ?? 0.0;
+        r.records = json.asNumber(json.get(v, "records")) ?? 0;
         r.decisions = json.asNumber(json.get(v, "decisions")) ?? 0;
+        r.billable = json.asNumber(json.get(v, "billable_units")) ?? 0;
         r.coverage = json.asFloat(json.get(v, "policy_coverage")) ?? 0.0;
         let verdicts = json.get(v, "verdicts");
+        r.allows = json.asNumber(json.get(verdicts, "allow")) ?? 0;
         r.denies = json.asNumber(json.get(verdicts, "deny")) ?? 0;
         r.stepUps = json.asNumber(json.get(verdicts, "step_up")) ?? 0;
+        r.shadows = json.asNumber(json.get(verdicts, "shadow")) ?? 0;
         return r;
     }
 
@@ -355,5 +382,41 @@ pub struct AcpClient {
         let resp = client.Http.request("POST", self.base + "/break-glass/clear", hdrs, "{}");
         if (resp.status.toCode() != 200) { return DeployResult(false, "acp-server unreachable"); }
         return DeployResult(true, "break-glass cleared");
+    }
+
+    // Control-plane integrity and health, from acp-server's verifiable endpoints. Each figure is
+    // served by acp-server and re-derivable from the signed evidence; the console only displays it.
+    pub fn health(self: AcpClient): HealthStatus {
+        let h = HealthStatus();
+        let vr = client.Http.get(self.base + "/verify");
+        if (vr.status.toCode() == 200) {
+            h.reachable = true;
+            let v = json.parse(vr.body);
+            h.ledgerOk = json.asBool(json.get(v, "ok")) ?? false;
+            let d = json.asString(json.get(v, "detail")) ?? "";
+            h.ledgerDetail = string.eql(d, "") ? (h.ledgerOk ? "re-derived, signatures valid" : "verification failed") : d;
+        }
+        let lv = client.Http.get(self.base + "/liveness");
+        if (lv.status.toCode() == 200) {
+            let v = json.parse(lv.body);
+            h.liveHealthy = json.asBool(json.get(v, "healthy")) ?? true;
+            let g = json.asArray(json.get(v, "gaps"));
+            if (g != undefined) { h.gaps = g.size(); }
+        }
+        let al = client.Http.get(self.base + "/alerts");
+        if (al.status.toCode() == 200) {
+            let v = json.parse(al.body);
+            h.alertsHealthy = json.asBool(json.get(v, "healthy")) ?? true;
+            let t = json.asArray(json.get(v, "tripped"));
+            if (t != undefined) { h.tripped = t.size(); }
+        }
+        let ma = client.Http.get(self.base + "/meta-audit");
+        if (ma.status.toCode() == 200) {
+            let v = json.parse(ma.body);
+            h.metaConfigured = json.asBool(json.get(v, "configured")) ?? false;
+            h.metaSize = json.asNumber(json.get(v, "size")) ?? 0;
+            h.metaVerified = json.asBool(json.get(v, "verified")) ?? false;
+        }
+        return h;
     }
 }

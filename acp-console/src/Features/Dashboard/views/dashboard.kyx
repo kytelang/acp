@@ -2,14 +2,123 @@ import string;
 import list;
 import Features.Dashboard.Shared.acp_client;
 
-// Overview stat tiles (live-patched fragment #metrics).
-pub fn metricsPanel(reachable: string, posture: string, decisions: string, coverage: string, denies: string, stepUps: string): Html {
-    return <div id="metrics" class="stats">
-        <div class="stat"><div class="stat-k">Posture</div><div class="stat-v">{posture}</div></div>
-        <div class="stat"><div class="stat-k">Decisions</div><div class="stat-v">{decisions}</div></div>
-        <div class="stat"><div class="stat-k">Coverage</div><div class="stat-v">{coverage}</div></div>
-        <div class="stat"><div class="stat-k">Denied</div><div class="stat-v danger">{denies}</div></div>
-        <div class="stat"><div class="stat-k">Step-up</div><div class="stat-v warn">{stepUps}</div></div>
+// Overview stat tiles plus a verdict-distribution bar (live-patched fragment #metrics). Driven
+// straight from acp-server's /report, so every figure is re-derivable from the signed ledger.
+pub fn metricsPanel(r: AcpReport): Html {
+    let tot = r.allows + r.denies + r.stepUps + r.shadows;
+    let aw = tot - tot; let dw = tot - tot; let sw = tot - tot; let hw = tot - tot;
+    if (tot > 0) {
+        aw = (r.allows * 100) / tot;
+        dw = (r.denies * 100) / tot;
+        sw = (r.stepUps * 100) / tot;
+        hw = (r.shadows * 100) / tot;
+    }
+    let awS = `${aw}`; let dwS = `${dw}`; let swS = `${sw}`; let hwS = `${hw}`;
+    let covPct = r.coverage * 100.0;
+    return <div id="metrics">
+        {if (!r.reachable) {
+            <p class="empty">acp-server unreachable. Start it on 127.0.0.1:8787.</p>
+        } else {
+            <div>
+                <div class="stats">
+                    <div class="stat"><div class="stat-k">Records</div><div class="stat-v">{`${r.records}`}</div></div>
+                    <div class="stat"><div class="stat-k">Decisions</div><div class="stat-v">{`${r.decisions}`}</div></div>
+                    <div class="stat"><div class="stat-k">Coverage</div><div class="stat-v">{`${covPct}`}<span class="dim" style="font-size:1rem">%</span></div></div>
+                    <div class="stat"><div class="stat-k">Denied</div><div class="stat-v danger">{`${r.denies}`}</div></div>
+                    <div class="stat"><div class="stat-k">Step-up</div><div class="stat-v warn">{`${r.stepUps}`}</div></div>
+                </div>
+                <div class="barwrap">
+                    <div class="barlbl"><span>Verdict distribution</span><span class="dim">{`${tot}`} decisions</span></div>
+                    <div class="bar">
+                        <div class="barseg allow" style={"width:" + awS + "%"}></div>
+                        <div class="barseg step" style={"width:" + swS + "%"}></div>
+                        <div class="barseg shadow" style={"width:" + hwS + "%"}></div>
+                        <div class="barseg deny" style={"width:" + dwS + "%"}></div>
+                    </div>
+                    <div class="barkey">
+                        <span><i class="dot allow"></i>allow {`${r.allows}`}</span>
+                        <span><i class="dot step"></i>step-up {`${r.stepUps}`}</span>
+                        <span><i class="dot shadow"></i>shadow {`${r.shadows}`}</span>
+                        <span><i class="dot deny"></i>deny {`${r.denies}`}</span>
+                    </div>
+                </div>
+            </div>
+        }}
+    </div>;
+}
+
+// Small helper: a healthy/degraded pill.
+fn healthPill(ok: bool, okText: string, badText: string): Html {
+    if (ok) { return <span class="badge ok">{okText}</span>; }
+    return <span class="badge bad">{badText}</span>;
+}
+
+// Control-plane integrity (fragment #health): ledger re-derivation, dead-man's-switch, spike
+// detector and the self-governance meta-audit log. All from acp-server's verifiable endpoints.
+pub fn healthPanel(h: HealthStatus): Html {
+    return <div id="health">
+        {if (!h.reachable) {
+            <p class="empty">acp-server unreachable.</p>
+        } else {
+            <div class="stats">
+                <div class="stat">
+                    <div class="stat-k">Ledger integrity</div>
+                    <div style="margin-top:.5rem">{healthPill(h.ledgerOk, "verified", "FAILED")}</div>
+                    <div class="dim" style="margin-top:.4rem;font-size:.78rem">{h.ledgerDetail}</div>
+                </div>
+                <div class="stat">
+                    <div class="stat-k">Proxy liveness</div>
+                    <div style="margin-top:.5rem">{healthPill(h.liveHealthy, "all live", "gaps")}</div>
+                    <div class="dim" style="margin-top:.4rem;font-size:.78rem">{`${h.gaps}`} silent proxy gap(s)</div>
+                </div>
+                <div class="stat">
+                    <div class="stat-k">Spike alerts</div>
+                    <div style="margin-top:.5rem">{healthPill(h.alertsHealthy, "quiet", "tripped")}</div>
+                    <div class="dim" style="margin-top:.4rem;font-size:.78rem">{`${h.tripped}`} event kind(s) spiking</div>
+                </div>
+                <div class="stat">
+                    <div class="stat-k">Self-governance log</div>
+                    <div style="margin-top:.5rem">{if (h.metaConfigured) {
+                        if (h.metaVerified) { <span class="badge ok">verified</span> } else { <span class="badge bad">unverified</span> }
+                    } else { <span class="badge warn">off</span> }}</div>
+                    <div class="dim" style="margin-top:.4rem;font-size:.78rem">{`${h.metaSize}`} meta-audit record(s)</div>
+                </div>
+            </div>
+        }}
+    </div>;
+}
+
+// A consolidated, printable governance report (fragment #reports): activity, verdict split,
+// coverage and ledger integrity in one view an operator can hand to an auditor.
+pub fn reportsPanel(r: AcpReport, h: HealthStatus, evidenceCount: int): Html {
+    let covPct = r.coverage * 100.0;
+    return <div id="reports">
+        {if (!r.reachable) {
+            <p class="empty">acp-server unreachable.</p>
+        } else {
+            <div class="repgrid">
+                <div class="repcard">
+                    <div class="rep-k">Governed decisions</div>
+                    <div class="rep-v">{`${r.decisions}`}</div>
+                    <div class="dim">{`${r.records}`} total ledger records</div>
+                </div>
+                <div class="repcard">
+                    <div class="rep-k">Policy coverage</div>
+                    <div class="rep-v">{`${covPct}`}%</div>
+                    <div class="dim">decisions matched to a named rule</div>
+                </div>
+                <div class="repcard">
+                    <div class="rep-k">Denied</div>
+                    <div class="rep-v" style="color:var(--bad)">{`${r.denies}`}</div>
+                    <div class="dim">{`${r.stepUps}`} sent to human step-up</div>
+                </div>
+                <div class="repcard">
+                    <div class="rep-k">Ledger integrity</div>
+                    <div style="margin-top:.4rem">{healthPill(h.ledgerOk, "verified", "FAILED")}</div>
+                    <div class="dim">{`${evidenceCount}`} recent decisions shown</div>
+                </div>
+            </div>
+        }}
     </div>;
 }
 

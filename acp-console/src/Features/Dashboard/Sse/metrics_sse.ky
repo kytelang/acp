@@ -16,14 +16,11 @@ pub class MetricsSse impl SseHandler {
         let _h = await ds.writeHeaders();
         let alive = true;
         while (alive) {
-            let r = self.acp.report();
-            let frag = metricsPanel(
-                r.reachable ? "1" : "0",
-                `${r.postureScore}`, `${r.decisions}`, `${r.coverage}`,
-                `${r.denies}`, `${r.stepUps}`);
-            let w = await ds.patchElementsSimple(frag);
+            // Interleave fetch+write so the first paint lands after a single upstream call. The
+            // health panel makes several blocking calls, so it is deferred to the end of the tick.
+            let rep = self.acp.report();
+            let w = await ds.patchElementsSimple(metricsPanel(rep));
             if (w < 0) { alive = false; }
-            // Identity + policy sections, same stream.
             let w2 = await ds.patchElementsSimple(appsPanel(self.acp.appsRows()));
             if (w2 < 0) { alive = false; }
             let w3 = await ds.patchElementsSimple(agentsPanel(self.acp.agentsRows()));
@@ -32,12 +29,19 @@ pub class MetricsSse impl SseHandler {
             if (w4 < 0) { alive = false; }
             let w5 = await ds.patchElementsSimple(approvalsPanel(self.acp.pendingApprovals()));
             if (w5 < 0) { alive = false; }
-            let w6 = await ds.patchElementsSimple(evidencePanel(self.acp.evidenceRows()));
+            let ev = self.acp.evidenceRows();
+            let w6 = await ds.patchElementsSimple(evidencePanel(ev));
             if (w6 < 0) { alive = false; }
             let w7 = await ds.patchElementsSimple(policyRulesPanel(self.acp.policyRules()));
             if (w7 < 0) { alive = false; }
             let w8 = await ds.patchElementsSimple(killStatusPanel(self.acp.killStatus()));
             if (w8 < 0) { alive = false; }
+            // Control-plane integrity (several calls) and the consolidated report, last.
+            let health = self.acp.health();
+            let w9 = await ds.patchElementsSimple(healthPanel(health));
+            if (w9 < 0) { alive = false; }
+            let w10 = await ds.patchElementsSimple(reportsPanel(rep, health, ev.size()));
+            if (w10 < 0) { alive = false; }
             if (alive) { await aio.delay(2000); }
         }
     }
