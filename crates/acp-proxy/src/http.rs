@@ -35,8 +35,8 @@ pub async fn run(addr: &str, upstream: String, controller: Arc<Controller>) -> a
         && !upstream.contains("127.0.0.1")
         && !upstream.contains("localhost")
     {
-        eprintln!(
-            "acp-proxy: WARNING upstream {upstream} is cleartext http; use https in production"
+        tracing::warn!(
+            "WARNING upstream {upstream} is cleartext http; use https in production"
         );
     }
     let state = Arc::new(HttpState {
@@ -50,7 +50,7 @@ pub async fn run(addr: &str, upstream: String, controller: Arc<Controller>) -> a
     });
     let app = Router::new().route("/", post(handle)).with_state(state);
     let listener = tokio::net::TcpListener::bind(addr).await?;
-    eprintln!("acp-proxy: HTTP transport listening on {addr}");
+    tracing::info!("HTTP transport listening on {addr}");
     axum::serve(listener, app).await?;
     Ok(())
 }

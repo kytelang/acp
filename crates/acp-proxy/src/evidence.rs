@@ -55,7 +55,7 @@ fn load_or_create_key(path: &str) -> Result<Box<dyn Signer + Send>, String> {
                 use std::os::unix::fs::PermissionsExt;
                 let _ = std::fs::set_permissions(path, std::fs::Permissions::from_mode(0o600));
             }
-            eprintln!("acp-proxy: generated signing key {path}");
+            tracing::info!("generated signing key {path}");
             Ok(Box::new(signer))
         }
         Err(e) => Err(e.to_string()),
@@ -69,11 +69,11 @@ impl Evidence {
         let spool = Spool::open(&format!("{ledger_path}.spool"));
         let report = spool.drain_into(&mut ledger).map_err(|e| e.to_string())?;
         if report.ingested > 0 {
-            eprintln!("acp-proxy: replayed {} spooled records", report.ingested);
+            tracing::info!("replayed {} spooled records", report.ingested);
         }
         if !report.dead_letters.is_empty() {
-            eprintln!(
-                "acp-proxy: {} dead-lettered spool entries",
+            tracing::info!(
+                "{} dead-lettered spool entries",
                 report.dead_letters.len()
             );
         }

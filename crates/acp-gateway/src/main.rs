@@ -58,6 +58,7 @@ struct GwState {
 
 #[tokio::main]
 async fn main() -> std::process::ExitCode {
+    acp_obs::init("acp-gateway");
     let args: Vec<String> = std::env::args().collect();
     let mut addr = "127.0.0.1:8799".to_string();
     let (mut policy, mut upstream, mut upstream_key, mut env) = (None, None, None, "prod".to_string());
@@ -93,7 +94,7 @@ async fn main() -> std::process::ExitCode {
             "--entra-tenant" => entra_tenant = it.next().cloned(),
             "--entra-audience" => entra_audience = it.next().cloned(),
             other => {
-                eprintln!("acp-gateway: unknown option '{other}'");
+                tracing::warn!("unknown option '{other}'");
                 return std::process::ExitCode::from(2);
             }
         }
@@ -102,19 +103,19 @@ async fn main() -> std::process::ExitCode {
         Some(Ok(src)) => match PolicyEngine::from_yaml(&src) {
             Ok(e) => e,
             Err(e) => {
-                eprintln!("acp-gateway: bad policy: {e}");
+                tracing::error!("bad policy: {e}");
                 return std::process::ExitCode::from(1);
             }
         },
         _ => {
-            eprintln!("acp-gateway: --policy <file> is required");
+            tracing::error!("--policy <file> is required");
             return std::process::ExitCode::from(2);
         }
     };
     let upstream = match upstream {
         Some(u) => u,
         None => {
-            eprintln!("acp-gateway: --upstream <base-url> is required");
+            tracing::error!("--upstream <base-url> is required");
             return std::process::ExitCode::from(2);
         }
     };
@@ -123,14 +124,14 @@ async fn main() -> std::process::ExitCode {
             let url = format!("https://login.microsoftonline.com/{tid}/discovery/v2.0/keys");
             match load_jwks(&url).await {
                 Ok(jwks) => {
-                    eprintln!("acp-gateway: per-request human identity enabled");
+                    tracing::info!("per-request human identity enabled");
                     Some((jwks, acp_auth::EntraConfig {
                         issuer: format!("https://login.microsoftonline.com/{tid}/v2.0"),
                         audience: aud,
                     }))
                 }
                 Err(e) => {
-                    eprintln!("acp-gateway: could not load JWKS ({e}); refusing to start (identity requested, failing closed)");
+                    tracing::error!("could not load JWKS ({e}); refusing to start (identity requested, failing closed)");
                     return std::process::ExitCode::from(1);
                 }
             }
@@ -139,7 +140,7 @@ async fn main() -> std::process::ExitCode {
     };
     let ledger = ledger_path.as_ref().and_then(|p| open_ledger(p));
     if ledger.is_some() {
-        eprintln!("acp-gateway: recording decisions to the tamper-evident ledger");
+        tracing::info!("recording decisions to the tamper-evident ledger");
     }
     let upstream_key = upstream_key.map(|k| acp_core::secret::resolve(&k));
     let bg_key = bg_key_hex.as_ref().and_then(|h| hex::decode(acp_core::secret::resolve(h)).ok());
@@ -148,15 +149,15 @@ async fn main() -> std::process::ExitCode {
     } else { None };
     let budget_pg = match budget_pg_conn.as_ref() {
         Some(conn) => match acp_pgstate::PgState::connect(conn).await {
-            Ok(s) => { eprintln!("acp-gateway: shared budgets via Postgres ({conn})"); Some(tokio::sync::Mutex::new(s)) }
-            Err(e) => { eprintln!("acp-gateway: cannot connect --budget-pg: {e}"); return std::process::ExitCode::from(1); }
+            Ok(s) => { tracing::info!("shared budgets via Postgres ({conn})"); Some(tokio::sync::Mutex::new(s)) }
+            Err(e) => { tracing::error!("cannot connect --budget-pg: {e}"); return std::process::ExitCode::from(1); }
         },
         None => None,
     };
     let content_ml = match content_ml_path.as_ref() {
         Some(path) => match std::fs::read_to_string(path).ok().and_then(|s| acp_core::content::LinearScorer::from_json(&s).ok()) {
-            Some(s) => { eprintln!("acp-gateway: ML content detector loaded from {path}"); Some(std::sync::Arc::new(s)) }
-            None => { eprintln!("acp-gateway: cannot load --content-ml model {path}"); return std::process::ExitCode::from(1); }
+            Some(s) => { tracing::info!("ML content detector loaded from {path}"); Some(std::sync::Arc::new(s)) }
+            None => { tracing::error!("cannot load --content-ml model {path}"); return std::process::ExitCode::from(1); }
         },
         None => None,
     };
@@ -199,11 +200,11 @@ async fn main() -> std::process::ExitCode {
     let listener = match tokio::net::TcpListener::bind(&addr).await {
         Ok(l) => l,
         Err(e) => {
-            eprintln!("acp-gateway: bind {addr}: {e}");
+            tracing::error!("bind {addr}: {e}");
             return std::process::ExitCode::from(1);
         }
     };
-    eprintln!("acp-gateway: governing model calls on http://{addr} -> {upstream_log}");
+    tracing::info!("governing model calls on http://{addr} -> {upstream_log}");
     let _ = axum::serve(listener, app).await;
     std::process::ExitCode::SUCCESS
 }
@@ -227,7 +228,7 @@ fn refresh_break_glass(st: &GwState) {
         Err(_) => return,
     };
     if !gf.verify(st.bg_key.as_deref()) {
-        eprintln!("acp-gateway: break-glass grant REJECTED (signature/pin); keeping current");
+        tracing::warn!("break-glass grant REJECTED (signature/pin); keeping current");
         return;
     }
     st.breakglass.lock().unwrap().replace_all(gf.to_break_glass());
@@ -424,8 +425,8 @@ async fn handle(
             Json(json!({"error": {"message": "evidence unavailable, failing closed", "type": "acp_fail_closed"}})),
         ).into_response();
     }
-    eprintln!(
-        "acp-gateway: {} model={} class={} op={} app={} principal={} -> {:?}",
+    tracing::info!(
+        "{} model={} class={} op={} app={} principal={} -> {:?}",
         path, model, d.resource, d.operation, app, principal, d.verdict
     );
 
@@ -472,7 +473,7 @@ async fn handle(
                             match pg.lock().await.allow(&key, max as f64, rate, now_ms() as i64).await {
                                 Ok(v) => v,
                                 Err(e) => {
-                                    eprintln!("acp-gateway: budget store error (falling back in-process): {e}");
+                                    tracing::warn!("budget store error (falling back in-process): {e}");
                                     inproc(&st, key.clone())
                                 }
                             }

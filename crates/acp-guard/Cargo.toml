@@ -13,6 +13,8 @@ name = "acp-guard"
 path = "src/main.rs"
 
 [dependencies]
+acp-obs = { path = "../acp-obs" }
+tracing.workspace = true
 acp-core = { path = "../acp-core" }
 acp-ledger = { path = "../acp-ledger" }
 axum = { workspace = true }

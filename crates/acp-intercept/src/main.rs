@@ -39,6 +39,7 @@ fn record(cfg: &Cfg, host: &str, action: &str, verdict: &str, rule: &Option<Stri
 
 #[tokio::main]
 async fn main() -> std::process::ExitCode {
+    acp_obs::init("acp-intercept");
     let args: Vec<String> = std::env::args().collect();
     // Subcommand: generate a CA to install on managed devices for TLS interception.
     if args.get(1).map(String::as_str) == Some("gen-ca") {
@@ -47,18 +48,18 @@ async fn main() -> std::process::ExitCode {
         match mitm::generate_ca() {
             Ok((cert, key)) => {
                 if std::fs::write(&cert_out, cert).is_err() {
-                    eprintln!("acp-intercept: cannot write {cert_out}");
+                    tracing::error!("cannot write {cert_out}");
                     return std::process::ExitCode::from(1);
                 }
                 if acp_core::secret::write_key_secure(&key_out, key.as_bytes()).is_err() {
-                    eprintln!("acp-intercept: cannot write {key_out}");
+                    tracing::error!("cannot write {key_out}");
                     return std::process::ExitCode::from(1);
                 }
-                eprintln!("acp-intercept: wrote CA cert {cert_out} and key {key_out} (0600). Install {cert_out} as a trusted root on managed devices.");
+                tracing::info!("wrote CA cert {cert_out} and key {key_out} (0600). Install {cert_out} as a trusted root on managed devices.");
                 return std::process::ExitCode::SUCCESS;
             }
             Err(e) => {
-                eprintln!("acp-intercept: gen-ca failed: {e}");
+                tracing::error!("gen-ca failed: {e}");
                 return std::process::ExitCode::from(1);
             }
         }
@@ -80,20 +81,20 @@ async fn main() -> std::process::ExitCode {
             "--block-secrets" => block_secrets = true,
             "--ca-cert" => ca_cert = it.next().cloned(),
             "--ca-key" => ca_key = it.next().cloned(),
-            other => { eprintln!("acp-intercept: unknown option '{other}'"); return std::process::ExitCode::from(2); }
+            other => { tracing::warn!("unknown option '{other}'"); return std::process::ExitCode::from(2); }
         }
     }
     let registry = match rules.as_ref().map(|p| std::fs::read_to_string(p)) {
         Some(Ok(src)) => match EndpointRegistry::from_yaml(&src) {
             Ok(r) => r,
-            Err(e) => { eprintln!("acp-intercept: {e}"); return std::process::ExitCode::from(1); }
+            Err(e) => { tracing::info!("{e}"); return std::process::ExitCode::from(1); }
         },
-        _ => { eprintln!("acp-intercept: --rules <endpoints.yaml> is required"); return std::process::ExitCode::from(2); }
+        _ => { tracing::error!("--rules <endpoints.yaml> is required"); return std::process::ExitCode::from(2); }
     };
     let ledger = match ledger_path.as_ref() {
         Some(p) => match acp_ledger::Ledger::open(p, Box::new(acp_core::sign::Ed25519Signer::generate())) {
             Ok(l) => Some(Mutex::new(l)),
-            Err(e) => { eprintln!("acp-intercept: cannot open ledger {p}: {e}"); return std::process::ExitCode::from(1); }
+            Err(e) => { tracing::error!("cannot open ledger {p}: {e}"); return std::process::ExitCode::from(1); }
         },
         None => None,
     };
@@ -102,8 +103,8 @@ async fn main() -> std::process::ExitCode {
             let cert = std::fs::read_to_string(c).unwrap_or_default();
             let key = std::fs::read_to_string(k).unwrap_or_default();
             match CaSigner::load(&cert, &key) {
-                Ok(s) => { eprintln!("acp-intercept: TLS interception ENABLED (CA {c}); body-inspecting HTTPS endpoints are decrypted"); Some(Arc::new(s)) }
-                Err(e) => { eprintln!("acp-intercept: cannot load CA: {e}"); return std::process::ExitCode::from(1); }
+                Ok(s) => { tracing::info!("TLS interception ENABLED (CA {c}); body-inspecting HTTPS endpoints are decrypted"); Some(Arc::new(s)) }
+                Err(e) => { tracing::error!("cannot load CA: {e}"); return std::process::ExitCode::from(1); }
             }
         }
         _ => None,
@@ -119,20 +120,20 @@ async fn main() -> std::process::ExitCode {
 
     let listener = match TcpListener::bind(&addr).await {
         Ok(l) => l,
-        Err(e) => { eprintln!("acp-intercept: cannot bind {addr}: {e}"); return std::process::ExitCode::from(1); }
+        Err(e) => { tracing::error!("cannot bind {addr}: {e}"); return std::process::ExitCode::from(1); }
     };
-    eprintln!("acp-intercept: forward proxy on {addr}; {} rule(s)", cfg.registry.endpoints.len());
+    tracing::info!("forward proxy on {addr}; {} rule(s)", cfg.registry.endpoints.len());
     loop {
         match listener.accept().await {
             Ok((sock, _)) => {
                 let cfg = cfg.clone();
                 tokio::spawn(async move {
                     if let Err(e) = handle(cfg, sock).await {
-                        eprintln!("acp-intercept: conn error: {e}");
+                        tracing::error!("conn error: {e}");
                     }
                 });
             }
-            Err(e) => eprintln!("acp-intercept: accept error: {e}"),
+            Err(e) => tracing::error!("accept error: {e}"),
         }
     }
 }

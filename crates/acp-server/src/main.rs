@@ -72,6 +72,7 @@ fn authorize(auth: &Option<Auth>, headers: &HeaderMap, cap: acp_auth::Capability
 
 #[tokio::main]
 async fn main() {
+    acp_obs::init("acp-server");
     let args: Vec<String> = std::env::args().collect();
     let mut addr = "127.0.0.1:8787".to_string();
     let (mut approvals, mut policy_path, mut ledger) = (None, None, None);
@@ -118,14 +119,14 @@ async fn main() {
                             break_glass_seed = Some(s);
                         }
                         _ => {
-                            eprintln!("acp-server: --break-glass-key must be a 32-byte hex seed");
+                            tracing::error!("--break-glass-key must be a 32-byte hex seed");
                             std::process::exit(2);
                         }
                     }
                 }
             }
             other => {
-                eprintln!("acp-server: unknown option '{other}'");
+                tracing::warn!("unknown option '{other}'");
                 std::process::exit(2);
             }
         }
@@ -139,7 +140,7 @@ async fn main() {
         }) {
             Some(v) => Some(v),
             None => {
-                eprintln!("acp-server: could not load policy {p}");
+                tracing::error!("could not load policy {p}");
                 std::process::exit(1);
             }
         },
@@ -164,14 +165,14 @@ async fn main() {
         match acp_ledger::Ledger::open(&path, signer) {
             Ok(l) => Some(std::sync::Mutex::new(l)),
             Err(e) => {
-                eprintln!("acp-server: could not open meta-ledger {path}: {e}");
+                tracing::error!("could not open meta-ledger {path}: {e}");
                 None
             }
         }
     });
 
     if dev_auth && std::env::var("ACP_ALLOW_DEV_AUTH").ok().as_deref() != Some("1") {
-        eprintln!("acp-server: --dev-auth requires ACP_ALLOW_DEV_AUTH=1 (never enable in production)");
+        tracing::info!("--dev-auth requires ACP_ALLOW_DEV_AUTH=1 (never enable in production)");
         std::process::exit(2);
     }
     // Control-plane RBAC (opt-in). Three ways to enable, in priority order:
@@ -181,7 +182,7 @@ async fn main() {
     // With none, RBAC is off and the local demo is unaffected.
     let auth: Option<Auth> = if dev_auth {
         let mock = acp_auth::MockEntra::new("common", "acp-app");
-        eprintln!("acp-server: DEV auth enabled (mock issuer); GET /auth/dev-token?role=PolicyAdmin");
+        tracing::info!("DEV auth enabled (mock issuer); GET /auth/dev-token?role=PolicyAdmin");
         Some(Auth {
             jwks: std::sync::Arc::new(std::sync::RwLock::new(mock.jwks())),
             cfg: mock.config(),
@@ -204,7 +205,7 @@ async fn main() {
         match resolved {
             Some((issuer, audience, source)) => match load_jwks(&source).await {
                 Ok(jwks) => {
-                    eprintln!("acp-server: OIDC RBAC enabled (issuer {issuer}, aud {audience})");
+                    tracing::info!("OIDC RBAC enabled (issuer {issuer}, aud {audience})");
                     let jwks_arc = std::sync::Arc::new(std::sync::RwLock::new(jwks));
                     // Key rotation: refresh the JWKS hourly when it came from a URL.
                     if source.starts_with("http") {
@@ -226,7 +227,7 @@ async fn main() {
                     })
                 }
                 Err(e) => {
-                    eprintln!("acp-server: could not load JWKS from {source}: {e}; refusing to start (auth was requested, failing closed)");
+                    tracing::error!("could not load JWKS from {source}: {e}; refusing to start (auth was requested, failing closed)");
                     std::process::exit(1);
                 }
             },
@@ -278,12 +279,12 @@ async fn main() {
 
     // mTLS between components: when TLS flags are given, require a client cert signed by the ACP CA.
     if let (Some(ca), Some(cert), Some(key)) = (&tls_ca, &tls_cert, &tls_key) {
-        eprintln!("acp-server: listening on https://{addr} (mTLS, client cert required)");
+        tracing::error!("listening on https://{addr} (mTLS, client cert required)");
         serve_mtls(&addr, app, ca, cert, key).await;
         return;
     }
     let listener = tokio::net::TcpListener::bind(&addr).await.expect("bind");
-    eprintln!("acp-server: listening on http://{addr}");
+    tracing::info!("listening on http://{addr}");
     // X.7: drain in-flight requests on SIGTERM/Ctrl-C instead of dropping them. The evidence
     // ledger is durable per-append, so a clean drain loses no decision and double-executes none.
     axum::serve(listener, app)
@@ -885,5 +886,5 @@ async fn shutdown_signal() {
         _ = ctrl_c => {},
         _ = terminate => {},
     }
-    eprintln!("acp-server: shutdown signal received, draining in-flight requests");
+    tracing::info!("shutdown signal received, draining in-flight requests");
 }

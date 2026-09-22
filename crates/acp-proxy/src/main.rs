@@ -122,7 +122,7 @@ async fn build_controller(o: &Opts) -> Result<Arc<Controller>, String> {
     let engine = if let Some(dir) = &o.policy_dir {
         let eng = acp_policy::store::load_current(dir)
             .map_err(|e| format!("cannot load current policy from {dir}: {e}"))?;
-        eprintln!("acp-proxy: signed policy loaded from {dir} ({}...)", &eng.hash()[..12.min(eng.hash().len())]);
+        tracing::info!("signed policy loaded from {dir} ({}...)", &eng.hash()[..12.min(eng.hash().len())]);
         Some(Arc::new(eng))
     } else {
         match &o.policy {
@@ -131,8 +131,8 @@ async fn build_controller(o: &Opts) -> Result<Arc<Controller>, String> {
                 std::fs::read_to_string(p).map_err(|e| format!("cannot read policy {p}: {e}"))?;
             let eng =
                 PolicyEngine::from_yaml(&src).map_err(|e| format!("invalid policy {p}: {e}"))?;
-            eprintln!(
-                "acp-proxy: policy loaded ({}...)",
+            tracing::info!(
+                "policy loaded ({}...)",
                 &eng.hash()[..12.min(eng.hash().len())]
             );
             Some(Arc::new(eng))
@@ -145,7 +145,7 @@ async fn build_controller(o: &Opts) -> Result<Arc<Controller>, String> {
         Some(lp) => {
             let kp = o.key.clone().unwrap_or_else(|| format!("{lp}.key"));
             let ev = evidence::Evidence::open(lp, &kp)?;
-            eprintln!("acp-proxy: evidence ledger {lp} ({} records)", ev.size());
+            tracing::info!("evidence ledger {lp} ({} records)", ev.size());
             Some(ev)
         }
         None => None,
@@ -153,7 +153,7 @@ async fn build_controller(o: &Opts) -> Result<Arc<Controller>, String> {
     let approvals = match o.approvals.clone().or(approvals_default) {
         Some(ap) => {
             let s = acp_approvals::ApprovalStore::open(&ap)?;
-            eprintln!("acp-proxy: approvals store {ap}");
+            tracing::info!("approvals store {ap}");
             Some(s)
         }
         None => None,
@@ -163,29 +163,29 @@ async fn build_controller(o: &Opts) -> Result<Arc<Controller>, String> {
         sinks.push(Box::new(
             events::FileSink::open(ep).map_err(|e| format!("cannot open events {ep}: {e}"))?,
         ));
-        eprintln!("acp-proxy: governance events -> {ep}");
+        tracing::info!("governance events -> {ep}");
     }
     if let Some(url) = &o.otel {
         sinks.push(Box::new(events::OtelSink::new(url.clone())));
-        eprintln!("acp-proxy: OTLP governance events -> {url}");
+        tracing::info!("OTLP governance events -> {url}");
     }
     if let Some(cp) = &o.cef {
         sinks.push(Box::new(
             events::CefSink::open(cp).map_err(|e| format!("cannot open cef {cp}: {e}"))?,
         ));
-        eprintln!("acp-proxy: CEF governance events -> {cp}");
+        tracing::info!("CEF governance events -> {cp}");
     }
     if let Some(target) = &o.syslog {
         sinks.push(Box::new(
             events::SyslogSink::open(target).map_err(|e| format!("cannot open syslog {target}: {e}"))?,
         ));
-        eprintln!("acp-proxy: CEF governance events -> syslog {target}");
+        tracing::info!("CEF governance events -> syslog {target}");
     }
     if let Some(op) = &o.ocsf {
         sinks.push(Box::new(
             events::OcsfSink::open(op).map_err(|e| format!("cannot open ocsf {op}: {e}"))?,
         ));
-        eprintln!("acp-proxy: OCSF governance events -> {op}");
+        tracing::info!("OCSF governance events -> {op}");
     }
     let impact_tax = match &o.impact {
         Some(ip) => {
@@ -193,14 +193,14 @@ async fn build_controller(o: &Opts) -> Result<Arc<Controller>, String> {
                 .map_err(|e| format!("cannot read impact taxonomy {ip}: {e}"))?;
             let tax = acp_core::impact::ImpactTaxonomy::from_yaml(&src)
                 .map_err(|e| format!("invalid impact taxonomy {ip}: {e}"))?;
-            eprintln!("acp-proxy: impact taxonomy {} loaded", tax.version);
+            tracing::info!("impact taxonomy {} loaded", tax.version);
             tax
         }
         None => acp_core::impact::ImpactTaxonomy::default(),
     };
     let env = o.env.clone().unwrap_or_else(|| "prod".to_string());
     if o.shadow {
-        eprintln!("acp-proxy: SHADOW MODE (recording would-blocks, enforcing nothing)");
+        tracing::info!("SHADOW MODE (recording would-blocks, enforcing nothing)");
     }
     let controller = Arc::new(Controller::new(
         engine,
@@ -214,24 +214,24 @@ async fn build_controller(o: &Opts) -> Result<Arc<Controller>, String> {
     ));
     if let Some(bg) = &o.break_glass {
         controller.set_break_glass_file(bg.clone());
-        eprintln!("acp-proxy: watching break-glass grant file {bg}");
+        tracing::info!("watching break-glass grant file {bg}");
     }
     if let Some(k) = &o.break_glass_key {
         match hex::decode(acp_core::secret::resolve(k)) {
             Ok(pk) => {
                 controller.set_break_glass_key(pk);
-                eprintln!("acp-proxy: break-glass grants must be signed by the pinned key");
+                tracing::error!("break-glass grants must be signed by the pinned key");
             }
             Err(_) => return Err("--break-glass-key must be hex".to_string()),
         }
     }
     if let Some(dir) = &o.policy_dir {
         controller.set_policy_dir(dir.clone());
-        eprintln!("acp-proxy: hot-reloading signed policies from {dir}");
+        tracing::info!("hot-reloading signed policies from {dir}");
     }
     if let Some(pins) = &o.tool_pins {
         controller.set_tool_pins_file(pins.clone());
-        eprintln!("acp-proxy: tool-integrity pins persisted at {pins}");
+        tracing::info!("tool-integrity pins persisted at {pins}");
     }
     if let Some(k) = &o.enforcement_key {
         match hex::decode(acp_core::secret::resolve(k)) {
@@ -240,8 +240,8 @@ async fn build_controller(o: &Opts) -> Result<Arc<Controller>, String> {
                 seed.copy_from_slice(&b);
                 let pubkey = acp_core::sign::Ed25519Signer::from_seed(&seed);
                 use acp_core::sign::Signer;
-                eprintln!(
-                    "acp-proxy: stamping enforcement attestations; guard tool servers with pubkey {}",
+                tracing::info!(
+                    "stamping enforcement attestations; guard tool servers with pubkey {}",
                     hex::encode(pubkey.public_key())
                 );
                 controller.set_enforcement_key(seed);
@@ -250,7 +250,7 @@ async fn build_controller(o: &Opts) -> Result<Arc<Controller>, String> {
         }
     }
     if o.fail_open {
-        eprintln!("acp-proxy: WARNING --fail-open is set: on an evidence-write failure the proxy FORWARDS ungoverned. This weakens the fail-closed guarantee; use only for controlled testing.");
+        tracing::warn!("WARNING --fail-open is set: on an evidence-write failure the proxy FORWARDS ungoverned. This weakens the fail-closed guarantee; use only for controlled testing.");
     }
     if o.content_firewall {
         controller.set_content_policy(acp_core::content::ContentPolicy {
@@ -259,17 +259,17 @@ async fn build_controller(o: &Opts) -> Result<Arc<Controller>, String> {
             redact_pii: true,
             denied_topics: o.deny_topics.clone(),
         });
-        eprintln!("acp-proxy: first-party content firewall enabled over tool-call arguments");
+        tracing::info!("first-party content firewall enabled over tool-call arguments");
     }
     if let Some(mlp) = o.content_ml.as_ref() {
         match std::fs::read_to_string(mlp).ok().and_then(|s| acp_core::content::LinearScorer::from_json(&s).ok()) {
-            Some(s) => { controller.set_content_ml(std::sync::Arc::new(s)); eprintln!("acp-proxy: ML content detector loaded from {mlp}"); }
+            Some(s) => { controller.set_content_ml(std::sync::Arc::new(s)); tracing::info!("ML content detector loaded from {mlp}"); }
             None => return Err(format!("cannot load --content-ml model {mlp}")),
         }
     }
     if let Some(conn) = o.pin_pg.as_ref() {
         match acp_pgstate::PgState::connect(conn).await {
-            Ok(pg) => { controller.set_pin_pg(pg).await; eprintln!("acp-proxy: shared tool pins via Postgres ({conn})"); }
+            Ok(pg) => { controller.set_pin_pg(pg).await; tracing::info!("shared tool pins via Postgres ({conn})"); }
             Err(e) => return Err(format!("cannot connect --pin-pg: {e}")),
         }
     }
@@ -277,13 +277,13 @@ async fn build_controller(o: &Opts) -> Result<Arc<Controller>, String> {
         let src = std::fs::read_to_string(tp).map_err(|e| format!("cannot read --trajectory {tp}: {e}"))?;
         let policy: acp_core::trajectory::TrajectoryPolicy = serde_yaml::from_str(&src).map_err(|e| format!("invalid trajectory policy: {e}"))?;
         controller.set_trajectory_policy(policy);
-        eprintln!("acp-proxy: intent/trajectory governance enabled from {tp}");
+        tracing::info!("intent/trajectory governance enabled from {tp}");
     }
     if let Some(dp) = o.data_boundary.as_ref() {
         let src = std::fs::read_to_string(dp).map_err(|e| format!("cannot read --data-boundary {dp}: {e}"))?;
         let policy: acp_core::databoundary::DataBoundaryPolicy = serde_yaml::from_str(&src).map_err(|e| format!("invalid data-boundary policy: {e}"))?;
         controller.set_data_boundary(policy);
-        eprintln!("acp-proxy: data-boundary enforcement enabled from {dp}");
+        tracing::info!("data-boundary enforcement enabled from {dp}");
     }
     // Verified caller identity: when a registry is configured, the presented (agent-id, token) MUST
     // verify. Fail closed on a missing/invalid/revoked credential so a mis-enrolled agent cannot run
@@ -301,8 +301,8 @@ async fn build_controller(o: &Opts) -> Result<Arc<Controller>, String> {
         };
         match reg.verify(&aid, &tok) {
             Some(id) => {
-                eprintln!(
-                    "acp-proxy: verified identity app={} ({}) agent={} ({}) principal={}",
+                tracing::info!(
+                    "verified identity app={} ({}) agent={} ({}) principal={}",
                     id.app_name, id.app_id, id.agent_name, id.agent_id, principal
                 );
                 // Policy rules reference the human names; evidence-friendly ids remain in the registry.
@@ -319,6 +319,7 @@ async fn build_controller(o: &Opts) -> Result<Arc<Controller>, String> {
 
 #[tokio::main]
 async fn main() -> ExitCode {
+    acp_obs::init("acp-proxy");
     let args: Vec<String> = std::env::args().collect();
     let sub = args.get(1).map(String::as_str);
     let rest = if args.len() > 2 { &args[2..] } else { &[] };
@@ -327,12 +328,12 @@ async fn main() -> ExitCode {
         Some("stdio") | Some("http") => match parse_opts(rest) {
             Ok(v) => v,
             Err(e) => {
-                eprintln!("acp-proxy: {e}");
+                tracing::info!("{e}");
                 return ExitCode::from(2);
             }
         },
         _ => {
-            eprintln!("usage: acp-proxy stdio [opts] -- <cmd> | acp-proxy http [opts] --addr <ip:port> --upstream <url>");
+            tracing::info!("usage: acp-proxy stdio [opts] -- <cmd> | acp-proxy http [opts] --addr <ip:port> --upstream <url>");
             return ExitCode::SUCCESS;
         }
     };
@@ -340,7 +341,7 @@ async fn main() -> ExitCode {
     let controller = match build_controller(&opts).await {
         Ok(c) => c,
         Err(e) => {
-            eprintln!("acp-proxy: {e}");
+            tracing::info!("{e}");
             return ExitCode::from(1);
         }
     };
@@ -353,10 +354,10 @@ async fn main() -> ExitCode {
         match load_jwks(&jwks_url).await {
             Ok(jwks) => {
                 controller.set_oidc(jwks, acp_auth::EntraConfig { issuer: issuer.clone(), audience: aud.clone() });
-                eprintln!("acp-proxy: per-request human identity enabled (issuer {issuer})");
+                tracing::info!("per-request human identity enabled (issuer {issuer})");
             }
             Err(e) => {
-                eprintln!("acp-proxy: could not load JWKS ({e}); refusing to start (identity was requested, failing closed)");
+                tracing::error!("could not load JWKS ({e}); refusing to start (identity was requested, failing closed)");
                 return ExitCode::from(1);
             }
         }
@@ -365,7 +366,7 @@ async fn main() -> ExitCode {
     match sub {
         Some("stdio") => {
             if cmd.is_empty() {
-                eprintln!("usage: acp-proxy stdio [opts] -- <mcp-server-cmd> [args...]");
+                tracing::info!("usage: acp-proxy stdio [opts] -- <mcp-server-cmd> [args...]");
                 return ExitCode::from(2);
             }
             // B5/D10: verify the tool-server binary's fingerprint before launching it.
@@ -374,14 +375,14 @@ async fn main() -> ExitCode {
                     Ok(bytes) => {
                         let got = acp_core::canonical::sha256_hex_bytes(&bytes);
                         if &got != expected {
-                            eprintln!("acp-proxy: tool binary {} fingerprint {} != expected {}; refusing to launch", cmd[0], &got[..16], &expected[..16.min(expected.len())]);
+                            tracing::error!("tool binary {} fingerprint {} != expected {}; refusing to launch", cmd[0], &got[..16], &expected[..16.min(expected.len())]);
                             return ExitCode::from(1);
                         }
-                        eprintln!("acp-proxy: tool binary verified ({}...)", &got[..16]);
+                        tracing::info!("tool binary verified ({}...)", &got[..16]);
                     }
                     Err(e) => {
-                        eprintln!(
-                            "acp-proxy: cannot read tool binary {} for verification: {e}",
+                        tracing::error!(
+                            "cannot read tool binary {} for verification: {e}",
                             cmd[0]
                         );
                         return ExitCode::from(1);
@@ -391,7 +392,7 @@ async fn main() -> ExitCode {
             match stdio::run(&cmd[0], &cmd[1..], controller).await {
                 Ok(code) => ExitCode::from(code as u8),
                 Err(e) => {
-                    eprintln!("acp-proxy: {e}");
+                    tracing::info!("{e}");
                     ExitCode::from(1)
                 }
             }
@@ -400,14 +401,14 @@ async fn main() -> ExitCode {
             let (addr, upstream) = match (opts.addr.clone(), opts.upstream.clone()) {
                 (Some(a), Some(u)) => (a, u),
                 _ => {
-                    eprintln!("usage: acp-proxy http [opts] --addr <ip:port> --upstream <url>");
+                    tracing::info!("usage: acp-proxy http [opts] --addr <ip:port> --upstream <url>");
                     return ExitCode::from(2);
                 }
             };
             match http::run(&addr, upstream, controller).await {
                 Ok(()) => ExitCode::SUCCESS,
                 Err(e) => {
-                    eprintln!("acp-proxy: {e}");
+                    tracing::info!("{e}");
                     ExitCode::from(1)
                 }
             }

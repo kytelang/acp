@@ -37,6 +37,7 @@ fn now_ms() -> u64 {
 
 #[tokio::main]
 async fn main() -> std::process::ExitCode {
+    acp_obs::init("acp-guard");
     let args: Vec<String> = std::env::args().collect();
     let mut addr = "127.0.0.1:8801".to_string();
     let mut upstream: Option<String> = None;
@@ -56,7 +57,7 @@ async fn main() -> std::process::ExitCode {
             "--ledger" => ledger_path = it.next().cloned(),
             "--ledger-key" => ledger_key_hex = it.next().cloned(),
             other => {
-                eprintln!("acp-guard: unknown option '{other}'");
+                tracing::warn!("unknown option '{other}'");
                 return std::process::ExitCode::from(2);
             }
         }
@@ -65,14 +66,14 @@ async fn main() -> std::process::ExitCode {
     let upstream = match upstream {
         Some(u) => u.trim_end_matches('/').to_string(),
         None => {
-            eprintln!("acp-guard: --upstream <tool-server-url> is required");
+            tracing::error!("--upstream <tool-server-url> is required");
             return std::process::ExitCode::from(2);
         }
     };
     let pubkey = match pubkey_hex.as_ref().map(|h| hex::decode(h)) {
         Some(Ok(b)) => b,
         _ => {
-            eprintln!("acp-guard: --pubkey <hex> (the proxy's pinned public key) is required");
+            tracing::error!("--pubkey <hex> (the proxy's pinned public key) is required");
             return std::process::ExitCode::from(2);
         }
     };
@@ -85,7 +86,7 @@ async fn main() -> std::process::ExitCode {
                 Some(k) => match hex::decode(k).ok().and_then(|b| b.try_into().ok()) {
                     Some(seed) => Box::new(acp_core::sign::Ed25519Signer::from_seed(&seed)),
                     None => {
-                        eprintln!("acp-guard: --ledger-key must be 32-byte hex");
+                        tracing::error!("--ledger-key must be 32-byte hex");
                         return std::process::ExitCode::from(2);
                     }
                 },
@@ -94,7 +95,7 @@ async fn main() -> std::process::ExitCode {
             match acp_ledger::Ledger::open(path, signer) {
                 Ok(l) => Some(Mutex::new(l)),
                 Err(e) => {
-                    eprintln!("acp-guard: cannot open ledger '{path}': {e}");
+                    tracing::error!("cannot open ledger '{path}': {e}");
                     return std::process::ExitCode::from(1);
                 }
             }
@@ -137,15 +138,15 @@ async fn main() -> std::process::ExitCode {
     let listener = match tokio::net::TcpListener::bind(&addr).await {
         Ok(l) => l,
         Err(e) => {
-            eprintln!("acp-guard: cannot bind {addr}: {e}");
+            tracing::error!("cannot bind {addr}: {e}");
             return std::process::ExitCode::from(1);
         }
     };
-    eprintln!(
-        "acp-guard: verifying x-acp-enforcement in front of {upstream}; listening on {addr} (max-age {max_age_ms}ms)"
+    tracing::info!(
+        "verifying x-acp-enforcement in front of {upstream}; listening on {addr} (max-age {max_age_ms}ms)"
     );
     if let Err(e) = axum::serve(listener, app).await {
-        eprintln!("acp-guard: serve error: {e}");
+        tracing::error!("serve error: {e}");
         return std::process::ExitCode::from(1);
     }
     std::process::ExitCode::SUCCESS

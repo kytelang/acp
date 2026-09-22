@@ -48,11 +48,14 @@ gaps have the implementing code already written but not wired, which lowers the 
 
 ## P1: serious, required for unattended production
 
-- [ ] P1-1 Structured logging and log levels. There is no `tracing` or `RUST_LOG`; there are about 74
-      raw `println!`/`eprintln!` calls across server, proxy and gateway. No JSON logs, no correlation
-      ids, no verbosity control. The OTLP span builder (`otelspan.rs`) exists but `build_span` is
-      never called by any binary, so distributed tracing is unwired (only decision events reach the
-      SIEM sinks). Fix: adopt `tracing` with a JSON subscriber and levels; wire request-scoped spans.
+- [x] P1-1 Structured logging and log levels. DONE (2026-09-22): added the `acp-obs` crate (one
+      `init` call sets a `tracing` subscriber with an env filter and an optional JSON formatter) and
+      wired it into all five services (server, gateway, proxy, guard, intercept). Every operational
+      `eprintln!` is now a leveled `tracing` event; the stdio proxy's protocol output on stdout is
+      untouched. Configure with `ACP_LOG`/`RUST_LOG` (levels) and `ACP_LOG_FORMAT=json`. Verified:
+      leveled compact and JSON output, env-filter suppression, and the proxy's JSON-RPC stdout stays
+      clean with structured logs on stderr; full workspace suite green. REMAINING (enhancement): wire
+      request-scoped spans and the `otelspan` OTLP exporter for distributed tracing.
 - [x] P1-2 Secrets management. DONE (2026-09-22): docker-compose reads the Postgres password from a
       required env var (`ACP_PG_PASSWORD`, via `deploy/.env`, gitignored) and fails closed if unset;
       the helm chart takes the Postgres DSN from a Kubernetes Secret (`postgres.dsnSecret`) injected

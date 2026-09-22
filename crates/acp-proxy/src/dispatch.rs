@@ -164,9 +164,9 @@ impl Controller {
         match acp_policy::store::load_current(&dir) {
             Ok(engine) => {
                 *self.engine.lock().unwrap() = Some(Arc::new(engine));
-                eprintln!("acp-proxy: hot-reloaded policy from {dir}");
+                tracing::info!("hot-reloaded policy from {dir}");
             }
-            Err(e) => eprintln!("acp-proxy: policy reload REJECTED ({e}); keeping current policy"),
+            Err(e) => tracing::warn!("policy reload REJECTED ({e}); keeping current policy"),
         }
     }
 
@@ -247,7 +247,7 @@ impl Controller {
             let key = format!("pin:tool:{name}");
             if let Ok(PinResult::Changed) = pg.check_and_pin(&key, &fp).await {
                 self.quarantined.lock().unwrap().insert(name.clone());
-                eprintln!("acp-proxy: tool '{name}' changed vs SHARED pin (quarantined across replicas)");
+                tracing::info!("tool '{name}' changed vs SHARED pin (quarantined across replicas)");
             }
         }
     }
@@ -331,7 +331,7 @@ impl Controller {
             }
         }
         for name in &changed {
-            eprintln!("acp-proxy: TOOL INTEGRITY ALERT: '{name}' definition changed since it was pinned; quarantining (calls denied until re-pinned)");
+            tracing::info!("TOOL INTEGRITY ALERT: '{name}' definition changed since it was pinned; quarantining (calls denied until re-pinned)");
             self.emit_event(name, "alert", Some("tool-integrity"), "high", "definition_changed");
         }
     }
@@ -362,14 +362,14 @@ impl Controller {
         let gf = match serde_json::from_slice::<acp_core::breakglass::GrantFile>(&bytes) {
             Ok(g) => g,
             Err(_) => {
-                eprintln!("acp-proxy: break-glass grant unparseable; keeping current grant");
+                tracing::warn!("break-glass grant unparseable; keeping current grant");
                 return;
             }
         };
         let pinned = self.bg_key.lock().unwrap().clone();
         if !gf.verify(pinned.as_deref()) {
             // A forged/invalid grant must not be able to trip OR clear the switch: keep current.
-            eprintln!("acp-proxy: break-glass grant REJECTED (signature/pin check failed); keeping current grant");
+            tracing::warn!("break-glass grant REJECTED (signature/pin check failed); keeping current grant");
             return;
         }
         self.breakglass.lock().unwrap().replace_all(gf.to_break_glass());
@@ -444,7 +444,7 @@ impl Controller {
                     .and_then(|p| p.get("protocolVersion"))
                     .and_then(|s| s.as_str().map(str::to_string))
             }) {
-                eprintln!("acp-proxy: MCP protocolVersion {pv}");
+                tracing::info!("MCP protocolVersion {pv}");
             }
         }
 
