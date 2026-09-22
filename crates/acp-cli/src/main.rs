@@ -67,6 +67,7 @@ fn main() -> ExitCode {
         "verify-enforcement" => cmd_verify_enforcement(&args[2..]),
         "registry" => cmd_registry(&args[2..]),
         "policy" => cmd_policy(&args[2..]),
+        "posture" => cmd_posture(&args[2..]),
         "help" | "--help" | "-h" | "version" | "--version" | "-V" => print_help(),
         _ => usage("acp [init|verify|verify-pack|export|policy-compile|policy-test|approve|deny|approvals|canary|learn|replay|purge|classify-eval]"),
     }
@@ -279,6 +280,10 @@ fn cmd_export(path: &str) -> ExitCode {
 
 const SAMPLE_POLICY: &str = "\
 version: 1
+# Posture: this starter uses default: allow so you can observe first (shadow mode). The governance
+# goal is default: deny. Path there: run real traffic, then check `acp coverage` and
+# `acp posture <ledger.db>`; once coverage is high and you understand the would-block list, add
+# explicit allow rules for what should pass and switch this to default: deny.
 default: allow
 rules:
   - id: cap-spend
@@ -318,6 +323,94 @@ fn cmd_init(dir: &str) -> ExitCode {
     println!("  acp approve   {dir}/ledger.db.approvals <id>   # approve one");
     println!("  acp verify    {dir}/ledger.db                  # verify the evidence");
     println!("  acp export    {dir}/ledger.db > pack.json      # regulator-ready pack");
+    println!();
+    println!("Move toward default-deny when ready:");
+    println!("  acp posture   {dir}/ledger.db                  # is coverage high enough to flip?");
+    ExitCode::SUCCESS
+}
+
+/// `acp posture <ledger.db> [--required <0..1>]`: read real decisions and report whether the tenant
+/// is ready to switch the policy default from allow to deny (E6 staged path). Coverage is the
+/// fraction of decisions that matched a named rule; the would-block set is the distinct tools whose
+/// decisions matched no rule (they would newly deny under default-deny). Wires acp_core::posture.
+fn cmd_posture(rest: &[String]) -> ExitCode {
+    let path = match rest.first() {
+        Some(p) => p,
+        None => return usage("acp posture <ledger.db> [--required <0..1>]"),
+    };
+    let mut required = 0.8f64;
+    let mut i = 1;
+    while i < rest.len() {
+        if rest[i] == "--required" {
+            if let Some(v) = rest.get(i + 1).and_then(|s| s.parse::<f64>().ok()) {
+                required = v;
+            }
+            i += 2;
+        } else {
+            i += 1;
+        }
+    }
+    let pack = match acp_ledger::export_file(path) {
+        Ok(p) => p,
+        Err(e) => {
+            eprintln!("acp: {e}");
+            return ExitCode::from(1);
+        }
+    };
+    let (mut decisions, mut with_rule) = (0u64, 0u64);
+    let mut unmatched: std::collections::BTreeSet<String> = std::collections::BTreeSet::new();
+    if let Some(recs) = pack["records"].as_array() {
+        for r in recs {
+            let canon = r["canonical"]
+                .as_str()
+                .and_then(|h| hex::decode(h).ok())
+                .and_then(|b| serde_json::from_slice::<Value>(&b).ok());
+            if let Some(c) = canon {
+                if c["type"] == "decision" {
+                    decisions += 1;
+                    if c["decision"]["rule_id"].is_string() {
+                        with_rule += 1;
+                    } else if let Some(tool) = c["action"]["tool"].as_str() {
+                        if !tool.is_empty() {
+                            unmatched.insert(tool.to_string());
+                        }
+                    }
+                }
+            }
+        }
+    }
+    let coverage = if decisions > 0 {
+        with_rule as f64 / decisions as f64
+    } else {
+        0.0
+    };
+    let unmatched_v: Vec<String> = unmatched.into_iter().collect();
+    let mut posture = acp_core::posture::Posture::new(required);
+    match posture.enable_default_deny(coverage, &unmatched_v) {
+        acp_core::posture::Enable::Ready { would_block } => {
+            println!(
+                "READY for default-deny: coverage {:.1}% >= required {:.1}% ({decisions} decisions)",
+                coverage * 100.0,
+                required * 100.0
+            );
+            if would_block.is_empty() {
+                println!("  nothing would newly block.");
+            } else {
+                println!("  {} tool(s) would newly block; add explicit allow rules first:", would_block.len());
+                for tname in &would_block {
+                    println!("    - {tname}");
+                }
+            }
+        }
+        acp_core::posture::Enable::BlockedByCoverage { coverage, required } => {
+            println!(
+                "NOT READY: coverage {:.1}% < required {:.1}% ({decisions} decisions)",
+                coverage * 100.0,
+                required * 100.0
+            );
+            println!("  stay in shadow or partial; run more traffic and add rules, then re-check.");
+        }
+    }
     ExitCode::SUCCESS
 }
 

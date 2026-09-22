@@ -73,9 +73,12 @@ gaps have the implementing code already written but not wired, which lowers the 
       PodDisruptionBudget and NetworkPolicy, with a shared labels helper. Verified with `helm lint
       --strict` (clean) and `helm template` (all resources render, default and with the gated
       features enabled).
-- [ ] P1-4 Default-deny posture. The default policy verdict is `allow`, so unmatched actions are
-      permitted; the `posture.rs` default-deny maturity path is unwired and the CLI scaffolds
-      `default: allow`. Fix: wire the staged path to default-deny and change the scaffold guidance.
+- [x] P1-4 Default-deny posture. DONE (2026-09-22): wired the staged path. New `acp posture
+      <ledger.db> [--required]` reads real decisions, computes rule coverage and the would-block set,
+      and reports READY or NOT READY to flip to default-deny (backs `acp_core::posture`, previously
+      unwired). The `acp init` scaffold now carries explicit guidance toward `default: deny` and
+      points at `acp coverage` and `acp posture`. Verified end to end against a real ledger (READY and
+      NOT READY branches, would-block list correct).
 - [ ] P1-5 Protections on by default. Trajectory, data-boundary and the content firewall are opt-in
       proxy and gateway flags; the SSRF egress allowlist (`egress.rs`) is implemented but not wired
       into any outbound-dial path (only the canary uses it). Fix: make the key protections on by
