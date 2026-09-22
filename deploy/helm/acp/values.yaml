@@ -68,3 +68,12 @@ ledgerKek:
   enabled: false
   secretName: "acp-ledger-kek"
   key: "kek"
+
+hsm:
+  # Optional: sign evidence on a PKCS#11 HSM instead of a file key (P0-2). The module .so/.dylib must
+  # exist in the image or be mounted by the operator (vendor-specific). Slot/pin come from a Secret.
+  #   kubectl create secret generic acp-hsm --from-literal=slot=<n> --from-literal=pin=<pin>
+  enabled: false
+  module: "/usr/lib/softhsm/libsofthsm2.so"
+  label: "acp"
+  secretName: "acp-hsm"        # keys: slot, pin

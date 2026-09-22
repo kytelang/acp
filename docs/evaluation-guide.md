@@ -59,7 +59,7 @@ Neither is required. Left to itself, ACP covers all three jobs.
 
 - Runs on-premises (Linux; develop on WSL2 on Windows). Not a cloud service.
 - Single node works out of the box. For high availability, a Postgres instance backs shared state (rate-limit budgets and tool-integrity pins), verified across replicas.
-- Optional: Microsoft Entra or any OIDC provider for verified human identity (real and wired); mutual TLS between components (real and wired). Encryption of evidence at rest is wired: set `ACP_LEDGER_KEK` to encrypt the sensitive argument blobs with AES-256-GCM envelope encryption (KMS-sourced key delivery is the remaining hardening). PKCS#11 HSM key custody for the signing key is implemented in code but not yet wired into the signing path; treat that as available-to-integrate, not on by default.
+- Optional: Microsoft Entra or any OIDC provider for verified human identity (real and wired); mutual TLS between components (real and wired). Encryption of evidence at rest is wired: set `ACP_LEDGER_KEK` to encrypt the sensitive argument blobs with AES-256-GCM envelope encryption (KMS-sourced key delivery is the remaining hardening). PKCS#11 HSM key custody for the signing key is wired (set ACP_PKCS11_MODULE) and verified against SoftHSM; the default remains a file key. Validate against your production HSM before relying on it.
 - Governs by sitting in the path: a transparent MCP proxy, an LLM gateway, and a forward proxy; and by compiling one policy into coding agents' managed settings.
 
 ## 7. Maturity and honest status

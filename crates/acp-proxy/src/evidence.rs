@@ -40,6 +40,13 @@ fn verdict_str(v: Verdict) -> &'static str {
 }
 
 fn load_or_create_key(path: &str) -> Result<Box<dyn Signer + Send>, String> {
+    // Prefer a PKCS#11 HSM signer when configured (ACP_PKCS11_MODULE); else the file key below.
+    if let Some(res) = acp_hsm::signer_from_env() {
+        if res.is_ok() {
+            tracing::info!("signing evidence with a PKCS#11 HSM");
+        }
+        return res;
+    }
     match std::fs::read(path) {
         Ok(bytes) if bytes.len() == 32 => {
             let mut seed = [0u8; 32];

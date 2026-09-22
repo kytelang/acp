@@ -198,10 +198,10 @@ bounded task:
 - `blast_radius.rs` is the v0 heuristic, superseded by the wired `impact.rs`
 
 ## Cryptographic primitives built but not wired (primitive, local-only)
-- HSM/PKCS#11 signer (`acp-hsm`): a real `cryptoki` Ed25519 signer whose key never leaves the token,
-  including a `Send` threaded wrapper. But no crate depends on it and the ledger does not use it yet; its
-  tests are gated on a hardware or SoftHSM module. So HSM key custody exists in code, not in the signing
-  path
+- HSM/PKCS#11 signer (`acp-hsm`): NOW WIRED. A real `cryptoki` Ed25519 signer whose key never leaves
+  the token, selected via `ACP_PKCS11_MODULE` and used by the proxy, gateway and server for evidence
+  signing (file-key fallback otherwise). Verified end to end against SoftHSM 2.7; validate against your
+  production HSM module
 - Encryption-at-rest (`acp-encrypt`): NOW WIRED into the ledger (see the Evidence section). Enable with
   `ACP_LEDGER_KEK`. The remaining gap is KMS-sourced key delivery, not the encryption itself
 - Key rotation with historical verification (`keymgr.rs`): a local KMS that keeps every key so old

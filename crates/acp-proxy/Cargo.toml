@@ -14,6 +14,7 @@ name = "mock-mcp-server"
 path = "src/bin/mock_mcp_server.rs"
 
 [dependencies]
+acp-hsm = { path = "../acp-hsm" }
 acp-obs = { path = "../acp-obs" }
 tracing.workspace = true
 hex.workspace = true

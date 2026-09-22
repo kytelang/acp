@@ -328,6 +328,12 @@ fn open_ledger(path: &str) -> Option<acp_ledger::Ledger> {
             Box::new(s)
         }
     };
+    // Prefer a PKCS#11 HSM signer when configured (ACP_PKCS11_MODULE) for evidence signing.
+    let signer: Box<dyn acp_core::sign::Signer + Send> = match acp_hsm::signer_from_env() {
+        Some(Ok(hsm)) => { tracing::info!("gateway signing evidence with a PKCS#11 HSM"); hsm }
+        Some(Err(e)) => { tracing::error!("HSM signer requested but failed: {e}"); return None; }
+        None => signer,
+    };
     acp_ledger::Ledger::open(path, signer).ok()
 }
 

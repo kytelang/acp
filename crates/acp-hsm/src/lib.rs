@@ -189,3 +189,23 @@ impl Signer for ThreadedPkcs11Signer {
         "ed25519"
     }
 }
+
+
+/// Build a ledger signer from the environment when a PKCS#11 module is configured, else `None` so
+/// the caller uses its file-based key. Selected by `ACP_PKCS11_MODULE` (path to the `.so`/`.dylib`);
+/// also reads `ACP_PKCS11_SLOT` (required), `ACP_PKCS11_PIN` (required) and `ACP_PKCS11_LABEL`
+/// (default `acp`). Returns a `Send` handle (a dedicated signing thread) suitable for the ledger.
+pub fn signer_from_env() -> Option<Result<Box<dyn Signer + Send>, String>> {
+    let module = std::env::var("ACP_PKCS11_MODULE").ok()?;
+    Some((|| {
+        let slot: u64 = std::env::var("ACP_PKCS11_SLOT")
+            .map_err(|_| "ACP_PKCS11_SLOT is required with ACP_PKCS11_MODULE".to_string())?
+            .parse()
+            .map_err(|_| "ACP_PKCS11_SLOT must be a number".to_string())?;
+        let pin = std::env::var("ACP_PKCS11_PIN")
+            .map_err(|_| "ACP_PKCS11_PIN is required with ACP_PKCS11_MODULE".to_string())?;
+        let label = std::env::var("ACP_PKCS11_LABEL").unwrap_or_else(|_| "acp".to_string());
+        let s = ThreadedPkcs11Signer::open(&module, slot, &pin, &label)?;
+        Ok(Box::new(s) as Box<dyn Signer + Send>)
+    })())
+}

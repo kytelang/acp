@@ -25,10 +25,22 @@ spec:
         - name: control-plane
           image: "{{ .Values.image.repository }}:{{ .Values.image.tag }}"
           imagePullPolicy: {{ .Values.image.pullPolicy }}
-          {{- if .Values.ledgerKek.enabled }}
+          {{- if or .Values.ledgerKek.enabled .Values.hsm.enabled }}
           env:
+            {{- if .Values.ledgerKek.enabled }}
             - name: ACP_LEDGER_KEK_FILE
               value: /etc/acp-kek/{{ .Values.ledgerKek.key }}
+            {{- end }}
+            {{- if .Values.hsm.enabled }}
+            - name: ACP_PKCS11_MODULE
+              value: {{ .Values.hsm.module | quote }}
+            - name: ACP_PKCS11_LABEL
+              value: {{ .Values.hsm.label | quote }}
+            - name: ACP_PKCS11_SLOT
+              valueFrom: { secretKeyRef: { name: {{ .Values.hsm.secretName }}, key: slot } }
+            - name: ACP_PKCS11_PIN
+              valueFrom: { secretKeyRef: { name: {{ .Values.hsm.secretName }}, key: pin } }
+            {{- end }}
           {{- end }}
           args:
             - "--addr"

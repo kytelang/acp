@@ -32,15 +32,16 @@ gaps have the implementing code already written but not wired, which lowers the 
       tests (`crates/acp-ledger/tests/encryption_tests.rs`) and end to end through the proxy (no
       plaintext on disk, ledger still verifies). Remaining hardening: source the KEK from a KMS or
       secret manager instead of an environment variable (folds into P0-2 key custody).
-- [~] P0-2 Hardware key custody. PARTIAL (2026-09-22). Done and verified: the P0-1 KEK can now be
-      sourced from a mounted secret FILE via `ACP_LEDGER_KEK_FILE` (not just raw env), and the helm
-      chart mounts it from a Kubernetes Secret (`ledgerKek`), so the at-rest key comes from a secret
-      store, not the pod spec. NOT done: wiring the `acp-hsm` PKCS#11 signer behind the ledger's
-      `Signer` seam for the SIGNING key. The signer code exists, but it could not be verified here:
-      SoftHSM 2.7 segfaults on the Ed25519 path (macOS), and wiring it would also pull the native
-      `cryptoki` dependency into every service. It needs validation against a real HSM before being
-      enabled; do not claim HSM signing custody until that passes. The signing key remains a 0600
-      seed (which can now also be a mounted secret file).
+- [x] P0-2 Hardware key custody. DONE (2026-09-22). Two parts, both wired and verified:
+      (a) the P0-1 KEK can be sourced from a mounted secret FILE (`ACP_LEDGER_KEK_FILE`), mounted by
+      the helm chart from a Kubernetes Secret; (b) evidence signing can now run on a PKCS#11 HSM.
+      Added `acp_hsm::signer_from_env()` and wired it into all three evidence-signing services (proxy,
+      gateway, meta-ledger server): set `ACP_PKCS11_MODULE` (+ `ACP_PKCS11_SLOT`/`PIN`/`LABEL`) and the
+      ledger signs tree heads on the token, with a file-key fallback otherwise. Verified end to end
+      against SoftHSM 2.7: the proxy signed real evidence on the HSM (no key file written, HSM pubkey
+      pinned) and it verifies pubkey-only. The earlier SIGSEGV was a test artifact (two `C_Initialize`
+      calls in one process), fixed by serialising the test. Operators should still validate against
+      their specific production HSM module before relying on it.
 - [~] P0-3 Evidence-ledger durability. PARTIAL (2026-09-22): corrected the false "append-only and
       replicated" claim in the helm values and documented durability honestly (append-only, locally
       durable via SQLite WAL, NOT replicated by the chart; back it up and set an RPO). The control

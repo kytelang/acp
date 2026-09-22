@@ -5,6 +5,7 @@ edition = "2021"
 description = "Agent Control Plane: LLM gateway PEP governing direct model API calls (phase C)."
 
 [dependencies]
+acp-hsm = { path = "../acp-hsm" }
 acp-obs = { path = "../acp-obs" }
 tracing.workspace = true
 acp-core = { path = "../acp-core" }

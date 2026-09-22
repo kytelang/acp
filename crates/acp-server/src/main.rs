@@ -162,6 +162,12 @@ async fn main() {
                 Box::new(s)
             }
         };
+        // Prefer a PKCS#11 HSM signer when configured (ACP_PKCS11_MODULE).
+        let signer: Box<dyn acp_core::sign::Signer + Send> = match acp_hsm::signer_from_env() {
+            Some(Ok(hsm)) => { tracing::info!("meta-ledger signing with a PKCS#11 HSM"); hsm }
+            Some(Err(e)) => { tracing::error!("HSM signer requested but failed: {e}"); return None; }
+            None => signer,
+        };
         match acp_ledger::Ledger::open(&path, signer) {
             Ok(l) => Some(std::sync::Mutex::new(l)),
             Err(e) => {
