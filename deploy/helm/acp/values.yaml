@@ -21,6 +21,13 @@ controlPlane:
   resources:
     requests: { cpu: "100m", memory: "128Mi" }
     limits: { cpu: "1", memory: "512Mi" }
+  # In-cluster verified backup (P0-3). A sidecar periodically runs `acp-cli ledger-backup` to a second
+  # persistent volume and verifies each copy. This is a second independent on-cluster copy, not offsite
+  # durability: for a real RPO, ship the backup volume (or the ledger export) to object storage.
+  backup:
+    enabled: false
+    intervalSeconds: 3600
+    size: 10Gi
 
 gateway:
   enabled: true

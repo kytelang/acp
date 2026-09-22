@@ -42,11 +42,14 @@ gaps have the implementing code already written but not wired, which lowers the 
       pinned) and it verifies pubkey-only. The earlier SIGSEGV was a test artifact (two `C_Initialize`
       calls in one process), fixed by serialising the test. Operators should still validate against
       their specific production HSM module before relying on it.
-- [~] P0-3 Evidence-ledger durability. PARTIAL (2026-09-22): corrected the false "append-only and
-      replicated" claim in the helm values and documented durability honestly (append-only, locally
-      durable via SQLite WAL, NOT replicated by the chart; back it up and set an RPO). The control
-      plane is now a StatefulSet with its own persistent volume. REMAINING: wire scheduled backup or
-      streaming replication in-cluster (`acp-cli ledger-backup` exists as the backup primitive).
+- [x] P0-3 Evidence-ledger durability. DONE (2026-09-22): corrected the false "replicated" claim and
+      documented durability honestly; the control plane is a StatefulSet with its own persistent
+      volume; and an opt-in backup sidecar (`controlPlane.backup.enabled`) periodically runs
+      `acp-cli ledger-backup` to a second persistent volume and verifies each copy (the command copies
+      db+wal+shm and re-verifies the result pubkey-only). helm lint clean; renders only when enabled.
+      Honest remaining note (not a blocker): this is a second on-cluster copy, not offsite durability;
+      for a strict RPO, ship the backup volume or the signed export to object storage, and a fully
+      consistent snapshot of a live WAL database ideally uses a quiesce or VACUUM INTO.
 - [ ] P0-4 Control-plane single point of failure. `acp-server` is a single instance whose liveness
       and spike state is in-memory (`Mutex` on `AppState`), lost on restart; HA is unwired (`ha.rs`
       has no caller). Fix: wire the `ha.rs` leader lease, move shared state to `acp-pgstate`, and run

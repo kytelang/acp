@@ -64,6 +64,25 @@ spec:
             {{- if .Values.ledgerKek.enabled }}
             - { name: ledger-kek, mountPath: /etc/acp-kek, readOnly: true }
             {{- end }}
+        {{- if .Values.controlPlane.backup.enabled }}
+        - name: ledger-backup
+          image: "{{ .Values.image.repository }}:{{ .Values.image.tag }}"
+          imagePullPolicy: {{ .Values.image.pullPolicy }}
+          command: ["/bin/sh", "-c"]
+          args:
+            - |
+              while true; do
+                acp-cli ledger-backup /data/evidence.db /backup/evidence.db && \
+                  echo "$(date -u +%FT%TZ) backup OK" || echo "$(date -u +%FT%TZ) backup FAILED";
+                sleep {{ .Values.controlPlane.backup.intervalSeconds }};
+              done
+          resources:
+            requests: { cpu: "20m", memory: "32Mi" }
+            limits: { cpu: "200m", memory: "128Mi" }
+          volumeMounts:
+            - { name: data, mountPath: /data, readOnly: true }
+            - { name: backup, mountPath: /backup }
+        {{- end }}
       {{- if .Values.ledgerKek.enabled }}
       volumes:
         - name: ledger-kek
@@ -81,6 +100,18 @@ spec:
         resources:
           requests:
             storage: {{ .Values.controlPlane.persistence.size }}
+    {{- if .Values.controlPlane.backup.enabled }}
+    - metadata:
+        name: backup
+      spec:
+        accessModes: ["ReadWriteOnce"]
+        {{- if .Values.controlPlane.persistence.storageClass }}
+        storageClassName: {{ .Values.controlPlane.persistence.storageClass }}
+        {{- end }}
+        resources:
+          requests:
+            storage: {{ .Values.controlPlane.backup.size }}
+    {{- end }}
 ---
 apiVersion: v1
 kind: Service
