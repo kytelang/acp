@@ -44,6 +44,9 @@ pub struct Ledger {
     signer: Box<dyn Signer + Send>,
     public_key: Vec<u8>,
     algorithm: String,
+    /// Optional key-encryption key for at-rest encryption of argument blobs (P0-1). `None` keeps the
+    /// legacy plaintext behaviour and reads existing plaintext ledgers unchanged.
+    kek: Option<[u8; 32]>,
 }
 
 fn now_ms() -> u64 {
@@ -53,10 +56,50 @@ fn now_ms() -> u64 {
         .as_millis() as u64
 }
 
+/// Read the ledger key-encryption key from `ACP_LEDGER_KEK` (64 hex chars = 32 bytes). Absent or
+/// malformed means no at-rest encryption, which is backward compatible with existing plaintext
+/// ledgers. The KEK is never written to the database.
+pub fn kek_from_env() -> Option<[u8; 32]> {
+    let hexk = std::env::var("ACP_LEDGER_KEK").ok()?;
+    let bytes = hex::decode(hexk.trim()).ok()?;
+    if bytes.len() != 32 {
+        return None;
+    }
+    let mut k = [0u8; 32];
+    k.copy_from_slice(&bytes);
+    Some(k)
+}
+
+/// Decode a stored args blob. A leading 0x01 byte marks an encrypted envelope (JSON after the tag);
+/// any other first byte is legacy plaintext JSON (JSON text never begins with 0x01). Returns `None`
+/// when an encrypted blob cannot be opened (no KEK, wrong KEK, or tamper), so a caller without the
+/// key simply sees no recoverable arguments rather than an error.
+fn decode_blob(blob: &[u8], args_hash: &str, kek: Option<[u8; 32]>) -> Option<Vec<u8>> {
+    if blob.first() == Some(&0x01u8) {
+        let kek = kek?;
+        let env: acp_encrypt::Envelope = serde_json::from_slice(&blob[1..]).ok()?;
+        acp_encrypt::decrypt(&kek, &env, args_hash.as_bytes()).ok()
+    } else {
+        Some(blob.to_vec())
+    }
+}
+
 impl Ledger {
     /// Open (or create) a ledger at `path`, signing tree heads with `signer`. Exclusive locking
     /// gives the single-writer guarantee (D6): a second writer on the same file cannot extend it.
+    /// Argument-blob encryption at rest is enabled when `ACP_LEDGER_KEK` is set (see `open_with_kek`).
     pub fn open(path: &str, signer: Box<dyn Signer + Send>) -> Result<Ledger, String> {
+        Self::open_with_kek(path, signer, kek_from_env())
+    }
+
+    /// Open (or create) a ledger, encrypting argument blobs at rest under `kek` when `Some` (P0-1,
+    /// decision H0.5). The KEK never touches the database, and verification is unaffected: the Merkle
+    /// leaves commit to the canonical record, not to the (auxiliary, purgeable) argument blob.
+    pub fn open_with_kek(
+        path: &str,
+        signer: Box<dyn Signer + Send>,
+        kek: Option<[u8; 32]>,
+    ) -> Result<Ledger, String> {
         let conn = Connection::open(path).map_err(|e| e.to_string())?;
         conn.pragma_update(None, "journal_mode", "WAL").ok();
         conn.pragma_update(None, "locking_mode", "EXCLUSIVE").ok();
@@ -107,6 +150,7 @@ impl Ledger {
             signer,
             public_key,
             algorithm,
+            kek,
         })
     }
 
@@ -158,6 +202,22 @@ impl Ledger {
         }
     }
 
+    /// Encode an args blob for storage: encrypt under the KEK when configured (tag byte 0x01 followed
+    /// by the envelope JSON), else store legacy plaintext. Fails closed (returns `Err`) rather than
+    /// silently storing plaintext if encryption was requested but the primitive failed.
+    fn encode_blob(&self, args_hash: &str, plaintext: &[u8]) -> Result<Vec<u8>, String> {
+        match self.kek {
+            Some(kek) => {
+                let env = acp_encrypt::encrypt(&kek, plaintext, args_hash.as_bytes())?;
+                let mut out = Vec::with_capacity(plaintext.len() + 160);
+                out.push(0x01u8);
+                out.extend_from_slice(&serde_json::to_vec(&env).map_err(|e| e.to_string())?);
+                Ok(out)
+            }
+            None => Ok(plaintext.to_vec()),
+        }
+    }
+
     /// The transactional body of `append`; assumes a transaction is open.
     fn append_txn(
         &mut self,
@@ -170,10 +230,12 @@ impl Ledger {
         let leaf = leaf_hash(&canonical);
         let args_hash = args.map(sha256_hex);
         if let (Some(a), Some(h)) = (args, &args_hash) {
+            let plaintext = serde_json::to_vec(a).map_err(|e| e.to_string())?;
+            let blob = self.encode_blob(h, &plaintext)?;
             self.conn
                 .execute(
                     "INSERT OR IGNORE INTO args_blob(args_hash,blob) VALUES(?,?)",
-                    params![h, serde_json::to_vec(a).unwrap()],
+                    params![h, blob],
                 )
                 .map_err(|e| e.to_string())?;
         }
@@ -563,6 +625,16 @@ pub fn ordered_by_hlc(path: &str) -> Result<Vec<(u64, String)>, String> {
 }
 
 pub fn read_record(path: &str, seq: u64) -> Result<(Value, Option<Value>), String> {
+    read_record_with_kek(path, seq, kek_from_env())
+}
+
+/// Read a single record and its args by seq, read-only, decrypting the args blob with `kek` when the
+/// blob is encrypted. `read_record` supplies the KEK from `ACP_LEDGER_KEK`.
+pub fn read_record_with_kek(
+    path: &str,
+    seq: u64,
+    kek: Option<[u8; 32]>,
+) -> Result<(Value, Option<Value>), String> {
     let conn = Connection::open_with_flags(path, OpenFlags::SQLITE_OPEN_READ_ONLY)
         .map_err(|e| e.to_string())?;
     let (canonical, args_hash): (Vec<u8>, Option<String>) = conn
@@ -574,15 +646,18 @@ pub fn read_record(path: &str, seq: u64) -> Result<(Value, Option<Value>), Strin
         .map_err(|e| e.to_string())?;
     let record: Value = serde_json::from_slice(&canonical).map_err(|e| e.to_string())?;
     let args = match args_hash {
-        Some(h) => conn
-            .query_row(
-                "SELECT blob FROM args_blob WHERE args_hash=?",
-                params![h],
-                |r| r.get::<_, Vec<u8>>(0),
-            )
-            .optional()
-            .map_err(|e| e.to_string())?
-            .and_then(|b| serde_json::from_slice(&b).ok()),
+        Some(h) => {
+            let blob: Option<Vec<u8>> = conn
+                .query_row(
+                    "SELECT blob FROM args_blob WHERE args_hash=?",
+                    params![h],
+                    |r| r.get::<_, Vec<u8>>(0),
+                )
+                .optional()
+                .map_err(|e| e.to_string())?;
+            blob.and_then(|b| decode_blob(&b, &h, kek))
+                .and_then(|plain| serde_json::from_slice(&plain).ok())
+        }
         None => None,
     };
     Ok((record, args))

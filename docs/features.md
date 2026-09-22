@@ -75,9 +75,12 @@ On-prem, vendor-neutral. See `docs/positioning.md`, `docs/evaluation-guide.md` a
 - Right-to-erasure without breaking verification: argument blobs are separately purgeable
 - SIEM export that is a faithful projection of real ledger decision records: CEF, OCSF (class 6003) and
   RFC 5424 syslog (`acp siem`), plus OTLP, CEF and syslog event sinks in the proxy
-- Honest boundary on evidence-at-rest: argument blobs are currently stored as plaintext JSON. AES-256
-  -GCM envelope encryption is implemented (`acp-encrypt`) but is NOT yet wired into the ledger. See the
-  primitives section.
+- Encryption at rest (P0-1, wired): argument blobs, the sensitive part of the evidence store, are
+  encrypted with AES-256-GCM envelope encryption (`acp-encrypt`) when a key-encryption key is set via
+  `ACP_LEDGER_KEK`; each blob has a fresh DEK wrapped by the KEK, bound to its `args_hash` as AAD. The
+  KEK never touches the database, verification is unaffected (the Merkle leaves commit to the record,
+  not the blob), and erasure and backward-compatible plaintext reads still work. Remaining hardening:
+  source the KEK from a KMS or secret manager rather than an environment variable (ties to key custody).
 
 ## Integrity and anti-tamper (enforced)
 - Tool-integrity pinning: a SHA-256 fingerprint over name, description and input schema, trust-on-first
@@ -199,8 +202,8 @@ bounded task:
   including a `Send` threaded wrapper. But no crate depends on it and the ledger does not use it yet; its
   tests are gated on a hardware or SoftHSM module. So HSM key custody exists in code, not in the signing
   path
-- Encryption-at-rest (`acp-encrypt`): real AES-256-GCM envelope encryption with per-blob keys and AAD
-  binding. Nothing depends on it; the ledger stores argument blobs as plaintext
+- Encryption-at-rest (`acp-encrypt`): NOW WIRED into the ledger (see the Evidence section). Enable with
+  `ACP_LEDGER_KEK`. The remaining gap is KMS-sourced key delivery, not the encryption itself
 - Key rotation with historical verification (`keymgr.rs`): a local KMS that keeps every key so old
   records still verify after rotation; not wired to the ledger, which uses a single signer
 - External transparency anchoring (`anchor.rs`): only a local in-memory anchor exists; Rekor or an
