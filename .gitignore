@@ -5,3 +5,6 @@
 *.db-journal
 /keys/
 /dist/
+
+# local deployment secrets
+deploy/.env

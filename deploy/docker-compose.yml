@@ -1,12 +1,13 @@
 # Reference HA-style deployment: Postgres-backed shared state, an active control plane, and two
 # gateway replicas that share one budget through Postgres (so a failover keeps limits correct).
 # NOT production-tuned; a starting point for "run in anger" and a failover drill.
+# Secrets come from deploy/.env (copy deploy/.env.example). Never commit real secrets.
 services:
   postgres:
     image: postgres:16-alpine
     environment:
       POSTGRES_USER: acp
-      POSTGRES_PASSWORD: acp
+      POSTGRES_PASSWORD: ${ACP_PG_PASSWORD:?set ACP_PG_PASSWORD in deploy/.env}
       POSTGRES_DB: acp
     healthcheck:
       test: ["CMD-SHELL", "pg_isready -U acp"]
@@ -35,7 +36,7 @@ services:
     image: acp:local
     entrypoint: ["acp-gateway"]
     command: ["--addr", "0.0.0.0:8799", "--policy", "/etc/acp/policy.yaml",
-              "--upstream", "https://api.anthropic.com", "--budget-pg", "host=postgres user=acp password=acp dbname=acp",
+              "--upstream", "https://api.anthropic.com", "--budget-pg", "host=postgres user=acp password=${ACP_PG_PASSWORD} dbname=acp",
               "--content-firewall"]
     ports: ["8799:8799"]
     healthcheck:
@@ -51,7 +52,7 @@ services:
     image: acp:local
     entrypoint: ["acp-gateway"]
     command: ["--addr", "0.0.0.0:8799", "--policy", "/etc/acp/policy.yaml",
-              "--upstream", "https://api.anthropic.com", "--budget-pg", "host=postgres user=acp password=acp dbname=acp",
+              "--upstream", "https://api.anthropic.com", "--budget-pg", "host=postgres user=acp password=${ACP_PG_PASSWORD} dbname=acp",
               "--content-firewall"]
     ports: ["8798:8799"]
     volumes: ["./config:/etc/acp:ro"]

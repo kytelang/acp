@@ -3,16 +3,59 @@ image:
   tag: local
   pullPolicy: IfNotPresent
 
+imagePullSecrets: []
+nameOverride: ""
+
+# Control plane (acp-server): holds the single-writer evidence ledger, so it is a StatefulSet with
+# one replica and its own persistent volume. High availability (active plus standby with a leader
+# lease) is tracked as P0-4 in docs/production-readiness.md and is not yet wired.
 controlPlane:
-  replicas: 1          # active plus a warm standby is an ops choice; the ledger is append-only + replicated
+  enabled: true
   addr: "0.0.0.0:8080"
+  # Honest durability note (P0-3): the ledger is append-only and locally durable (SQLite WAL). It is
+  # NOT replicated by this chart. Back it up (acp-cli ledger-backup or a volume snapshot) and set an
+  # RPO you can live with. Do not claim replication you do not have.
+  persistence:
+    size: 10Gi
+    storageClass: ""       # "" uses the cluster default
+  resources:
+    requests: { cpu: "100m", memory: "128Mi" }
+    limits: { cpu: "1", memory: "512Mi" }
 
 gateway:
-  replicas: 2          # replicas share one budget through Postgres
+  enabled: true
+  replicas: 2              # stateless; replicas share one budget through Postgres
   addr: "0.0.0.0:8799"
   upstream: "https://api.anthropic.com"
   contentFirewall: true
+  resources:
+    requests: { cpu: "100m", memory: "128Mi" }
+    limits: { cpu: "2", memory: "512Mi" }
+  autoscaling:
+    enabled: false
+    minReplicas: 2
+    maxReplicas: 6
+    targetCPUUtilizationPercentage: 70
+  podDisruptionBudget:
+    enabled: true
+    minAvailable: 1
 
 postgres:
-  # Point at an external managed Postgres in production; this chart does not deploy one.
-  dsn: "host=postgres user=acp password=acp dbname=acp"
+  # Shared state (budgets and tool-integrity pins). Point at a managed Postgres in production; this
+  # chart does not deploy one. The DSN is a SECRET and is NOT stored in values: create it out of band
+  #   kubectl create secret generic acp-postgres --from-literal=dsn='host=... user=... password=... dbname=acp'
+  # and reference it here. The DSN is injected as an env var and expanded into the flag at runtime, so
+  # the password never appears in the pod spec or in this file.
+  dsnSecret:
+    name: "acp-postgres"
+    key: "dsn"
+
+ingress:
+  enabled: false
+  className: ""
+  annotations: {}
+  host: "acp.example.com"
+  tls: []                  # e.g. [{ secretName: acp-tls, hosts: [acp.example.com] }]
+
+networkPolicy:
+  enabled: false           # when true, restrict ingress to the two services' ports only

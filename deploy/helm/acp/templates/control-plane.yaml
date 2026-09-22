@@ -1,0 +1,68 @@
+{{- if .Values.controlPlane.enabled }}
+apiVersion: apps/v1
+kind: StatefulSet
+metadata:
+  name: {{ .Release.Name }}-control-plane
+  labels:
+    {{- include "acp.labels" . | nindent 4 }}
+    app: {{ .Release.Name }}-control-plane
+spec:
+  serviceName: {{ .Release.Name }}-control-plane
+  replicas: 1
+  selector:
+    matchLabels: { app: {{ .Release.Name }}-control-plane }
+  template:
+    metadata:
+      labels: { app: {{ .Release.Name }}-control-plane }
+    spec:
+      {{- with .Values.imagePullSecrets }}
+      imagePullSecrets: {{ toYaml . | nindent 8 }}
+      {{- end }}
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 10001
+      containers:
+        - name: control-plane
+          image: "{{ .Values.image.repository }}:{{ .Values.image.tag }}"
+          imagePullPolicy: {{ .Values.image.pullPolicy }}
+          args:
+            - "--addr"
+            - "{{ .Values.controlPlane.addr }}"
+            - "--ledger"
+            - "/data/evidence.db"
+            - "--approvals"
+            - "/data/approvals.db"
+          ports:
+            - { name: http, containerPort: 8080 }
+          readinessProbe:
+            httpGet: { path: /readyz, port: 8080 }
+            initialDelaySeconds: 3
+            periodSeconds: 10
+          livenessProbe:
+            httpGet: { path: /healthz, port: 8080 }
+            periodSeconds: 15
+          resources: {{ toYaml .Values.controlPlane.resources | nindent 12 }}
+          volumeMounts:
+            - { name: data, mountPath: /data }
+  volumeClaimTemplates:
+    - metadata:
+        name: data
+      spec:
+        accessModes: ["ReadWriteOnce"]
+        {{- if .Values.controlPlane.persistence.storageClass }}
+        storageClassName: {{ .Values.controlPlane.persistence.storageClass }}
+        {{- end }}
+        resources:
+          requests:
+            storage: {{ .Values.controlPlane.persistence.size }}
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: {{ .Release.Name }}-control-plane
+  labels: {{- include "acp.labels" . | nindent 4 }}
+spec:
+  selector: { app: {{ .Release.Name }}-control-plane }
+  ports:
+    - { name: http, port: 8080, targetPort: 8080 }
+{{- end }}

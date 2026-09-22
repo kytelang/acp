@@ -1,0 +1,11 @@
+{{- if and .Values.gateway.enabled .Values.gateway.podDisruptionBudget.enabled }}
+apiVersion: policy/v1
+kind: PodDisruptionBudget
+metadata:
+  name: {{ .Release.Name }}-gateway
+  labels: {{- include "acp.labels" . | nindent 4 }}
+spec:
+  minAvailable: {{ .Values.gateway.podDisruptionBudget.minAvailable }}
+  selector:
+    matchLabels: { app: {{ .Release.Name }}-gateway }
+{{- end }}

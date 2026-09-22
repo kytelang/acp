@@ -36,11 +36,11 @@ gaps have the implementing code already written but not wired, which lowers the 
       evidence and tree heads. `acp-hsm` (PKCS#11) is implemented but orphaned. Fix: wire
       `acp-hsm` (or `keymgr` rotation) behind the `Signer` seam for ledger, break-glass and policy
       signing.
-- [ ] P0-3 Evidence-ledger durability. The ledger is a single SQLite file per node and is not
-      replicated; it is the crown jewel and a single point of loss. The helm values claim
-      "append-only and replicated," which is not true today. Fix: add replication or streaming
-      offsite backup (or state the RPO honestly and wire scheduled `ledger-backup`), and correct the
-      helm claim.
+- [~] P0-3 Evidence-ledger durability. PARTIAL (2026-09-22): corrected the false "append-only and
+      replicated" claim in the helm values and documented durability honestly (append-only, locally
+      durable via SQLite WAL, NOT replicated by the chart; back it up and set an RPO). The control
+      plane is now a StatefulSet with its own persistent volume. REMAINING: wire scheduled backup or
+      streaming replication in-cluster (`acp-cli ledger-backup` exists as the backup primitive).
 - [ ] P0-4 Control-plane single point of failure. `acp-server` is a single instance whose liveness
       and spike state is in-memory (`Mutex` on `AppState`), lost on restart; HA is unwired (`ha.rs`
       has no caller). Fix: wire the `ha.rs` leader lease, move shared state to `acp-pgstate`, and run
@@ -53,12 +53,18 @@ gaps have the implementing code already written but not wired, which lowers the 
       ids, no verbosity control. The OTLP span builder (`otelspan.rs`) exists but `build_span` is
       never called by any binary, so distributed tracing is unwired (only decision events reach the
       SIEM sinks). Fix: adopt `tracing` with a JSON subscriber and levels; wire request-scoped spans.
-- [ ] P1-2 Secrets management. `deploy/docker-compose.yml` and `deploy/helm/acp/values.yaml` carry a
-      plaintext Postgres password; model API keys are passed by flag or environment. Fix: use
-      Kubernetes Secrets or Vault; never bake a DSN password into values.
-- [ ] P1-3 Helm chart completeness. Only `templates/gateway.yaml` exists. There is no control-plane
-      Deployment, Service, Ingress, Secret, probe, resource limit, HPA, PodDisruptionBudget or
-      NetworkPolicy. Fix: complete the chart so it installs a real cluster deployment.
+- [x] P1-2 Secrets management. DONE (2026-09-22): docker-compose reads the Postgres password from a
+      required env var (`ACP_PG_PASSWORD`, via `deploy/.env`, gitignored) and fails closed if unset;
+      the helm chart takes the Postgres DSN from a Kubernetes Secret (`postgres.dsnSecret`) injected
+      as an env var and expanded into the flag at runtime, so no password appears in values or the pod
+      spec. Verified: `docker compose config` passes with the env set and refuses without it; the
+      rendered chart shows the DSN only via `secretKeyRef`.
+- [x] P1-3 Helm chart completeness. DONE (2026-09-22): the chart now renders a control-plane
+      StatefulSet with a persistent volume plus Service, a gateway Deployment with resource requests
+      and limits and probes plus Service, and gated Ingress, HorizontalPodAutoscaler,
+      PodDisruptionBudget and NetworkPolicy, with a shared labels helper. Verified with `helm lint
+      --strict` (clean) and `helm template` (all resources render, default and with the gated
+      features enabled).
 - [ ] P1-4 Default-deny posture. The default policy verdict is `allow`, so unmatched actions are
       permitted; the `posture.rs` default-deny maturity path is unwired and the CLI scaffolds
       `default: allow`. Fix: wire the staged path to default-deny and change the scaffold guidance.
