@@ -63,3 +63,17 @@ async fn tenants_cannot_see_each_others_rows() {
         "a tenant's visible rows must be strictly fewer than the whole table"
     );
 }
+
+
+/// The RLS bypass guard: init_schema must REFUSE a superuser / BYPASSRLS role, because isolation
+/// would silently not hold. Gated on ACP_PG_SUPER_URL (a superuser DSN); skips otherwise.
+#[tokio::test(flavor = "multi_thread")]
+async fn init_refuses_a_role_that_bypasses_rls() {
+    let Some(url) = std::env::var("ACP_PG_SUPER_URL").ok() else {
+        eprintln!("ACP_PG_SUPER_URL not set; skipping RLS-bypass guard test");
+        return;
+    };
+    let store = TenantStore::connect(&url).await.expect("connect");
+    let err = store.init_schema().await.expect_err("must refuse a bypassing role");
+    assert!(err.contains("bypasses row-level security"), "unexpected error: {err}");
+}

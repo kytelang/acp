@@ -31,8 +31,32 @@ impl TenantStore {
         Ok(TenantStore { client })
     }
 
-    /// Create the records table and install FORCE row-level security. Idempotent.
+    /// Fail closed if the connected role bypasses row-level security. Postgres superusers and roles
+    /// with BYPASSRLS ignore RLS policies entirely, so tenant isolation would silently NOT hold. We
+    /// refuse to initialise against such a role rather than pretend the guarantee is in place.
+    async fn ensure_rls_enforceable(&self) -> Result<(), String> {
+        let row = self
+            .client
+            .query_one(
+                "SELECT rolsuper OR rolbypassrls FROM pg_roles WHERE rolname = current_user",
+                &[],
+            )
+            .await
+            .map_err(|e| e.to_string())?;
+        let bypasses: bool = row.get(0);
+        if bypasses {
+            return Err("acp-pgstore: the connected Postgres role bypasses row-level security \
+                (superuser or BYPASSRLS). Tenant isolation would NOT be enforced. Connect as a \
+                non-superuser role that does not have BYPASSRLS."
+                .to_string());
+        }
+        Ok(())
+    }
+
+    /// Create the records table and install FORCE row-level security. Idempotent. Refuses if the
+    /// connected role would bypass RLS (see `ensure_rls_enforceable`).
     pub async fn init_schema(&self) -> Result<(), String> {
+        self.ensure_rls_enforceable().await?;
         let stmts = [
             "CREATE TABLE IF NOT EXISTS records (
                  tenant_id text NOT NULL,

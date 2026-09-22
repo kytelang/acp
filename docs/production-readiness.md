@@ -107,8 +107,12 @@ gaps have the implementing code already written but not wired, which lowers the 
 - [ ] P2-2 Wire or clearly shelve the built-but-unwired governance modules (SCIM, dual-control, ITSM
       tickets, webhook signing, rollout, fleet, drift, metering, offboarding, mcpdrift, hostshim,
       timeline, adapter, agility, keymgr rotation, external anchor). See `docs/features.md`.
-- [ ] P2-3 Multi-tenancy in the control plane (`acp-pgstore` enforces Postgres RLS, but `acp-server`
-      is single-tenant with no tenant plumbing).
+- [~] P2-3 Multi-tenancy. PARTIAL (2026-09-22): verified `acp-pgstate` (shared budgets/pins) and
+      `acp-pgstore` (tenant RLS isolation) against a real Postgres, and added a fail-closed guard so
+      `acp-pgstore.init_schema` REFUSES a role that bypasses RLS (superuser or BYPASSRLS), since such
+      a role would silently break isolation. Deployment note: the store must connect as a
+      non-superuser role without BYPASSRLS. REMAINING: `acp-server` itself is still single-tenant with
+      no tenant plumbing.
 - [ ] P2-4 Third-party assurance: SOC 2, penetration test, independent cryptographic audit. See
       `docs/commercial/pre-launch-requirements.md`.
 - [ ] P2-5 Make the console's `acp-server` URL configurable (it is currently hardcoded).
