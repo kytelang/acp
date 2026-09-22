@@ -104,3 +104,22 @@ fn erasure_still_works_on_encrypted_blobs() {
     let (_r, a) = read_record_with_kek(&path, 1, Some(kek)).unwrap();
     assert!(a.is_none(), "erased args are gone");
 }
+
+
+#[test]
+fn kek_from_file_env_source() {
+    // A KEK provided via ACP_LEDGER_KEK_FILE (a mounted secret file) drives encryption end to end.
+    let kek_hex = "00112233445566778899aabbccddeeff00112233445566778899aabbccddeeff";
+    let kekfile = std::env::temp_dir().join(format!("acp-kek-{}.hex", std::process::id()));
+    std::fs::write(&kekfile, format!("{kek_hex}\n")).unwrap();
+    // acp_ledger::kek_from_env reads the file when ACP_LEDGER_KEK_FILE is set.
+    std::env::set_var("ACP_LEDGER_KEK_FILE", &kekfile);
+    let kek = acp_ledger::kek_from_env().expect("kek from file");
+    std::env::remove_var("ACP_LEDGER_KEK_FILE");
+    let mut expect = [0u8; 32];
+    for (i, b) in expect.iter_mut().enumerate() {
+        *b = u8::from_str_radix(&kek_hex[i * 2..i * 2 + 2], 16).unwrap();
+    }
+    assert_eq!(kek, expect, "KEK loaded from file must match the hex contents");
+    let _ = std::fs::remove_file(&kekfile);
+}

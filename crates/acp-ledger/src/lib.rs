@@ -56,11 +56,18 @@ fn now_ms() -> u64 {
         .as_millis() as u64
 }
 
-/// Read the ledger key-encryption key from `ACP_LEDGER_KEK` (64 hex chars = 32 bytes). Absent or
-/// malformed means no at-rest encryption, which is backward compatible with existing plaintext
-/// ledgers. The KEK is never written to the database.
+/// Read the ledger key-encryption key (32 bytes as 64 hex chars). Sources, in order:
+///   1. `ACP_LEDGER_KEK_FILE`: path to a file holding the hex KEK. Preferred in production, because a
+///      Kubernetes Secret or a secret-manager agent can mount the key as a file without it ever
+///      appearing in the process environment or the pod spec.
+///   2. `ACP_LEDGER_KEK`: the hex KEK inline in the environment (convenient for local use).
+/// Absent or malformed means no at-rest encryption, which is backward compatible with existing
+/// plaintext ledgers. The KEK is never written to the database.
 pub fn kek_from_env() -> Option<[u8; 32]> {
-    let hexk = std::env::var("ACP_LEDGER_KEK").ok()?;
+    let hexk = match std::env::var("ACP_LEDGER_KEK_FILE") {
+        Ok(path) => std::fs::read_to_string(&path).ok()?,
+        Err(_) => std::env::var("ACP_LEDGER_KEK").ok()?,
+    };
     let bytes = hex::decode(hexk.trim()).ok()?;
     if bytes.len() != 32 {
         return None;

@@ -59,3 +59,12 @@ ingress:
 
 networkPolicy:
   enabled: false           # when true, restrict ingress to the two services' ports only
+
+ledgerKek:
+  # Optional: encrypt evidence argument blobs at rest (P0-1). Create a Secret with the 64-hex KEK
+  #   kubectl create secret generic acp-ledger-kek --from-literal=kek=$(openssl rand -hex 32)
+  # and enable it here; it is mounted as a file and read via ACP_LEDGER_KEK_FILE, so the key never
+  # appears in the pod spec or in this file.
+  enabled: false
+  secretName: "acp-ledger-kek"
+  key: "kek"

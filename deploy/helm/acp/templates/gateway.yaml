@@ -34,6 +34,10 @@ spec:
                 secretKeyRef:
                   name: {{ .Values.postgres.dsnSecret.name }}
                   key: {{ .Values.postgres.dsnSecret.key }}
+            {{- if .Values.ledgerKek.enabled }}
+            - name: ACP_LEDGER_KEK_FILE
+              value: /etc/acp-kek/{{ .Values.ledgerKek.key }}
+            {{- end }}
           args:
             - "--addr"
             - "{{ .Values.gateway.addr }}"
@@ -56,6 +60,16 @@ spec:
             httpGet: { path: /healthz, port: 8799 }
             periodSeconds: 15
           resources: {{ toYaml .Values.gateway.resources | nindent 12 }}
+          {{- if .Values.ledgerKek.enabled }}
+          volumeMounts:
+            - { name: ledger-kek, mountPath: /etc/acp-kek, readOnly: true }
+          {{- end }}
+      {{- if .Values.ledgerKek.enabled }}
+      volumes:
+        - name: ledger-kek
+          secret:
+            secretName: {{ .Values.ledgerKek.secretName }}
+      {{- end }}
 ---
 apiVersion: v1
 kind: Service

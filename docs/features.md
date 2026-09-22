@@ -77,7 +77,7 @@ On-prem, vendor-neutral. See `docs/positioning.md`, `docs/evaluation-guide.md` a
   RFC 5424 syslog (`acp siem`), plus OTLP, CEF and syslog event sinks in the proxy
 - Encryption at rest (P0-1, wired): argument blobs, the sensitive part of the evidence store, are
   encrypted with AES-256-GCM envelope encryption (`acp-encrypt`) when a key-encryption key is set via
-  `ACP_LEDGER_KEK`; each blob has a fresh DEK wrapped by the KEK, bound to its `args_hash` as AAD. The
+  `ACP_LEDGER_KEK` (inline) or `ACP_LEDGER_KEK_FILE` (a mounted secret file); each blob has a fresh DEK wrapped by the KEK, bound to its `args_hash` as AAD. The
   KEK never touches the database, verification is unaffected (the Merkle leaves commit to the record,
   not the blob), and erasure and backward-compatible plaintext reads still work. Remaining hardening:
   source the KEK from a KMS or secret manager rather than an environment variable (ties to key custody).

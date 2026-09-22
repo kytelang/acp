@@ -25,6 +25,11 @@ spec:
         - name: control-plane
           image: "{{ .Values.image.repository }}:{{ .Values.image.tag }}"
           imagePullPolicy: {{ .Values.image.pullPolicy }}
+          {{- if .Values.ledgerKek.enabled }}
+          env:
+            - name: ACP_LEDGER_KEK_FILE
+              value: /etc/acp-kek/{{ .Values.ledgerKek.key }}
+          {{- end }}
           args:
             - "--addr"
             - "{{ .Values.controlPlane.addr }}"
@@ -44,6 +49,15 @@ spec:
           resources: {{ toYaml .Values.controlPlane.resources | nindent 12 }}
           volumeMounts:
             - { name: data, mountPath: /data }
+            {{- if .Values.ledgerKek.enabled }}
+            - { name: ledger-kek, mountPath: /etc/acp-kek, readOnly: true }
+            {{- end }}
+      {{- if .Values.ledgerKek.enabled }}
+      volumes:
+        - name: ledger-kek
+          secret:
+            secretName: {{ .Values.ledgerKek.secretName }}
+      {{- end }}
   volumeClaimTemplates:
     - metadata:
         name: data
