@@ -73,9 +73,12 @@ gaps have the implementing code already written but not wired, which lowers the 
       `aibom` are Ed25519-signed operator documents whose linked-decision references are free-text and
       are not checked against the ledger. Only `grc-report`, `siem` and `warehouse` are truly
       ledger-backed. Fix: validate linked-decision ids against real ledger records at sign time.
-- [ ] P1-8 DLP classifier quality. `classify.rs` has no direct unit tests and its secret regex
-      matches any 32-plus character token, so it over-matches and will mangle legitimate payloads
-      during redaction. Fix: tighten the patterns, add a labelled eval set and unit tests.
+- [x] P1-8 DLP classifier quality. DONE (2026-09-22): replaced the length-only secret rule with a
+      character-diversity plus Shannon-entropy gate (keeping the high-precision keyword rule), and made
+      numeric PII (SSN, phone) reject matches embedded in a letter-bearing token so UUIDs, hashes and
+      identifiers no longer false-positive. Added unit tests and a labelled eval gate
+      (`classify.rs` tests): secret precision, recall and FPR all pass; the exact former false
+      positives (git SHA, UUID, long path, long word) now classify as none.
 
 ## P2: hardening
 
