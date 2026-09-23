@@ -1,6 +1,6 @@
 # Varman evaluation guide: is it fit for your AI governance purpose?
 
-Date: 2026-09-21
+Date: 2026-09-22
 Audience: a security, platform, risk or compliance leader evaluating whether Varman (the Agent Control Plane, ACP) fits their AI governance needs. This is a plain-language, honest overview, including where Varman is not the right choice. "ACP" is the internal architecture name; "Varman" is the product.
 
 ## 1. What ACP is, in one paragraph
@@ -11,20 +11,79 @@ Varman (the Agent Control Plane, ACP) is a vendor-neutral, on-premises layer tha
 
 Enterprises deploying AI agents face two tools that each solve half the problem. AI firewalls inspect prompts and responses for unsafe content but do not authorize actions or produce verifiable proof. AI governance and GRC platforms document, assess and report, but do not sit in the request path or block a live action. Neither can answer, with evidence, "what did our agents actually do, and could they have done something they were not allowed to?" ACP is built to answer exactly that.
 
-## 3. What ACP offers
+## 3. What ACP offers, feature by feature
 
-In buyer terms, grouped by outcome:
+Grouped the way the stack is actually built, from the surfaces it sits in down to operations. Each group is tagged: [enforced] runs in a running component end to end; [opt-in] is enforced when a flag or environment setting turns it on; [primitive] is built and tested but not yet wired into a running component. The tags are the honest part; read them.
 
-- Control what agents can do. Per-action authorization at the resource boundary (which database, secret, file, model class, network destination), with allow, deny, require-human-approval, or allow-with-obligations. Default-deny is available with a staged path to it.
-- Prove what happened. A tamper-evident evidence ledger of every decision, cryptographically signed and independently verifiable without trusting ACP's own store. This is the capability no incumbent has, and it is the reason to look at ACP.
-- Stop content attacks (defence in depth). A first-party content firewall for prompt injection, jailbreaks, PII and secrets, hardened against obfuscation (base64, unicode tricks, de-spacing) and indirect injection (poisoned tool results). Honest boundary: detection is best-effort; the authorization layer is what actually contains a successful attack.
-- Check groundedness (hallucination). A baseline groundedness detector flags an answer that is not supported by its source context (the reliable form of hallucination detection, for RAG and tool-augmented flows). Honest boundary: it does context-grounded faithfulness, not reference-free factuality (which is unreliable for everyone); the built-in baseline is a zero-dependency lexical detector for on-premises and air-gapped use, and production-grade groundedness is delegated to an external specialist service (Azure or Bedrock) through the content-scan hook. See `docs/design/groundedness.md`.
-- Govern sequences and data flow. Catch a toxic combination of individually-allowed actions (read a secret, then send it out) and block classified data from crossing to a lower-trust destination.
-- Keep a human in control. Step-up approvals with separation of duty, and a scoped, signed kill-switch that halts an agent across every surface.
-- Make enforcement unavoidable and measurable. Credential brokering, an enforcement guard, a coverage report and an egress canary that measure whether anything is talking to a model or tool without going through ACP.
-- Discover and enrol shadow AI. Find ungoverned model and agent endpoints and bring them under one policy, or block them.
-- Cover every surface. Agent tool calls (MCP), direct model API calls, arbitrary HTTP/API traffic (a configuration-driven forward proxy with optional TLS interception), and the coding agents' own shell, file and network powers.
-- Satisfy the auditors. Two honestly different things. The framework report (acp grc-report) and SIEM export are derived from real signed ledger records, and warehouse rows are re-verified against Merkle proofs. The rest of the GRC surface (a control library, risk assessments, a worked conformity checklist, model cards, use-case registry, AI-BOM) are Ed25519-signed documents you author; the signature proves they were not altered, but their internal evidence and linked-decision references are free-text today, not cross-checked against the ledger. Both are useful; they are not the same strength of proof.
+### 3.1 Coverage: the surfaces it governs [enforced]
+- Agent tool calls over MCP: a transparent proxy over stdio and streamable-HTTP.
+- Direct model API calls: a reverse-proxy gateway that holds the upstream key.
+- Arbitrary HTTP and API traffic: a configuration-driven forward proxy with a real TLS-interception CA for managed devices; certificate pinning is detected and reported, not silently bypassed.
+- The coding agents' own shell, file and network powers: one policy compiled into Claude, Copilot and Gemini managed settings (vendor settings, not machine code; the agent stays the enforcer).
+
+### 3.2 Policy and authorization [enforced]
+- One policy language across every surface, compiled to Cedar and fail-closed on any error.
+- Subject is the agent plus the human principal; the object is the resource (database, secret, file, model class, network); the operation is read, write, delete, egress and so on.
+- Tool-to-resource and model-to-class taxonomies are derived from names, never asserted by the agent.
+- Verdicts: allow, deny, step-up, or allow with obligations (confirm, redact, rate-limit, token and cost budgets). Default-deny with deny-overrides.
+- Signed, versioned policy with tamper detection and hot-reload, plus a staged path to default-deny (`acp posture` reads real evidence to tell you when it is safe to flip).
+
+### 3.3 Identity and access [enforced]
+- Verified agent identity (tokens stored only as a hash, fail-closed, revocable).
+- Verified human identity via OIDC or Microsoft Entra (real RS256 and EdDSA, JWKS rotation), degrading to unattributed.
+- Delegation: an agent acting for a named human, time-bounded.
+- Role-based access control on the control plane with separation of duty, and mutual TLS between components.
+
+### 3.4 Human oversight and emergency control [enforced]
+- Step-up approvals with an inbox; each approval is single-use and bound to the session, principal, argument hash and a time limit.
+- A scoped, signed kill-switch (break-glass) that halts an agent, resource or tool across both the tool-call and model-call surfaces and stays engaged until cleared.
+
+### 3.5 Evidence and audit [enforced]
+- A tamper-evident Merkle ledger with Ed25519 signed tree heads, independently verifiable with the public key alone, so you do not have to trust our store.
+- Crash-safe recording, idempotent appends, and right-to-erasure or retention purges that do not break verification.
+- Encryption of the sensitive argument payloads at rest (AES-256-GCM, key from a mounted secret), and optional signing on a PKCS#11 HSM.
+- SIEM export in CEF, OCSF and syslog, plus OTLP, as a faithful projection of real decisions.
+
+### 3.6 Content firewall, first-party and in-path [enforced]
+- A trained prompt-injection classifier plus signatures, PII and secret detection, and denied-topic rules; block or redact.
+- Hardened against obfuscation (base64, zero-width, homoglyphs, de-spacing) and against indirect injection in poisoned tool results, not just prompts.
+- A continuous adversarial red-team gate and an evaluation gate, so a weakened detector cannot ship.
+- Groundedness and hallucination: a zero-dependency baseline for context-grounded faithfulness, with production-grade detection delegated to an external specialist. Honest boundary: detection is defence in depth; the authorization layer is what actually contains a successful attack.
+
+### 3.7 Integrity and anti-tamper [enforced]
+- Tool-integrity pinning that detects a rug-pull or tool-poisoning and quarantines the tool until it is re-pinned.
+- A self-governance meta-audit of policy, key, role and break-glass changes, appended to the same verifiable ledger.
+
+### 3.8 Unavoidability and containment [enforced and opt-in]
+- Credential brokering, so callers cannot reach the model directly.
+- An enforcement guard sidecar that refuses and records any un-proxied call.
+- A coverage report and an egress canary that measure whether anything is talking to a model or tool without going through ACP.
+- Concurrency caps with load-shed and upstream timeouts on the data path.
+
+### 3.9 Sequence and data-boundary governance [opt-in]
+- Trajectory governance denies the action that completes a toxic combination of individually-allowed steps (read a secret, then send it out) or exceeds a velocity budget.
+- Data-boundary enforcement stops classified data crossing to a lower-trust destination, and is destination-aware, unlike the content filter.
+
+### 3.10 Discovery and enrolment [enforced]
+- Shadow-AI detection classifies ungoverned model and agent endpoints by provider.
+- A signed enrolment loop brings them under one policy or blocks them, and exports an allow and block list for your MDM or CASB.
+
+### 3.11 Compliance and GRC
+Two honestly different strengths of proof:
+- Ledger-backed [enforced]: framework reports for the EU AI Act, NIST AI RMF and ISO 42001 graded from real signed records, SIEM export, and warehouse re-verification against Merkle proofs.
+- Signed operator documents [enforced, but author-attested]: risk assessment and tiering, a worked conformity checklist, an AI risk register, model cards, a use-case lifecycle registry, attestations and a CycloneDX AI bill of materials. The signature proves the document was not altered; the linked-decision references inside it are free-text today, not cross-checked against the ledger.
+
+### 3.12 Operations and platform [enforced]
+- A control-plane console and a web console: approvals, policy view and deploy with a syntax-highlighted editor, kill-switch, evidence timeline, an integrity view and printable reports.
+- Structured, leveled logs across every service (JSON option, configured by environment).
+- Liveness (dead-man's-switch) and spike detection; Postgres-backed shared budgets and pins, and a tenant-isolated store with a fail-closed guard against a mis-scoped database role.
+- Deployment: a complete helm chart (control-plane, gateway, ingress, autoscaling, disruption budget, network policy, optional at-rest key, HSM and backup), docker-compose, and systemd units.
+
+### 3.13 Built but not yet wired [primitive]
+Real, tested logic that no running component calls yet, so treat it as a roadmap, not a running feature: high-availability leader lease, staged rollout, fleet registry, classifier tuning and drift, usage metering, crypto-agility, four-eyes dual control, ITSM tickets, SCIM provisioning, tenant offboarding, MCP method-drift, webhook signing, and external transparency anchoring. See `docs/production-readiness.md` for what is closed and what remains.
+
+### 3.14 Deliberately not built
+OS-level sandboxing of shell commands (the coding agents enforce their own), a fully-managed cloud SaaS (on-premises by design), and statistical model monitoring such as bias and fairness dashboards. See section 5 for how that affects fit.
 
 ## 4. One complete product, with optional interoperability
 
