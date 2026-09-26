@@ -73,19 +73,25 @@
     .ainfo{display:flex;align-items:center;gap:.75rem;min-width:0}
     .atool{font-weight:650} .aid{font-size:.72rem;overflow:hidden;text-overflow:ellipsis;max-width:230px;white-space:nowrap}
     .abtns{display:flex;gap:.5rem;flex-shrink:0}
-    .btn{padding:.5rem 1rem;border:1px solid var(--line2);background:var(--panel2);color:var(--txt);border-radius:9px;cursor:pointer;font-size:.82rem;font-weight:600;transition:.15s;display:inline-flex;align-items:center;gap:.4rem} .btn:hover{border-color:var(--accent)}
-    .btn.ok{background:var(--ok);color:#052e22} .btn.ok:hover{background:#0ea371}
-    .btn.no{background:rgba(239,68,68,.15);color:#f87171;border:1px solid rgba(239,68,68,.35)} .btn.no:hover{background:rgba(239,68,68,.25)}
-    .btn.primary{background:var(--accent);color:#fff} .btn.primary:hover{filter:brightness(1.12)}
-    .deploy{display:flex;flex-direction:column;gap:.85rem}
-    .deploy label.fld, .modal-b label.fld{display:flex;flex-direction:column;gap:.35rem;font-size:.68rem;color:var(--dim);text-transform:uppercase;letter-spacing:.06em}
-    .deploy textarea, .modal-b textarea{width:100%;min-height:230px;background:var(--panel2);border:1px solid var(--line2);border-radius:10px;color:var(--txt);font-family:ui-monospace,SFMono-Regular,Menlo,monospace;font-size:.82rem;line-height:1.55;padding:.9rem;resize:vertical}
-    .deploy select, .modal-b select{background:var(--panel2);border:1px solid var(--line2);border-radius:9px;color:var(--txt);padding:.55rem .8rem;font-size:.85rem}
-    .deploy select option, .modal-b select option{background:var(--panel);color:var(--txt)}
-    .deploy input, .modal-b input{background:var(--panel2);border:1px solid var(--line2);border-radius:9px;color:var(--txt);padding:.55rem .8rem;font-size:.85rem;max-width:240px}
-    .deploy .row, .modal-b .row{display:flex;gap:1rem;align-items:flex-end;flex-wrap:wrap}
-    .deploystatus{display:flex;align-items:center;gap:.6rem;min-height:1.5rem}
-    .hint{color:var(--muted);font-size:.78rem;margin:.1rem 0 .4rem}
+    /* ---- uniform buttons ---- */
+    .btn{height:38px;padding:0 1.1rem;border:1px solid var(--line2);background:var(--panel2);color:var(--txt);border-radius:9px;cursor:pointer;font:600 .85rem/1 inherit;font-family:inherit;transition:.15s;display:inline-flex;align-items:center;justify-content:center;gap:.4rem;white-space:nowrap}
+    .btn:hover{border-color:var(--accent)}
+    .btn.primary{background:var(--accent);border-color:var(--accent);color:#fff} .btn.primary:hover{filter:brightness(1.1)}
+    .btn.ok{background:var(--ok);border-color:var(--ok);color:#052e22} .btn.ok:hover{filter:brightness(1.05)}
+    .btn.no{background:transparent;border-color:var(--bad);color:var(--bad)} .btn.no:hover{background:rgba(239,68,68,.12)}
+    /* ---- uniform form controls (cards + modals) ---- */
+    .card input, .card select, .card textarea, .modal input, .modal select, .modal textarea{width:100%;box-sizing:border-box;background:var(--panel2);color:var(--txt);border:1px solid var(--line2);border-radius:9px;padding:0 .75rem;height:38px;font-size:.9rem;font-family:inherit;transition:border-color .15s,box-shadow .15s}
+    .card input:focus, .card select:focus, .card textarea:focus, .modal input:focus, .modal select:focus, .modal textarea:focus{outline:none;border-color:var(--accent);box-shadow:0 0 0 3px rgba(99,102,241,.25)}
+    .card textarea, .modal textarea{height:auto;min-height:130px;padding:.7rem .75rem;font-family:ui-monospace,SFMono-Regular,Menlo,monospace;font-size:.85rem;line-height:1.55;resize:vertical}
+    .card select option, .modal select option{background:var(--panel);color:var(--txt)}
+    /* ---- fields, rows, status ---- */
+    .fld{display:flex;flex-direction:column;gap:.4rem;font-size:.8rem;color:var(--dim);font-weight:500}
+    .deploy, .modal-b{display:flex;flex-direction:column;gap:1rem}
+    .row{display:flex;gap:.85rem;align-items:flex-end;flex-wrap:wrap}
+    .row .fld{flex:1;min-width:180px}
+    .row .btn{flex:0 0 auto}
+    .deploystatus{display:flex;align-items:center;gap:.6rem;min-height:1.4rem}
+    .hint{color:var(--muted);font-size:.82rem;line-height:1.5;margin:0 0 .25rem}
     .tbtn{background:var(--panel);border:1px solid var(--line);color:var(--txt);width:36px;height:36px;border-radius:9px;cursor:pointer;font-size:1rem;display:grid;place-items:center;transition:.15s} .tbtn:hover{background:var(--panel2)}
     .tright{display:flex;align-items:center;gap:.85rem}
     .barwrap{margin-top:1.25rem}
@@ -101,7 +107,7 @@
     .rep-k{font-size:.68rem;text-transform:uppercase;letter-spacing:.07em;color:var(--muted)}
     .rep-v{font-size:1.9rem;font-weight:750;margin:.25rem 0 .1rem;letter-spacing:-.02em}
     .repcard .dim{font-size:.76rem}
-    #policy-editor{height:360px;border:1px solid var(--line2);border-radius:10px;overflow:hidden}
+    #policy-editor{height:360px;width:100%;border:1px solid var(--line2);border-radius:10px;overflow:hidden}
     .polrow{display:flex;align-items:center;gap:.6rem;flex-wrap:wrap}
     @media print{.sidebar,.topbar{display:none}.app{display:block}.content{max-width:none}}
     .card-h .card-cta{margin-left:auto;padding:.4rem .85rem;font-size:.78rem}
@@ -110,18 +116,14 @@
     .modal.wide{width:min(880px,95vw)}
     .modal-h{display:flex;align-items:center;justify-content:space-between;gap:1rem;padding:1rem 1.25rem;border-bottom:1px solid var(--line);font-weight:600;font-size:.95rem}
     .modal{color:var(--txt)}
-    .modal-b{padding:1.25rem;display:flex;flex-direction:column;gap:.9rem;color:var(--txt)}
+    .modal-b{padding:1.25rem;color:var(--txt)}
     .modal-close{background:none;border:0;color:var(--dim);font-size:1.5rem;line-height:1;cursor:pointer}
     .modal-close:hover{color:var(--txt)}
     .tabs{display:flex;gap:.25rem;border-bottom:1px solid var(--line)}
     .tab{padding:.6rem 1rem;border:0;background:none;color:var(--dim);cursor:pointer;font-size:.85rem;font-weight:600;border-bottom:2px solid transparent;margin-bottom:-1px}
     .tab:hover{color:var(--txt)}
     .tab.active{color:var(--accent);border-bottom-color:var(--accent)}
-    .modal-b input, .modal-b select{max-width:none;width:100%}
-    .modal-b textarea{min-height:120px}
-    .modal-b .fld{width:100%}
-    .modal-b .row{gap:.75rem}
-    .modal input[type=file]{color:var(--dim);font-size:.85rem;background:var(--panel2);border:1px solid var(--line2);border-radius:9px;padding:.6rem}
+    .modal input[type=file]{display:none}
   </style>
 </head>
 <body data-signals="{view: 'overview', endpoint: '', disposition: 'govern', appName: '', appOwner: '', agentAppId: '', agentName: '', grcKind: 'assessment', grcSubject: '', grcTitle: '', grcStatus: 'open', grcBody: '{}', modal: '', policyTab: 'deployed'}">
