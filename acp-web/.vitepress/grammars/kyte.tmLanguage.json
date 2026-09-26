@@ -1,0 +1,283 @@
+{
+  "name": "Kyte",
+  "scopeName": "source.ky",
+  "fileTypes": [
+    ".ky",
+    ".nsx"
+  ],
+  "patterns": [
+    {
+      "include": "#comments"
+    },
+    {
+      "include": "#nsx"
+    },
+    {
+      "include": "#keywords"
+    },
+    {
+      "include": "#types"
+    },
+    {
+      "include": "#functions"
+    },
+    {
+      "include": "#strings"
+    },
+    {
+      "include": "#numbers"
+    },
+    {
+      "include": "#operators"
+    },
+    {
+      "include": "#generics"
+    }
+  ],
+  "repository": {
+    "keywords": {
+      "patterns": [
+        {
+          "name": "keyword.control.ky",
+          "match": "(?<![a-zA-Z])(if|else|while|for|in|switch|case|default|break|continue|return|defer|errdefer|try|catch|async|await|spawn)(?![a-zA-Z])"
+        },
+        {
+          "name": "keyword.declaration.ky",
+          "match": "(?<![a-zA-Z])(fn|struct|enum|trait|impl|exception|import|export|const|let|pub|extern|as)(?![a-zA-Z])"
+        },
+        {
+          "name": "keyword.operator.ky",
+          "match": "(?<![a-zA-Z])(and|or|not)(?![a-zA-Z])"
+        },
+        {
+          "name": "constant.language.ky",
+          "match": "(?<![a-zA-Z])(true|false|self|undefined|null)(?![a-zA-Z])"
+        }
+      ]
+    },
+    "types": {
+      "patterns": [
+        {
+          "name": "storage.type.primitive.ky",
+          "match": "(?<![a-zA-Z])(int|long|float|double|decimal|bool|string|char|byte|bytes|datetime|void|any|ptr)(?![a-zA-Z])"
+        },
+        {
+          "name": "storage.type.collection.ky",
+          "match": "(?<![a-zA-Z])(List|Map|Set|Array|Option|Result|Future|Channel|StringBuilder)(?![a-zA-Z])"
+        },
+        {
+          "name": "storage.type.struct.ky",
+          "match": "(?<![a-zA-Z])[A-Z][a-zA-Z0-9_]*(?![a-zA-Z])"
+        }
+      ]
+    },
+    "functions": {
+      "patterns": [
+        {
+          "name": "entity.name.function.ky",
+          "match": "(?<![a-zA-Z])[a-zA-Z_][a-zA-Z0-9_]*(?:<[^>]*>)?(?=\\()"
+        }
+      ]
+    },
+    "strings": {
+      "patterns": [
+        {
+          "name": "string.quoted.double.ky",
+          "begin": "\"",
+          "end": "\"",
+          "patterns": [
+            {
+              "name": "constant.character.escape.ky",
+              "match": "\\\\(\\\\|\\\"|n|r|t|u[0-9a-fA-F]{4})"
+            }
+          ]
+        },
+        {
+          "name": "string.template.ky",
+          "begin": "`",
+          "end": "`",
+          "patterns": [
+            {
+              "name": "constant.character.escape.ky",
+              "match": "\\\\(\\\\|`|n|r|t)"
+            },
+            {
+              "name": "meta.template.expression.ky",
+              "begin": "\\$\\{",
+              "end": "\\}",
+              "beginCaptures": {
+                "0": { "name": "punctuation.definition.template-expression.begin.ky" }
+              },
+              "endCaptures": {
+                "0": { "name": "punctuation.definition.template-expression.end.ky" }
+              },
+              "patterns": [
+                { "include": "$self" }
+              ]
+            }
+          ]
+        }
+      ]
+    },
+    "numbers": {
+      "patterns": [
+        {
+          "name": "constant.numeric.ky",
+          "match": "\\b[0-9_]+(\\.[0-9_]+)?\\b"
+        }
+      ]
+    },
+    "comments": {
+      "patterns": [
+        {
+          "name": "comment.line.double-slash.ky",
+          "match": "//.*$"
+        },
+        {
+          "name": "comment.block.ky",
+          "begin": "/\\*",
+          "end": "\\*/"
+        }
+      ]
+    },
+    "operators": {
+      "patterns": [
+        {
+          "comment": "The `...from(expr)` struct-literal mapper spread: highlight the `...` as a spread operator and the contextual `from` as a keyword.",
+          "match": "(\\.\\.\\.)\\s*(from)(?![A-Za-z0-9_])",
+          "captures": {
+            "1": { "name": "keyword.operator.spread.ky" },
+            "2": { "name": "keyword.control.spread.ky" }
+          }
+        },
+        {
+          "name": "keyword.operator.arithmetic.ky",
+          "match": "(\\+|\\-|\\*|\\/|%)"
+        },
+        {
+          "name": "keyword.operator.assignment.ky",
+          "match": "(\\=|\\+\\=|\\-\\=|\\*\\=|\\/\\=|\\%\\=)"
+        },
+        {
+          "name": "keyword.operator.comparison.ky",
+          "match": "(\\=\\=|\\!\\=|\\<\\=|\\>\\=)"
+        },
+        {
+          "name": "keyword.operator.logical.ky",
+          "match": "(\\&\\&|\\|\\|)"
+        },
+        {
+          "name": "keyword.operator.nullish.ky",
+          "match": "(\\?\\?|\\?\\.)"
+        },
+        {
+          "name": "keyword.operator.other.ky",
+          "match": "(\\:|\\;|\\,|\\.|\\-\\>|\\=\\>|\\|)"
+        }
+      ]
+    },
+    "generics": {
+      "patterns": [
+        {
+          "name": "meta.generic.ky",
+          "match": "<[a-zA-Z_][a-zA-Z0-9_]*(?:\\s*,\\s*[a-zA-Z_][a-zA-Z0-9_]*)*>"
+        }
+      ]
+    },
+    "nsx": {
+      "patterns": [
+        {
+          "include": "#nsx-element"
+        }
+      ]
+    },
+    "nsx-element": {
+      "comment": "Entry point for an NSX element, only started at an EXPRESSION position (preceded by return / ( / { / [ / , / > / : / ? / = / => / && / ||) so a generic like List<int> or a comparison a < b is never mistaken for a tag. The region spans the whole element (opening tag, children, close tag), so children are scoped as markup. Nested child elements recurse through #nsx-child-element, which needs no lookbehind because inside a body a <tag is unambiguously a child.",
+      "name": "meta.tag.ky",
+      "begin": "(?<=(?:return|=>|[(\\[{,>?:=&|;}]))\\s*(<)([a-zA-Z][a-zA-Z0-9_.]*)",
+      "beginCaptures": {
+        "1": { "name": "punctuation.definition.tag.begin.ky" },
+        "2": { "name": "entity.name.tag.ky" }
+      },
+      "end": "(/>)|(</)([a-zA-Z][a-zA-Z0-9_.]*)\\s*(>)",
+      "endCaptures": {
+        "1": { "name": "punctuation.definition.tag.end.ky" },
+        "2": { "name": "punctuation.definition.tag.begin.ky" },
+        "3": { "name": "entity.name.tag.ky" },
+        "4": { "name": "punctuation.definition.tag.end.ky" }
+      },
+      "patterns": [
+        { "include": "#nsx-tag-body" }
+      ]
+    },
+    "nsx-child-element": {
+      "comment": "A nested NSX child element. Identical to #nsx-element but WITHOUT the expression-position lookbehind: TextMate tokenises line by line, and a child tag usually begins a line while its parent's > sits on the previous line, out of the lookbehind's reach. Only ever reached from inside an element body, where a <tag is always a child, so no lookbehind is needed.",
+      "name": "meta.tag.ky",
+      "begin": "(<)([a-zA-Z][a-zA-Z0-9_.]*)",
+      "beginCaptures": {
+        "1": { "name": "punctuation.definition.tag.begin.ky" },
+        "2": { "name": "entity.name.tag.ky" }
+      },
+      "end": "(/>)|(</)([a-zA-Z][a-zA-Z0-9_.]*)\\s*(>)",
+      "endCaptures": {
+        "1": { "name": "punctuation.definition.tag.end.ky" },
+        "2": { "name": "punctuation.definition.tag.begin.ky" },
+        "3": { "name": "entity.name.tag.ky" },
+        "4": { "name": "punctuation.definition.tag.end.ky" }
+      },
+      "patterns": [
+        { "include": "#nsx-tag-body" }
+      ]
+    },
+    "nsx-tag-body": {
+      "comment": "The shared contents of an NSX element: attribute name/value pairs in the opening tag, then, after the header-closing >, the children (text, {expression} interpolation and nested elements).",
+      "patterns": [
+        {
+          "include": "#nsx-embedded-expression"
+        },
+        {
+          "include": "#nsx-child-element"
+        },
+        {
+          "comment": "An attribute name, only when it heads an `=` value. Requiring the `=` keeps this from scoping ordinary child text words. Names may contain - : . @ and interior _ (Datastar data-on-click, HTMX hx-get, Alpine @click / :class).",
+          "match": "([a-zA-Z_@:][a-zA-Z0-9_.:@-]*)(?=\\s*=)",
+          "name": "entity.other.attribute-name.ky"
+        },
+        {
+          "name": "punctuation.separator.key-value.ky",
+          "match": "="
+        },
+        {
+          "name": "string.quoted.double.ky",
+          "begin": "\"",
+          "end": "\"",
+          "patterns": [
+            {
+              "name": "constant.character.escape.ky",
+              "match": "\\\\(\\\\|\\\"|n|r|t)"
+            }
+          ]
+        },
+        {
+          "comment": "The header-closing >, after which the element's children begin.",
+          "name": "punctuation.definition.tag.end.ky",
+          "match": ">"
+        }
+      ]
+    },
+    "nsx-embedded-expression": {
+      "comment": "A {expression} inside an NSX element, in an attribute value (class={x}) or as a child node (<h3>{title}</h3>). Its contents are highlighted as ordinary Kyte. Only reached from inside an element region, so it never captures a plain Kyte block brace.",
+      "begin": "\\{",
+      "end": "\\}",
+      "beginCaptures": {
+        "0": { "name": "punctuation.section.embedded.begin.ky" }
+      },
+      "endCaptures": {
+        "0": { "name": "punctuation.section.embedded.end.ky" }
+      },
+      "patterns": [
+        { "include": "$self" }
+      ]
+    }
+  }
+}
