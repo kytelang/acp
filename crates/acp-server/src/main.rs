@@ -61,8 +61,8 @@ async fn load_jwks(source: &str) -> Result<acp_auth::Jwks, String> {
 }
 
 /// Authorise a request for a capability. RBAC disabled (auth None) allows everything (local demo).
-fn authorize(auth: &Option<Auth>, headers: &HeaderMap, cap: acp_auth::Capability) -> Result<(), Response> {
-    let a = match auth { Some(a) => a, None => return Ok(()) };
+fn authorize(auth: &Option<Auth>, headers: &HeaderMap, cap: acp_auth::Capability) -> Result<Option<acp_auth::Principal>, Response> {
+    let a = match auth { Some(a) => a, None => return Ok(None) };
     let token = headers
         .get("authorization")
         .and_then(|v| v.to_str().ok())
@@ -74,7 +74,18 @@ fn authorize(auth: &Option<Auth>, headers: &HeaderMap, cap: acp_auth::Capability
     if !p.can(cap) {
         return Err((StatusCode::FORBIDDEN, Json(serde_json::json!({"ok":false,"error":format!("principal lacks {cap:?}")}))).into_response());
     }
-    Ok(())
+    Ok(Some(p))
+}
+
+/// The actor string to attribute a change to: the verified principal's username (or oid), else
+/// "console" when RBAC is off (local/dev). Threaded into evidence and control-plane records so a
+/// change is attributable to the authenticated admin, not a hardcoded literal (gap A9).
+fn actor_of(p: &Option<acp_auth::Principal>) -> String {
+    match p {
+        Some(pr) if !pr.username.is_empty() => pr.username.clone(),
+        Some(pr) => pr.oid.clone(),
+        None => "console".to_string(),
+    }
 }
 
 #[tokio::main]
@@ -375,18 +386,20 @@ async fn inbox(State(st): State<Arc<AppState>>) -> Html<String> {
     Html(page.into_string())
 }
 
-async fn approve(State(st): State<Arc<AppState>>, Path(id): Path<String>) -> impl IntoResponse {
-    resolve(&st, &id, true);
-    Redirect::to("/")
+async fn approve(State(st): State<Arc<AppState>>, headers: HeaderMap, Path(id): Path<String>) -> Response {
+    let principal = match authorize(&st.auth, &headers, acp_auth::Capability::Approve) { Ok(p) => p, Err(r) => return r };
+    resolve(&st, &id, true, &actor_of(&principal));
+    Redirect::to("/").into_response()
 }
-async fn deny(State(st): State<Arc<AppState>>, Path(id): Path<String>) -> impl IntoResponse {
-    resolve(&st, &id, false);
-    Redirect::to("/")
+async fn deny(State(st): State<Arc<AppState>>, headers: HeaderMap, Path(id): Path<String>) -> Response {
+    let principal = match authorize(&st.auth, &headers, acp_auth::Capability::Approve) { Ok(p) => p, Err(r) => return r };
+    resolve(&st, &id, false, &actor_of(&principal));
+    Redirect::to("/").into_response()
 }
-fn resolve(st: &AppState, id: &str, ok: bool) {
+fn resolve(st: &AppState, id: &str, ok: bool, actor: &str) {
     if let Some(p) = &st.approvals {
         if let Ok(store) = acp_approvals::ApprovalStore::open(p) {
-            let _ = store.resolve(id, ok, "web-user", "web");
+            let _ = store.resolve(id, ok, actor, "web");
         }
     }
 }
@@ -531,9 +544,10 @@ async fn timeline(State(st): State<Arc<AppState>>) -> impl IntoResponse {
 
 /// H0.7: record a self-governance change (policy/key/RBAC/approver/break-glass) to the tamper-
 /// evident meta-audit log. Body: {kind, actor, reason, before?, after?}.
-async fn record_meta(State(st): State<Arc<AppState>>, Json(body): Json<serde_json::Value>) -> impl IntoResponse {
+async fn record_meta(State(st): State<Arc<AppState>>, headers: HeaderMap, Json(body): Json<serde_json::Value>) -> Response {
+    let principal = match authorize(&st.auth, &headers, acp_auth::Capability::EditPolicy) { Ok(p) => p, Err(r) => return r };
     let Some(meta) = st.meta.as_ref() else {
-        return Json(serde_json::json!({"ok": false, "detail": "meta-audit not configured"}));
+        return Json(serde_json::json!({"ok": false, "detail": "meta-audit not configured"})).into_response();
     };
     let kind = match body.get("kind").and_then(|v| v.as_str()) {
         Some("policy_change") => acp_core::metaaudit::MetaKind::PolicyChange,
@@ -542,21 +556,22 @@ async fn record_meta(State(st): State<Arc<AppState>>, Json(body): Json<serde_jso
         Some("approver_group_change") => acp_core::metaaudit::MetaKind::ApproverGroupChange,
         Some("break_glass_engage") => acp_core::metaaudit::MetaKind::BreakGlassEngage,
         Some("break_glass_revert") => acp_core::metaaudit::MetaKind::BreakGlassRevert,
-        _ => return Json(serde_json::json!({"ok": false, "detail": "unknown kind"})),
+        _ => return Json(serde_json::json!({"ok": false, "detail": "unknown kind"})).into_response(),
     };
-    let actor = body.get("actor").and_then(|v| v.as_str()).unwrap_or("unknown");
+    let actor_s = actor_of(&principal);
+    let actor = actor_s.as_str();
     let reason = body.get("reason").and_then(|v| v.as_str()).unwrap_or("");
     let ev = match acp_core::metaaudit::MetaEvent::new(kind, actor, reason, now_ms()) {
         Ok(e) => e.transition(
             body.get("before").and_then(|v| v.as_str()),
             body.get("after").and_then(|v| v.as_str()),
         ),
-        Err(e) => return Json(serde_json::json!({"ok": false, "detail": e})),
+        Err(e) => return Json(serde_json::json!({"ok": false, "detail": e})).into_response(),
     };
     let mut l = meta.lock().unwrap();
     let id = format!("meta-{}", l.size() + 1);
     let _ = l.append(&id, "meta", &ev.to_record(), None);
-    Json(serde_json::json!({"ok": true, "id": id, "size": l.size()}))
+    Json(serde_json::json!({"ok": true, "id": id, "size": l.size()})).into_response()
 }
 
 /// H0.7: the meta-audit log status, verifiable like any evidence.
@@ -805,9 +820,8 @@ async fn endpoints_register(
     headers: HeaderMap,
     Json(body): Json<serde_json::Value>,
 ) -> Response {
-    if let Err(r) = authorize(&st.auth, &headers, acp_auth::Capability::EditPolicy) {
-        return r;
-    }
+    let principal = match authorize(&st.auth, &headers, acp_auth::Capability::EditPolicy) { Ok(p) => p, Err(r) => return r };
+    let operator = actor_of(&principal);
     let endpoint = body.get("endpoint").and_then(|v| v.as_str()).unwrap_or("").trim().to_string();
     if endpoint.is_empty() {
         return Json(serde_json::json!({"ok": false, "error": "endpoint is required"})).into_response();
@@ -829,9 +843,9 @@ async fn endpoints_register(
     if let Some(store) = &st.store {
         let signer = enroll_signer(&st.cp_key);
         let mut log = acp_core::enrollment::EnrollmentLog::new();
-        let d = log.record(&signer, &endpoint, &kind, disposition, "console", &reason, now).clone();
+        let d = log.record(&signer, &endpoint, &kind, disposition, &operator, &reason, now).clone();
         return match store
-            .upsert_endpoint(&endpoint, &kind, &provider, dispo_str, "console", &reason, d.decided_ms as i64, expires, &d.pubkey_hex, &d.sig_hex)
+            .upsert_endpoint(&endpoint, &kind, &provider, dispo_str, &operator, &reason, d.decided_ms as i64, expires, &d.pubkey_hex, &d.sig_hex)
             .await
         {
             Ok(()) => Json(serde_json::json!({"ok": true, "endpoint": endpoint, "provider": provider, "kind": kind})).into_response(),
@@ -845,7 +859,7 @@ async fn endpoints_register(
     };
     let mut log = load_enrollment(&path);
     let signer = enroll_signer(&path);
-    log.record(&signer, &endpoint, &kind, disposition, "console", &reason, now);
+    log.record(&signer, &endpoint, &kind, disposition, &operator, &reason, now);
     match serde_json::to_string_pretty(&log) {
         Ok(s) => {
             if std::fs::write(&path, s).is_err() {
@@ -950,7 +964,8 @@ async fn grc_list(State(st): State<Arc<AppState>>) -> impl IntoResponse {
 
 /// POST /grc: create a signed governance record. Body: {kind, subject, title, status, body}.
 async fn grc_create(State(st): State<Arc<AppState>>, headers: HeaderMap, Json(body): Json<serde_json::Value>) -> Response {
-    if let Err(r) = authorize(&st.auth, &headers, acp_auth::Capability::EditPolicy) { return r; }
+    let principal = match authorize(&st.auth, &headers, acp_auth::Capability::EditPolicy) { Ok(p) => p, Err(r) => return r };
+    let operator = actor_of(&principal);
     let store = match &st.store { Some(s) => s, None => return Json(serde_json::json!({"ok": false, "error": "no --store configured"})).into_response() };
     let kind = body.get("kind").and_then(|v| v.as_str()).unwrap_or("").trim().to_string();
     if !GRC_KINDS.contains(&kind.as_str()) {
@@ -973,7 +988,7 @@ async fn grc_create(State(st): State<Arc<AppState>>, headers: HeaderMap, Json(bo
     let sig = acp_core::sign::Signer::sign(&signer, &acp_core::canonical::canonical_bytes(&doc));
     let pubkey_hex = hex::encode(acp_core::sign::Signer::public_key(&signer));
     let sig_hex = hex::encode(sig);
-    match store.add_grc(&id, &kind, &subject, &title, &status, &doc_body, "console", now as i64, &pubkey_hex, &sig_hex).await {
+    match store.add_grc(&id, &kind, &subject, &title, &status, &doc_body, &operator, now as i64, &pubkey_hex, &sig_hex).await {
         Ok(()) => Json(serde_json::json!({"ok": true, "id": id, "kind": kind})).into_response(),
         Err(e) => Json(serde_json::json!({"ok": false, "error": e})).into_response(),
     }
