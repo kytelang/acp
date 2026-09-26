@@ -24,6 +24,22 @@ by pointing `--registry-url` at the control plane (a local registry file via `--
 offline alternative). Verification is fail-closed: a wrong or revoked token yields no identity, and
 the call is denied. Deactivating an agent in the console refuses it immediately, verified end to end.
 
+### How to register a team (step by step)
+
+1. Open the console and select **Teams** in the sidebar.
+2. Click **+ Register team** (top right of the Teams and agents card). The **Register a team / application** popup opens.
+3. Fill in **Name** (required, for example `acme-app`) and, optionally, **Owner**.
+4. Click **Register**. The team appears in the list with its generated id (`app-...`), which you will need when registering agents.
+
+### How to register an agent (step by step)
+
+1. Select **Agents** in the sidebar.
+2. Click **+ Register agent**. The **Register an agent** popup opens.
+3. Fill in **App ID** (required, the `app-...` id from the team you just registered) and **Name** (required, for example `coding-assistant`).
+4. Click **Register**. The result line shows a **one-time token**. Copy it now: it is shown once and only its SHA-256 is stored. The agent presents this token at enforcement time, and the proxy verifies it against the control-plane database.
+
+To revoke an agent, use its **Deactivate** action on the Agents page; enforcement refuses it immediately.
+
 ## Human identity: OIDC and Entra
 
 The human principal is established from a verified OIDC/JWT bearer token. Varman verifies EdDSA and

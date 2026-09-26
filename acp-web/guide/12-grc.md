@@ -34,6 +34,14 @@ Each disposition is Ed25519-signed, so it is tamper-evident evidence of an opera
 governed set feeds the [coverage report](#measuring-unavoidability), and the enrolment feeds the
 [interceptor's rules](05-intercept.md) via `acp intercept from-enrollment`.
 
+### How to register an AI endpoint (step by step)
+
+1. Select **AI Endpoints** in the sidebar.
+2. Click **+ Register endpoint**. The **Register an AI endpoint** popup opens.
+3. Fill in **Endpoint (host or URL)** (required, for example `claude.ai`). The provider is classified automatically.
+4. Choose a **Disposition**: `govern` (route through the control plane), `block` (quarantine), or `accept-risk` (time-boxed). Add a short **Reason**.
+5. Click **Register endpoint**. The signed disposition is stored (the latest wins) and appears in the list. Re-registering the same endpoint updates its disposition.
+
 ## Measuring unavoidability
 
 Two commands measure whether anything is acting off-ACP.
@@ -87,3 +95,12 @@ lives in the console and the control-plane API, so the CLI subcommands are retir
 
 Both kinds are useful. An auditor gets runtime proof from the ledger-backed set and documented
 governance from the signed set. Do not present the second kind as if it were the first.
+
+### How to create a governance record (step by step)
+
+1. Select **Governance** in the sidebar.
+2. Click **+ Create record**. The **Create a governance record** popup opens.
+3. Choose a **Kind** (`assessment`, `conformity`, `risk`, `model-card`, `use-case`, `attestation` or `aibom`).
+4. Fill in **Subject** (required, the system or agent the record is about, for example `checkout-agent`) and, optionally, a **Title** and **Status** (defaults to `open`).
+5. Put the record content in **Details** as JSON or plain text.
+6. Click **Create record**. The control plane signs it (Ed25519), stores it in the control-plane database, and re-verifies it on read, so the list shows a checked "signed" state, not an asserted one.

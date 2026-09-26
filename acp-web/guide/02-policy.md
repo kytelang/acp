@@ -114,5 +114,12 @@ after verifying the signature**; a policy that does not compile is rejected and 
 and a bad deploy leaves the last good policy serving. Evaluation itself is fail-closed: any error
 building the request context or evaluating Cedar results in a deny, never an accidental allow.
 
+### How to deploy a policy version from the console (step by step)
+
+1. Select **Policy** in the sidebar. The card has two tabs: **Deployed policy** (the current signed version) and **Editor**.
+2. Click the **Editor** tab. Either edit the policy directly in the syntax-highlighted editor, or click **Upload .yaml** and pick a file; its contents load into the editor for review.
+3. Set the **Author** field (who is deploying).
+4. Click **Deploy policy**. The control plane validates, versions and signs it, then writes it to the policy store. A PEP hot-reloads it only after verifying the signature; a policy that does not compile is rejected and the last good policy keeps serving. The **Deployed policy** tab and version badge refresh on the next tick.
+
 See [chapter 8](08-identity.md) for who is allowed to deploy a policy (the `PolicyAdmin` capability)
 and [chapter 15](15-security.md) for how the signed policy chain is verified.

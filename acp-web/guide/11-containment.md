@@ -62,3 +62,10 @@ curl -X POST http://<host>:8787/break-glass/clear
 Engaging or clearing break-glass is gated on the `BreakGlassOperator` capability and is recorded in
 the [meta-audit](09-evidence.md), so the emergency stop is itself governed and evidenced. In the web
 console it is a single control with a live status ([chapter 14](14-operations.md)).
+
+### How to engage or clear the kill-switch from the console (step by step)
+
+1. Select **Kill-switch** in the sidebar, then click **Engage / clear**. The **Engage or clear the kill-switch** popup opens with the live status.
+2. Choose a **Mode**: `lockdown_all` (deny), `disable_enforce` (observe without blocking) or `emergency_bypass` (allow held calls).
+3. Set the **Scope** (`global`, or narrow it to `agent:`, `resource:` or `tool:`), a **Reason** (an incident reference), and the **TTL ms** after which a grant auto-reverts (except `lockdown_all`, which persists until cleared).
+4. Click **Engage** to write the signed grant, or **Clear** to lift it. Engaging and clearing are gated on the `BreakGlassOperator` capability and are themselves recorded in the meta-audit.
