@@ -63,6 +63,7 @@ struct Opts {
     proxy_id: Option<String>,
     approvals_url: Option<String>,
     evidence_url: Option<String>,
+    firewall_url: Option<String>,
 }
 
 fn parse_opts(items: &[String]) -> Result<(Opts, Vec<String>), String> {
@@ -115,6 +116,7 @@ fn parse_opts(items: &[String]) -> Result<(Opts, Vec<String>), String> {
             "--proxy-id" => o.proxy_id = it.next().cloned(),
             "--approvals-url" => o.approvals_url = it.next().cloned(),
             "--evidence-url" => o.evidence_url = it.next().cloned(),
+            "--firewall-url" => o.firewall_url = it.next().cloned(),
             other => return Err(format!("unknown option '{other}'")),
         }
     }
@@ -447,6 +449,41 @@ async fn main() -> ExitCode {
                 }
             });
         }
+    }
+
+    // Central content-firewall config from the control plane (toggles + denied topics + ML model), so
+    // this workstation proxy needs no local model file. Fetched at startup and refreshed at runtime.
+    if let Some(base) = opts.firewall_url.clone() {
+        let base = base.trim_end_matches('/').to_string();
+        async fn fetch_fw(client: &reqwest::Client, base: &str) -> Option<(acp_core::content::ContentPolicy, Option<std::sync::Arc<acp_core::content::LinearScorer>>)> {
+            let v: serde_json::Value = client.get(format!("{base}/firewall/config")).send().await.ok()?.json().await.ok()?;
+            let enabled = v.get("enabled").and_then(|x| x.as_bool()).unwrap_or(false);
+            let block_secrets = enabled && v.get("block_secrets").and_then(|x| x.as_bool()).unwrap_or(false);
+            let denied_topics: Vec<String> = v.get("deny_topics").and_then(|x| x.as_array()).map(|a| a.iter().filter_map(|t| t.as_str().map(|s| s.to_string())).collect()).unwrap_or_default();
+            let pol = acp_core::content::ContentPolicy { block_injection: enabled, block_secrets, redact_pii: enabled, denied_topics };
+            let model = v.get("model").and_then(|x| x.as_str()).unwrap_or("");
+            let ml = if enabled && !model.is_empty() { acp_core::content::LinearScorer::from_json(model).ok().map(std::sync::Arc::new) } else { None };
+            Some((pol, ml))
+        }
+        let client = reqwest::Client::new();
+        if let Some((pol, ml)) = fetch_fw(&client, &base).await {
+            controller.set_content_policy(pol);
+            if let Some(m) = ml { controller.set_content_ml(m); }
+            tracing::info!("content firewall config fetched from {base}");
+        } else {
+            tracing::warn!("content firewall fetch from {base} failed; using local flags");
+        }
+        let c2 = controller.clone();
+        tokio::spawn(async move {
+            let client = reqwest::Client::new();
+            loop {
+                tokio::time::sleep(std::time::Duration::from_secs(30)).await;
+                if let Some((pol, ml)) = fetch_fw(&client, &base).await {
+                    c2.set_content_policy(pol);
+                    if let Some(m) = ml { c2.set_content_ml(m); }
+                }
+            }
+        });
     }
 
     // Per-request human identity (phase B): verify each request's bearer against the org IdP and
