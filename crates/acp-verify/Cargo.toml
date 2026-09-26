@@ -1,0 +1,12 @@
+[package]
+name = "acp-verify"
+version = "0.0.0"
+edition = "2021"
+
+[[bin]]
+name = "acp-verify"
+path = "src/main.rs"
+
+[dependencies]
+acp-ledger = { path = "../acp-ledger" }
+serde_json.workspace = true

@@ -265,6 +265,14 @@ dependencies = [
 ]
 
 [[package]]
+name = "acp-verify"
+version = "0.0.0"
+dependencies = [
+ "acp-ledger",
+ "serde_json",
+]
+
+[[package]]
 name = "ahash"
 version = "0.8.12"
 source = "registry+https://github.com/rust-lang/crates.io-index"
