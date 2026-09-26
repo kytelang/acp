@@ -98,10 +98,10 @@ impl ControlStore {
 
     async fn migrate(&self) -> Result<(), String> {
         for ddl in [
-            "CREATE TABLE IF NOT EXISTS apps (id TEXT PRIMARY KEY, name TEXT NOT NULL, owner TEXT NOT NULL, created_ms BIGINT NOT NULL)",
-            "CREATE TABLE IF NOT EXISTS agents (id TEXT PRIMARY KEY, app_id TEXT NOT NULL, name TEXT NOT NULL, token_sha256 TEXT NOT NULL, active INTEGER NOT NULL, created_ms BIGINT NOT NULL)",
-            "CREATE TABLE IF NOT EXISTS endpoints (endpoint TEXT PRIMARY KEY, kind TEXT NOT NULL, provider TEXT NOT NULL, disposition TEXT NOT NULL, operator TEXT NOT NULL, reason TEXT NOT NULL, decided_ms BIGINT NOT NULL, expires_ms BIGINT NOT NULL, pubkey_hex TEXT NOT NULL, sig_hex TEXT NOT NULL)",
-            "CREATE TABLE IF NOT EXISTS grc_records (id TEXT PRIMARY KEY, kind TEXT NOT NULL, subject TEXT NOT NULL, title TEXT NOT NULL, status TEXT NOT NULL, body TEXT NOT NULL, operator TEXT NOT NULL, created_ms BIGINT NOT NULL, pubkey_hex TEXT NOT NULL, sig_hex TEXT NOT NULL)",
+            "CREATE TABLE IF NOT EXISTS apps (id VARCHAR(255) PRIMARY KEY, name TEXT NOT NULL, owner TEXT NOT NULL, created_ms BIGINT NOT NULL)",
+            "CREATE TABLE IF NOT EXISTS agents (id VARCHAR(255) PRIMARY KEY, app_id TEXT NOT NULL, name TEXT NOT NULL, token_sha256 TEXT NOT NULL, active INTEGER NOT NULL, created_ms BIGINT NOT NULL)",
+            "CREATE TABLE IF NOT EXISTS endpoints (endpoint VARCHAR(255) PRIMARY KEY, kind TEXT NOT NULL, provider TEXT NOT NULL, disposition TEXT NOT NULL, operator TEXT NOT NULL, reason TEXT NOT NULL, decided_ms BIGINT NOT NULL, expires_ms BIGINT NOT NULL, pubkey_hex TEXT NOT NULL, sig_hex TEXT NOT NULL)",
+            "CREATE TABLE IF NOT EXISTS grc_records (id VARCHAR(255) PRIMARY KEY, kind TEXT NOT NULL, subject TEXT NOT NULL, title TEXT NOT NULL, status TEXT NOT NULL, body TEXT NOT NULL, operator TEXT NOT NULL, created_ms BIGINT NOT NULL, pubkey_hex TEXT NOT NULL, sig_hex TEXT NOT NULL)",
         ] {
             sqlx::query(ddl).execute(&self.pool).await.map_err(|e| e.to_string())?;
         }
@@ -277,6 +277,25 @@ impl ControlStore {
         Ok(())
     }
 
+    /// Fetch a single GRC record by id (for re-signing on a status change).
+    pub async fn get_grc(&self, id: &str) -> Result<Option<GrcRecord>, String> {
+        let sql = self.ph("SELECT id, kind, subject, title, status, body, operator, created_ms, pubkey_hex, sig_hex FROM grc_records WHERE id = ?");
+        let row = sqlx::query(&sql).bind(id).fetch_optional(&self.pool).await.map_err(|e| e.to_string())?;
+        Ok(row.map(|r| GrcRecord {
+            id: r.get("id"), kind: r.get("kind"), subject: r.get("subject"), title: r.get("title"),
+            status: r.get("status"), body: r.get("body"), operator: r.get("operator"),
+            created_ms: r.get("created_ms"), pubkey_hex: r.get("pubkey_hex"), sig_hex: r.get("sig_hex"),
+        }))
+    }
+
+    /// Update a record's status AND its signature together, so the stored signature always matches
+    /// the current document (gap A4: a status change must re-sign, or the record reads as tampered).
+    pub async fn update_grc_signed(&self, id: &str, status: &str, pubkey_hex: &str, sig_hex: &str) -> Result<(), String> {
+        let sql = self.ph("UPDATE grc_records SET status = ?, pubkey_hex = ?, sig_hex = ? WHERE id = ?");
+        sqlx::query(&sql).bind(status).bind(pubkey_hex).bind(sig_hex).bind(id).execute(&self.pool).await.map_err(|e| e.to_string())?;
+        Ok(())
+    }
+
     pub async fn list_grc(&self, kind: Option<&str>) -> Result<Vec<GrcRecord>, String> {
         let rows = match kind {
             Some(k) => sqlx::query(&self.ph("SELECT id, kind, subject, title, status, body, operator, created_ms, pubkey_hex, sig_hex FROM grc_records WHERE kind = ? ORDER BY created_ms"))
@@ -318,6 +337,13 @@ mod tests {
         s.add_grc("grc-2", "assessment", "checkout-agent", "EU AI Act tiering", "high", "{}", "console", 4001, "aa", "cc").await.unwrap();
         assert_eq!(s.list_grc(None).await.unwrap().len(), 2);
         assert_eq!(s.list_grc(Some("risk")).await.unwrap().len(), 1);
+        // A4: get_grc + update_grc_signed round-trip (status + signature updated together).
+        let g = s.get_grc("grc-1").await.unwrap().expect("record present");
+        assert_eq!(g.status, "open");
+        s.update_grc_signed("grc-1", "mitigated", "dd", "ee").await.unwrap();
+        let g2 = s.get_grc("grc-1").await.unwrap().unwrap();
+        assert_eq!(g2.status, "mitigated");
+        assert_eq!(g2.sig_hex, "ee", "signature updated with the status");
         s.update_grc_status("grc-1", "mitigated").await.unwrap();
         assert_eq!(s.list_grc(Some("risk")).await.unwrap()[0].status, "mitigated");
     }

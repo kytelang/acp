@@ -1000,7 +1000,19 @@ async fn grc_status(State(st): State<Arc<AppState>>, headers: HeaderMap, Path(id
     let store = match &st.store { Some(s) => s, None => return Json(serde_json::json!({"ok": false, "error": "no --store configured"})).into_response() };
     let status = body.get("status").and_then(|v| v.as_str()).unwrap_or("").trim().to_string();
     if status.is_empty() { return Json(serde_json::json!({"ok": false, "error": "status is required"})).into_response(); }
-    match store.update_grc_status(&id, &status).await {
+    // A4: re-sign the record with the new status so the stored signature stays valid; otherwise the
+    // record would read as tampered on the next verify-on-read in grc_list.
+    let rec = match store.get_grc(&id).await {
+        Ok(Some(r)) => r,
+        Ok(None) => return Json(serde_json::json!({"ok": false, "error": "no such record"})).into_response(),
+        Err(e) => return Json(serde_json::json!({"ok": false, "error": e})).into_response(),
+    };
+    let doc = grc_doc(&rec.id, &rec.kind, &rec.subject, &rec.title, &status, &rec.body);
+    let signer = enroll_signer(&st.cp_key);
+    let sig = acp_core::sign::Signer::sign(&signer, &acp_core::canonical::canonical_bytes(&doc));
+    let pubkey_hex = hex::encode(acp_core::sign::Signer::public_key(&signer));
+    let sig_hex = hex::encode(sig);
+    match store.update_grc_signed(&id, &status, &pubkey_hex, &sig_hex).await {
         Ok(()) => Json(serde_json::json!({"ok": true, "id": id, "status": status})).into_response(),
         Err(e) => Json(serde_json::json!({"ok": false, "error": e})).into_response(),
     }
