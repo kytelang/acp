@@ -1,0 +1,16 @@
+[package]
+name = "acp-agent"
+version = "0.0.0"
+edition = "2021"
+description = "Varman (ACP) workstation agent: one service; its capability (firewall | mcp | guard) is configuration, not a separate binary."
+
+[[bin]]
+name = "acp-agent"
+path = "src/main.rs"
+
+[dependencies]
+acp-proxy = { path = "../acp-proxy" }
+acp-intercept = { path = "../acp-intercept" }
+acp-guard = { path = "../acp-guard" }
+acp-obs = { path = "../acp-obs" }
+tokio = { workspace = true }

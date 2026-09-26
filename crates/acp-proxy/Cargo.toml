@@ -5,6 +5,10 @@ edition.workspace = true
 license.workspace = true
 description = "Agent Control Plane: transparent MCP interception proxy (stdio + HTTP)."
 
+[lib]
+name = "acp_proxy"
+path = "src/lib.rs"
+
 [[bin]]
 name = "acp-proxy"
 path = "src/main.rs"

@@ -9,6 +9,7 @@
 //! The parsing helpers here are pure so the request handling is unit-testable without a socket.
 
 pub mod mitm;
+pub mod agent;
 
 /// Parse an HTTP request line into (method, target). Returns None if malformed.
 pub fn parse_request_line(line: &str) -> Option<(String, String)> {

@@ -9,6 +9,7 @@
 //! The decision itself is a pure function so it is unit-testable without a socket: given the pinned
 //! proxy public key, the header value (if any) and the clock, it returns forward or reject.
 
+pub mod agent;
 /// The guard's decision for one request.
 #[derive(Debug, Clone, PartialEq)]
 pub enum GuardDecision {
