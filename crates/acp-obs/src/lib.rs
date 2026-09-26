@@ -9,6 +9,7 @@
 use tracing_subscriber::{fmt, EnvFilter};
 
 /// Initialise the global tracing subscriber for `service`. Safe to call more than once.
+/// Logs go to STDERR so the acp-proxy stdio transport keeps STDOUT clean for JSON-RPC frames.
 pub fn init(service: &str) {
     let filter = std::env::var("ACP_LOG")
         .ok()
@@ -25,9 +26,10 @@ pub fn init(service: &str) {
             .json()
             .flatten_event(true)
             .with_current_span(false)
+            .with_writer(std::io::stderr)
             .try_init()
     } else {
-        fmt().with_env_filter(filter).compact().try_init()
+        fmt().with_env_filter(filter).compact().with_writer(std::io::stderr).try_init()
     };
     tracing::info!(service, "logging initialised");
 }

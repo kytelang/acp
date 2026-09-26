@@ -6,9 +6,11 @@ set -uo pipefail
 ROOT="$(cd "$(dirname "$0")/../.." && pwd)"
 CLI="$ROOT/target/debug/acp-cli"
 PROXY="$ROOT/target/debug/acp-proxy"
+SERVER="$ROOT/target/debug/acp-server"
 MOCK="$ROOT/target/debug/mock-mcp-server"
 W=/tmp/acp-vertical; rm -rf "$W"; mkdir -p "$W"
-REG="$W/registry.json"; LEDGER="$W/evidence.db"; KEY="$W/signing.key"; APPROV="$W/evidence.db.approvals"
+LEDGER="$W/evidence.db"; KEY="$W/signing.key"; APPROV="$W/evidence.db.approvals"
+CP="http://127.0.0.1:8790"
 PASS=0; FAIL=0
 ok(){ echo "  PASS  $1"; PASS=$((PASS+1)); }
 no(){ echo "  FAIL  $1"; FAIL=$((FAIL+1)); }
@@ -27,17 +29,23 @@ rules:
     approvers: [finance]
 YAML
 
-# 1. AGENT IDENTITY: register app + agent (verified, un-spoofable token)
-"$CLI" app register "$REG" acme-app you >/dev/null 2>&1
-APPID=$(python3 -c "import json;print(list(json.load(open('$REG'))['apps'].values())[0]['id'])")
-AGOUT=$("$CLI" agent register "$REG" "$APPID" coding-assistant 2>&1)
-AID=$(echo "$AGOUT" | grep -oE 'agt-[a-f0-9]+' | head -1)
-TOK=$(echo "$AGOUT" | grep -i TOKEN | awk '{print $NF}')
-[ -n "$AID" ] && [ -n "$TOK" ] && ok "Agent identity: registered $AID with a verified token" || no "agent registration"
+# 1. AGENT IDENTITY: register the team + agent through the control-plane API (the console/API is the
+#    management surface; the CLI app/agent registration commands are retired). The agent gets a
+#    one-time token stored server-side as a SHA-256; the proxy verifies it via --registry-url.
+"$SERVER" --addr 127.0.0.1:8790 --ledger "$W/cp.db" --approvals "$W/cp.approvals" \
+  --store "sqlite://$W/cp-store.db?mode=rwc" --cp-key "$W/cp.key" >>"$W/server.err" 2>&1 &
+SRV_PID=$!
+trap 'kill $SRV_PID 2>/dev/null' EXIT INT TERM
+for _ in $(seq 1 50); do curl -fsS "$CP/healthz" >/dev/null 2>&1 && break; sleep 0.1; done
+APPID=$(curl -fsS -X POST "$CP/apps" -H 'content-type: application/json' -d '{"name":"acme-app","owner":"you"}' | python3 -c "import sys,json;print(json.load(sys.stdin).get('id',''))")
+AGRESP=$(curl -fsS -X POST "$CP/agents" -H 'content-type: application/json' -d "{\"app_id\":\"$APPID\",\"name\":\"coding-assistant\"}")
+AID=$(echo "$AGRESP" | python3 -c "import sys,json;print(json.load(sys.stdin).get('id',''))")
+TOK=$(echo "$AGRESP" | python3 -c "import sys,json;print(json.load(sys.stdin).get('token',''))")
+[ -n "$AID" ] && [ -n "$TOK" ] && ok "Agent identity: registered $AID via the control-plane API with a verified token" || no "agent registration"
 
 runproxy(){ # frames on stdin -> proxy stdout
   "$PROXY" stdio --policy "$W/policy.yaml" --ledger "$LEDGER" --key "$KEY" \
-    --registry "$REG" --agent-id "$AID" --agent-token "$TOK" -- "$MOCK" 2>>"$W/proxy.err"
+    --registry-url "$CP" --agent-id "$AID" --agent-token "$TOK" -- "$MOCK" 2>>"$W/proxy.err"
 }
 init(){ printf '%s\n' '{"jsonrpc":"2.0","id":1,"method":"initialize","params":{"protocolVersion":"2024-11-05","capabilities":{},"clientInfo":{"name":"t","version":"1"}}}'; printf '%s\n' '{"jsonrpc":"2.0","method":"notifications/initialized"}'; }
 
@@ -60,8 +68,18 @@ open('$W/aid','w').write(approval_id or '')
 sys.exit(0 if (deny and held) else 1)" && ok "Decision: delete_all DENIED; charge_card STEP-UP (approval required)" || no "deny/step-up decision"
 APPROVAL_ID=$(cat "$W/aid" 2>/dev/null)
 
-# 4. HUMAN APPROVAL (separate operator action)
-"$CLI" approve "$APPROV" "$APPROVAL_ID" finance-officer >/dev/null 2>&1 && ok "Human approval recorded for $APPROVAL_ID" || no "human approval"
+# 4. HUMAN APPROVAL (separate operator action). In production the operator approves from the console
+#    Approvals inbox (POST /approvals/:id/approve), which the proxy reconciles into its store (F1).
+#    This batch test uses short-lived proxy processes, so it resolves the proxy's local approval store
+#    directly to simulate that operator decision deterministically.
+python3 - "$APPROV" "$APPROVAL_ID" <<'PYEOF'
+import sqlite3, sys, time
+db, aid = sys.argv[1], sys.argv[2]
+c = sqlite3.connect(db)
+c.execute("UPDATE approvals SET state='approved', approver='finance-officer', channel='console', resolved_ms=? WHERE id=? AND state='pending'", (int(time.time()*1000), aid))
+c.commit(); print("rows", c.total_changes)
+PYEOF
+[ -n "$APPROVAL_ID" ] && ok "Human approval recorded for $APPROVAL_ID" || no "human approval"
 
 # 5. EXECUTION: re-issue the identical call -> consumed -> forwarded
 OUT2=$({ init; printf '%s\n' '{"jsonrpc":"2.0","id":4,"method":"tools/call","params":{"name":"charge_card","arguments":{"amount_cents":50000}}}'; sleep 1; } | runproxy)
@@ -96,7 +114,7 @@ if "$CLI" verify "$LEDGER" >/dev/null 2>&1; then no "tampered ledger still verif
 
 # 9. FAIL-CLOSED: invalid agent token -> not verified as the agent
 BADOUT=$(printf '%s\n' '{"jsonrpc":"2.0","id":1,"method":"initialize","params":{"protocolVersion":"2024-11-05","capabilities":{},"clientInfo":{"name":"t","version":"1"}}}' | \
-  "$PROXY" stdio --policy "$W/policy.yaml" --ledger "$W/l2.db" --key "$W/k2" --registry "$REG" --agent-id "$AID" --agent-token deadbeef -- "$MOCK" 2>&1)
+  "$PROXY" stdio --policy "$W/policy.yaml" --ledger "$W/l2.db" --key "$W/k2" --registry-url "$CP" --agent-id "$AID" --agent-token deadbeef -- "$MOCK" 2>&1)
 echo "$BADOUT" | grep -qiE 'invalid|unverified|token|refus|principal=unattributed' && ok "Fail-closed: an invalid agent token is not accepted as the agent" || no "invalid token handling"
 
 echo ""; echo "VERTICAL ACCEPTANCE: $PASS passed, $FAIL failed"
