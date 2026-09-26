@@ -1,9 +1,9 @@
 # 5. Forward and TLS interception
 
 `acp-intercept` governs **arbitrary HTTP and API traffic** from agents, IDEs and browsers. It is a
-forward proxy driven by a signed endpoint registry: for each destination it matches a rule and either
-tunnels, inspects, or blocks. On managed devices it can also terminate TLS with an ACP certificate
-authority to inspect body-bearing HTTPS endpoints.
+forward proxy driven by the governed endpoint set from the control plane: for each destination it
+matches a rule and either tunnels, inspects, or blocks. On managed devices it can also terminate TLS
+with an ACP certificate authority to inspect body-bearing HTTPS endpoints.
 
 ## The endpoint registry
 
@@ -15,9 +15,13 @@ The registry maps destinations (by host, SNI or path) to actions:
   content firewall and policy to the body.
 - **`DlpOnly`** applies data-boundary checks without full governance.
 
-The interceptor loads its rule set from a YAML file (`--rules`). You can sign a rule set with `acp
-intercept sign` for tamper-evident distribution; note that the running interceptor loads the YAML
-rules today (signature verification at load is not yet wired into the binary). A precedence-aware
+The interceptor pulls its rules from the control plane with `--registry-url <server>`: it fetches
+`GET /intercept/rules`, which the server derives from the endpoints operators enrol on the console AI
+Endpoints page (govern becomes inspect or govern-tool-call, block becomes block, accept-risk becomes
+pass). It refreshes on an interval (`--refresh-secs`, default 30), so a change made in the console
+takes effect without touching the workstation. For air-gapped or offline use, `--rules <file>` loads
+a local YAML registry instead (and is the fallback if the control plane is unreachable at startup); a
+rule set can be signed with `acp intercept sign` for tamper-evident distribution. A precedence-aware
 least-inspection gate decides when to decrypt, so you only break TLS where a rule genuinely needs the
 body.
 
@@ -37,7 +41,8 @@ fleet:
 
 ```sh
 acp-intercept gen-ca            # writes the ACP CA cert and key
-acp-intercept --listen 127.0.0.1:8890 --ca-cert ca.pem --ca-key ca.key --rules endpoints.yaml
+# rules from the control plane (recommended); --rules <file> is the offline alternative
+acp-intercept --listen 127.0.0.1:8890 --ca-cert ca.pem --ca-key ca.key --registry-url http://<host>:8787
 ```
 
 With a CA configured, the interceptor mints per-host leaf certificates on the fly, terminates the
@@ -50,12 +55,15 @@ does not decrypt.
 
 ## Feeding rules from discovery and enrolment
 
-You do not hand-write the registry. Discover shadow-AI endpoints, enrol dispositions for them, then
-compile the enrolment into an interception registry:
+You do not hand-write the registry. Discover shadow-AI endpoints, then enrol a disposition for each
+from the console AI Endpoints page (or `POST /endpoints/register`). An interceptor started with
+`--registry-url` picks those up automatically on its next refresh. For an offline build, compile a
+stored enrolment log into a local YAML registry instead:
 
 ```sh
 acp discover egress.log                         # classify ungoverned AI endpoints
-# register endpoints from the console AI Endpoints page or POST /endpoints/register
+# enrol endpoints from the console AI Endpoints page or POST /endpoints/register (the interceptor then
+# pulls them via --registry-url); or, for offline use, build a local file:
 acp intercept from-enrollment enroll.json > endpoints.yaml
 ```
 

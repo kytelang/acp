@@ -7,12 +7,12 @@ use acp_core::interception::{Action, EndpointRegistry};
 use acp_intercept::mitm::{self, CaSigner};
 use acp_intercept::{absolute_target, connect_target, content_length, parse_request_line};
 use tokio_rustls::TlsConnector;
-use std::sync::{Arc, Mutex};
+use std::sync::{Arc, Mutex, RwLock};
 use tokio::io::{AsyncReadExt, AsyncWriteExt};
 use tokio::net::{TcpListener, TcpStream};
 
 struct Cfg {
-    registry: EndpointRegistry,
+    registry: RwLock<EndpointRegistry>,
     content: ContentPolicy,
     client: reqwest::Client,
     ledger: Option<Mutex<acp_ledger::Ledger>>,
@@ -35,6 +35,18 @@ fn record(cfg: &Cfg, host: &str, action: &str, verdict: &str, rule: &Option<Stri
             let _ = g.append(&did, "intercept", &rec, None);
         }
     }
+}
+
+/// Fetch the interception rule registry from the control plane (GET <base>/intercept/rules). The
+/// registry is derived server-side from the endpoints operators enrol via the console, so the
+/// interceptor always governs the current set without editing a file on each workstation.
+async fn fetch_registry(client: &reqwest::Client, base: &str) -> Result<EndpointRegistry, String> {
+    let url = format!("{}/intercept/rules", base.trim_end_matches('/'));
+    let resp = client.get(&url).send().await.map_err(|e| e.to_string())?;
+    if !resp.status().is_success() {
+        return Err(format!("control plane returned {}", resp.status()));
+    }
+    resp.json::<EndpointRegistry>().await.map_err(|e| e.to_string())
 }
 
 #[tokio::main]
@@ -66,6 +78,8 @@ async fn main() -> std::process::ExitCode {
     }
     let mut addr = "127.0.0.1:8890".to_string();
     let mut rules: Option<String> = None;
+    let mut registry_url: Option<String> = None;
+    let mut refresh_secs: u64 = 30;
     let mut ledger_path: Option<String> = None;
     let mut deny_topics: Vec<String> = Vec::new();
     let mut block_secrets = false;
@@ -76,6 +90,8 @@ async fn main() -> std::process::ExitCode {
         match a.as_str() {
             "--listen" => addr = it.next().cloned().unwrap_or(addr),
             "--rules" => rules = it.next().cloned(),
+            "--registry-url" => registry_url = it.next().cloned(),
+            "--refresh-secs" => { if let Some(v) = it.next() { refresh_secs = v.parse().unwrap_or(30); } }
             "--ledger" => ledger_path = it.next().cloned(),
             "--deny-topic" => { if let Some(v) = it.next() { deny_topics.push(v.clone()); } }
             "--block-secrets" => block_secrets = true,
@@ -84,12 +100,27 @@ async fn main() -> std::process::ExitCode {
             other => { tracing::warn!("unknown option '{other}'"); return std::process::ExitCode::from(2); }
         }
     }
-    let registry = match rules.as_ref().map(|p| std::fs::read_to_string(p)) {
-        Some(Ok(src)) => match EndpointRegistry::from_yaml(&src) {
+    // The interception rules come from the control plane (--registry-url), derived from the
+    // endpoints operators enrol via the console. --rules is the offline fallback / air-gapped source.
+    let http = reqwest::Client::new();
+    let load_file = || match rules.as_ref().map(|p| std::fs::read_to_string(p)) {
+        Some(Ok(src)) => EndpointRegistry::from_yaml(&src).map_err(|e| e.to_string()),
+        Some(Err(e)) => Err(e.to_string()),
+        None => Err("no --rules file".to_string()),
+    };
+    let registry = if let Some(base) = registry_url.as_ref() {
+        match fetch_registry(&http, base).await {
+            Ok(r) => { tracing::info!("fetched {} rule(s) from {base}", r.endpoints.len()); r }
+            Err(fe) => match load_file() {
+                Ok(r) => { tracing::warn!("registry fetch from {base} failed ({fe}); using --rules fallback"); r }
+                Err(_) => { tracing::error!("cannot fetch rules from {base}: {fe}, and no --rules fallback"); return std::process::ExitCode::from(1); }
+            },
+        }
+    } else {
+        match load_file() {
             Ok(r) => r,
-            Err(e) => { tracing::info!("{e}"); return std::process::ExitCode::from(1); }
-        },
-        _ => { tracing::error!("--rules <endpoints.yaml> is required"); return std::process::ExitCode::from(2); }
+            Err(e) => { tracing::error!("--registry-url <server> or --rules <endpoints.yaml> is required ({e})"); return std::process::ExitCode::from(2); }
+        }
     };
     let ledger = match ledger_path.as_ref() {
         Some(p) => match acp_ledger::Ledger::open(p, Box::new(acp_core::sign::Ed25519Signer::generate())) {
@@ -110,9 +141,9 @@ async fn main() -> std::process::ExitCode {
         _ => None,
     };
     let cfg = Arc::new(Cfg {
-        registry,
+        registry: RwLock::new(registry),
         content: ContentPolicy { block_injection: true, block_secrets, redact_pii: true, denied_topics: deny_topics },
-        client: reqwest::Client::new(),
+        client: http.clone(),
         ledger,
         ca,
         connector: mitm::upstream_connector(),
@@ -122,7 +153,25 @@ async fn main() -> std::process::ExitCode {
         Ok(l) => l,
         Err(e) => { tracing::error!("cannot bind {addr}: {e}"); return std::process::ExitCode::from(1); }
     };
-    tracing::info!("forward proxy on {addr}; {} rule(s)", cfg.registry.endpoints.len());
+    tracing::info!("forward proxy on {addr}; {} rule(s)", cfg.registry.read().unwrap().endpoints.len());
+    // Poll the control plane so newly enrolled or re-dispositioned endpoints take effect without a restart.
+    if let Some(base) = registry_url.clone() {
+        let cfg_r = cfg.clone();
+        let http_r = http.clone();
+        tokio::spawn(async move {
+            loop {
+                tokio::time::sleep(std::time::Duration::from_secs(refresh_secs)).await;
+                match fetch_registry(&http_r, &base).await {
+                    Ok(r) => {
+                        let n = r.endpoints.len();
+                        if let Ok(mut g) = cfg_r.registry.write() { *g = r; }
+                        tracing::debug!("refreshed {n} rule(s) from {base}");
+                    }
+                    Err(e) => tracing::warn!("registry refresh failed: {e}"),
+                }
+            }
+        });
+    }
     loop {
         match listener.accept().await {
             Ok((sock, _)) => {
@@ -182,19 +231,19 @@ async fn handle(cfg: Arc<Cfg>, mut client: TcpStream) -> std::io::Result<()> {
         let Some((host, port)) = connect_target(&target) else {
             return write_status(&mut client, 400, "Bad Request", "bad CONNECT target").await;
         };
-        let decision = cfg.registry.evaluate(&host, "", port);
+        let decision = { cfg.registry.read().unwrap().evaluate(&host, "", port) };
         if decision.action == Action::Block {
             record(&cfg, &host, "block", "deny", &decision.rule_id);
             return write_status(&mut client, 403, "Forbidden", "blocked by endpoint policy").await;
         }
         // Phase 3: if TLS interception is enabled and this host needs the body, MITM it.
-        if cfg.registry.should_decrypt(&host, port) {
+        if { cfg.registry.read().unwrap().should_decrypt(&host, port) } {
             if let Some(ca) = cfg.ca.clone() {
                 client.write_all(b"HTTP/1.1 200 Connection Established\r\n\r\n").await?;
                 let cfg2 = cfg.clone();
                 let host2 = host.clone();
                 let decide = |path: &str| {
-                    let d = cfg2.registry.evaluate(&host2, path, port);
+                    let d = { cfg2.registry.read().unwrap().evaluate(&host2, path, port) };
                     (d.action == Action::Block, d.action.needs_body(), d.rule_id.clone())
                 };
                 let cfg3 = cfg.clone();
@@ -219,7 +268,7 @@ async fn handle(cfg: Arc<Cfg>, mut client: TcpStream) -> std::io::Result<()> {
         }
         // Phase 2: no MITM. A body-inspecting HTTPS host is tunnelled and flagged (inspection needs
         // phase 3). block/pass are fully enforced here.
-        let verdict = if cfg.registry.should_decrypt(&host, port) { "tunnel-uninspected" } else { "tunnel" };
+        let verdict = if { cfg.registry.read().unwrap().should_decrypt(&host, port) } { "tunnel-uninspected" } else { "tunnel" };
         record(&cfg, &host, "connect", verdict, &decision.rule_id);
         let mut upstream = match TcpStream::connect((host.as_str(), port)).await {
             Ok(u) => u,
@@ -244,7 +293,7 @@ async fn handle(cfg: Arc<Cfg>, mut client: TcpStream) -> std::io::Result<()> {
         }
         body.extend_from_slice(&tmp[..n]);
     }
-    let decision = cfg.registry.evaluate(&host, &path, port);
+    let decision = { cfg.registry.read().unwrap().evaluate(&host, &path, port) };
     if decision.action == Action::Block {
         record(&cfg, &host, "block", "deny", &decision.rule_id);
         return write_status(&mut client, 403, "Forbidden", "blocked by endpoint policy").await;

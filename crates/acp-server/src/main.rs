@@ -304,6 +304,7 @@ async fn main() {
         .route("/policy-store/deploy", post(policy_store_deploy))
         .route("/endpoints", get(endpoints_list))
         .route("/endpoints/register", post(endpoints_register))
+        .route("/intercept/rules", get(intercept_rules))
         .route("/apps", post(app_register))
         .route("/agents", post(agent_register))
         .route("/agents/:id/deactivate", post(agent_deactivate))
@@ -738,6 +739,53 @@ async fn endpoints_list(State(st): State<Arc<AppState>>) -> impl IntoResponse {
         })
         .collect();
     Json(serde_json::json!({"configured": true, "endpoints": out})).into_response()
+}
+
+/// GET /intercept/rules: the interception rule registry derived from the stored endpoint
+/// dispositions, so acp-intercept can pull its governed set from the control plane instead of a
+/// static file. Latest disposition per endpoint wins; expired accept-risk exceptions are dropped;
+/// destinations that match no rule hit the default (flag-and-pass: recorded as shadow AI, then
+/// passed). Ungated: it returns the same governed set as GET /endpoints, no secrets.
+async fn intercept_rules(State(st): State<Arc<AppState>>) -> impl IntoResponse {
+    use acp_core::enrollment::{Disposition, EndpointDisposition, EnrollmentLog};
+    let now = now_ms();
+    let mut dispositions: Vec<EndpointDisposition> = Vec::new();
+    if let Some(store) = &st.store {
+        match store.list_endpoints().await {
+            Ok(eps) => {
+                for e in eps {
+                    let disposition = match e.disposition.as_str() {
+                        "block" | "quarantine" => Disposition::Quarantine,
+                        "accept-risk" => Disposition::AcceptRisk { expires_ms: e.expires_ms as u64 },
+                        _ => Disposition::Enroll,
+                    };
+                    dispositions.push(EndpointDisposition {
+                        endpoint: e.endpoint,
+                        kind: e.kind,
+                        disposition,
+                        operator: e.operator,
+                        reason: e.reason,
+                        decided_ms: e.decided_ms as u64,
+                        pubkey_hex: e.pubkey_hex,
+                        sig_hex: e.sig_hex,
+                    });
+                }
+            }
+            Err(e) => return Json(serde_json::json!({"error": e})).into_response(),
+        }
+    } else if let Some(path) = &st.enrollment {
+        dispositions = load_enrollment(path).dispositions;
+    }
+    dispositions.retain(|d| match d.disposition {
+        Disposition::AcceptRisk { expires_ms } => now < expires_ms,
+        _ => true,
+    });
+    let log = EnrollmentLog { dispositions };
+    let registry = acp_core::interception::registry_from_enrollment(
+        &log,
+        acp_core::interception::DefaultAction::FlagAndPass,
+    );
+    Json(registry).into_response()
 }
 
 /// POST /endpoints/register: record a signed disposition for an AI endpoint. Body:

@@ -20,15 +20,29 @@ Install the client tools on every developer machine; install the services on one
 ## 1. Install on a workstation
 
 ```sh
+# on-demand tools only
 curl -fsSL https://acpdocs.web.app/install.sh | sh          # macOS, Linux
+
+# or point it at your control plane to also run acp-intercept as a background service
+ACP_SERVER=http://cp.internal:8787 curl -fsSL https://acpdocs.web.app/install.sh | sh
+
 # Windows (PowerShell):
 powershell -c "irm https://acpdocs.web.app/install.ps1 | iex"
 ```
 
 This installs the workstation tools into `~/.acp/bin` (or `%USERPROFILE%\.acp\bin`) and adds it to
-your PATH: `acp-proxy` (wraps a local MCP server), `acp-intercept` (a dev forward proxy), and
-`acp-verify` (independent evidence verification). These run on demand, not as services. The installer
-refuses to run under `sudo`: it installs into your home directory.
+your PATH: `acp-proxy` (wraps a local MCP server), `acp-intercept` (a forward proxy), and `acp-verify`
+(independent evidence verification). `acp-proxy` is launched on demand by the agent host (it wraps a
+tool server over stdio). If you set **`ACP_SERVER`** (your control-plane URL), the installer also
+configures **`acp-intercept` as a background service** (a launchd LaunchAgent on macOS, a
+`systemd --user` unit on Linux) that listens on `127.0.0.1:8890` (override with `ACP_LISTEN`) and
+pulls its governed endpoint set from the control plane, refreshing it so the endpoints you enrol in
+the console take effect without touching the machine. Set `ACP_NO_SERVICE=1` to install binaries only.
+The installer refuses to run under `sudo`: it installs into your home directory.
+
+Manage the service the usual way, for example `launchctl unload ~/Library/LaunchAgents/ai.acp.intercept.plist`
+on macOS or `systemctl --user restart acp-intercept` on Linux. Point your agents' or browser's HTTP(S)
+proxy at `127.0.0.1:8890`.
 
 You do not register agents or author policy from the workstation: that is done centrally, from the
 console or the control-plane API on the server (below). The workstation tools enforce and verify.
