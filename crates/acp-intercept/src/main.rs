@@ -2,7 +2,7 @@
 //! HTTP(S) proxy at it. Phase 2: enforce block/pass on HTTPS at CONNECT (by host, no decryption) and
 //! fully inspect plain-HTTP bodies with the content engine. TLS body inspection (MITM) is phase 3.
 
-use acp_core::content::{scan_text, ContentPolicy};
+use acp_core::content::{scan_with_ml, ContentPolicy, LinearScorer};
 use acp_core::interception::{Action, EndpointRegistry};
 use acp_intercept::mitm::{self, CaSigner};
 use acp_intercept::{absolute_target, connect_target, content_length, parse_request_line};
@@ -21,7 +21,8 @@ struct Cfg {
     report_url: Option<String>,
     report_token: Option<String>,
     proxy_id: String,
-    content: ContentPolicy,
+    content: RwLock<ContentPolicy>,
+    content_ml: RwLock<Option<std::sync::Arc<LinearScorer>>>,
     client: reqwest::Client,
     ledger: Option<Mutex<acp_ledger::Ledger>>,
     ca: Option<Arc<CaSigner>>,
@@ -60,6 +61,24 @@ fn record(cfg: &Cfg, host: &str, action: &str, verdict: &str, rule: &Option<Stri
             let _ = g.append(&did, "intercept", &rec, None);
         }
     }
+}
+
+/// Fetch the central content-firewall config (toggles, denied topics, ML model) from the control
+/// plane, so a workstation interceptor needs no local model file. Returns the policy and optional
+/// model. On any failure the caller keeps its current config.
+async fn fetch_firewall(client: &reqwest::Client, base: &str) -> Result<(ContentPolicy, Option<std::sync::Arc<LinearScorer>>), String> {
+    let url = format!("{}/firewall/config", base.trim_end_matches('/'));
+    let resp = client.get(&url).send().await.map_err(|e| e.to_string())?;
+    if !resp.status().is_success() { return Err(format!("control plane returned {}", resp.status())); }
+    let v: serde_json::Value = resp.json().await.map_err(|e| e.to_string())?;
+    let enabled = v.get("enabled").and_then(|x| x.as_bool()).unwrap_or(false);
+    let block_secrets = enabled && v.get("block_secrets").and_then(|x| x.as_bool()).unwrap_or(false);
+    let denied_topics: Vec<String> = v.get("deny_topics").and_then(|x| x.as_array())
+        .map(|a| a.iter().filter_map(|t| t.as_str().map(|s| s.to_string())).collect()).unwrap_or_default();
+    let policy = ContentPolicy { block_injection: enabled, block_secrets, redact_pii: enabled, denied_topics };
+    let model_s = v.get("model").and_then(|x| x.as_str()).unwrap_or("");
+    let ml = if enabled && !model_s.is_empty() { LinearScorer::from_json(model_s).ok().map(std::sync::Arc::new) } else { None };
+    Ok((policy, ml))
 }
 
 /// Load and verify the break-glass grant file into a live grant (None when absent/invalid). With a
@@ -134,6 +153,7 @@ async fn main() -> std::process::ExitCode {
     let mut allow_internal = false;
     let mut bg_path: Option<String> = None;
     let mut bg_key_hex: Option<String> = None;
+    let mut firewall_url: Option<String> = None;
     let mut report_url: Option<String> = None;
     let mut report_token: Option<String> = None;
     let mut proxy_id: Option<String> = None;
@@ -151,6 +171,7 @@ async fn main() -> std::process::ExitCode {
             "--ca-key" => ca_key = it.next().cloned(),
             "--allow-internal-egress" => allow_internal = true,
             "--break-glass-file" => bg_path = it.next().cloned(),
+            "--firewall-url" => firewall_url = it.next().cloned(),
             "--break-glass-key" => bg_key_hex = it.next().cloned(),
             "--report-url" => report_url = it.next().cloned(),
             "--report-token" => report_token = it.next().cloned(),
@@ -207,7 +228,8 @@ async fn main() -> std::process::ExitCode {
         report_url: report_url.clone(),
         report_token: report_token.clone(),
         proxy_id: proxy_id.clone().unwrap_or_else(|| "intercept".to_string()),
-        content: ContentPolicy { block_injection: true, block_secrets, redact_pii: true, denied_topics: deny_topics },
+        content: RwLock::new(ContentPolicy { block_injection: true, block_secrets, redact_pii: true, denied_topics: deny_topics }),
+        content_ml: RwLock::new(None),
         client: http.clone(),
         ledger,
         ca,
@@ -231,6 +253,30 @@ async fn main() -> std::process::ExitCode {
                 if let Some(t) = &token { req = req.bearer_auth(t); }
                 let _ = req.send().await;
                 tokio::time::sleep(std::time::Duration::from_secs(10)).await;
+            }
+        });
+    }
+    // Central content-firewall config (toggles + denied topics + ML model) from the control plane, so
+    // this workstation needs no local model file. Fetched at startup and refreshed.
+    if let Some(base) = firewall_url.clone() {
+        let base = base.trim_end_matches('/').to_string();
+        match fetch_firewall(&http, &base).await {
+            Ok((pol, ml)) => {
+                { *cfg.content.write().unwrap() = pol; }
+                { *cfg.content_ml.write().unwrap() = ml; }
+                tracing::info!("content firewall config fetched from {base}");
+            }
+            Err(e) => tracing::warn!("content firewall fetch from {base} failed ({e}); using local flags"),
+        }
+        let cfg_fw = cfg.clone();
+        tokio::spawn(async move {
+            let client = reqwest::Client::new();
+            loop {
+                tokio::time::sleep(std::time::Duration::from_secs(30)).await;
+                if let Ok((pol, ml)) = fetch_firewall(&client, &base).await {
+                    { *cfg_fw.content.write().unwrap() = pol; }
+                    { *cfg_fw.content_ml.write().unwrap() = ml; }
+                }
             }
         });
     }
@@ -349,7 +395,11 @@ async fn handle(cfg: Arc<Cfg>, mut client: TcpStream) -> std::io::Result<()> {
                 };
                 let cfg3 = cfg.clone();
                 let inspect = |text: &str| {
-                    let cv = scan_text(&cfg3.content, text);
+                    let cv = {
+                        let pol = cfg3.content.read().unwrap();
+                        let ml = cfg3.content_ml.read().unwrap();
+                        scan_with_ml(&pol, text, ml.as_deref())
+                    };
                     if cv.block {
                         Some(cv.findings.iter().map(|f| f.kind.clone()).collect::<Vec<_>>().join(", "))
                     } else {
@@ -409,7 +459,11 @@ async fn handle(cfg: Arc<Cfg>, mut client: TcpStream) -> std::io::Result<()> {
     }
     if decision.action.needs_body() {
         let text = String::from_utf8_lossy(&body);
-        let cv = scan_text(&cfg.content, &text);
+        let cv = {
+            let pol = cfg.content.read().unwrap();
+            let ml = cfg.content_ml.read().unwrap();
+            scan_with_ml(&pol, &text, ml.as_deref())
+        };
         if cv.block {
             let kinds: Vec<String> = cv.findings.iter().map(|f| f.kind.clone()).collect();
             record(&cfg, &host, "inspect", "deny", &decision.rule_id);

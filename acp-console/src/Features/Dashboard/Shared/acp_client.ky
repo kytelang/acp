@@ -80,6 +80,16 @@ pub struct ApprovalRow {
     init(id: string, tool: string) { self.id = id; self.tool = tool; }
 }
 
+pub struct FirewallCfg {
+    pub enabled: bool,
+    pub blockSecrets: bool,
+    pub denyTopics: string,
+    pub hasModel: bool,
+    init(enabled: bool, blockSecrets: bool, denyTopics: string, hasModel: bool) {
+        self.enabled = enabled; self.blockSecrets = blockSecrets; self.denyTopics = denyTopics; self.hasModel = hasModel;
+    }
+}
+
 pub struct IngestedRow {
     pub pep: string,
     pub verdict: string,
@@ -359,6 +369,58 @@ pub struct AcpClient {
             i = i + 1;
         }
         return rows;
+    }
+
+    // Central content-firewall config (kept in the control-plane DB; PEPs fetch it).
+    pub fn firewallStatus(self: AcpClient): FirewallCfg {
+        let resp = client.Http.get(self.base + "/firewall/config");
+        if (resp.status.toCode() != 200) { return FirewallCfg(false, false, "", false); }
+        let v = json.parse(resp.body);
+        let en = json.asBool(json.get(v, "enabled")) ?? false;
+        let bs = json.asBool(json.get(v, "block_secrets")) ?? false;
+        let model = json.asString(json.get(v, "model")) ?? "";
+        let topicsV = json.get(v, "deny_topics");
+        let arr = json.asArray(topicsV);
+        let topics = "";
+        if (arr != undefined) {
+            let i = 0;
+            while (i < arr.size()) {
+                let t = json.asString(json.at(topicsV, i)) ?? "";
+                topics = string.eql(topics, "") ? t : topics + ", " + t;
+                i = i + 1;
+            }
+        }
+        return FirewallCfg(en, bs, topics, !string.eql(model, ""));
+    }
+
+    pub fn setFirewall(self: AcpClient, enabled: bool, blockSecrets: bool, denyCsv: string, model: string, userAuth: string): DeployResult {
+        let topics = list.List<string>();
+        let parts = string.split(denyCsv, ",");
+        let i = 0;
+        while (i < parts.size()) {
+            let t = string.trim(parts.get(i) ?? "");
+            if (!string.eql(t, "")) { topics.push(t); }
+            i = i + 1;
+        }
+        let arr = "";
+        let k = 0;
+        while (k < topics.size()) {
+            let piece = self.jstr(topics.get(k) ?? "");
+            arr = string.eql(arr, "") ? piece : arr + "," + piece;
+            k = k + 1;
+        }
+        let enS = enabled ? "true" : "false";
+        let bsS = blockSecrets ? "true" : "false";
+        let body = "{\"enabled\":" + enS + ",\"block_secrets\":" + bsS + ",\"deny_topics\":[" + arr + "],\"model\":" + self.jstr(model) + "}";
+        let hdrs = client.Http.emptyHeaders();
+        hdrs.set("Content-Type", "application/json");
+        if (!string.eql(userAuth, "")) { hdrs.set("Authorization", userAuth); }
+        else { let tok = self.authToken("PolicyAdmin"); if (!string.eql(tok, "")) { hdrs.set("Authorization", "Bearer " + tok); } }
+        let resp = client.Http.request("POST", self.base + "/firewall/config", hdrs, body);
+        if (resp.status.toCode() != 200) { return DeployResult(false, "acp-server unreachable"); }
+        let v = json.parse(resp.body);
+        if (!(json.asBool(json.get(v, "ok")) ?? false)) { return DeployResult(false, json.asString(json.get(v, "error")) ?? "rejected"); }
+        return DeployResult(true, "content firewall config saved");
     }
 
     // Rules of the currently deployed policy, with app/agent resolved to registered names. Shows

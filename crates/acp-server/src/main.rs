@@ -329,6 +329,7 @@ async fn main() {
         .route("/endpoints", get(endpoints_list))
         .route("/endpoints/register", post(endpoints_register))
         .route("/intercept/rules", get(intercept_rules))
+        .route("/firewall/config", get(firewall_config_get).post(firewall_config_set))
         .route("/apps", post(app_register))
         .route("/agents", post(agent_register))
         .route("/agents/:id/deactivate", post(agent_deactivate))
@@ -795,6 +796,46 @@ async fn endpoints_list(State(st): State<Arc<AppState>>) -> impl IntoResponse {
         })
         .collect();
     Json(serde_json::json!({"configured": true, "endpoints": out})).into_response()
+}
+
+/// GET /firewall/config: the central content-firewall configuration (toggles, denied topics, and the
+/// ML model content), so a workstation PEP fetches everything from the control plane instead of
+/// carrying local files. Ungated (same trust as the governed rule set). Returns a safe default when
+/// no config has been set yet.
+async fn firewall_config_get(State(st): State<Arc<AppState>>) -> Response {
+    let default = serde_json::json!({"enabled": false, "block_secrets": false, "deny_topics": [], "model": "", "updated_ms": 0});
+    let store = match &st.store { Some(s) => s, None => return Json(default).into_response() };
+    match store.get_firewall_config().await {
+        Ok(Some(c)) => {
+            let topics: serde_json::Value = serde_json::from_str(&c.deny_topics).unwrap_or_else(|_| serde_json::json!([]));
+            Json(serde_json::json!({"enabled": c.enabled, "block_secrets": c.block_secrets, "deny_topics": topics, "model": c.model, "updated_ms": c.updated_ms})).into_response()
+        }
+        Ok(None) => Json(default).into_response(),
+        Err(e) => Json(serde_json::json!({"error": e})).into_response(),
+    }
+}
+
+/// POST /firewall/config: set the central content-firewall configuration from the console
+/// (RBAC-gated on EditPolicy). Body: {enabled, block_secrets, deny_topics:[...], model:"<json or empty>"}.
+async fn firewall_config_set(State(st): State<Arc<AppState>>, headers: HeaderMap, Json(body): Json<serde_json::Value>) -> Response {
+    if let Err(r) = authorize(&st.auth, &headers, acp_auth::Capability::EditPolicy) { return r; }
+    let store = match &st.store { Some(s) => s, None => return Json(serde_json::json!({"ok": false, "error": "no --store configured"})).into_response() };
+    let enabled = body.get("enabled").and_then(|v| v.as_bool()).unwrap_or(false);
+    let block_secrets = body.get("block_secrets").and_then(|v| v.as_bool()).unwrap_or(false);
+    let deny_topics_json = match body.get("deny_topics") {
+        Some(v) if v.is_array() => v.to_string(),
+        _ => "[]".to_string(),
+    };
+    // model may be a JSON string of the model content, or an object we serialise.
+    let model = match body.get("model") {
+        Some(serde_json::Value::String(s)) => s.clone(),
+        Some(v) => v.to_string(),
+        None => String::new(),
+    };
+    match store.set_firewall_config(enabled, block_secrets, &deny_topics_json, &model, now_ms() as i64).await {
+        Ok(()) => Json(serde_json::json!({"ok": true})).into_response(),
+        Err(e) => Json(serde_json::json!({"ok": false, "error": e})).into_response(),
+    }
 }
 
 /// GET /intercept/rules: the interception rule registry derived from the stored endpoint

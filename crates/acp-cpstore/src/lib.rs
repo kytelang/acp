@@ -55,6 +55,15 @@ pub struct IngestedRecord {
 }
 
 #[derive(Debug, Clone, Serialize)]
+pub struct FirewallConfig {
+    pub enabled: bool,
+    pub block_secrets: bool,
+    pub deny_topics: String, // JSON array of strings
+    pub model: String,       // the ML model JSON content, or "" for signatures-only
+    pub updated_ms: i64,
+}
+
+#[derive(Debug, Clone, Serialize)]
 pub struct GrcRecord {
     pub id: String,
     pub kind: String,
@@ -116,6 +125,7 @@ impl ControlStore {
             "CREATE TABLE IF NOT EXISTS endpoints (endpoint VARCHAR(255) PRIMARY KEY, kind TEXT NOT NULL, provider TEXT NOT NULL, disposition TEXT NOT NULL, operator TEXT NOT NULL, reason TEXT NOT NULL, decided_ms BIGINT NOT NULL, expires_ms BIGINT NOT NULL, pubkey_hex TEXT NOT NULL, sig_hex TEXT NOT NULL)",
             "CREATE TABLE IF NOT EXISTS grc_records (id VARCHAR(255) PRIMARY KEY, kind TEXT NOT NULL, subject TEXT NOT NULL, title TEXT NOT NULL, status TEXT NOT NULL, body TEXT NOT NULL, operator TEXT NOT NULL, created_ms BIGINT NOT NULL, pubkey_hex TEXT NOT NULL, sig_hex TEXT NOT NULL)",
             "CREATE TABLE IF NOT EXISTS ingested_evidence (decision_id VARCHAR(255) PRIMARY KEY, pep TEXT NOT NULL, kind TEXT NOT NULL, verdict TEXT NOT NULL, record TEXT NOT NULL, operator TEXT NOT NULL, created_ms BIGINT NOT NULL, pubkey_hex TEXT NOT NULL, sig_hex TEXT NOT NULL)",
+            "CREATE TABLE IF NOT EXISTS firewall_config (id INTEGER PRIMARY KEY, enabled INTEGER NOT NULL, block_secrets INTEGER NOT NULL, deny_topics TEXT NOT NULL, model TEXT NOT NULL, updated_ms BIGINT NOT NULL)",
         ] {
             sqlx::query(ddl).execute(&self.pool).await.map_err(|e| e.to_string())?;
         }
@@ -289,6 +299,31 @@ impl ControlStore {
         let sql = self.ph("UPDATE grc_records SET status = ? WHERE id = ?");
         sqlx::query(&sql).bind(status).bind(id).execute(&self.pool).await.map_err(|e| e.to_string())?;
         Ok(())
+    }
+
+    /// Central content-firewall configuration (single row): the toggles, the denied topics, and the
+    /// ML model content itself, so a workstation PEP fetches everything from the control plane instead
+    /// of carrying a local model file. Idempotent replace of the singleton.
+    pub async fn set_firewall_config(&self, enabled: bool, block_secrets: bool, deny_topics_json: &str, model: &str, updated_ms: i64) -> Result<(), String> {
+        sqlx::query("DELETE FROM firewall_config").execute(&self.pool).await.map_err(|e| e.to_string())?;
+        let sql = self.ph("INSERT INTO firewall_config(id,enabled,block_secrets,deny_topics,model,updated_ms) VALUES(1,?,?,?,?,?)");
+        sqlx::query(&sql)
+            .bind(if enabled {1i64} else {0}).bind(if block_secrets {1i64} else {0})
+            .bind(deny_topics_json).bind(model).bind(updated_ms)
+            .execute(&self.pool).await.map_err(|e| e.to_string())?;
+        Ok(())
+    }
+
+    pub async fn get_firewall_config(&self) -> Result<Option<FirewallConfig>, String> {
+        let row = sqlx::query("SELECT enabled, block_secrets, deny_topics, model, updated_ms FROM firewall_config WHERE id = 1")
+            .fetch_optional(&self.pool).await.map_err(|e| e.to_string())?;
+        Ok(row.map(|r| FirewallConfig {
+            enabled: r.get::<i64,_>("enabled") != 0,
+            block_secrets: r.get::<i64,_>("block_secrets") != 0,
+            deny_topics: r.get("deny_topics"),
+            model: r.get("model"),
+            updated_ms: r.get("updated_ms"),
+        }))
     }
 
     /// E2: append a PEP-reported decision record to the central ingested-evidence store, signed by

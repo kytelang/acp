@@ -43,6 +43,7 @@ fn buildApp(): App {
     app.post("/grc/create", CreateGrcHandler(acp));
     app.post("/agents/{id}/deactivate", DeactivateAgentHandler(acp));
     app.post("/grc/{id}/to/{status}", GrcStatusHandler(acp));
+    app.post("/firewall/save", FirewallSaveHandler(acp));
 
     // Serve static assets (wwwroot/) for any unmatched GET.
     app.useStatic("/", "./wwwroot");

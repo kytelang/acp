@@ -127,7 +127,7 @@
     .modal input[type=file]{display:none}
   </style>
 </head>
-<body data-signals="{view: 'overview', endpoint: '', disposition: 'govern', appName: '', appOwner: '', agentAppId: '', agentName: '', grcKind: 'assessment', grcSubject: '', grcTitle: '', grcStatus: 'open', grcBody: '{}', modal: '', policyTab: 'deployed', author: 'operator', epReason: 'sanctioned', mode: 'lockdown_all', scope: 'global', killReason: 'incident', ttl_ms: '3600000', reason: ''}">
+<body data-signals="{view: 'overview', endpoint: '', disposition: 'govern', appName: '', appOwner: '', agentAppId: '', agentName: '', grcKind: 'assessment', grcSubject: '', grcTitle: '', grcStatus: 'open', grcBody: '{}', modal: '', policyTab: 'deployed', fwEnabled: 'false', fwBlockSecrets: 'false', fwDenyTopics: '', fwModel: '', author: 'operator', epReason: 'sanctioned', mode: 'lockdown_all', scope: 'global', killReason: 'incident', ttl_ms: '3600000', reason: ''}">
   <div class="navbar">
     <div class="brand">
       <img class="logo" src="/varman-logo.svg" alt="Varman" />
@@ -153,6 +153,7 @@
         <div class="nav-i" data-class-active="$view === 'endpoints'" data-on:click="$view = 'endpoints'"><span class="ic">&#127760;</span> AI Endpoints</div>
         <div class="nav-l">Policy</div>
         <div class="nav-i" data-class-active="$view === 'policy'" data-on:click="$view = 'policy'"><span class="ic">&#128271;</span> Policy</div>
+        <div class="nav-i" data-class-active="$view === 'firewall'" data-on:click="$view = 'firewall'"><span class="ic">&#129521;</span> Content firewall</div>
         <div class="nav-l">Compliance</div>
         <div class="nav-i" data-class-active="$view === 'grc'" data-on:click="$view = 'grc'"><span class="ic">&#128209;</span> Governance</div>
         <div class="nav-l">Emergency</div>
@@ -164,7 +165,7 @@
 
     <div class="main">
       <div class="content" data-on-intersect="@get('/sse/metrics')">
-        <h1 class="page-title" data-text="$view === 'overview' ? 'Governance overview' : $view === 'approvals' ? 'Pending approvals' : $view === 'evidence' ? 'Evidence timeline' : $view === 'violations' ? 'Violations and breaches' : $view === 'apps' ? 'Teams' : $view === 'agents' ? 'Registered agents' : $view === 'policy' ? 'Policy' : $view === 'reports' ? 'Governance report' : $view === 'health' ? 'Control-plane integrity' : $view === 'endpoints' ? 'AI endpoints' : $view === 'grc' ? 'Governance records' : 'Emergency kill-switch'">Governance overview</h1>
+        <h1 class="page-title" data-text="$view === 'overview' ? 'Governance overview' : $view === 'approvals' ? 'Pending approvals' : $view === 'evidence' ? 'Evidence timeline' : $view === 'violations' ? 'Violations and breaches' : $view === 'apps' ? 'Teams' : $view === 'agents' ? 'Registered agents' : $view === 'policy' ? 'Policy' : $view === 'firewall' ? 'Content firewall' : $view === 'reports' ? 'Governance report' : $view === 'health' ? 'Control-plane integrity' : $view === 'endpoints' ? 'AI endpoints' : $view === 'grc' ? 'Governance records' : 'Emergency kill-switch'">Governance overview</h1>
         <section class="view" data-show="$view === 'overview'">
           <div class="card"><div class="card-h"><span class="ic">&#128202;</span> Posture &amp; activity</div>
             <div class="card-b"><div id="metrics" class="stats"><p class="empty">connecting to acp-server&#8230;</p></div></div></div>
@@ -257,6 +258,19 @@ rules:
           </div>
         </section>
 
+        <section class="view" data-show="$view === 'firewall'">
+          <div class="card"><div class="card-h"><span class="ic">&#129521;</span> Content firewall<span class="sub">stored centrally in the control plane; enforcement points fetch it, no local model file</span></div>
+          <div class="card-b">
+            <div id="firewallstatus"><p class="empty">&#8230;</p></div>
+            <div class="row">
+              <label class="fld">Enabled <select data-bind="fwEnabled"><option value="false">off</option><option value="true">on</option></select></label>
+              <label class="fld">Block secrets <select data-bind="fwBlockSecrets"><option value="false">no</option><option value="true">yes</option></select></label>
+            </div>
+            <label class="fld">Denied topics (comma-separated) <input type="text" data-bind="fwDenyTopics" placeholder="weapons, malware" /></label>
+            <label class="fld">ML model JSON (optional) <textarea data-bind="fwModel" placeholder="paste model.json content, or leave blank for signatures only"></textarea></label>
+            <button class="btn primary" data-on:click="@post('/firewall/save')">Save firewall config</button>
+          </div></div>
+        </section>
         <section class="view" data-show="$view === 'endpoints'">
           <div class="card"><div class="card-h"><span class="ic">&#127760;</span> Registered AI endpoints<span class="sub">agents and providers under governance</span><button class="btn primary card-cta" data-on:click="$modal = 'endpoint'">+ Register endpoint</button></div>
             <div class="card-b"><div id="endpoints"><p class="empty">&#8230;</p></div></div></div>

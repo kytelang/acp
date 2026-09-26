@@ -1,6 +1,7 @@
 import web.routing;
 import web.response;
 import serde.json;
+import string;
 import ds_response;
 import Features.Dashboard.Shared.acp_client;
 import Features.Dashboard.views.dashboard;
@@ -34,5 +35,22 @@ pub struct GrcStatusHandler impl RouteHandler {
         let status = ctx.param("status");
         let _ = self.acp.updateGrcStatus(id, status, auth);
         return await ds_response.patch(grcPanel(self.acp.grcRows()));
+    }
+}
+
+
+// POST /firewall/save: store the central content-firewall config (toggles, denied topics, ML model)
+// in the control-plane DB; the enforcement points fetch it. Re-reads and patches the status.
+pub struct FirewallSaveHandler impl RouteHandler {
+    acp: AcpClient,
+    init(acp: AcpClient) { self.acp = acp; }
+    async fn serve(self: FirewallSaveHandler, ctx: Context): Response {
+        let auth = ctx.request.headers.get("authorization") ?? "";
+        let en = json.stringField(ctx.request.body, "fwEnabled");
+        let bs = json.stringField(ctx.request.body, "fwBlockSecrets");
+        let topics = json.stringField(ctx.request.body, "fwDenyTopics");
+        let model = json.stringField(ctx.request.body, "fwModel");
+        let _ = self.acp.setFirewall(string.eql(en, "true"), string.eql(bs, "true"), topics, model, auth);
+        return await ds_response.patch(firewallStatusPanel(self.acp.firewallStatus()));
     }
 }

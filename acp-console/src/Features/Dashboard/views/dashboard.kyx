@@ -230,6 +230,17 @@ pub fn evidencePanel(rows: list.List<EvidenceRow>): Html {
     </div>;
 }
 
+pub fn firewallStatusPanel(cfg: FirewallCfg): Html {
+    return <div id="firewallstatus">
+        <div class="row" style="gap:.6rem;align-items:center">
+            {if (cfg.enabled) { <span class="badge ok">enabled</span> } else { <span class="badge bad">disabled</span> }}
+            {if (cfg.blockSecrets) { <span class="badge ver">block secrets</span> } else { <span class="dim">secrets: allow</span> }}
+            {if (cfg.hasModel) { <span class="badge ver">ML model loaded</span> } else { <span class="dim">signatures only</span> }}
+            <span class="dim">denied topics: {string.eql(cfg.denyTopics, "") ? "none" : cfg.denyTopics}</span>
+        </div>
+    </div>;
+}
+
 pub fn fleetEvidencePanel(rows: list.List<IngestedRow>): Html {
     return <div id="fleetevidence">
         {if (rows.size() == 0) {
