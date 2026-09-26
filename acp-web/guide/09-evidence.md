@@ -71,7 +71,7 @@ Argument payloads are separately purgeable without breaking verification, becaus
 the record's argument-hash, not the payload:
 
 ```sh
-acp purge evidence.db --before <ms>       # drop payloads older than a cutoff (retention)
+acp purge evidence.db <older-than-days>   # drop payloads older than N days (retention)
 ```
 
 A single decision's payload can be erased for a right-to-erasure request; the signed decision stays
@@ -97,8 +97,9 @@ governance of the governor is itself recorded.
 
 ## SIEM export
 
-Every decision projects faithfully into your SIEM in CEF, OCSF (class 6003) and RFC 5424 syslog,
-plus OTLP:
+Every decision projects faithfully into your SIEM in CEF, OCSF (class 6003) and RFC 5424 syslog. (OTLP
+is a separate live path: the proxy can stream spans to an OpenTelemetry collector with `--otel`, rather
+than an `acp siem` output format.)
 
 ```sh
 acp siem evidence.db --format ocsf

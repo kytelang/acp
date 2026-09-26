@@ -44,12 +44,13 @@ To revoke an agent, use its **Deactivate** action on the Agents page; enforcemen
 
 The human principal is established from a verified OIDC/JWT bearer token. Varman verifies EdDSA and
 real RS256 signatures, resolves the key by `kid` from a JWKS it fetches and refreshes, and checks the
-issuer, audience and expiry. Configure it on the PEP or the control plane:
+issuer, audience and expiry. Configure Entra on the PEP or the control plane; the generic OIDC flags
+are accepted by the control plane:
 
 ```sh
 # Microsoft Entra
 --entra-tenant <tenant> --entra-audience <audience>
-# any OIDC provider
+# any OIDC provider (control plane)
 --oidc-jwks <url> --oidc-issuer <iss> --oidc-audience <aud>
 ```
 
@@ -70,14 +71,15 @@ The control plane enforces RBAC with capabilities mapped from OIDC app roles:
 
 | Capability | Who needs it |
 | --- | --- |
-| `PolicyAdmin` (`EditPolicy`) | deploy a new policy version |
+| `PolicyAdmin` (`EditPolicy`) | deploy a new policy version; register teams, agents and endpoints |
 | `Approver` (`Approve`) | resolve a step-up hold |
 | `BreakGlassOperator` (`BreakGlass`) | engage or clear the kill-switch |
-| `Auditor` (`Export`, `SeeArgs`) | export evidence and read argument payloads |
-| `Registrar` | register apps and agents |
+| `Auditor` (`Export`) | export evidence |
+| `SecurityOfficer` (`SeeArgs`) | read argument payloads |
 
-**Separation of duty** is enforced across these: a policy admin cannot trip the kill-switch, and the
-reverse. With no auth flags the control plane runs RBAC-off for local use; if you request auth and
+**Separation of duty** follows from this role-to-capability mapping: a `PolicyAdmin` alone cannot trip
+the kill-switch, and a `BreakGlassOperator` alone cannot deploy a policy, because those are distinct
+capabilities. Grant the roles to different people to keep the duties separate. With no auth flags the control plane runs RBAC-off for local use; if you request auth and
 the JWKS fails to load, the server refuses to start rather than run unprotected (fail-closed).
 
 ## mutual TLS between components

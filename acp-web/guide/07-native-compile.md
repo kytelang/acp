@@ -9,9 +9,9 @@ origin; the agent stays the enforcer of its own sandbox.
 ## Compiling a policy
 
 ```sh
-acp native-compile policy.yaml --vendor claude
-acp native-compile policy.yaml --vendor copilot
-acp native-compile policy.yaml --vendor gemini
+acp native-compile policy.yaml claude
+acp native-compile policy.yaml copilot
+acp native-compile policy.yaml gemini
 ```
 
 The command reads your ACP policy and prints the vendor's managed-settings JSON. It maps the
@@ -35,7 +35,7 @@ A coding agent also makes its own model calls. To force those through the [gatew
 too, so even the agent's direct model use cannot bypass ACP, compile with a gateway URL:
 
 ```sh
-acp native-compile policy.yaml --vendor claude --gateway http://127.0.0.1:8799
+acp native-compile policy.yaml claude --gateway http://127.0.0.1:8799
 ```
 
 This adds an `env` block to the settings that pins each vendor SDK's base-URL variable

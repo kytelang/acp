@@ -61,7 +61,8 @@ For each tool call the proxy runs, in order:
 
 | Flag | Effect |
 | --- | --- |
-| `--policy <file>` | the policy to enforce (or a policy-store directory to watch and hot-reload) |
+| `--policy <file>` | the policy file to enforce |
+| `--policy-dir <dir>` | a signed policy-store directory to watch and hot-reload |
 | `--ledger <db>` | the evidence ledger to append to |
 | `--key <file>` | the Ed25519 signing key (generated 0600 if absent; see below for HSM) |
 | `--registry <file>` | verify the agent against a local registry file |
@@ -74,7 +75,7 @@ For each tool call the proxy runs, in order:
 | `--tool-pins <file>` | enable tool-integrity pinning (rug-pull detection) |
 | `--pin-pg <dsn>` | share tool-integrity pins across replicas via Postgres |
 | `--enforcement-key <hex>` | stamp the enforcement attestation the guard verifies |
-| `--oidc-jwks`, `--oidc-issuer`, `--oidc-audience` | resolve the human principal per request |
+| `--entra-tenant`, `--entra-audience` | resolve the human principal per request via Microsoft Entra |
 
 ## Environment
 

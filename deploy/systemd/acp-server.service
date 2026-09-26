@@ -6,7 +6,7 @@ Wants=network-online.target
 [Service]
 User=acp
 Group=acp
-ExecStart=/usr/local/bin/acp-server --addr 127.0.0.1:8080 --ledger /var/lib/acp/evidence.db --approvals /var/lib/acp/approvals.db
+ExecStart=/usr/local/bin/acp-server --addr 127.0.0.1:8787 --ledger /var/lib/acp/evidence.db --approvals /var/lib/acp/approvals.db --store sqlite:///var/lib/acp/control.db?mode=rwc --cp-key /var/lib/acp/cp.key --policy-store /var/lib/acp/policy --break-glass-file /var/lib/acp/break-glass.signed
 Restart=on-failure
 RestartSec=2
 # Hardening

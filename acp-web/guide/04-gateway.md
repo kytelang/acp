@@ -55,7 +55,7 @@ classifier. Detection is enforced on both the gateway (prompt) and the proxy (to
 
 ## Identity
 
-Add `--entra-tenant` and `--entra-audience` (or `--oidc-jwks`, `--oidc-issuer`, `--oidc-audience`)
+Add `--entra-tenant` and `--entra-audience`
 to resolve the human principal per request from a bearer token; requests without a valid token
 degrade to `unattributed`, which your policy can then treat as it likes. See [chapter 8](08-identity.md).
 
@@ -70,7 +70,6 @@ degrade to `unattributed`, which your policy can then treat as it likes. See [ch
 | `--content-firewall` | enable the signature content firewall on prompts |
 | `--content-ml <model.json>` | also load the trained ML classifier |
 | `--entra-tenant`, `--entra-audience` | Entra identity for the human principal |
-| `--oidc-jwks`, `--oidc-issuer`, `--oidc-audience` | any OIDC provider |
 
 Evidence at-rest encryption and HSM signing are configured by the same environment variables as the
 proxy ([chapter 9](09-evidence.md)).

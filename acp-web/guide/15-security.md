@@ -55,7 +55,7 @@ acp redteam model.json --min-catch 0.9
 
 # 3. Measure unavoidability.
 acp coverage observed.txt governed.txt
-acp canary-egress probes.json
+acp canary-egress targets.txt
 
 # 4. Verify a live ledger, then verify a standalone export on a clean machine with only the pubkey.
 acp verify evidence.db

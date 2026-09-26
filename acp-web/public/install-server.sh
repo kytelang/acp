@@ -177,6 +177,11 @@ PrivateTmp=true
 WantedBy=multi-user.target
 EOF
 
+# Wire the content model if it was installed, and shared budgets if a Postgres DSN was given at install.
+GW_CONTENT="--content-firewall"
+[ -f "$ETC/injection-lr.json" ] && GW_CONTENT="--content-firewall --content-ml $ETC/injection-lr.json"
+GW_BUDGET=""
+[ -n "${ACP_BUDGET_PG:-}" ] && GW_BUDGET="--budget-pg \${ACP_BUDGET_PG}"
 cat > /etc/systemd/system/acp-gateway.service <<EOF
 [Unit]
 Description=Varman (ACP) LLM gateway
@@ -186,7 +191,7 @@ Wants=network-online.target
 User=$SVCUSER
 Group=$SVCUSER
 EnvironmentFile=$ETC/gateway.env
-ExecStart=$PREFIX/bin/acp-gateway --addr 0.0.0.0:8799 --policy $ETC/policy.yaml --upstream \${ACP_UPSTREAM} --content-firewall
+ExecStart=$PREFIX/bin/acp-gateway --addr 0.0.0.0:8799 --policy $ETC/policy.yaml --upstream \${ACP_UPSTREAM} $GW_BUDGET $GW_CONTENT
 Restart=on-failure
 RestartSec=2
 NoNewPrivileges=true

@@ -40,6 +40,12 @@ line: they change no governance state, or they run in a pipeline, or they must w
 | `acp ledger-backup` / `purge` / `replay` | evidence maintenance |
 | `acp native-compile` | compile a policy into coding-agent settings |
 | `acp discover` | classify shadow-AI endpoints from an egress log (then enrol them in the console) |
+| `acp intercept sign` / `pac` / `from-enrollment` | build TLS-interception rule sets, PAC files and browser config |
+| `acp verify-enforcement` | check a PEP is actually enforcing, not bypassed |
+| `acp sign-artifact` / `verify-artifact` | sign and verify a build artifact |
+
+This table is a curated subset; run `acp help` for the full command list (including `init`, `learn`,
+`classify-eval`, `canary`, `diagnose` and `bench-ledger`).
 
 ## What moved to the console and the API
 

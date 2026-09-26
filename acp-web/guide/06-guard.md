@@ -26,10 +26,11 @@ attested requests, a caller cannot reach the tool server without going through A
 
 ```sh
 acp-guard \
-  --addr 0.0.0.0:8801 \
+  --listen 0.0.0.0:8801 \
   --upstream http://127.0.0.1:9090 \
-  --enforcement-key <hex> \
+  --pubkey <hex> \
   --ledger evidence.db \
+  --ledger-key <hex> \
   --max-age-ms 30000
 ```
 

@@ -9,8 +9,9 @@ the system is working.
 
 Varman has two kinds of component.
 
-- **Client tools**, run on a workstation on demand: `acp` (the CLI), `acp-proxy` (wraps a local MCP
-  server), `acp-intercept` (a forward proxy), `acp-guard` (a tool-server sidecar).
+- **Client tools**, run on a workstation on demand: `acp-proxy` (wraps a local MCP server),
+  `acp-intercept` (a forward proxy), and `acp-verify` (independent evidence verification). The `acp`
+  CLI and `acp-guard` ship in the server archive.
 - **Services**, run on a server: `acp-server` (the control plane) and `acp-gateway` (the LLM
   gateway). These are the components that should run continuously, as systemd units.
 
@@ -43,7 +44,7 @@ curl -fsSL https://acpdocs.web.app/install-server.sh | sudo sh
 This installs binaries into `/opt/acp/bin`, creates a service user, and sets up:
 
 - config in `/etc/acp` (`policy.yaml`, `server.env`, `gateway.env`, and a generated `ledger.kek`),
-- data in `/var/lib/acp` (`evidence.db`, `approvals.db`, `enroll.json`),
+- data in `/var/lib/acp` (`evidence.db`, `approvals.db`, `control.db`),
 - a systemd unit `acp-server` (started), and `acp-gateway` (started only once you set an upstream).
 
 It generates a random key-encryption key so the evidence ledger is **encrypted at rest by default**.
@@ -82,7 +83,7 @@ file is needed.
 For the human principal, point the control plane and gateway at your IdP (Entra or any OIDC):
 
 ```sh
-# in /etc/acp/server.env or on the command line
+# add these to the acp-server ExecStart: they are CLI flags, not env vars
 --entra-tenant <tenant> --entra-audience <audience>
 # or: --oidc-jwks <url> --oidc-issuer <iss> --oidc-audience <aud>
 ```
@@ -129,6 +130,11 @@ against one):
 ACP_BUDGET_PG=host=pg user=acp_app password=... dbname=acp
 ```
 
+Set `ACP_BUDGET_PG` in the environment **before running the server installer** so it is wired into the
+gateway unit's `ExecStart`. If you set it afterwards, add `--budget-pg ${ACP_BUDGET_PG}` to the
+`acp-gateway` `ExecStart` in `/etc/systemd/system/acp-gateway.service` and reload systemd. The proxy
+takes the same DSN via `--pin-pg` to share its tool-integrity pins.
+
 ### Logging
 
 Set `ACP_LOG=info` (or `debug`) and `ACP_LOG_FORMAT=json` for a log pipeline. Both are already in the
@@ -172,13 +178,13 @@ Bring the agents and providers your organisation uses under governance, from the
 
 ```sh
 # via the control plane API (what the console calls)
-curl -s -X POST http://127.0.0.1:8080/endpoints/register \
+curl -s -X POST http://127.0.0.1:8787/endpoints/register \
   -H 'content-type: application/json' \
   -d '{"endpoint":"claude.ai","disposition":"govern","reason":"sanctioned assistant"}'
-curl -s -X POST http://127.0.0.1:8080/endpoints/register \
+curl -s -X POST http://127.0.0.1:8787/endpoints/register \
   -H 'content-type: application/json' \
   -d '{"endpoint":"chatgpt.com","disposition":"block","reason":"not approved"}'
-curl -s http://127.0.0.1:8080/endpoints          # list, with provider classified
+curl -s http://127.0.0.1:8787/endpoints          # list, with provider classified
 ```
 
 The server classifies the provider (Anthropic, OpenAI, xAI, Google, Groq, ...) and records a signed
@@ -205,14 +211,14 @@ acp redteam models/injection-lr.json --min-catch 0.9
 
 # 4. Measure that nothing is acting off-ACP.
 acp coverage observed.txt governed.txt
-acp canary-egress probes.json                # exit 3 if a model/tool is reachable off-ACP
+acp canary-egress targets.txt                # exit 3 if a model/tool is reachable off-ACP
 
 # 5. A framework report graded from real records.
 acp grc-report /var/lib/acp/evidence.db
 
 # 6. The control plane is healthy.
-curl -s http://127.0.0.1:8080/healthz        # ok
-curl -s http://127.0.0.1:8080/report         # verdict and outcome tallies + coverage
+curl -s http://127.0.0.1:8787/healthz        # ok
+curl -s http://127.0.0.1:8787/report         # verdict and outcome tallies + coverage
 ```
 
 You should see the acceptance pass 10 of 10, the ledger verify, the red-team catch-rate above your

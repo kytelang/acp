@@ -15,9 +15,11 @@ The registry maps destinations (by host, SNI or path) to actions:
   content firewall and policy to the body.
 - **`DlpOnly`** applies data-boundary checks without full governance.
 
-The registry is Ed25519-signed, and the proxy verifies the signature before using it, so a tampered
-rule set is rejected. A precedence-aware least-inspection gate decides when to decrypt, so you only
-break TLS where a rule genuinely needs the body.
+The interceptor loads its rule set from a YAML file (`--rules`). You can sign a rule set with `acp
+intercept sign` for tamper-evident distribution; note that the running interceptor loads the YAML
+rules today (signature verification at load is not yet wired into the binary). A precedence-aware
+least-inspection gate decides when to decrypt, so you only break TLS where a rule genuinely needs the
+body.
 
 ## Generating a PAC file
 
@@ -25,7 +27,7 @@ Hand a proxy auto-config file to managed browsers and agents so their traffic fl
 interceptor:
 
 ```sh
-acp intercept pac --proxy 127.0.0.1:8890 > acp.pac
+acp intercept pac endpoints.yaml --proxy 127.0.0.1:8890 > acp.pac
 ```
 
 ## TLS interception on managed devices
@@ -35,7 +37,7 @@ fleet:
 
 ```sh
 acp-intercept gen-ca            # writes the ACP CA cert and key
-acp-intercept --addr 127.0.0.1:8890 --ca ca.pem --ca-key ca.key --registry endpoints.signed.json
+acp-intercept --listen 127.0.0.1:8890 --ca-cert ca.pem --ca-key ca.key --rules endpoints.yaml
 ```
 
 With a CA configured, the interceptor mints per-host leaf certificates on the fly, terminates the
@@ -52,9 +54,9 @@ You do not hand-write the registry. Discover shadow-AI endpoints, enrol disposit
 compile the enrolment into an interception registry:
 
 ```sh
-acp discover < egress.log                       # classify ungoverned AI endpoints
+acp discover egress.log                         # classify ungoverned AI endpoints
 # register endpoints from the console AI Endpoints page or POST /endpoints/register
-acp intercept from-enrollment enroll.log > endpoints.json
+acp intercept from-enrollment enroll.json > endpoints.yaml
 ```
 
 See [chapter 12](12-grc.md) for discovery and enrolment.

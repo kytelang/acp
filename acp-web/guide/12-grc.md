@@ -9,7 +9,7 @@ govern, bringing it under policy, and producing the compliance artifacts an audi
 an endpoint list, against a table of known AI hosts and MCP path hints.
 
 ```sh
-acp discover < egress.log        # list shadow-AI endpoints and their providers
+acp discover egress.log          # list shadow-AI endpoints and their providers
 ```
 
 It produces a worklist and marks scopes it did not cover, so a partial scan does not masquerade as
@@ -48,7 +48,7 @@ Two commands measure whether anything is acting off-ACP.
 
 ```sh
 acp coverage observed.txt governed.txt --require-full    # signed coverage report
-acp canary-egress probes.json                            # fails (exit 3) if a model/tool is reachable off-ACP
+acp canary-egress targets.txt                            # fails (exit 3) if a model/tool is reachable off-ACP
 ```
 
 `acp coverage` joins the observed endpoints against the governed set, lists ungoverned and leaky
