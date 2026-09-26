@@ -123,10 +123,11 @@
     .tab{display:inline-flex;align-items:center;padding:.5rem 1.3rem;border:0;background:none;color:var(--dim);cursor:pointer;font-size:.875rem;font-weight:600;border-radius:8px;transition:background .12s,color .12s,box-shadow .12s}
     .tab:hover:not(.active){color:var(--txt);background:var(--panel)}
     .tab.active{background:var(--accent);color:#fff;box-shadow:0 1px 4px rgba(79,70,229,.35)}
+    .req{color:var(--bad);font-weight:700;margin-left:.15rem}
     .modal input[type=file]{display:none}
   </style>
 </head>
-<body data-signals="{view: 'overview', endpoint: '', disposition: 'govern', appName: '', appOwner: '', agentAppId: '', agentName: '', grcKind: 'assessment', grcSubject: '', grcTitle: '', grcStatus: 'open', grcBody: '{}', modal: '', policyTab: 'deployed'}">
+<body data-signals="{view: 'overview', endpoint: '', disposition: 'govern', appName: '', appOwner: '', agentAppId: '', agentName: '', grcKind: 'assessment', grcSubject: '', grcTitle: '', grcStatus: 'open', grcBody: '{}', modal: '', policyTab: 'deployed', author: 'operator', epReason: 'sanctioned', mode: 'lockdown_all', scope: 'global', killReason: 'incident', ttl_ms: '3600000', reason: ''}">
   <div class="navbar">
     <div class="brand">
       <img class="logo" src="/varman-logo.svg" alt="Varman" />
@@ -275,7 +276,7 @@ rules:
   <div class="modal" data-show="$modal === 'app'">
     <div class="modal-h"><span>&#10133; Register a team / application</span><button class="modal-close" data-on:click="$modal = ''">&times;</button></div>
     <div class="modal-b">
-      <label class="fld">Name <input type="text" data-bind="appName" placeholder="acme-app" /></label>
+      <label class="fld">Name<span class="req">*</span> <input type="text" data-bind="appName" placeholder="acme-app" /></label>
       <label class="fld">Owner <input type="text" data-bind="appOwner" placeholder="you" /></label>
       <div class="row">
         <button class="btn primary" data-on:click="@post('/apps/register')">Register</button>
@@ -289,8 +290,8 @@ rules:
     <div class="modal-h"><span>&#10133; Register an agent</span><button class="modal-close" data-on:click="$modal = ''">&times;</button></div>
     <div class="modal-b">
       <p class="hint">An agent belongs to a team (app). Registering returns a one-time token; store it now, it is not shown again.</p>
-      <label class="fld">App ID <input type="text" data-bind="agentAppId" placeholder="app-..." /></label>
-      <label class="fld">Name <input type="text" data-bind="agentName" placeholder="coding-assistant" /></label>
+      <label class="fld">App ID<span class="req">*</span> <input type="text" data-bind="agentAppId" placeholder="app-..." /></label>
+      <label class="fld">Name<span class="req">*</span> <input type="text" data-bind="agentName" placeholder="coding-assistant" /></label>
       <div class="row">
         <button class="btn primary" data-on:click="@post('/agents/register')">Register</button>
         <button class="btn" data-on:click="$modal = ''">Close</button>
@@ -303,7 +304,7 @@ rules:
     <div class="modal-h"><span>&#10133; Register an AI endpoint</span><button class="modal-close" data-on:click="$modal = ''">&times;</button></div>
     <div class="modal-b">
       <p class="hint">An AI agent or provider (for example <span class="mono">claude.ai</span>, <span class="mono">chatgpt.com</span>, <span class="mono">api.x.ai</span>, or an MCP server URL). The provider is classified automatically. <span class="mono">govern</span> routes it through ACP; <span class="mono">block</span> quarantines it; <span class="mono">accept-risk</span> is a time-boxed exception.</p>
-      <label class="fld">Endpoint (host or URL) <input type="text" data-bind="endpoint" placeholder="claude.ai" /></label>
+      <label class="fld">Endpoint (host or URL)<span class="req">*</span> <input type="text" data-bind="endpoint" placeholder="claude.ai" /></label>
       <label class="fld">Disposition
         <select data-bind="disposition">
           <option value="govern">govern (route through ACP)</option>
@@ -311,9 +312,9 @@ rules:
           <option value="accept-risk">accept-risk (time-boxed)</option>
         </select>
       </label>
-      <label class="fld">Reason <input type="text" data-bind="reason" value="sanctioned" /></label>
+      <label class="fld">Reason <input type="text" data-bind="epReason" placeholder="why this disposition" /></label>
       <div class="row">
-        <button class="btn primary" data-on:click="@post('/endpoints/register')">Register endpoint</button>
+        <button class="btn primary" data-on:click="$reason = $epReason; @post('/endpoints/register')">Register endpoint</button>
         <button class="btn" data-on:click="$modal = ''">Close</button>
         <div class="deploystatus" id="endpointresult"></div>
       </div>
@@ -336,7 +337,7 @@ rules:
             <option value="aibom">aibom</option>
           </select>
         </label>
-        <label class="fld">Subject <input type="text" data-bind="grcSubject" placeholder="checkout-agent" /></label>
+        <label class="fld">Subject<span class="req">*</span> <input type="text" data-bind="grcSubject" placeholder="checkout-agent" /></label>
       </div>
       <label class="fld">Title <input type="text" data-bind="grcTitle" placeholder="EU AI Act tiering" /></label>
       <label class="fld">Status <input type="text" data-bind="grcStatus" value="open" /></label>
@@ -366,11 +367,11 @@ rules:
         <label class="fld">Scope <input type="text" data-bind="scope" value="global" /></label>
       </div>
       <div class="row">
-        <label class="fld">Reason <input type="text" data-bind="reason" value="incident" /></label>
+        <label class="fld">Reason <input type="text" data-bind="killReason" placeholder="incident reference" /></label>
         <label class="fld">TTL ms <input type="text" data-bind="ttl_ms" value="3600000" /></label>
       </div>
       <div class="row">
-        <button class="btn no" data-on:click="@post('/kill/engage')">Engage</button>
+        <button class="btn no" data-on:click="$reason = $killReason; @post('/kill/engage')">Engage</button>
         <button class="btn ok" data-on:click="@post('/kill/clear')">Clear</button>
         <button class="btn" data-on:click="$modal = ''">Close</button>
         <div class="deploystatus" id="killresult"></div>
