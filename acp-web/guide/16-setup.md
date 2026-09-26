@@ -264,3 +264,63 @@ policy and redeploy ([chapter 2](02-policy.md)).
 
 For component detail, follow the chapter links above. For the honest maturity picture and what is not
 yet production-hardened, see [chapter 14](14-operations.md) and [chapter 15](15-security.md).
+
+## 10. Troubleshooting and FAQ
+
+### Diagnostic commands
+
+These answer the common "is it actually working?" questions without exposing sensitive arguments.
+
+```sh
+# Prove a specific decision, redacted (no raw arguments), for a support ticket.
+acp diagnose /var/lib/acp/evidence.db <seq>
+
+# Prove the gate is live: probe calls that each declare the verdict they must produce.
+acp canary policy.yaml canaries.json          # exits non-zero (pages) on any mismatch
+
+# Prove a tool server is refusing un-proxied calls (the enforcement attestation).
+acp verify-enforcement <proxy-pubkey-hex> <x-acp-enforcement-token> [max-age-ms]
+
+# Prove the evidence is intact.
+acp verify /var/lib/acp/evidence.db
+```
+
+`acp canary` is the one to run on a schedule: a mis-loaded policy that lets a must-deny probe through is
+caught within one probe interval. `acp verify-enforcement` is what a tool-server guard uses to reject a
+call that did not come through the proxy (see [chapter 6](06-guard.md)).
+
+### Common problems
+
+- **The proxy forwards everything and warns about no policy.** You started `acp-proxy` with no
+  `--policy` or `--policy-dir`, so it is in transparent mode and governs nothing. Supply a policy file
+  or point `--policy-dir` at the signed policy store.
+- **The gateway exits immediately.** It needs `--upstream` (set `ACP_UPSTREAM` in `gateway.env`). If a
+  content-model path is configured but missing it fails closed; remove `--content-ml` or install the
+  model.
+- **`acp verify` fails.** That is the tamper-evidence working. The ledger was edited or a copy is torn.
+  Restore from a backup and re-verify (see [chapter 14](14-operations.md)).
+- **Postgres tenant isolation looks off, or the store will not initialise.** You connected as a
+  superuser or a `BYPASSRLS` role; row-level security is bypassed by such roles, so the store refuses
+  them. Connect as an ordinary application role.
+- **An agent's calls are rejected as an invalid token.** The one-time token is wrong or the agent was
+  deactivated. Re-register the agent from the console Agents page for a fresh token and update
+  `--agent-token`.
+- **A step-up never resolves.** The hold may be in the proxy's local store rather than the control
+  plane's (see [chapter 11](11-containment.md)); resolve it where the proxy keeps it, or run the proxy
+  against the control plane's approval store.
+- **A service will not start.** `journalctl -u acp-server -e` shows the structured logs; check the
+  config paths under `/etc/acp` and the data-directory permissions.
+- **A probe endpoint is missing.** `/healthz` and `/readyz` are on the control plane; the proxy and
+  interceptor do not expose them, so use their heartbeat to the control plane
+  ([chapter 14](14-operations.md)) for liveness rather than an HTTP probe.
+
+### FAQ
+
+- **Do I register agents or write policy on the workstation?** No. Registration, policy authoring and
+  the GRC records are done centrally from the console or the control-plane API; the workstation tools
+  enforce and verify. The `acp` CLI is for verification, testing and offline work.
+- **Where did the `acp approve` / `acp app` / `acp risk` commands go?** They are retired from the CLI.
+  Run one to see its console or API pointer. Management lives in the console and the control-plane API.
+- **Can an auditor check the evidence without trusting our server?** Yes. `acp verify` (or `acp-verify`)
+  and `acp verify-pack` need only the public key inside the ledger or pack, and never contact the
+  server.

@@ -123,3 +123,55 @@ building the request context or evaluating Cedar results in a deny, never an acc
 
 See [chapter 8](08-identity.md) for who is allowed to deploy a policy (the `PolicyAdmin` capability)
 and [chapter 15](15-security.md) for how the signed policy chain is verified.
+
+## Changing policy safely
+
+A policy change is a change to what your agents may do, so treat it like a code change: see the diff,
+test it, and be able to reproduce old decisions. Three tools make this safe.
+
+### See exactly which decisions a change flips
+
+`acp policy-test --diff` evaluates the same set of example calls against the old and the new policy and
+prints **only** the calls whose verdict changes, so a reviewer sees the behavioural diff, not a text
+diff:
+
+```sh
+acp policy-test --diff old.yaml new.yaml calls.jsonl
+# flip call#3 payments.charge: Allow -> StepUp
+# 1 of 42 calls change verdict
+```
+
+Each line of `calls.jsonl` is one call, `{"tool":"...","args":{...},"env":"..."}`, turned into a
+request context exactly as the proxy would build it. Run this in CI on every policy pull request and
+fail the build if the flips are not the intended ones. Plain `acp policy-test policy.yaml calls.jsonl`
+prints the verdict (and matched rule) for every call.
+
+### Reproduce a past decision
+
+`acp replay` re-evaluates a recorded decision from the ledger against a policy and tells you whether the
+verdict is reproduced or has drifted:
+
+```sh
+acp replay evidence.db <seq> policy.yaml
+# REPRODUCED: record #128 (payments.charge) re-evaluates to 'step_up', matching the ledger
+# or: DRIFT: record #128 recorded 'allow' but now evaluates to 'deny'
+```
+
+It warns if the supplied policy's hash differs from the one recorded with the decision, so you can tell
+whether a difference is because the policy changed since. This is how you answer "would this call still
+be allowed under today's policy?" from evidence, and it exits non-zero on drift.
+
+### Draft a policy from real traffic
+
+`acp learn` reads the decisions in a ledger (run the proxy in `--shadow` first to observe without
+blocking) and emits a compilable draft policy that gates the high- and medium-impact tools it saw behind
+a step-up, leaving the rest at default-allow:
+
+```sh
+acp-proxy stdio --shadow ... -- your-mcp-server   # observe real traffic first
+acp learn evidence.db > draft-policy.yaml          # a starting policy to review, not to deploy blind
+```
+
+Review the draft before enforcing it: it is a starting point derived from what actually happened, not a
+finished policy. Pair it with `acp posture` (above) to decide when coverage is high enough to move to
+default-deny.

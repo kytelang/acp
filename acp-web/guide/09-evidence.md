@@ -113,3 +113,90 @@ acp siem evidence.db --format syslog
 
 These read the real ledger records, so what your SIEM sees is exactly what was recorded, not a
 separate log that could drift.
+
+## Key custody and rotation
+
+Varman uses several keys, and they do not all rotate the same way. This section lists each one, what it
+protects, and, honestly, whether rotation is wired today or is a manual, caveated procedure. Where a
+rotation path is not yet built, that is stated plainly so you do not assume a safety net that is not
+there.
+
+### The key-encryption key (KEK)
+
+`ACP_LEDGER_KEK_FILE` (a 64-hex secret file, preferred over the inline `ACP_LEDGER_KEK`) wraps the
+per-blob keys that encrypt argument payloads at rest.
+
+**Rotation is not yet wired.** There is no re-wrap path: rotating the KEK renders every existing
+argument blob permanently unreadable, because the old blobs were wrapped under the old KEK and nothing
+re-encrypts them under the new one. Until a re-wrap tool exists, treat the KEK as long-lived. If you
+must roll it, the workable procedure is to export what you need, purge old payloads
+(`acp purge`, which keeps the signed decisions verifiable), and start encrypting new payloads under the
+new KEK, accepting that the old payloads are gone. Verification is unaffected either way, because the
+Merkle leaves commit to the record and the argument hash, not to the encrypted blob.
+
+### The ledger signing key (or HSM)
+
+The ledger signs its tree head with an Ed25519 key from a 0600 seed file (`--key`), or on a PKCS#11 HSM
+when the `ACP_PKCS11_*` environment is set. The public key is stored inside the ledger so `acp verify`
+is self-contained.
+
+The durable answer to custody here is the **HSM**: the private key never leaves the token, so there is
+no seed file to rotate or leak. Prefer the HSM over rotating a file seed. Rotating the signing key of an
+existing ledger is not a routine operation: past heads were signed with the old key, so a new ledger (or
+a new signing epoch) is the clean boundary. Plan signer changes at ledger-rollover time, not mid-stream.
+
+### The control-plane key (`--cp-key`)
+
+`--cp-key` is the key the control plane signs endpoint dispositions and GRC records with. Rolling it
+means new records are signed under the new key; records signed under the old key still need the old
+public key to verify, so retain the old public key for as long as you keep those records. There is no
+automatic re-sign of historical records on rotation. Note also that when an HSM is configured it
+currently covers only ledger-head signing, so GRC, endpoint and break-glass signing still use the
+`--cp-key` file key.
+
+### Agent tokens
+
+Agent tokens are the one credential with a clean, wired rotation path. Each agent's token is issued once
+(shown once) at registration. To rotate, **deactivate the agent and register it again** from the console
+Agents page (or `POST /agents/:id/deactivate` then `POST /agents`), which mints a fresh one-time token;
+update the proxy's `--agent-token`. There is no long-lived shared secret to leak.
+
+### The break-glass key (`--break-glass-key`)
+
+The kill-switch grant is Ed25519-signed. Pin the public key at each PEP so a tampered or unsigned grant
+is rejected. Honest caveat: signature enforcement is active only where a public key is pinned; if no key
+is pinned, a grant is accepted without a signature check. Always pin the break-glass public key in
+production. Rotating it means re-pinning the new public key at every PEP that honours the grant.
+
+### The enforcement (attestation) key
+
+The proxy signs an `x-acp-enforcement` attestation with its Ed25519 key; a tool-server guard pins the
+proxy's public key and rejects un-proxied calls (see [chapter 6](06-guard.md)). Rotating the proxy key
+means updating the pinned public key at each guard, so schedule proxy-key changes with a guard re-pin.
+
+### Enrolment and artifact signing keys
+
+Signed interception registries (`acp intercept sign --key`) and signed release artifacts
+(`acp sign-artifact`) use file-based Ed25519 keys. Rotation is manual: sign with the new key, distribute
+the new public key, and re-sign anything that must keep verifying under the new key.
+
+### JWKS / OIDC rollover
+
+Human identity is verified against your IdP's JWKS (Entra or a generic OIDC issuer). Key rollover is the
+**IdP's** job: it publishes new keys at the JWKS endpoint and Varman fetches them, so an IdP-side signing
+key rotation needs no change on the Varman side beyond the service being able to reach the JWKS URL. If
+the JWKS cannot be loaded when identity is requested, the server and proxy fail closed and refuse to
+start rather than run without verifying tokens.
+
+### Summary
+
+| Key | What it protects | Rotation today |
+| --- | --- | --- |
+| KEK (`ACP_LEDGER_KEK_FILE`) | argument payloads at rest | **not wired** (no re-wrap); treat as long-lived |
+| Ledger signing key / HSM | the signed evidence head | prefer HSM; rotate at ledger rollover, not mid-stream |
+| `--cp-key` | endpoint and GRC record signatures | manual; retain old public key for old records |
+| Agent token | agent identity | **wired**: deactivate and re-register for a fresh token |
+| Break-glass key | the kill-switch grant | re-pin the new public key at every PEP |
+| Enforcement key | proxy-to-guard attestation | re-pin the new public key at every guard |
+| Enrolment / artifact keys | signed registries and artifacts | manual: re-sign and redistribute |
+| IdP JWKS (OIDC / Entra) | human token verification | handled by the IdP; Varman refetches |

@@ -69,3 +69,69 @@ console it is a single control with a live status ([chapter 14](14-operations.md
 2. Choose a **Mode**: `lockdown_all` (deny), `disable_enforce` (observe without blocking) or `emergency_bypass` (allow held calls).
 3. Set the **Scope** (`global`, or narrow it to `agent:`, `resource:` or `tool:`), a **Reason** (an incident reference), and the **TTL ms** after which a grant auto-reverts (except `lockdown_all`, which persists until cleared).
 4. Click **Engage** to write the signed grant, or **Clear** to lift it. Engaging and clearing are gated on the `BreakGlass` capability (granted by the `BreakGlassOperator` role) and are themselves recorded in the meta-audit.
+
+## Approvals: resolving a step-up hold
+
+A `step_up` verdict is the human-in-the-loop control. Instead of allowing or denying outright, the PEP
+**holds** the call and waits for a person with the right role to approve or deny it. This section is the
+runbook for resolving a hold, and the end-to-end trace of what happens.
+
+### The end-to-end step-up flow
+
+1. **The agent makes a call that matches a `step_up` rule.** The proxy does not forward it. It opens an
+   approval keyed to `hash(session, principal, tool, arg_hash)`, so the approval is bound to the exact
+   call, and returns a JSON-RPC hold to the agent: `-32001 approval required (step-up); re-issue after
+   approval`, with the `approvalId` and a `retryAfter` hint in the error data. A hold is not a failure;
+   it is a pause.
+2. **The hold appears for a human.** A pending approval carries the presented context an approver
+   sees: the tool, its impact, and the argument hash (never the raw arguments). The default approval
+   lifetime is fifteen minutes; an unresolved hold expires and the call stays blocked.
+3. **A human approves or denies.** Approving marks the approval consumable exactly once; denying (or
+   letting it expire) turns it terminal.
+4. **The agent re-issues the identical call.** On approve, the same key consumes once and the proxy
+   forwards the call to the tool server; the decision and its approval are recorded in the ledger. On
+   deny or expiry, the agent gets a structured tool error and the call never runs. Because the key
+   includes the canonical `arg_hash`, a re-issue whose arguments differ maps to a different key and
+   cannot ride the earlier approval.
+
+### Resolving a hold from the console
+
+The console **Approvals inbox** lists the pending holds held in the control plane's approval store,
+each with its tool and presented context and an **Approve** and a **Deny** button.
+
+1. Open the console and select **Approvals** (the control plane also serves a minimal inbox at `/`).
+2. Read the presented context: tool, impact and argument hash. Use `acp diagnose <ledger.db> <seq>` if
+   you want the redacted decision bundle for the matching record (it never shows raw arguments).
+3. Click **Approve** to release the held call, or **Deny** to block it.
+
+### Resolving a hold over the API
+
+The console buttons POST to these routes; use them directly for scripting or from an incident tool:
+
+```sh
+# list pending holds
+curl -s http://<host>:8787/approvals/pending
+
+# approve or deny one, by id
+curl -X POST http://<host>:8787/approvals/<id>/approve -H "Authorization: Bearer <token>"
+curl -X POST http://<host>:8787/approvals/<id>/deny    -H "Authorization: Bearer <token>"
+```
+
+Both routes are gated on the `Approve` capability (granted by the approver role), so with RBAC enabled
+only an authorised human can resolve a hold, and the resolver is attributed on the record. The `acp
+approve` / `acp deny` / `acp approvals` CLI commands are **retired**; resolve holds from the console or
+these routes.
+
+### Where a hold lives
+
+There are two approval stores, and it matters which one a hold is in:
+
+- **Control-plane store** (`acp-server --approvals`): the holds the console inbox and the
+  `/approvals/*` routes see.
+- **Proxy-local store** (`acp-proxy --approvals`, default `<ledger>.approvals`): where a workstation
+  proxy currently keeps its own holds.
+
+Honest limitation today: a step-up raised at a workstation proxy is held in that proxy's local store,
+so it does not yet surface in the console inbox. Run the proxy against the control plane's approval
+store, or resolve workstation holds where the proxy keeps them, until the field-approval push lands.
+For the self-contained quickstart proxy this is the `<ledger>.approvals` file beside the ledger.

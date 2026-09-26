@@ -77,3 +77,47 @@ cloud-metadata targets is implemented and tested (`acp_core::egress`), and the s
 the egress canary (`acp canary-egress`). Honest status: wiring that allowlist into the interceptor's
 outbound dial path is tracked work, not yet on by default; today the canary uses it to detect a
 reachable target, and the block-at-CONNECT rules are the enforced control.
+
+## A browser extension for managed Chromium
+
+For managed browsers you can ship a small Chromium MV3 extension instead of hand-distributing a PAC.
+It installs the same proxy auto-config and, in addition, badges a tab with `ACP` when it is on a
+governed AI endpoint, so users can see the interaction is monitored:
+
+```sh
+acp intercept extension endpoints.yaml \
+  --proxy 127.0.0.1:8890 \
+  --out acp-guard-extension \
+  [--catch-all]
+```
+
+This writes `manifest.json`, `background.js` and a `README.md` into the output directory (default
+`acp-guard-extension/`). The manifest declares the `proxy`, `tabs`, `storage` and `webNavigation`
+permissions; the service worker applies the generated PAC on install and startup, and badges governed
+tabs based on the host list derived from the registry. `--catch-all` routes everything (not only the
+matched hosts) through the interceptor, the same switch as `acp intercept pac`.
+
+Load it for development from `chrome://extensions` (enable Developer mode, then Load unpacked). For a
+fleet, package it and push it with an enterprise policy (`ExtensionInstallForcelist`), and install the
+ACP CA on the device first so TLS interception works. Regenerate the extension whenever the endpoint
+registry changes so the PAC and the badge list stay in sync. This is a starting scaffold and has not
+been run-verified in a browser here; treat it as the wiring, to be validated against your managed
+browser build.
+
+## Suggesting rules from observed traffic
+
+You do not have to hand-write the registry from scratch. Point `acp intercept suggest` at a file of
+observed egress endpoints (one per line) and it classifies the shadow-AI destinations and emits a draft
+registry with a `flag-and-pass` default, ready to review before you enforce:
+
+```sh
+acp intercept suggest observed.txt                      # draft registry as YAML on stdout
+acp intercept suggest observed.txt --governed known.txt # exclude what is already governed
+acp intercept suggest observed.txt --key <32-byte-hex>  # emit a signed JSON registry instead
+```
+
+With `--governed` it drops endpoints you already cover, so the suggestion is only the newly-seen ones.
+With `--key` it prints a signed registry (the same signed form as `acp intercept sign`) for
+tamper-evident distribution; without a key it prints reviewable YAML. This closes discover to enrol from
+real traffic: run `acp discover` to see what is ungoverned, then `acp intercept suggest` to turn it into
+rules. See [chapter 12](12-grc.md) for discovery and enrolment.

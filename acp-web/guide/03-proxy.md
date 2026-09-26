@@ -86,3 +86,23 @@ For each tool call the proxy runs, in order:
 
 The proxy's operational logs go to stderr; stdout carries only the JSON-RPC protocol, so structured
 logging never corrupts the stream.
+
+## Running modes and their safety trade-offs
+
+Beyond the flags above, three modes change how strictly the proxy enforces. Two of them deliberately
+weaken the default guarantees, so use them knowingly.
+
+| Flag | Effect | Safety impact |
+| --- | --- | --- |
+| `--shadow` | evaluate and record every decision, but never block; the call is always forwarded | observe-only. Nothing is enforced. Use to gather real traffic before you enforce (feeds `acp learn` and `acp posture`), never as a steady state |
+| `--fail-open` | on an evidence-write failure, forward the call ungoverned instead of failing closed | **weakens the core guarantee.** By default the proxy fails **closed**: if it cannot record a decision, it does not forward. `--fail-open` drops that, so a ledger outage becomes an ungoverned window. The proxy warns loudly at startup; use only for controlled testing |
+| `--tool-hash <hex>` | verify the tool-server binary's fingerprint before launching it, and refuse to start if it does not match | strengthens supply-chain safety: a swapped tool binary is caught at launch |
+
+Two more flags wire the proxy into fleet monitoring: `--report-url <control-plane>` makes it post a
+heartbeat and non-allow events to the control plane (lighting up the console liveness and violation
+views), and `--report-token <token>` presents the shared token those routes require (see
+[chapter 14](14-operations.md)). `--otel <endpoint>` streams OTLP traces to an OpenTelemetry collector.
+
+A proxy started with no `--policy` and no `--policy-dir` runs in transparent mode: it forwards every
+`tools/call` ungoverned and warns loudly that nothing is being enforced, so an accidental ungoverned run
+is visible in the logs rather than silent.

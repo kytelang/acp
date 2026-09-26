@@ -106,3 +106,42 @@ There is also a set of governance modules that are implemented and tested but no
 running binary (high-availability leases, SCIM, dual-control, webhook signing, and others). They are
 called out as not-yet-integrated primitives rather than shipping features, so nobody mistakes one
 for the other.
+
+## Glossary
+
+A quick reference for the terms this guide coins. Each is expanded in the chapter noted.
+
+- **PEP (policy enforcement point).** A component that sits in the path of an agent action and applies
+  the policy: the MCP proxy, the LLM gateway, the interceptor and the guard.
+- **Control plane.** The central service (`acp-server`) that holds identity, endpoints, policy,
+  approvals, break-glass and the evidence API. See [chapter 14](14-operations.md).
+- **Evidence ledger.** The append-only, tamper-evident Merkle log of every decision, verifiable with a
+  public key alone. See [chapter 9](09-evidence.md).
+- **Verdict.** The policy outcome for a call: `allow`, `deny`, `step_up` (hold for a human) or `shadow`
+  (record only, do not block). See [chapter 2](02-policy.md).
+- **Obligation.** A side condition attached to an allow: `confirm` (route to step-up), `rate_limit`
+  (deny once exhausted) or `redact` (rewrite the frame). See [chapter 2](02-policy.md).
+- **Step-up.** A human-in-the-loop hold: the call pauses until an authorised person approves or denies
+  it. See [chapter 11](11-containment.md).
+- **Break-glass (kill-switch).** A signed emergency grant that overrides normal policy to lock down,
+  disable enforcement or bypass. See [chapter 11](11-containment.md).
+- **Shadow mode.** Running a PEP so it evaluates and records but never blocks, to observe real traffic
+  before enforcing. See [chapter 3](03-proxy.md).
+- **Fail-closed / fail-open.** Fail-closed (the default) refuses to forward a call it cannot record;
+  fail-open forwards ungoverned on an evidence-write failure. See [chapter 3](03-proxy.md).
+- **Trajectory governance.** Denying the action that completes a toxic combination of individually
+  allowed steps. See [chapter 11](11-containment.md).
+- **Data boundary.** Destination-aware DLP: may this class of data cross to that destination. See
+  [chapter 11](11-containment.md).
+- **Content firewall.** Argument and response scanning for injection, PII and secrets. See
+  [chapter 10](10-content-firewall.md).
+- **Endpoint registry.** The set of governed destinations the interceptor matches traffic against. See
+  [chapter 5](05-intercept.md).
+- **Tool-integrity pin (rug-pull detection).** A fingerprint of a tool definition or binary; a mismatch
+  means it changed under a live agent. See [chapter 3](03-proxy.md).
+- **Enforcement attestation.** The signed `x-acp-enforcement` token a guard checks to reject un-proxied
+  calls. See [chapter 6](06-guard.md).
+- **Coverage / posture.** Coverage is how much observed traffic a rule matches; posture is whether that
+  coverage is high enough to switch safely to default-deny. See [chapter 2](02-policy.md).
+- **Meta-audit.** The control plane's own ledger of its governance actions (policy, keys, RBAC,
+  break-glass), so the governor is itself governed. See [chapter 9](09-evidence.md).

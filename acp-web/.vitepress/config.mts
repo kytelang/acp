@@ -40,7 +40,10 @@ export default defineConfig({
       '/guide/': [
         {
           text: 'Overview',
-          items: [{ text: 'The guide', link: '/guide/' }],
+          items: [
+            { text: 'The guide', link: '/guide/' },
+            { text: '0. Quickstart', link: '/guide/00-quickstart' },
+          ],
         },
         {
           text: 'The stack',

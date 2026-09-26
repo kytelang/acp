@@ -34,6 +34,7 @@ the step-by-step runbook for both sides.
 
 | # | Chapter | Covers |
 | --- | --- | --- |
+| 0 | [Quickstart](00-quickstart.md) | one governed call in five minutes, then where to go next |
 | 1 | [Overview and architecture](01-overview.md) | what ACP is, the six-step spine, the components, where it fits, what is not built |
 | 2 | [Policy and authorization](02-policy.md) | the model-v2 DSL, subjects and objects, verdicts, obligations, Cedar, signing, default-deny |
 | 3 | [The MCP proxy](03-proxy.md) | `acp-proxy` stdio and HTTP, the enforcement pipeline, every flag |
@@ -49,6 +50,7 @@ the step-by-step runbook for both sides.
 | 13 | [Command-line tools](13-cli.md) | acp-verify and the CI/offline helpers; what moved to the console and API |
 | 14 | [Operations and deployment](14-operations.md) | the server, the console, helm, Postgres, logging, backup, production readiness |
 | 15 | [Security and verification](15-security.md) | the trust model, the threat model, how to verify the claims yourself |
+| 16 | [Setting it all up (runbook)](16-setup.md) | the end-to-end install and configuration runbook, plus the checks that prove it works |
 
 > **Version:** tracks `acp version` (Beta 0.1.0). This is a tested reference implementation; read
 > chapter 14 for the honest maturity picture.
