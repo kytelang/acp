@@ -1,5 +1,48 @@
 <script setup lang="ts">
 import { withBase } from 'vitepress'
+import { ref, computed, onMounted } from 'vue'
+
+// OS-detecting install block. The one-liners point at the scripts served from this site's public/
+// folder, so they stay correct wherever the site is deployed.
+const osTabs = [
+  { id: 'macos', label: 'macOS', note: 'Apple Silicon' },
+  { id: 'linux', label: 'Linux', note: 'x86_64 / arm64' },
+  { id: 'windows', label: 'Windows', note: 'x86_64' },
+]
+const activeOs = ref('macos')
+const copied = ref(false)
+const shUrl = ref('https://acpdocs.web.app/install.sh')
+const psUrl = ref('https://acpdocs.web.app/install.ps1')
+const srvUrl = ref('https://acpdocs.web.app/install-server.sh')
+
+const command = computed(() =>
+  activeOs.value === 'windows'
+    ? `powershell -c "irm ${psUrl.value} | iex"`
+    : `curl -fsSL ${shUrl.value} | sh`
+)
+const serverCmd = computed(() => `curl -fsSL ${srvUrl.value} | sudo sh`)
+const installDir = computed(() => (activeOs.value === 'windows' ? '%USERPROFILE%\\.acp' : '~/.acp'))
+const binDir = computed(() => (activeOs.value === 'windows' ? '.acp\\bin' : '~/.acp/bin'))
+
+function copyCommand() {
+  if (typeof navigator !== 'undefined' && navigator.clipboard) {
+    navigator.clipboard.writeText(command.value)
+    copied.value = true
+    setTimeout(() => (copied.value = false), 1500)
+  }
+}
+
+onMounted(() => {
+  if (typeof window === 'undefined') return
+  shUrl.value = window.location.origin + withBase('/install.sh')
+  psUrl.value = window.location.origin + withBase('/install.ps1')
+  srvUrl.value = window.location.origin + withBase('/install-server.sh')
+  const nav: any = navigator
+  const pf = `${nav.userAgentData?.platform || ''} ${nav.platform || ''} ${nav.userAgent || ''}`
+  if (/Win/i.test(pf)) activeOs.value = 'windows'
+  else if (/Mac|iPhone|iPad|iPod/i.test(pf)) activeOs.value = 'macos'
+  else if (/Linux|X11|Android/i.test(pf)) activeOs.value = 'linux'
+})
 
 // The landing mirrors the kaidb "ledger" idea, but for governance: Varman shown as the spine every
 // AI action passes through, each row naming what that step buys you. Here the metaphor is literal,
@@ -66,6 +109,40 @@ const chips = [
         <a class="nv-link" :href="withBase('/guide/13-cli')">The CLI</a>
       </div>
     </header>
+
+    <section class="nv-dl" aria-label="Download and install">
+      <div class="nv-dl-aside">
+        <span class="nv-eyebrow">Install</span>
+        <p class="nv-dl-note">
+          One command installs the client tools for your machine into an <code>.acp</code> folder in
+          your home directory: the <code>acp</code> CLI, the MCP proxy, the forward proxy and the
+          guard. No package manager, no system dependencies.
+        </p>
+        <div class="nv-badge-one">macOS &middot; Linux &middot; Windows</div>
+      </div>
+      <div class="nv-dl-panel">
+        <div class="nv-dl-tabs" role="tablist" aria-label="Operating system">
+          <button v-for="t in osTabs" :key="t.id" class="nv-dl-tab" :class="{ 'is-active': activeOs === t.id }"
+            role="tab" :aria-selected="activeOs === t.id" @click="activeOs = t.id">
+            <span class="nv-dl-tab-label">{{ t.label }}</span>
+            <span class="nv-dl-tab-note">{{ t.note }}</span>
+          </button>
+        </div>
+        <div class="nv-dl-cmd">
+          <code class="nv-dl-code">{{ command }}</code>
+          <button class="nv-dl-copy" type="button" @click="copyCommand">{{ copied ? 'Copied' : 'Copy' }}</button>
+        </div>
+        <p class="nv-dl-sub">
+          Installs to <code>{{ installDir }}</code>, then add <code>{{ binDir }}</code> to your PATH.
+          <a class="nv-link nv-link-azure" href="https://github.com/kytelang/acp/releases/latest">Manual downloads and checksums &rarr;</a>
+        </p>
+        <p class="nv-dl-sub">
+          Running a server? Install the control plane and gateway as systemd services on a Linux host:
+          <code class="nv-dl-code">{{ serverCmd }}</code>
+          <a class="nv-link nv-link-azure" :href="withBase('/guide/16-setup')">The full setup runbook &rarr;</a>
+        </p>
+      </div>
+    </section>
 
     <section class="nv-stack" aria-label="The governance spine">
       <div class="nv-stack-aside">

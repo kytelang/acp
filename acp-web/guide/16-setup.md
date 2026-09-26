@@ -1,0 +1,223 @@
+# 16. Setting it all up, end to end
+
+This is the runbook: install the stack, configure it, run each component, and check that you are
+getting the results you expect. It covers a workstation (a developer governing a local agent) and a
+server (the control plane and gateway running as services), and finishes with the checks that prove
+the system is working.
+
+## 0. Decide what goes where
+
+Varman has two kinds of component.
+
+- **Client tools**, run on a workstation on demand: `acp` (the CLI), `acp-proxy` (wraps a local MCP
+  server), `acp-intercept` (a forward proxy), `acp-guard` (a tool-server sidecar).
+- **Services**, run on a server: `acp-server` (the control plane) and `acp-gateway` (the LLM
+  gateway). These are the components that should run continuously, as systemd units.
+
+Install the client tools on every developer machine; install the services on one or more Linux hosts.
+
+## 1. Install on a workstation
+
+```sh
+curl -fsSL https://acpdocs.web.app/install.sh | sh          # macOS, Linux
+# Windows (PowerShell):
+powershell -c "irm https://acpdocs.web.app/install.ps1 | iex"
+```
+
+This installs the client binaries into `~/.acp/bin` (or `%USERPROFILE%\.acp\bin`) and adds it to your
+PATH. Open a new terminal and check:
+
+```sh
+acp version
+acp init acp-demo        # writes a starter policy and prints the next commands
+```
+
+The installer refuses to run under `sudo`: it installs into your home directory, not system-wide.
+
+## 2. Install the services on a server
+
+On a Linux host with systemd:
+
+```sh
+curl -fsSL https://acpdocs.web.app/install-server.sh | sudo sh
+```
+
+This installs binaries into `/opt/acp/bin`, creates a service user, and sets up:
+
+- config in `/etc/acp` (`policy.yaml`, `server.env`, `gateway.env`, and a generated `ledger.kek`),
+- data in `/var/lib/acp` (`evidence.db`, `approvals.db`, `enroll.json`),
+- a systemd unit `acp-server` (started), and `acp-gateway` (started only once you set an upstream).
+
+It generates a random key-encryption key so the evidence ledger is **encrypted at rest by default**.
+Keep `/etc/acp/ledger.kek` safe: losing it makes recorded argument payloads unreadable.
+
+Enable the gateway once you have a model provider to broker:
+
+```sh
+sudo sed -i 's#^ACP_UPSTREAM=.*#ACP_UPSTREAM=https://api.anthropic.com#' /etc/acp/gateway.env
+sudo systemctl enable --now acp-gateway
+systemctl status acp-server acp-gateway
+```
+
+## 3. Configure
+
+### Policy
+
+Edit `/etc/acp/policy.yaml` (or your workstation policy). See [chapter 2](02-policy.md) for the full
+DSL. Start in observe mode (`default: allow`) and move to `default: deny` once coverage is proven
+(step 7).
+
+### Identity
+
+Register applications and agents ([chapter 8](08-identity.md)):
+
+```sh
+acp app register /var/lib/acp/registry.json acme-app you
+acp agent register /var/lib/acp/registry.json <app-id> coding-assistant   # prints a one-time token
+```
+
+For the human principal, point the control plane and gateway at your IdP (Entra or any OIDC):
+
+```sh
+# in /etc/acp/server.env or on the command line
+--entra-tenant <tenant> --entra-audience <audience>
+# or: --oidc-jwks <url> --oidc-issuer <iss> --oidc-audience <aud>
+```
+
+### Evidence at rest and key custody
+
+At-rest encryption is on by default on the server (the generated `ledger.kek`, referenced by
+`ACP_LEDGER_KEK_FILE`). To sign evidence on an HSM instead of a file key, add the PKCS#11 environment
+to `server.env` ([chapter 9](09-evidence.md)):
+
+```sh
+ACP_PKCS11_MODULE=/usr/lib/softhsm/libsofthsm2.so
+ACP_PKCS11_SLOT=<slot>
+ACP_PKCS11_PIN=<pin>
+ACP_PKCS11_LABEL=acp
+```
+
+### Shared state for more than one replica
+
+Point the gateway and proxy at Postgres so replicas share one budget and pin set. Connect as a
+**non-superuser** role (superusers bypass row-level security, and the store refuses to initialise
+against one):
+
+```sh
+# gateway.env
+ACP_BUDGET_PG=host=pg user=acp_app password=... dbname=acp
+```
+
+### Logging
+
+Set `ACP_LOG=info` (or `debug`) and `ACP_LOG_FORMAT=json` for a log pipeline. Both are already in the
+generated env files.
+
+## 4. Run the enforcement points
+
+### Govern a local MCP server (workstation)
+
+```sh
+acp-proxy stdio \
+  --policy acp-demo/policy.yaml --ledger acp-demo/ledger.db --key acp-demo/signing.key \
+  --registry /var/lib/acp/registry.json --agent-id <agt-id> --agent-token <token> \
+  --content-firewall --trajectory acp-demo/trajectory.yaml \
+  -- your-mcp-server --its --args
+```
+
+### Govern model calls (server)
+
+The gateway runs as a service once configured (step 2). Point your application's model base URL at
+`http://<host>:8799`. See [chapter 4](04-gateway.md).
+
+### The other points
+
+`acp-guard` in front of a tool server ([chapter 6](06-guard.md)), `acp-intercept` as a forward proxy
+([chapter 5](05-intercept.md)), and `acp native-compile` for coding agents ([chapter 7](07-native-compile.md)).
+
+## 5. The web console
+
+Run the console pointed at the control plane to get a dashboard, approvals, policy deploy, the
+kill-switch, the integrity view, and the AI-endpoints page ([chapter 14](14-operations.md)):
+
+```sh
+cd acp-console && kyte build && ./build/debug/bin/acp-console   # http://127.0.0.1:8080
+```
+
+## 6. Register your AI endpoints
+
+Bring the agents and providers your organisation uses under governance, from the console's
+**AI Endpoints** page or the CLI ([chapter 12](12-grc.md)):
+
+```sh
+# via the control plane API (what the console calls)
+curl -s -X POST http://127.0.0.1:8080/endpoints/register \
+  -H 'content-type: application/json' \
+  -d '{"endpoint":"claude.ai","disposition":"govern","reason":"sanctioned assistant"}'
+curl -s -X POST http://127.0.0.1:8080/endpoints/register \
+  -H 'content-type: application/json' \
+  -d '{"endpoint":"chatgpt.com","disposition":"block","reason":"not approved"}'
+curl -s http://127.0.0.1:8080/endpoints          # list, with provider classified
+```
+
+The server classifies the provider (Anthropic, OpenAI, xAI, Google, Groq, ...) and records a signed
+disposition. `govern` counts it as governed, `block` quarantines it, `accept-risk` is a time-boxed
+exception.
+
+## 7. Check you are getting the expected results
+
+This is how you prove the system works, not just that it started.
+
+```sh
+# 1. End-to-end acceptance: identity, decision, approval, execution, evidence, verification, plus
+#    fail-closed checks (a tampered ledger fails, an invalid token is rejected).
+bash demo/vertical/run.sh          # expect: 10/10 PASS
+
+# 2. Verify the evidence ledger independently, with the public key alone.
+acp verify /var/lib/acp/evidence.db          # expect: verifies
+acp export /var/lib/acp/evidence.db > pack.json && acp verify-pack pack.json
+
+# 3. Prove the content firewall on an obfuscation corpus.
+acp redteam models/injection-lr.json --min-catch 0.9
+
+# 4. Measure that nothing is acting off-ACP.
+acp coverage observed.txt governed.txt
+acp canary-egress probes.json                # exit 3 if a model/tool is reachable off-ACP
+
+# 5. A framework report graded from real records.
+acp grc-report /var/lib/acp/evidence.db
+
+# 6. The control plane is healthy.
+curl -s http://127.0.0.1:8080/healthz        # ok
+curl -s http://127.0.0.1:8080/report         # verdict and outcome tallies + coverage
+```
+
+You should see the acceptance pass 10 of 10, the ledger verify, the red-team catch-rate above your
+threshold with no false positives, and the report reflect the decisions your agents actually made.
+
+## 8. Move to default-deny
+
+Once real traffic has flowed, check whether it is safe to flip the policy default:
+
+```sh
+acp posture /var/lib/acp/evidence.db --required 0.8
+```
+
+It reports the rule coverage and the exact tools that would newly block. When it says READY and you
+have added explicit allow rules for those tools, change `default: allow` to `default: deny` in your
+policy and redeploy ([chapter 2](02-policy.md)).
+
+## 9. Troubleshooting
+
+- **The gateway exits immediately.** It needs `--upstream`; set `ACP_UPSTREAM` in `gateway.env`. If a
+  content model path is configured but missing, it fails closed; remove `--content-ml` or install the
+  model at the path.
+- **`acp verify` fails after a manual edit.** That is the point: the ledger is tamper-evident. Restore
+  from a backup (`acp ledger-backup`).
+- **Tenant isolation seems off in Postgres.** Connect as a non-superuser role; superusers bypass
+  row-level security and the store refuses to initialise against one.
+- **A service will not start.** `journalctl -u acp-server -e` shows the structured logs; check the
+  config paths in `/etc/acp` and the data directory permissions.
+
+For component detail, follow the chapter links above. For the honest maturity picture and what is not
+yet production-hardened, see [chapter 14](14-operations.md) and [chapter 15](15-security.md).

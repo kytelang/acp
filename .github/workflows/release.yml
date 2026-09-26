@@ -1,0 +1,105 @@
+name: release
+
+# Build and publish the Varman (ACP) release bundles on a GitHub Release.
+#
+# One tag ships one bundle per platform: acp-<tag>-<os>-<arch>.(tar.gz|zip), containing bin/ with the
+# governance binaries (acp, acp-proxy, acp-gateway, acp-guard, acp-intercept, acp-server,
+# mock-mcp-server), the trained content model under models/, and a VERSION file. These are exactly the
+# assets the install scripts (install.sh, install-server.sh, install.ps1) fetch.
+#
+# Fires on a version tag vX.Y.Z, or manually via workflow_dispatch with a tag name.
+
+on:
+  push:
+    tags: ["v*"]
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: "Release tag to build and publish (e.g. v0.1.0)"
+        required: true
+        type: string
+
+permissions:
+  contents: write
+
+jobs:
+  build:
+    name: ${{ matrix.name }}
+    runs-on: ${{ matrix.runner }}
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - { name: macos-aarch64,  runner: macos-14,        target: aarch64-apple-darwin,      os: macos,   arch: aarch64, archive: tgz }
+          - { name: linux-x86_64,   runner: ubuntu-22.04,     target: x86_64-unknown-linux-gnu,  os: linux,   arch: x86_64,  archive: tgz }
+          - { name: linux-aarch64,  runner: ubuntu-22.04-arm, target: aarch64-unknown-linux-gnu, os: linux,   arch: aarch64, archive: tgz }
+          - { name: windows-x86_64, runner: windows-2022,     target: x86_64-pc-windows-msvc,    os: windows, arch: x86_64,  archive: zip }
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Resolve tag
+        id: tag
+        shell: bash
+        run: |
+          if [ "${{ github.event_name }}" = "workflow_dispatch" ]; then
+            echo "tag=${{ inputs.tag }}" >> "$GITHUB_OUTPUT"
+          else
+            echo "tag=${GITHUB_REF_NAME}" >> "$GITHUB_OUTPUT"
+          fi
+
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: ${{ matrix.target }}
+
+      # aws-lc-rs (used by the mTLS layer) needs nasm on Windows.
+      - name: Install nasm (Windows)
+        if: matrix.os == 'windows'
+        uses: ilammy/setup-nasm@v1
+
+      - name: Build
+        shell: bash
+        run: |
+          cargo build --release --locked --target ${{ matrix.target }} \
+            -p acp-cli -p acp-proxy -p acp-gateway -p acp-guard -p acp-intercept -p acp-server \
+            --bin mock-mcp-server
+
+      - name: Stage bundle
+        id: stage
+        shell: bash
+        run: |
+          set -eu
+          TAG="${{ steps.tag.outputs.tag }}"
+          NAME="acp-${TAG}-${{ matrix.os }}-${{ matrix.arch }}"
+          EXT=""
+          [ "${{ matrix.os }}" = "windows" ] && EXT=".exe"
+          OUT="dist/${NAME}"
+          mkdir -p "${OUT}/bin" "${OUT}/models"
+          BINDIR="target/${{ matrix.target }}/release"
+          # acp-cli installs as `acp`.
+          cp "${BINDIR}/acp-cli${EXT}" "${OUT}/bin/acp${EXT}"
+          for b in acp-proxy acp-gateway acp-guard acp-intercept acp-server mock-mcp-server; do
+            cp "${BINDIR}/${b}${EXT}" "${OUT}/bin/${b}${EXT}"
+          done
+          cp crates/acp-core/models/injection-lr.json "${OUT}/models/injection-lr.json"
+          echo "${TAG}" > "${OUT}/VERSION"
+          cd dist
+          if [ "${{ matrix.archive }}" = "zip" ]; then
+            7z a -tzip "${NAME}.zip" "${NAME}" >/dev/null
+            ASSET="${NAME}.zip"
+          else
+            tar -czf "${NAME}.tar.gz" "${NAME}"
+            ASSET="${NAME}.tar.gz"
+          fi
+          # checksum sidecar (the install scripts verify it)
+          if command -v sha256sum >/dev/null 2>&1; then sha256sum "${ASSET}" > "${ASSET}.sha256";
+          else shasum -a 256 "${ASSET}" > "${ASSET}.sha256"; fi
+          echo "asset=dist/${ASSET}" >> "$GITHUB_OUTPUT"
+          echo "sum=dist/${ASSET}.sha256" >> "$GITHUB_OUTPUT"
+
+      - name: Publish to the release
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: ${{ steps.tag.outputs.tag }}
+          files: |
+            ${{ steps.stage.outputs.asset }}
+            ${{ steps.stage.outputs.sum }}
