@@ -33,13 +33,18 @@ Liveness), B1/B2 (console agent-deactivate + GRC-status actions; configurable co
 (console in compose/helm, port 8787, guard unit, CI console build), and C (guide lifecycle content) +
 D2/D3/D6/D1 inaccuracies.
 
+ALSO DONE:
+- **E2 full evidence ingest** SHIPPED. cpstore `ingested_evidence` (dedup by decision_id); server
+  `POST /evidence/ingest` (report-token gated) signs each record with the cp-key; `GET
+  /evidence/ingested` re-verifies against the embedded pubkey; proxy `--evidence-url` pushes every
+  decision (allow + deny); console **Fleet evidence** panel. Verified end to end (verified=true).
+  This is a separate central store, NOT the server's own Merkle ledger, preserving independent
+  verifiability.
+- **demo/vertical/run.sh** ported to the control-plane API (no retired commands); 10/10 pass. Fixed a
+  real bug found doing it: acp-obs logged to stdout, corrupting the stdio proxy's JSON-RPC channel;
+  logs now go to stderr.
+
 REMAINING (deferred, with rationale):
-- **E2 full evidence ingest** into a verifiable central Timeline. E1 already centralises the
-  decision/violation feed from every PEP (shown in the console Violations panel). E2 (mirroring ALL
-  per-decision evidence into a separate, independently-verifiable central store, with signed ingest,
-  dedup by decision_id and retention) is a distinct subsystem; folding remote records into the
-  server's own Merkle ledger would break its single-writer verifiability, so E2 needs its own store
-  and is intentionally not rushed.
 - **A2** read-endpoint capability gating (Export/SeeArgs) needs a token-bearing console to avoid
   breaking the read UI when RBAC is on; documented in the guide (D6) as the current reality.
 - MED/LOW hardening items A13, A14, A16, A17, A19-A24, A25-A33 remain as tracked hardening.
