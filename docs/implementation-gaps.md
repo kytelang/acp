@@ -289,3 +289,94 @@ console has only a generic "recent evidence" list sourced from the control-plane
 
 Note: this expands the "Monitoring and alerting" guide gap (C5) — once E1/E2 land, the guide needs a
 section on how violations flow from PEP to console and what each alert means.
+
+---
+
+## F. Workstation to control-plane telemetry contract (what else PEPs should push)
+
+Section E covers the decision/violation stream. This section is the fuller inventory of signals a
+workstation PEP (acp-proxy in front of MCP servers, acp-intercept as the forward proxy) already
+computes but keeps local, and which the console needs. Each item lists what the PEP has today and the
+console view it would feed. All of these share the same missing plumbing (a signed, authenticated
+push channel, see E) so they should be designed as one reporting contract, not one-offs.
+
+Priority order below is by operator value.
+
+### F1. Step-up approvals raised in the field (HIGH, currently invisible)
+
+The proxy stores step-up **holds in a LOCAL approval store** (`--approvals`, `acp_approvals::ApprovalStore::open`,
+`crates/acp-proxy/src/main.rs:155-158`), so a hold raised at a workstation never appears in the console
+Approvals inbox and cannot be resolved from the console. The inbox (`/approvals/pending`,
+`/approvals/:id/approve|deny`) only sees holds in the server's own store. This is the highest-value
+gap after E: a governance product's approval queue must include field step-ups. Fix: the proxy
+registers each hold with the control plane and subscribes for the approve/deny decision (or the
+control plane becomes the single approval store the PEP consults). Ties to A1 (gate the approve/deny
+routes) and A9 (attribute the resolver).
+
+### F2. Tool inventory and integrity status (HIGH)
+
+Each proxy knows the MCP tool servers it fronts, the tool list it exposes, tool-binary fingerprints
+(`--tool-hash`, verified at launch, `main.rs:396-402`) and tool-integrity pins with **drift detection**
+(`ToolPins`/`PinResult`, `crates/acp-core/src/toolintegrity.rs`). None of this reaches the console.
+A pin mismatch is a supply-chain alarm (a tool definition or binary changed under a live agent) and
+belongs on the console as a first-class alert, plus a "governed tools per host, with integrity state"
+view. Today pins can be shared via `--pin-pg` (a DB) but there is no console surface.
+
+### F3. Break-glass application acknowledgement (HIGH)
+
+When the server writes a kill-switch grant, proxy and gateway apply it locally (file watcher) but send
+no acknowledgement, so the console cannot show "lockdown propagated to N of M PEPs" or which PEPs have
+not yet picked it up (or are offline). Fix: PEPs report grant receipt + applied mode/scope; console
+shows propagation status. (Also depends on A10: intercept/guard do not apply it at all yet.)
+
+### F4. PEP presence, version and config posture (HIGH)
+
+There is no inventory of which PEPs exist, their version, and their **weakened-config flags**:
+`--shadow` (enforces nothing), `--fail-open` (drops fail-closed), no policy configured (A11), no CA on
+the interceptor (body inspection off, A29). The console should list every PEP and flag risky posture,
+so an operator can see "host X is running fail-open" rather than discovering it during an incident.
+Feeds a "Fleet / enforcement points" view. Pairs with the heartbeat in E1.
+
+### F5. Policy version actually in effect (MED)
+
+Each PEP enforces some policy version (file or hot-reloaded store), but nothing reports which version
+is live per PEP, so the console cannot tell whether the fleet has converged on the deployed policy or
+some PEPs are running stale rules. Fix: include the active policy hash/version in the heartbeat;
+console shows a convergence view (deployed vs in-effect per PEP).
+
+### F6. Field-discovered / shadow-AI endpoints and coverage (MED)
+
+The interceptor sees real egress destinations. It can report **newly observed, ungoverned** endpoints
+as enrol candidates (closing discover -> enrol from live traffic instead of a manual `acp discover`
+over a log), and coverage/leak signals (traffic that reached a destination off-governance). Feeds the
+console AI Endpoints page ("discovered, not yet enrolled") and a coverage/unavoidability panel. The
+building blocks exist (`acp_core::discovery`, `EndpointRegistry::covered_set`, `covers`).
+
+### F7. Obligations and step-up outcomes (MED)
+
+Counts of redactions/masks applied (redact/DLP obligations) and step-up outcomes (approved/denied/
+expired) per agent/resource, so the console can show that obligations are actually being enforced, not
+just present in policy. The PEP applies these during dispatch; only the local ledger sees them today.
+
+### F8. Volume and rate metrics (MED)
+
+Calls per agent / tool / endpoint / verdict over time, for the overview dashboard and to feed the
+server-side spike detector (E1). The proxy has `/metrics` (Prometheus) locally but the console has no
+per-PEP volume view; a compact rollup in the heartbeat would drive the dashboard without a Prometheus
+scrape of every workstation.
+
+### F9. PEP health and enforcement errors (LOW)
+
+Upstream failures, TLS-interception failures honestly reported by the interceptor (cert pinning,
+HTTP/2 handshake), tool-launch refusals (fingerprint mismatch), and JWKS/auth load failures. These are
+logged locally; a summarised error feed on the console helps distinguish "quiet because governed" from
+"quiet because broken".
+
+### Design note
+
+F1 to F9 plus E1/E2 are one reporting contract: a signed, authenticated, batched push from each PEP to
+the control plane (idempotent by decision/hold/event id, with a local spool + retry so an outage does
+not lose data), and the PEP identified the same way enforcement already verifies it (agent token /
+pinned key / mTLS). Build the channel once; F1 (approvals) and F2 (tool integrity) are the two that
+most change what the console can do, so they are the natural first payloads after the E1 heartbeat and
+deny/fail-open events.
