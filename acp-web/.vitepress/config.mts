@@ -19,6 +19,7 @@ export default defineConfig({
   head: [
     ['link', { rel: 'icon', type: 'image/svg+xml', href: '/varman-logo.svg' }],
     ['link', { rel: 'icon', type: 'image/png', href: '/favicon.png' }],
+    ['link', { rel: 'apple-touch-icon', href: '/varman-logo.png' }],
     ['meta', { name: 'theme-color', content: '#1f6feb' }],
     ['meta', { property: 'og:title', content: 'Varman (ACP), runtime authorization and verifiable evidence for AI' }],
     ['meta', {
