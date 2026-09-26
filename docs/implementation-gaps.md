@@ -25,9 +25,26 @@ DONE and committed this session:
 - **A18** interceptor blocks SSRF to internal targets in the dial path.
 - **D2**/**D6** doc inaccuracies corrected.
 
-OPEN (larger slices, in progress): A5 (encrypt record+spool), A10 (break-glass reach to intercept/guard
-+ require signature), F1 (field approvals full loop), F2/E2 + gateway/intercept/guard producers,
-B1/B2/B4-B10 (console actions, deploy, CI), C (guide lifecycle content), and the MED/LOW A-items.
+ALSO DONE since: A5 (spool args encrypted; metadata cleartext by design, documented), A10 (break-glass
+reaches intercept + guard), F1 (field step-up approvals register with the control plane and reconcile
+back, so the console inbox resolves them), F2 (tool-integrity drift is a first-class console alert via
+the reporting channel), E1 producers extended to gateway/intercept/guard (whole-fleet Violations +
+Liveness), B1/B2 (console agent-deactivate + GRC-status actions; configurable console URL), B4-B10
+(console in compose/helm, port 8787, guard unit, CI console build), and C (guide lifecycle content) +
+D2/D3/D6/D1 inaccuracies.
+
+REMAINING (deferred, with rationale):
+- **E2 full evidence ingest** into a verifiable central Timeline. E1 already centralises the
+  decision/violation feed from every PEP (shown in the console Violations panel). E2 (mirroring ALL
+  per-decision evidence into a separate, independently-verifiable central store, with signed ingest,
+  dedup by decision_id and retention) is a distinct subsystem; folding remote records into the
+  server's own Merkle ledger would break its single-writer verifiability, so E2 needs its own store
+  and is intentionally not rushed.
+- **A2** read-endpoint capability gating (Export/SeeArgs) needs a token-bearing console to avoid
+  breaking the read UI when RBAC is on; documented in the guide (D6) as the current reality.
+- MED/LOW hardening items A13, A14, A16, A17, A19-A24, A25-A33 remain as tracked hardening.
+- `demo/vertical/run.sh` still calls retired `acp app/agent register`; the quickstart references it,
+  so the demo script needs updating to the console/API (flagged by the docs pass).
 
 ---
 
