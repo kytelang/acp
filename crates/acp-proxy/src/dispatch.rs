@@ -97,6 +97,8 @@ pub struct Controller {
     // default. An invalid/absent token degrades to the startup principal (unattributed), never an
     // ungoverned pass.
     oidc: Mutex<Option<Oidc>>,
+    // F1: reports field-raised step-up holds to the control plane so the console inbox sees them.
+    approvals_reporter: Mutex<Option<crate::events::ApprovalReporter>>,
 }
 
 struct Oidc {
@@ -149,6 +151,7 @@ impl Controller {
             trajectory: Mutex::new(None),
             data_boundary: Mutex::new(None),
             oidc: Mutex::new(None),
+            approvals_reporter: Mutex::new(None),
         }
     }
 
@@ -201,6 +204,10 @@ impl Controller {
     /// file cannot trip or clear the switch.
     pub fn set_break_glass_key(&self, pubkey: Vec<u8>) {
         *self.bg_key.lock().unwrap() = Some(pubkey);
+    }
+
+    pub fn set_approvals_reporter(&self, r: crate::events::ApprovalReporter) {
+        *self.approvals_reporter.lock().unwrap() = Some(r);
     }
 
     /// Persist tool-integrity pins to a file so a definition swap is caught across restarts, not just
@@ -701,6 +708,15 @@ impl Controller {
                             a.impact,
                             "held",
                         );
+                        if let Some(r) = self.approvals_reporter.lock().unwrap().as_ref() {
+                            let (aid, arg_hash) = crate::approvals::approval_key(&self.session, &self.principal, &tc);
+                            r.register(serde_json::json!({
+                                "id": aid, "session": self.session, "principal": self.principal,
+                                "tool": tc.name, "arg_hash": arg_hash,
+                                "presented": {"tool": tc.name, "impact": a.impact, "arg_hash": arg_hash},
+                                "ttl_ms": crate::approvals::TTL_MS,
+                            }));
+                        }
                         return FrameAction::Reply(json);
                     }
                     Step::Denied(json) => {

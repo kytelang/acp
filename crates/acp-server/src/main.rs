@@ -303,6 +303,8 @@ async fn main() {
         .route("/", get(inbox))
         .route("/healthz", get(|| async { "ok" }))
         .route("/readyz", get(|| async { "ready" }))
+        .route("/approvals/register", post(approval_register))
+        .route("/approvals/:id/status", get(approval_status))
         .route("/approvals/:id/approve", post(approve))
         .route("/approvals/:id/deny", post(deny))
         .route("/policy/current", get(policy_current))
@@ -401,6 +403,34 @@ fn resolve(st: &AppState, id: &str, ok: bool, actor: &str) {
         if let Ok(store) = acp_approvals::ApprovalStore::open(p) {
             let _ = store.resolve(id, ok, actor, "web");
         }
+    }
+}
+
+/// F1: a PEP registers a step-up hold raised in the field, so it appears in the console Approvals
+/// inbox and can be resolved centrally. Gated by the shared report token (PEP identity). Idempotent.
+async fn approval_register(State(st): State<Arc<AppState>>, headers: HeaderMap, Json(body): Json<serde_json::Value>) -> Response {
+    if let Err(r) = authorize_report(&st, &headers) { return r; }
+    let path = match &st.approvals { Some(p) => p.clone(), None => return Json(serde_json::json!({"ok": false, "error": "no approvals store"})).into_response() };
+    let store = match acp_approvals::ApprovalStore::open(&path) { Ok(s) => s, Err(e) => return Json(serde_json::json!({"ok": false, "error": e})).into_response() };
+    let g = |k: &str| body.get(k).and_then(|v| v.as_str()).unwrap_or("").to_string();
+    let id = g("id");
+    if id.is_empty() { return Json(serde_json::json!({"ok": false, "error": "id is required"})).into_response(); }
+    let presented = body.get("presented").cloned().unwrap_or_else(|| serde_json::json!({}));
+    let ttl_ms = body.get("ttl_ms").and_then(|v| v.as_u64()).unwrap_or(15 * 60 * 1000);
+    match store.request(&id, &g("session"), &g("principal"), &g("tool"), &g("arg_hash"), &presented, ttl_ms) {
+        Ok(created) => Json(serde_json::json!({"ok": true, "id": id, "created": created})).into_response(),
+        Err(e) => Json(serde_json::json!({"ok": false, "error": e})).into_response(),
+    }
+}
+
+/// F1: the resolution state of a hold, so a PEP can poll for the console operator's decision.
+async fn approval_status(State(st): State<Arc<AppState>>, Path(id): Path<String>) -> Response {
+    let path = match &st.approvals { Some(p) => p.clone(), None => return Json(serde_json::json!({"state": "unknown"})).into_response() };
+    let store = match acp_approvals::ApprovalStore::open(&path) { Ok(s) => s, Err(_) => return Json(serde_json::json!({"state": "unknown"})).into_response() };
+    match store.get(&id) {
+        Ok(Some(v)) => Json(serde_json::json!({"state": v.state, "approver": v.approver})).into_response(),
+        Ok(None) => Json(serde_json::json!({"state": "unknown"})).into_response(),
+        Err(e) => Json(serde_json::json!({"state": "error", "error": e})).into_response(),
     }
 }
 

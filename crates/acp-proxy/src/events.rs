@@ -133,6 +133,38 @@ fn http_post_auth(endpoint: &str, body: &str, token: Option<&str>, default_port:
     Ok(())
 }
 
+/// The control-plane approval reporter (gap F1): a step-up hold raised in the field is POSTed to
+/// `<base>/approvals/register` so it appears in the console Approvals inbox and can be resolved
+/// centrally. Off the decision path (background thread); registration is idempotent server-side.
+pub struct ApprovalReporter {
+    tx: Option<Sender<Value>>,
+    handle: Option<JoinHandle<()>>,
+}
+
+impl ApprovalReporter {
+    pub fn new(base: String, token: Option<String>) -> ApprovalReporter {
+        let (tx, rx) = mpsc::channel::<Value>();
+        let base = base.trim_end_matches('/').to_string();
+        let handle = std::thread::spawn(move || {
+            for record in rx {
+                let url = format!("{base}/approvals/register");
+                let _ = http_post_auth(&url, &record.to_string(), token.as_deref(), 8787);
+            }
+        });
+        ApprovalReporter { tx: Some(tx), handle: Some(handle) }
+    }
+    pub fn register(&self, v: Value) {
+        if let Some(tx) = &self.tx { let _ = tx.send(v); }
+    }
+}
+
+impl Drop for ApprovalReporter {
+    fn drop(&mut self) {
+        self.tx.take();
+        if let Some(h) = self.handle.take() { let _ = h.join(); }
+    }
+}
+
 /// The control-plane reporting sink (gap E1/E3): each non-allow decision is posted to
 /// `POST <base>/event/<verdict>` so the console can show the violation/deny stream and the spike
 /// detector can page. Posting happens on a background thread; emit never blocks a decision.

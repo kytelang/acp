@@ -24,6 +24,13 @@ pub enum Step {
     Denied(String),
 }
 
+/// The approval id and arg-hash for a call, so the dispatch path can register a field-raised hold
+/// with the control plane using the same key `consume` will later use.
+pub fn approval_key(session: &str, principal: &str, tc: &ToolCall) -> (String, String) {
+    let arg_hash = sha256_hex(&tc.arguments);
+    (approval_id(session, principal, &tc.name, &arg_hash), arg_hash)
+}
+
 fn approval_id(session: &str, principal: &str, tool: &str, arg_hash: &str) -> String {
     sha256_hex(&json!({"s": session, "p": principal, "t": tool, "a": arg_hash}))
 }
