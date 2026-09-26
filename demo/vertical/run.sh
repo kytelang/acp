@@ -5,7 +5,7 @@
 set -uo pipefail
 ROOT="$(cd "$(dirname "$0")/../.." && pwd)"
 CLI="$ROOT/target/debug/acp-cli"
-PROXY="$ROOT/target/debug/acp-proxy"
+PROXY="$ROOT/target/debug/acp-agent"   # single workstation binary; mcp mode governs the MCP tool server
 SERVER="$ROOT/target/debug/acp-server"
 MOCK="$ROOT/target/debug/mock-mcp-server"
 W=/tmp/acp-vertical; rm -rf "$W"; mkdir -p "$W"
@@ -44,7 +44,7 @@ TOK=$(echo "$AGRESP" | python3 -c "import sys,json;print(json.load(sys.stdin).ge
 [ -n "$AID" ] && [ -n "$TOK" ] && ok "Agent identity: registered $AID via the control-plane API with a verified token" || no "agent registration"
 
 runproxy(){ # frames on stdin -> proxy stdout
-  "$PROXY" stdio --policy "$W/policy.yaml" --ledger "$LEDGER" --key "$KEY" \
+  "$PROXY" mcp stdio --policy "$W/policy.yaml" --ledger "$LEDGER" --key "$KEY" \
     --registry-url "$CP" --agent-id "$AID" --agent-token "$TOK" -- "$MOCK" 2>>"$W/proxy.err"
 }
 init(){ printf '%s\n' '{"jsonrpc":"2.0","id":1,"method":"initialize","params":{"protocolVersion":"2024-11-05","capabilities":{},"clientInfo":{"name":"t","version":"1"}}}'; printf '%s\n' '{"jsonrpc":"2.0","method":"notifications/initialized"}'; }
@@ -114,7 +114,7 @@ if "$CLI" verify "$LEDGER" >/dev/null 2>&1; then no "tampered ledger still verif
 
 # 9. FAIL-CLOSED: invalid agent token -> not verified as the agent
 BADOUT=$(printf '%s\n' '{"jsonrpc":"2.0","id":1,"method":"initialize","params":{"protocolVersion":"2024-11-05","capabilities":{},"clientInfo":{"name":"t","version":"1"}}}' | \
-  "$PROXY" stdio --policy "$W/policy.yaml" --ledger "$W/l2.db" --key "$W/k2" --registry-url "$CP" --agent-id "$AID" --agent-token deadbeef -- "$MOCK" 2>&1)
+  "$PROXY" mcp stdio --policy "$W/policy.yaml" --ledger "$W/l2.db" --key "$W/k2" --registry-url "$CP" --agent-id "$AID" --agent-token deadbeef -- "$MOCK" 2>&1)
 echo "$BADOUT" | grep -qiE 'invalid|unverified|token|refus|principal=unattributed' && ok "Fail-closed: an invalid agent token is not accepted as the agent" || no "invalid token handling"
 
 echo ""; echo "VERTICAL ACCEPTANCE: $PASS passed, $FAIL failed"

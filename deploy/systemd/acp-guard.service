@@ -16,7 +16,7 @@ Wants=network-online.target
 User=acp
 Group=acp
 EnvironmentFile=/etc/acp/guard.env
-ExecStart=/usr/local/bin/acp-guard --listen ${ACP_GUARD_LISTEN} --upstream ${ACP_GUARD_UPSTREAM} \
+ExecStart=/usr/local/bin/acp-agent guard --listen ${ACP_GUARD_LISTEN} --upstream ${ACP_GUARD_UPSTREAM} \
   --pubkey ${ACP_GUARD_PUBKEY} --ledger /var/lib/acp/guard-evidence.db
 Restart=on-failure
 RestartSec=2
