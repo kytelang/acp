@@ -206,8 +206,8 @@
             <div class="card-h"><span class="ic">&#128271;</span> Policy<span class="sub" id="policy"><span class="empty">&#8230;</span></span></div>
             <div class="card-b">
               <div class="tabs">
-                <button class="tab" data-class-active="$policyTab === 'deployed'" data-on:click="$policyTab = 'deployed'">Deployed policy</button>
-                <button class="tab" data-class-active="$policyTab === 'editor'" data-on:click="$policyTab = 'editor'">Editor</button>
+                <button class="tab active" id="poltab-deployed" onclick="acpPolTab('deployed')" data-on:click="$policyTab = 'deployed'">Deployed policy</button>
+                <button class="tab" id="poltab-editor" onclick="acpPolTab('editor')" data-on:click="$policyTab = 'editor'">Editor</button>
               </div>
               <div data-show="$policyTab === 'deployed'" style="margin-top:1rem">
                 <div id="policyrules"><p class="empty">&#8230;</p></div>
@@ -385,6 +385,11 @@ rules:
       var ic = document.getElementById('theme-ic'); if (ic) ic.innerHTML = light ? '\u263E' : '\u2600';
       try { localStorage.setItem('acp-theme', light ? 'light' : 'dark'); } catch (e) {}
       try { if (window.monaco && window.__policyEditor) monaco.editor.setTheme(light ? 'vs' : 'vs-dark'); } catch (e) {}
+    }
+    function acpPolTab(name){
+      var ids=['poltab-deployed','poltab-editor'];
+      for(var i=0;i<ids.length;i++){ var b=document.getElementById(ids[i]); if(b){ b.classList.remove('active'); } }
+      var el=document.getElementById('poltab-'+name); if(el){ el.classList.add('active'); }
     }
     (function(){ try { if (localStorage.getItem('acp-theme') === 'light') { document.body.classList.add('light'); var ic = document.getElementById('theme-ic'); if (ic) ic.innerHTML = '\u263E'; } } catch (e) {} })();
   </script>
