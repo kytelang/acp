@@ -133,6 +133,39 @@ fn http_post_auth(endpoint: &str, body: &str, token: Option<&str>, default_port:
     Ok(())
 }
 
+/// The central evidence reporter (gap E2): pushes each decision record to `<base>/evidence/ingest`
+/// so the control plane can mirror the whole fleet's decisions into a re-verifiable central store.
+/// Off the decision path (background thread); the server dedups by decision_id.
+pub struct EvidenceReporter {
+    tx: Option<Sender<Value>>,
+    handle: Option<JoinHandle<()>>,
+}
+
+impl EvidenceReporter {
+    pub fn new(base: String, pep: String, token: Option<String>) -> EvidenceReporter {
+        let (tx, rx) = mpsc::channel::<Value>();
+        let base = base.trim_end_matches('/').to_string();
+        let handle = std::thread::spawn(move || {
+            for rec in rx {
+                let envelope = json!({"pep": pep, "records": [rec]});
+                let url = format!("{base}/evidence/ingest");
+                let _ = http_post_auth(&url, &envelope.to_string(), token.as_deref(), 8787);
+            }
+        });
+        EvidenceReporter { tx: Some(tx), handle: Some(handle) }
+    }
+    pub fn push(&self, v: Value) {
+        if let Some(tx) = &self.tx { let _ = tx.send(v); }
+    }
+}
+
+impl Drop for EvidenceReporter {
+    fn drop(&mut self) {
+        self.tx.take();
+        if let Some(h) = self.handle.take() { let _ = h.join(); }
+    }
+}
+
 /// The control-plane approval reporter (gap F1): a step-up hold raised in the field is POSTed to
 /// `<base>/approvals/register` so it appears in the console Approvals inbox and can be resolved
 /// centrally. Off the decision path (background thread); registration is idempotent server-side.

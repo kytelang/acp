@@ -21,6 +21,8 @@ pub struct Evidence {
     run: String,
     counter: u64,
     hlc: Hlc,
+    // E2: optional push of each decision record to the control plane for the central fleet-evidence view.
+    reporter: Option<crate::events::EvidenceReporter>,
 }
 
 fn now_ms() -> u64 {
@@ -71,6 +73,10 @@ fn load_or_create_key(path: &str) -> Result<Box<dyn Signer + Send>, String> {
 
 impl Evidence {
     pub fn open(ledger_path: &str, key_path: &str) -> Result<Evidence, String> {
+        Self::open_with_reporter(ledger_path, key_path, None)
+    }
+
+    pub fn open_with_reporter(ledger_path: &str, key_path: &str, reporter: Option<crate::events::EvidenceReporter>) -> Result<Evidence, String> {
         let signer = load_or_create_key(key_path)?;
         let mut ledger = Ledger::open(ledger_path, signer)?;
         let spool = Spool::open_with_kek(&format!("{ledger_path}.spool"), acp_ledger::kek_from_env());
@@ -92,6 +98,7 @@ impl Evidence {
             run: run.clone(),
             counter: 0,
             hlc: Hlc::new(run),
+            reporter,
         })
     }
 
@@ -141,6 +148,9 @@ impl Evidence {
         let _ = self
             .ledger
             .append(&did, "decision", &record, Some(&tc.arguments));
+        if let Some(r) = self.reporter.as_ref() {
+            r.push(json!({"decision_id": did, "kind": "decision", "verdict": verdict_str(outcome.verdict), "record": record}));
+        }
         (did, durable)
     }
 

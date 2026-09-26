@@ -61,6 +61,8 @@ struct Opts {
     report_url: Option<String>,
     report_token: Option<String>,
     proxy_id: Option<String>,
+    approvals_url: Option<String>,
+    evidence_url: Option<String>,
 }
 
 fn parse_opts(items: &[String]) -> Result<(Opts, Vec<String>), String> {
@@ -111,6 +113,8 @@ fn parse_opts(items: &[String]) -> Result<(Opts, Vec<String>), String> {
             "--report-url" => o.report_url = it.next().cloned(),
             "--report-token" => o.report_token = it.next().cloned(),
             "--proxy-id" => o.proxy_id = it.next().cloned(),
+            "--approvals-url" => o.approvals_url = it.next().cloned(),
+            "--evidence-url" => o.evidence_url = it.next().cloned(),
             other => return Err(format!("unknown option '{other}'")),
         }
     }
@@ -155,10 +159,11 @@ async fn build_controller(o: &Opts) -> Result<Arc<Controller>, String> {
         }
     };
     let approvals_default = o.ledger.as_ref().map(|l| format!("{l}.approvals"));
+    let ev_reporter = o.evidence_url.as_ref().map(|u| events::EvidenceReporter::new(u.clone(), proxy_id(o), o.report_token.clone()));
     let evidence = match &o.ledger {
         Some(lp) => {
             let kp = o.key.clone().unwrap_or_else(|| format!("{lp}.key"));
-            let ev = evidence::Evidence::open(lp, &kp)?;
+            let ev = evidence::Evidence::open_with_reporter(lp, &kp, ev_reporter)?;
             tracing::info!("evidence ledger {lp} ({} records)", ev.size());
             Some(ev)
         }
@@ -411,6 +416,37 @@ async fn main() -> ExitCode {
                 tokio::time::sleep(std::time::Duration::from_secs(10)).await;
             }
         });
+    }
+
+    // F1: field step-up approvals. Register new holds with the control plane (console inbox sees
+    // them) and reconcile the operator's decision back into the local store so the agent's re-issue
+    // is released or blocked. The sync decide path is untouched.
+    if let Some(aurl) = opts.approvals_url.clone() {
+        let base = aurl.trim_end_matches('/').to_string();
+        controller.set_approvals_reporter(events::ApprovalReporter::new(base.clone(), opts.report_token.clone()));
+        let apath = opts.approvals.clone().or_else(|| opts.ledger.as_ref().map(|l| format!("{l}.approvals")));
+        if let Some(path) = apath {
+            let token = opts.report_token.clone();
+            tracing::info!("approval reconcile -> {base} (store {path})");
+            tokio::spawn(async move {
+                let client = reqwest::Client::new();
+                loop {
+                    tokio::time::sleep(std::time::Duration::from_secs(3)).await;
+                    let store = match acp_approvals::ApprovalStore::open(&path) { Ok(s) => s, Err(_) => continue };
+                    let pending = match store.list_pending() { Ok(p) => p, Err(_) => continue };
+                    for v in pending {
+                        let url = format!("{base}/approvals/{}/status", v.id);
+                        let mut req = client.get(&url);
+                        if let Some(t) = &token { req = req.bearer_auth(t); }
+                        let state = match req.send().await { Ok(r) => r.json::<serde_json::Value>().await.ok(), Err(_) => None };
+                        let stt = state.as_ref().and_then(|j| j.get("state")).and_then(|x| x.as_str()).unwrap_or("");
+                        let approver = state.as_ref().and_then(|j| j.get("approver")).and_then(|x| x.as_str()).unwrap_or("console");
+                        if stt == "approved" { let _ = store.resolve(&v.id, true, approver, "console"); }
+                        else if stt == "denied" { let _ = store.resolve(&v.id, false, approver, "console"); }
+                    }
+                }
+            });
+        }
     }
 
     // Per-request human identity (phase B): verify each request's bearer against the org IdP and

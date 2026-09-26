@@ -230,6 +230,30 @@ pub fn evidencePanel(rows: list.List<EvidenceRow>): Html {
     </div>;
 }
 
+pub fn fleetEvidencePanel(rows: list.List<IngestedRow>): Html {
+    return <div id="fleetevidence">
+        {if (rows.size() == 0) {
+            <p class="empty">No fleet evidence yet. PEPs stream signed decision records to the control plane here.</p>
+        } else {
+            <table class="tbl">
+                <thead><tr><th>PEP</th><th>Tool</th><th>Verdict</th><th>Signed</th><th>Decision ID</th></tr></thead>
+                <tbody>
+                    {for (i in 0..rows.size()) {
+                        let r = rows.get(i) ?? IngestedRow("", "", "", false, "");
+                        <tr>
+                            <td class="mono dim">{r.pep}</td>
+                            <td class="strong">{r.tool}</td>
+                            <td>{verdictBadge(r.verdict)}</td>
+                            <td>{if (r.verified) { <span class="badge ok">verified</span> } else { <span class="badge bad">unverified</span> }}</td>
+                            <td class="mono dim">{r.id}</td>
+                        </tr>
+                    }}
+                </tbody>
+            </table>
+        }}
+    </div>;
+}
+
 pub fn violationsPanel(rows: list.List<EventRow>): Html {
     return <div id="violations">
         {if (rows.size() == 0) {

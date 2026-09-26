@@ -42,6 +42,19 @@ pub struct Endpoint {
 }
 
 #[derive(Debug, Clone, Serialize)]
+pub struct IngestedRecord {
+    pub decision_id: String,
+    pub pep: String,
+    pub kind: String,
+    pub verdict: String,
+    pub record: String,
+    pub operator: String,
+    pub created_ms: i64,
+    pub pubkey_hex: String,
+    pub sig_hex: String,
+}
+
+#[derive(Debug, Clone, Serialize)]
 pub struct GrcRecord {
     pub id: String,
     pub kind: String,
@@ -102,6 +115,7 @@ impl ControlStore {
             "CREATE TABLE IF NOT EXISTS agents (id VARCHAR(255) PRIMARY KEY, app_id TEXT NOT NULL, name TEXT NOT NULL, token_sha256 TEXT NOT NULL, active INTEGER NOT NULL, created_ms BIGINT NOT NULL)",
             "CREATE TABLE IF NOT EXISTS endpoints (endpoint VARCHAR(255) PRIMARY KEY, kind TEXT NOT NULL, provider TEXT NOT NULL, disposition TEXT NOT NULL, operator TEXT NOT NULL, reason TEXT NOT NULL, decided_ms BIGINT NOT NULL, expires_ms BIGINT NOT NULL, pubkey_hex TEXT NOT NULL, sig_hex TEXT NOT NULL)",
             "CREATE TABLE IF NOT EXISTS grc_records (id VARCHAR(255) PRIMARY KEY, kind TEXT NOT NULL, subject TEXT NOT NULL, title TEXT NOT NULL, status TEXT NOT NULL, body TEXT NOT NULL, operator TEXT NOT NULL, created_ms BIGINT NOT NULL, pubkey_hex TEXT NOT NULL, sig_hex TEXT NOT NULL)",
+            "CREATE TABLE IF NOT EXISTS ingested_evidence (decision_id VARCHAR(255) PRIMARY KEY, pep TEXT NOT NULL, kind TEXT NOT NULL, verdict TEXT NOT NULL, record TEXT NOT NULL, operator TEXT NOT NULL, created_ms BIGINT NOT NULL, pubkey_hex TEXT NOT NULL, sig_hex TEXT NOT NULL)",
         ] {
             sqlx::query(ddl).execute(&self.pool).await.map_err(|e| e.to_string())?;
         }
@@ -275,6 +289,28 @@ impl ControlStore {
         let sql = self.ph("UPDATE grc_records SET status = ? WHERE id = ?");
         sqlx::query(&sql).bind(status).bind(id).execute(&self.pool).await.map_err(|e| e.to_string())?;
         Ok(())
+    }
+
+    /// E2: append a PEP-reported decision record to the central ingested-evidence store, signed by
+    /// the control plane and deduped by decision_id (idempotent across retries/replays).
+    #[allow(clippy::too_many_arguments)]
+    pub async fn add_ingested(&self, decision_id: &str, pep: &str, kind: &str, verdict: &str, record: &str, operator: &str, created_ms: i64, pubkey_hex: &str, sig_hex: &str) -> Result<bool, String> {
+        let sql = self.ph("INSERT OR IGNORE INTO ingested_evidence(decision_id,pep,kind,verdict,record,operator,created_ms,pubkey_hex,sig_hex) VALUES(?,?,?,?,?,?,?,?,?)");
+        let r = sqlx::query(&sql)
+            .bind(decision_id).bind(pep).bind(kind).bind(verdict).bind(record).bind(operator).bind(created_ms).bind(pubkey_hex).bind(sig_hex)
+            .execute(&self.pool).await.map_err(|e| e.to_string())?;
+        Ok(r.rows_affected() == 1)
+    }
+
+    /// E2: most recent ingested decisions, newest first, for the console Fleet evidence view.
+    pub async fn list_ingested(&self, limit: i64) -> Result<Vec<IngestedRecord>, String> {
+        let sql = self.ph("SELECT decision_id,pep,kind,verdict,record,operator,created_ms,pubkey_hex,sig_hex FROM ingested_evidence ORDER BY created_ms DESC LIMIT ?");
+        let rows = sqlx::query(&sql).bind(limit).fetch_all(&self.pool).await.map_err(|e| e.to_string())?;
+        Ok(rows.iter().map(|r| IngestedRecord {
+            decision_id: r.get("decision_id"), pep: r.get("pep"), kind: r.get("kind"), verdict: r.get("verdict"),
+            record: r.get("record"), operator: r.get("operator"), created_ms: r.get("created_ms"),
+            pubkey_hex: r.get("pubkey_hex"), sig_hex: r.get("sig_hex"),
+        }).collect())
     }
 
     /// Fetch a single GRC record by id (for re-signing on a status change).

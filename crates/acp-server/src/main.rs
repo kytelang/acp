@@ -316,6 +316,8 @@ async fn main() {
         .route("/event/:kind", post(record_event))
         .route("/alerts", get(alerts))
         .route("/events/recent", get(events_recent))
+        .route("/evidence/ingest", post(evidence_ingest))
+        .route("/evidence/ingested", get(evidence_ingested))
         .route("/admin/meta", post(record_meta))
         .route("/meta-audit", get(meta_audit))
         .route("/timeline", get(timeline))
@@ -1334,6 +1336,58 @@ async fn events_recent(State(st): State<Arc<AppState>>) -> impl IntoResponse {
     let buf = st.events.lock().unwrap();
     let out: Vec<serde_json::Value> = buf.iter().take(200).cloned().collect();
     Json(serde_json::json!({"events": out, "count": out.len()}))
+}
+
+/// E2: ingest PEP-reported decision records into the central, re-verifiable evidence store. The PEP is
+/// authenticated by the shared report token; the control plane signs each record with its cp-key so
+/// the central store is itself verifiable with the cp public key. Deduped by decision_id (idempotent).
+async fn evidence_ingest(State(st): State<Arc<AppState>>, headers: HeaderMap, Json(body): Json<serde_json::Value>) -> Response {
+    if let Err(r) = authorize_report(&st, &headers) { return r; }
+    let store = match &st.store { Some(s) => s, None => return Json(serde_json::json!({"ok": false, "error": "no --store configured"})).into_response() };
+    let pep = body.get("pep").and_then(|v| v.as_str()).unwrap_or("pep").to_string();
+    let recs: Vec<serde_json::Value> = match body.get("records").and_then(|v| v.as_array()) {
+        Some(a) => a.clone(),
+        None => vec![body.clone()],
+    };
+    let signer = enroll_signer(&st.cp_key);
+    let pubkey_hex = hex::encode(acp_core::sign::Signer::public_key(&signer));
+    let now = now_ms();
+    let mut count = 0usize;
+    for r in recs {
+        let did = r.get("decision_id").and_then(|v| v.as_str()).unwrap_or("");
+        if did.is_empty() { continue; }
+        let kind = r.get("kind").and_then(|v| v.as_str()).unwrap_or("decision");
+        let verdict = r.get("verdict").and_then(|v| v.as_str()).unwrap_or("");
+        let record = r.get("record").cloned().unwrap_or_else(|| serde_json::json!({}));
+        let sig = acp_core::sign::Signer::sign(&signer, &acp_core::canonical::canonical_bytes(&record));
+        let sig_hex = hex::encode(sig);
+        if let Ok(true) = store.add_ingested(did, &pep, kind, verdict, &record.to_string(), "control-plane", now as i64, &pubkey_hex, &sig_hex).await {
+            count += 1;
+        }
+    }
+    Json(serde_json::json!({"ok": true, "ingested": count})).into_response()
+}
+
+/// E2: the central fleet-evidence view, newest first, each re-verified against its embedded public key
+/// (so the console shows a checked "verified" state, not an asserted one).
+async fn evidence_ingested(State(st): State<Arc<AppState>>) -> Response {
+    let store = match &st.store { Some(s) => s, None => return Json(serde_json::json!({"records": []})).into_response() };
+    match store.list_ingested(200).await {
+        Ok(recs) => {
+            let out: Vec<serde_json::Value> = recs.iter().map(|r| {
+                let verified = serde_json::from_str::<serde_json::Value>(&r.record).ok()
+                    .and_then(|doc| hex::decode(&r.pubkey_hex).ok().zip(hex::decode(&r.sig_hex).ok())
+                        .map(|(pk, sig)| acp_core::sign::verify_ed25519(&pk, &acp_core::canonical::canonical_bytes(&doc), &sig)))
+                    .unwrap_or(false);
+                serde_json::json!({
+                    "decision_id": r.decision_id, "pep": r.pep, "kind": r.kind, "verdict": r.verdict,
+                    "record": r.record, "created_ms": r.created_ms, "verified": verified,
+                })
+            }).collect();
+            Json(serde_json::json!({"records": out, "count": out.len()})).into_response()
+        }
+        Err(e) => Json(serde_json::json!({"records": [], "error": e})).into_response(),
+    }
 }
 
 /// B3: which event kinds are currently spiking (over threshold in the window). A fail-open surge

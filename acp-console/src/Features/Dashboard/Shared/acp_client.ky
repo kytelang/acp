@@ -80,6 +80,17 @@ pub struct ApprovalRow {
     init(id: string, tool: string) { self.id = id; self.tool = tool; }
 }
 
+pub struct IngestedRow {
+    pub pep: string,
+    pub verdict: string,
+    pub tool: string,
+    pub verified: bool,
+    pub id: string,
+    init(pep: string, verdict: string, tool: string, verified: bool, id: string) {
+        self.pep = pep; self.verdict = verdict; self.tool = tool; self.verified = verified; self.id = id;
+    }
+}
+
 pub struct EventRow {
     pub proxy: string,
     pub agent: string,
@@ -320,6 +331,31 @@ pub struct AcpClient {
                 json.asString(json.get(item, "rule_id")) ?? "-",
                 json.asString(json.get(item, "impact")) ?? "-",
                 json.asString(json.get(item, "outcome")) ?? "-"));
+            i = i + 1;
+        }
+        return rows;
+    }
+
+    // E2: central fleet-evidence, PEP decision records mirrored and re-verified by the control plane.
+    pub fn ingestedRows(self: AcpClient): list.List<IngestedRow> {
+        let rows = list.List<IngestedRow>();
+        let resp = client.Http.get(self.base + "/evidence/ingested");
+        if (resp.status.toCode() != 200) { return rows; }
+        let ev = json.get(json.parse(resp.body), "records");
+        let arr = json.asArray(ev);
+        if (arr == undefined) { return rows; }
+        let i = 0;
+        while (i < arr.size()) {
+            let item = json.at(ev, i);
+            let recS = json.asString(json.get(item, "record")) ?? "{}";
+            let recV = json.parse(recS);
+            let tool = json.asString(json.get(recV, "tool")) ?? "-";
+            rows.push(IngestedRow(
+                json.asString(json.get(item, "pep")) ?? "-",
+                json.asString(json.get(item, "verdict")) ?? "?",
+                tool,
+                json.asBool(json.get(item, "verified")) ?? false,
+                json.asString(json.get(item, "decision_id")) ?? ""));
             i = i + 1;
         }
         return rows;
