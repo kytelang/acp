@@ -38,7 +38,11 @@ they can check it themselves.
 ## Encryption at rest
 
 The sensitive part of a record is the argument payload. Set a key-encryption key and those payloads
-are stored as AES-256-GCM envelopes (a fresh per-blob key wrapped by your KEK, bound to the record):
+are stored as AES-256-GCM envelopes (a fresh per-blob key wrapped by your KEK, bound to the record),
+both in the ledger and in the crash-safe spool (the pre-drain buffer). The decision metadata itself
+(principal, agent, tool, resource, verdict) is stored in cleartext by design: the Merkle log must be
+verifiable by anyone holding only the public key, with no KEK, so metadata cannot be encrypted without
+breaking independent verification. Keep sensitive data in arguments, not in resource or tool names.
 
 ```sh
 export ACP_LEDGER_KEK_FILE=/etc/acp/kek        # 64 hex chars in a mounted secret file (preferred)

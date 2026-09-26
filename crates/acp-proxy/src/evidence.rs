@@ -73,7 +73,7 @@ impl Evidence {
     pub fn open(ledger_path: &str, key_path: &str) -> Result<Evidence, String> {
         let signer = load_or_create_key(key_path)?;
         let mut ledger = Ledger::open(ledger_path, signer)?;
-        let spool = Spool::open(&format!("{ledger_path}.spool"));
+        let spool = Spool::open_with_kek(&format!("{ledger_path}.spool"), acp_ledger::kek_from_env());
         let report = spool.drain_into(&mut ledger).map_err(|e| e.to_string())?;
         if report.ingested > 0 {
             tracing::info!("replayed {} spooled records", report.ingested);
