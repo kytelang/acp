@@ -29,6 +29,8 @@ struct AppState {
     registry: Option<String>,
     policy_store: Option<String>,
     enrollment: Option<String>,
+    store: Option<std::sync::Arc<acp_cpstore::ControlStore>>,
+    cp_key: String,
     break_glass_file: Option<String>,
     break_glass_seed: Option<[u8; 32]>,
     auth: Option<Auth>,
@@ -82,6 +84,8 @@ async fn main() {
     let mut policy_store: Option<String> = None;
     let mut break_glass_file: Option<String> = None;
     let mut enrollment: Option<String> = None;
+    let mut store_url: Option<String> = None;
+    let mut cp_key = "acp-cp.key".to_string();
     let mut tls_ca: Option<String> = None;
     let mut tls_cert: Option<String> = None;
     let mut tls_key: Option<String> = None;
@@ -103,6 +107,8 @@ async fn main() {
             "--registry" => registry = it.next().cloned(),
             "--policy-store" => policy_store = it.next().cloned(),
             "--enrollment" => enrollment = it.next().cloned(),
+            "--store" => store_url = it.next().cloned(),
+            "--cp-key" => { if let Some(v) = it.next() { cp_key = v.clone(); } }
             "--oidc-jwks" => oidc_jwks = it.next().cloned(),
             "--oidc-issuer" => oidc_issuer = it.next().cloned(),
             "--oidc-audience" => oidc_audience = it.next().cloned(),
@@ -243,6 +249,21 @@ async fn main() {
             None => None,
         }
     };
+    // Config-driven control-plane store (identity, endpoints; GRC later). The backend is chosen by
+    // the --store URL (sqlite / postgres / mysql). Fail closed if it was requested but cannot connect.
+    let store = match store_url {
+        Some(u) => match acp_cpstore::ControlStore::connect(&u).await {
+            Ok(s) => {
+                tracing::info!("control-plane store connected");
+                Some(std::sync::Arc::new(s))
+            }
+            Err(e) => {
+                tracing::error!("cannot connect --store: {e}");
+                std::process::exit(1);
+            }
+        },
+        None => None,
+    };
     let state = Arc::new(AppState {
         approvals,
         policy,
@@ -253,6 +274,8 @@ async fn main() {
         registry,
         policy_store,
         enrollment,
+        store,
+        cp_key,
         break_glass_file,
         break_glass_seed,
         auth,
@@ -281,6 +304,9 @@ async fn main() {
         .route("/policy-store/deploy", post(policy_store_deploy))
         .route("/endpoints", get(endpoints_list))
         .route("/endpoints/register", post(endpoints_register))
+        .route("/apps", post(app_register))
+        .route("/agents", post(agent_register))
+        .route("/agents/:id/deactivate", post(agent_deactivate))
         .route("/approvals/pending", get(approvals_pending))
         .route("/evidence/recent", get(evidence_recent))
         .route("/break-glass", get(break_glass_status))
@@ -571,23 +597,35 @@ async fn approvals_pending(State(st): State<Arc<AppState>>) -> impl IntoResponse
 
 /// Registered apps (read-only view for the console).
 async fn apps(State(st): State<Arc<AppState>>) -> impl IntoResponse {
+    if let Some(store) = &st.store {
+        match store.list_apps().await {
+            Ok(apps) => return Json(serde_json::json!({"apps": apps})).into_response(),
+            Err(e) => return Json(serde_json::json!({"apps": [], "error": e})).into_response(),
+        }
+    }
     match st.registry.as_ref().map(|p| acp_registry::Registry::load(p)) {
         Some(Ok(reg)) => {
             let list: Vec<_> = reg.apps().into_iter().map(|a| serde_json::json!({"id":a.id,"name":a.name,"owner":a.owner})).collect();
-            Json(serde_json::json!({"apps": list}))
+            Json(serde_json::json!({"apps": list})).into_response()
         }
-        _ => Json(serde_json::json!({"apps": []})),
+        _ => Json(serde_json::json!({"apps": []})).into_response(),
     }
 }
 
 /// Registered agents (read-only).
 async fn agents(State(st): State<Arc<AppState>>) -> impl IntoResponse {
+    if let Some(store) = &st.store {
+        match store.list_agents().await {
+            Ok(agents) => return Json(serde_json::json!({"agents": agents})).into_response(),
+            Err(e) => return Json(serde_json::json!({"agents": [], "error": e})).into_response(),
+        }
+    }
     match st.registry.as_ref().map(|p| acp_registry::Registry::load(p)) {
         Some(Ok(reg)) => {
             let list: Vec<_> = reg.agents().into_iter().map(|a| serde_json::json!({"id":a.id,"name":a.name,"app_id":a.app_id,"active":a.active})).collect();
-            Json(serde_json::json!({"agents": list}))
+            Json(serde_json::json!({"agents": list})).into_response()
         }
-        _ => Json(serde_json::json!({"agents": []})),
+        _ => Json(serde_json::json!({"agents": []})).into_response(),
     }
 }
 
@@ -643,12 +681,32 @@ fn ai_kind_str(ep: &str) -> (String, String) {
 /// GET /endpoints: the latest disposition per registered AI endpoint, with the provider classified
 /// (OpenAI / Anthropic / xAI / Google / ...), for the console to list.
 async fn endpoints_list(State(st): State<Arc<AppState>>) -> impl IntoResponse {
+    // Config-driven store first (identity/endpoints in a DB). Falls back to the enrollment file.
+    if let Some(store) = &st.store {
+        let now = now_ms();
+        return match store.list_endpoints().await {
+            Ok(eps) => {
+                let out: Vec<serde_json::Value> = eps
+                    .iter()
+                    .map(|e| {
+                        let active = e.expires_ms == 0 || now < e.expires_ms as u64;
+                        serde_json::json!({
+                            "endpoint": e.endpoint, "provider": e.provider, "kind": e.kind,
+                            "disposition": e.disposition, "operator": e.operator, "reason": e.reason,
+                            "active": active, "verified": true,
+                        })
+                    })
+                    .collect();
+                Json(serde_json::json!({"configured": true, "endpoints": out})).into_response()
+            }
+            Err(e) => Json(serde_json::json!({"configured": true, "endpoints": [], "error": e})).into_response(),
+        };
+    }
     let path = match &st.enrollment {
         Some(p) => p.clone(),
         None => return Json(serde_json::json!({"configured": false, "endpoints": []})).into_response(),
     };
     let log = load_enrollment(&path);
-    // latest per endpoint (last write wins by decided_ms).
     let mut by_ep: std::collections::BTreeMap<&str, &acp_core::enrollment::EndpointDisposition> =
         std::collections::BTreeMap::new();
     for d in &log.dispositions {
@@ -667,19 +725,12 @@ async fn endpoints_list(State(st): State<Arc<AppState>>) -> impl IntoResponse {
             let (dispo, active) = match d.disposition {
                 acp_core::enrollment::Disposition::Enroll => ("govern", true),
                 acp_core::enrollment::Disposition::Quarantine => ("block", true),
-                acp_core::enrollment::Disposition::AcceptRisk { expires_ms } => {
-                    ("accept-risk", now < expires_ms)
-                }
+                acp_core::enrollment::Disposition::AcceptRisk { expires_ms } => ("accept-risk", now < expires_ms),
             };
             serde_json::json!({
-                "endpoint": d.endpoint,
-                "provider": provider,
-                "kind": d.kind,
-                "disposition": dispo,
-                "operator": d.operator,
-                "reason": d.reason,
-                "active": active,
-                "verified": d.verify(),
+                "endpoint": d.endpoint, "provider": provider, "kind": d.kind,
+                "disposition": dispo, "operator": d.operator, "reason": d.reason,
+                "active": active, "verified": d.verify(),
             })
         })
         .collect();
@@ -687,7 +738,8 @@ async fn endpoints_list(State(st): State<Arc<AppState>>) -> impl IntoResponse {
 }
 
 /// POST /endpoints/register: record a signed disposition for an AI endpoint. Body:
-/// {endpoint, disposition: govern|block|accept-risk, reason}. The provider is classified server-side.
+/// {endpoint, disposition: govern|block|accept-risk, reason}. The provider is classified server-side,
+/// and the record is stored in the control-plane DB when --store is set, else the enrollment file.
 async fn endpoints_register(
     State(st): State<Arc<AppState>>,
     headers: HeaderMap,
@@ -696,23 +748,41 @@ async fn endpoints_register(
     if let Err(r) = authorize(&st.auth, &headers, acp_auth::Capability::EditPolicy) {
         return r;
     }
-    let path = match &st.enrollment {
-        Some(p) => p.clone(),
-        None => return Json(serde_json::json!({"ok": false, "error": "no enrollment store configured (--enrollment)"})).into_response(),
-    };
     let endpoint = body.get("endpoint").and_then(|v| v.as_str()).unwrap_or("").trim().to_string();
     if endpoint.is_empty() {
         return Json(serde_json::json!({"ok": false, "error": "endpoint is required"})).into_response();
     }
     let reason = body.get("reason").and_then(|v| v.as_str()).unwrap_or("").to_string();
     let now = now_ms();
-    let disposition = match body.get("disposition").and_then(|v| v.as_str()).unwrap_or("govern") {
-        "govern" | "enroll" => acp_core::enrollment::Disposition::Enroll,
-        "block" | "quarantine" => acp_core::enrollment::Disposition::Quarantine,
-        "accept-risk" => acp_core::enrollment::Disposition::AcceptRisk { expires_ms: now + 30 * 24 * 3600 * 1000 },
-        other => return Json(serde_json::json!({"ok": false, "error": format!("unknown disposition '{other}'")})).into_response(),
-    };
+    let (disposition, dispo_str, expires): (acp_core::enrollment::Disposition, &str, i64) =
+        match body.get("disposition").and_then(|v| v.as_str()).unwrap_or("govern") {
+            "govern" | "enroll" => (acp_core::enrollment::Disposition::Enroll, "govern", 0),
+            "block" | "quarantine" => (acp_core::enrollment::Disposition::Quarantine, "block", 0),
+            "accept-risk" => {
+                let e = now + 30 * 24 * 3600 * 1000;
+                (acp_core::enrollment::Disposition::AcceptRisk { expires_ms: e }, "accept-risk", e as i64)
+            }
+            other => return Json(serde_json::json!({"ok": false, "error": format!("unknown disposition '{other}'")})).into_response(),
+        };
     let (kind, provider) = ai_kind_str(&endpoint);
+
+    if let Some(store) = &st.store {
+        let signer = enroll_signer(&st.cp_key);
+        let mut log = acp_core::enrollment::EnrollmentLog::new();
+        let d = log.record(&signer, &endpoint, &kind, disposition, "console", &reason, now).clone();
+        return match store
+            .upsert_endpoint(&endpoint, &kind, &provider, dispo_str, "console", &reason, d.decided_ms as i64, expires, &d.pubkey_hex, &d.sig_hex)
+            .await
+        {
+            Ok(()) => Json(serde_json::json!({"ok": true, "endpoint": endpoint, "provider": provider, "kind": kind})).into_response(),
+            Err(e) => Json(serde_json::json!({"ok": false, "error": e})).into_response(),
+        };
+    }
+
+    let path = match &st.enrollment {
+        Some(p) => p.clone(),
+        None => return Json(serde_json::json!({"ok": false, "error": "no store configured (--store or --enrollment)"})).into_response(),
+    };
     let mut log = load_enrollment(&path);
     let signer = enroll_signer(&path);
     log.record(&signer, &endpoint, &kind, disposition, "console", &reason, now);
@@ -727,6 +797,52 @@ async fn endpoints_register(
     Json(serde_json::json!({"ok": true, "endpoint": endpoint, "provider": provider, "kind": kind})).into_response()
 }
 
+/// Random hex, for generated ids and one-time agent tokens.
+fn rand_hex(nbytes: usize) -> String {
+    let mut b = vec![0u8; nbytes];
+    let _ = getrandom::getrandom(&mut b);
+    hex::encode(b)
+}
+
+/// POST /apps: register an application in the control-plane store. Body: {name, owner}.
+async fn app_register(State(st): State<Arc<AppState>>, headers: HeaderMap, Json(body): Json<serde_json::Value>) -> Response {
+    if let Err(r) = authorize(&st.auth, &headers, acp_auth::Capability::EditPolicy) { return r; }
+    let store = match &st.store { Some(s) => s, None => return Json(serde_json::json!({"ok": false, "error": "no --store configured"})).into_response() };
+    let name = body.get("name").and_then(|v| v.as_str()).unwrap_or("").trim().to_string();
+    if name.is_empty() { return Json(serde_json::json!({"ok": false, "error": "name is required"})).into_response(); }
+    let owner = body.get("owner").and_then(|v| v.as_str()).unwrap_or("").to_string();
+    let id = format!("app-{}", rand_hex(6));
+    match store.add_app(&id, &name, &owner, now_ms() as i64).await {
+        Ok(()) => Json(serde_json::json!({"ok": true, "id": id, "name": name})).into_response(),
+        Err(e) => Json(serde_json::json!({"ok": false, "error": e})).into_response(),
+    }
+}
+
+/// POST /agents: register an agent. Body: {app_id, name}. Returns a one-time token (stored hashed).
+async fn agent_register(State(st): State<Arc<AppState>>, headers: HeaderMap, Json(body): Json<serde_json::Value>) -> Response {
+    if let Err(r) = authorize(&st.auth, &headers, acp_auth::Capability::EditPolicy) { return r; }
+    let store = match &st.store { Some(s) => s, None => return Json(serde_json::json!({"ok": false, "error": "no --store configured"})).into_response() };
+    let app_id = body.get("app_id").and_then(|v| v.as_str()).unwrap_or("").trim().to_string();
+    let name = body.get("name").and_then(|v| v.as_str()).unwrap_or("").trim().to_string();
+    if app_id.is_empty() || name.is_empty() { return Json(serde_json::json!({"ok": false, "error": "app_id and name are required"})).into_response(); }
+    let id = format!("agt-{}", rand_hex(6));
+    let token = rand_hex(24);
+    let token_sha = acp_core::canonical::sha256_hex_bytes(token.as_bytes());
+    match store.add_agent(&id, &app_id, &name, &token_sha, now_ms() as i64).await {
+        Ok(()) => Json(serde_json::json!({"ok": true, "id": id, "token": token, "note": "store this token now; it is not shown again"})).into_response(),
+        Err(e) => Json(serde_json::json!({"ok": false, "error": e})).into_response(),
+    }
+}
+
+/// POST /agents/:id/deactivate: revoke an agent.
+async fn agent_deactivate(State(st): State<Arc<AppState>>, headers: HeaderMap, Path(id): Path<String>) -> Response {
+    if let Err(r) = authorize(&st.auth, &headers, acp_auth::Capability::EditPolicy) { return r; }
+    let store = match &st.store { Some(s) => s, None => return Json(serde_json::json!({"ok": false, "error": "no --store configured"})).into_response() };
+    match store.deactivate_agent(&id).await {
+        Ok(()) => Json(serde_json::json!({"ok": true, "id": id})).into_response(),
+        Err(e) => Json(serde_json::json!({"ok": false, "error": e})).into_response(),
+    }
+}
 fn deploy_signer(store_dir: &str) -> acp_core::sign::Ed25519Signer {
     let key_path = format!("{store_dir}/deploy.key");
     let _ = std::fs::create_dir_all(store_dir);

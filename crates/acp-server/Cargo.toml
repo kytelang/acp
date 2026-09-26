@@ -6,6 +6,8 @@ license.workspace = true
 description = "Agent Control Plane: control service - approval inbox, policy endpoint, verify, reporting."
 
 [dependencies]
+acp-cpstore = { path = "../acp-cpstore" }
+getrandom.workspace = true
 acp-hsm = { path = "../acp-hsm" }
 acp-obs = { path = "../acp-obs" }
 tracing.workspace = true
