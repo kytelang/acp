@@ -17,6 +17,8 @@ export default defineConfig({
   lastUpdated: true,
   ignoreDeadLinks: true,
   head: [
+    ['link', { rel: 'icon', type: 'image/svg+xml', href: '/varman-logo.svg' }],
+    ['link', { rel: 'icon', type: 'image/png', href: '/favicon.png' }],
     ['meta', { name: 'theme-color', content: '#1f6feb' }],
     ['meta', { property: 'og:title', content: 'Varman (ACP), runtime authorization and verifiable evidence for AI' }],
     ['meta', {
@@ -25,6 +27,7 @@ export default defineConfig({
     }],
   ],
   themeConfig: {
+    logo: '/varman-logo.svg',
     nav: [
       { text: 'Docs', link: '/guide/' },
       { text: 'Install', link: '/guide/16-setup' },

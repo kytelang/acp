@@ -3,7 +3,9 @@
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
-  <title>ACP Console</title>
+  <title>Varman Console</title>
+  <link rel="icon" type="image/svg+xml" href="/varman-logo.svg" />
+  <link rel="icon" type="image/png" href="/favicon.png" />
   <script type="module" src="https://cdn.jsdelivr.net/gh/starfederation/datastar@v1.0.0/bundles/datastar.js"></script>
   <script src="https://cdn.jsdelivr.net/npm/monaco-editor@0.52.2/min/vs/loader.js"></script>
   <style>
@@ -21,12 +23,17 @@
     body.light .sidebar,body.light .topbar{border-color:var(--line)}
     body.light .brand-t,body.light .logo{color:#fff}
     *{box-sizing:border-box}
-    body{margin:0;background:var(--bg);color:var(--txt);font:14px/1.5 -apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,sans-serif;-webkit-font-smoothing:antialiased}
+    html,body{height:100%}
+    body{margin:0;display:flex;flex-direction:column;height:100vh;overflow:hidden;background:var(--bg);color:var(--txt);font:14px/1.5 -apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,sans-serif;-webkit-font-smoothing:antialiased}
+    .navbar{flex:0 0 56px;display:flex;align-items:center;justify-content:space-between;padding:0 1.25rem;background:var(--topbar);border-bottom:1px solid var(--line);z-index:20}
+    .navbar .brand{padding:0;border:0}
+    .brand-r{display:flex;align-items:center;gap:.85rem}
+    .page-title{font-size:1.2rem;font-weight:650;margin:0 0 1.4rem}
     a{color:inherit;text-decoration:none}
-    .app{display:grid;grid-template-columns:236px 1fr;min-height:100vh}
-    .sidebar{background:var(--sidebar);border-right:1px solid var(--line);padding:1.25rem 0;position:sticky;top:0;height:100vh}
+    .app{flex:1;display:grid;grid-template-columns:236px 1fr;min-height:0}
+    .sidebar{background:var(--sidebar);border-right:1px solid var(--line);padding:1rem 0;overflow-y:auto;min-height:0}
     .brand{display:flex;align-items:center;gap:.6rem;padding:0 1.25rem 1.25rem;border-bottom:1px solid var(--line)}
-    .logo{width:34px;height:34px;border-radius:9px;background:linear-gradient(135deg,var(--accent),#8b5cf6);display:grid;place-items:center;font-weight:800;color:#fff;font-size:1rem;box-shadow:0 2px 12px rgba(99,102,241,.4)}
+    .logo{width:30px;height:30px;display:block}
     .brand-t{font-weight:700;letter-spacing:.2px} .brand-s{font-size:.7rem;color:var(--muted)}
     nav{padding:1rem .75rem;display:flex;flex-direction:column;gap:.15rem}
     .nav-l{font-size:.65rem;text-transform:uppercase;letter-spacing:.1em;color:var(--muted);padding:.75rem .75rem .35rem}
@@ -34,7 +41,7 @@
     .nav-i:hover{background:var(--panel);color:var(--txt)}
     .nav-i.active{background:var(--panel);color:var(--txt);box-shadow:inset 3px 0 0 var(--accent)}
     .nav-i .ic{width:20px;text-align:center;opacity:.9}
-    .main{display:flex;flex-direction:column;min-width:0}
+    .main{overflow-y:auto;min-height:0;min-width:0}
     .topbar{height:60px;border-bottom:1px solid var(--line);display:flex;align-items:center;justify-content:space-between;padding:0 1.75rem;background:var(--topbar);position:sticky;top:0;z-index:5}
     .topbar h1{font-size:1.05rem;font-weight:650;margin:0}
     .pill{display:flex;align-items:center;gap:.5rem;font-size:.8rem;color:var(--dim);background:var(--panel);border:1px solid var(--line);padding:.35rem .75rem;border-radius:999px}
@@ -118,12 +125,18 @@
   </style>
 </head>
 <body data-signals="{view: 'overview', endpoint: '', disposition: 'govern', appName: '', appOwner: '', agentAppId: '', agentName: '', grcKind: 'assessment', grcSubject: '', grcTitle: '', grcStatus: 'open', grcBody: '{}', modal: '', policyTab: 'deployed'}">
+  <div class="navbar">
+    <div class="brand">
+      <img class="logo" src="/varman-logo.svg" alt="Varman" />
+      <div><div class="brand-t">Varman</div><div class="brand-s">Agent Control Plane</div></div>
+    </div>
+    <div class="brand-r">
+      <button class="tbtn" onclick="acpTheme()" title="Toggle theme"><span id="theme-ic">&#9728;</span></button>
+      <div class="pill"><span class="live"></span> live</div>
+    </div>
+  </div>
   <div class="app">
     <aside class="sidebar">
-      <div class="brand">
-        <div class="logo">A</div>
-        <div><div class="brand-t">ACP</div><div class="brand-s">Agent Control Plane</div></div>
-      </div>
       <nav>
         <div class="nav-l">Governance</div>
         <div class="nav-i" data-class-active="$view === 'overview'" data-on:click="$view = 'overview'"><span class="ic">&#128202;</span> Overview</div>
@@ -146,15 +159,8 @@
     </aside>
 
     <div class="main">
-      <div class="topbar">
-        <h1 data-text="$view === 'overview' ? 'Governance overview' : $view === 'approvals' ? 'Pending approvals' : $view === 'evidence' ? 'Evidence timeline' : $view === 'apps' ? 'Teams' : $view === 'agents' ? 'Registered agents' : $view === 'policy' ? 'Policy' : $view === 'reports' ? 'Governance report' : $view === 'health' ? 'Control-plane integrity' : $view === 'endpoints' ? 'AI endpoints' : $view === 'grc' ? 'Governance records' : 'Emergency kill-switch'">Governance overview</h1>
-        <div class="tright">
-          <button class="tbtn" onclick="acpTheme()" title="Toggle theme"><span id="theme-ic">&#9728;</span></button>
-          <div class="pill"><span class="live"></span> live</div>
-        </div>
-      </div>
-
       <div class="content" data-on-intersect="@get('/sse/metrics')">
+        <h1 class="page-title" data-text="$view === 'overview' ? 'Governance overview' : $view === 'approvals' ? 'Pending approvals' : $view === 'evidence' ? 'Evidence timeline' : $view === 'apps' ? 'Teams' : $view === 'agents' ? 'Registered agents' : $view === 'policy' ? 'Policy' : $view === 'reports' ? 'Governance report' : $view === 'health' ? 'Control-plane integrity' : $view === 'endpoints' ? 'AI endpoints' : $view === 'grc' ? 'Governance records' : 'Emergency kill-switch'">Governance overview</h1>
         <section class="view" data-show="$view === 'overview'">
           <div class="card"><div class="card-h"><span class="ic">&#128202;</span> Posture &amp; activity</div>
             <div class="card-b"><div id="metrics" class="stats"><p class="empty">connecting to acp-server&#8230;</p></div></div></div>
