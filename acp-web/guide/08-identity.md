@@ -79,7 +79,11 @@ The control plane enforces RBAC with capabilities mapped from OIDC app roles:
 
 **Separation of duty** follows from this role-to-capability mapping: a `PolicyAdmin` alone cannot trip
 the kill-switch, and a `BreakGlassOperator` alone cannot deploy a policy, because those are distinct
-capabilities. Grant the roles to different people to keep the duties separate. With no auth flags the control plane runs RBAC-off for local use; if you request auth and
+capabilities. Grant the roles to different people to keep the duties separate. Enforced today at the mutating
+routes: `EditPolicy` (policy deploy, registration, GRC), `Approve` (approvals), `BreakGlass` (the
+kill-switch), and the meta-audit write. `Export` and `SeeArgs` are defined but the read/evidence
+endpoints are not yet capability-gated, so treat network reach to the control plane as read access
+until that lands. When auth is on, mutating calls need a bearer token with the right capability. With no auth flags the control plane runs RBAC-off for local use; if you request auth and
 the JWKS fails to load, the server refuses to start rather than run unprotected (fail-closed).
 
 ## mutual TLS between components

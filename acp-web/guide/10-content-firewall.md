@@ -2,8 +2,9 @@
 
 Varman ships a first-party, in-path content firewall. It is defence in depth: detection is
 best-effort, and the [authorization layer](02-policy.md) is what actually contains a successful
-attack. But a good firewall stops the easy attacks cheaply, and Varman's is a trained classifier,
-not just a regex.
+attack. But a good firewall stops the easy attacks cheaply. Varman's default (`--content-firewall`) is a
+fast signature-and-heuristics scanner; an optional trained classifier is loaded with `--content-ml`
+for higher recall.
 
 ## What it detects
 
@@ -66,8 +67,8 @@ through the content-scan hook; the lexical baseline remains the on-prem floor.
 
 ## Honest boundary
 
-The content firewall is deliberately lightweight, a trained classifier plus signatures, hardened
-against obfuscation and indirect injection. It is complete for most needs. If best-in-class ML
+The content firewall is deliberately lightweight: signatures and heuristics by default, plus an
+optional trained classifier (`--content-ml`), hardened against obfuscation and indirect injection. It is complete for most needs. If best-in-class ML
 detection against novel, evolving attacks is your single dominant risk, augment the engine with a
 specialist classifier through its hook. That is optional augmentation, not a separate product you
 must run, and it does not change the fact that the authorization layer, not the filter, is what
