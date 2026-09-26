@@ -93,6 +93,10 @@ The static control library across the three frameworks is served by the control 
 console Governance page. (These record kinds were previously separate `acp` subcommands; management now
 lives in the console and the control-plane API, so the CLI subcommands are retired.)
 
+Advancing a record's status is not API-only. Each record on the console Governance panel carries per-record
+**Review**, **Approve** and **Close** controls that POST to `POST /grc/:id/status`; the control plane
+re-signs the record on the change, so the lifecycle move is itself signed evidence, not an unsigned edit.
+
 Both kinds are useful. An auditor gets runtime proof from the ledger-backed set and documented
 governance from the signed set. Do not present the second kind as if it were the first.
 

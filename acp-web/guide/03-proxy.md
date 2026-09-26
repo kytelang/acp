@@ -75,6 +75,11 @@ For each tool call the proxy runs, in order:
 | `--tool-pins <file>` | enable tool-integrity pinning (rug-pull detection) |
 | `--pin-pg <dsn>` | share tool-integrity pins across replicas via Postgres |
 | `--enforcement-key <hex>` | stamp the enforcement attestation the guard verifies |
+| `--report-url <server>` | report a heartbeat and non-allow events to the control plane |
+| `--report-token <tok>` | the shared token the control-plane reporting routes require (`ACP_REPORT_TOKEN`) |
+| `--proxy-id <id>` | the identifier this PEP reports under (defaults to the agent id, else `proxy`) |
+| `--evidence-url <server>` | push every decision record (allow and deny) to the central fleet-evidence store |
+| `--approvals-url <server>` | register step-up holds with the control plane and reconcile the operator's decision back |
 | `--entra-tenant`, `--entra-audience` | resolve the human principal per request via Microsoft Entra |
 
 ## Environment
@@ -98,10 +103,15 @@ weaken the default guarantees, so use them knowingly.
 | `--fail-open` | on an evidence-write failure, forward the call ungoverned instead of failing closed | **weakens the core guarantee.** By default the proxy fails **closed**: if it cannot record a decision, it does not forward. `--fail-open` drops that, so a ledger outage becomes an ungoverned window. The proxy warns loudly at startup; use only for controlled testing |
 | `--tool-hash <hex>` | verify the tool-server binary's fingerprint before launching it, and refuse to start if it does not match | strengthens supply-chain safety: a swapped tool binary is caught at launch |
 
-Two more flags wire the proxy into fleet monitoring: `--report-url <control-plane>` makes it post a
-heartbeat and non-allow events to the control plane (lighting up the console liveness and violation
-views), and `--report-token <token>` presents the shared token those routes require (see
-[chapter 14](14-operations.md)). `--otel <endpoint>` streams OTLP traces to an OpenTelemetry collector.
+Several flags wire the proxy into the control plane. `--report-url <control-plane>` makes it post a
+heartbeat every ten seconds and a governance event on each non-allow decision (lighting up the console
+liveness, alerts and violation views), `--report-token <token>` presents the shared token those routes
+require, and `--proxy-id <id>` sets the name it reports under. `--evidence-url <control-plane>` pushes
+every decision record (allow and deny) to the central fleet-evidence store ([chapter 9](09-evidence.md)),
+and `--approvals-url <control-plane>` registers each step-up hold with the console approvals inbox and
+reconciles the operator's decision back to the proxy ([chapter 11](11-containment.md)). See
+[chapter 14](14-operations.md) for the monitoring surface. `--otel <endpoint>` streams OTLP traces to an
+OpenTelemetry collector.
 
 A proxy started with no `--policy` and no `--policy-dir` runs in transparent mode: it forwards every
 `tools/call` ungoverned and warns loudly that nothing is being enforced, so an accidental ungoverned run

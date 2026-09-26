@@ -46,14 +46,20 @@ from the signed evidence (so no trust lives in the UI), and **performs managemen
 control-plane API, which is where signing and every policy decision actually happen. The console holds
 no signing key.
 
-Management actions are popup forms: **Register a team / application**, **Register an agent** (which
-returns a one-time token, shown once), **Register an AI endpoint** (govern, block or accept-risk, with
-the provider classified automatically), **Create a governance record** (with a Kind selector), a
-tabbed **Policy** view with a syntax-highlighted editor and `.yaml` upload plus signed deploy, and
-**Engage or clear the kill-switch** with live status. It also gives a live governance overview with a
-verdict-distribution bar, the approvals inbox, teams and agents listings, an evidence view, an
-integrity view (ledger verify, proxy liveness, spike alerts, self-governance log), and a printable
-governance report. The console has a light and dark theme.
+Management actions are popup forms and inline controls: **Register a team / application**, **Register an
+agent** (which returns a one-time token, shown once) with a per-agent **Deactivate** action (`POST
+/agents/:id/deactivate`, which revokes the agent), **Register an AI endpoint** (govern, block or
+accept-risk, with the provider classified automatically), **Create a governance record** (with a Kind
+selector) with per-record **Review / Approve / Close** status controls (`POST /grc/:id/status`, re-signed
+server-side), a tabbed **Policy** view with a syntax-highlighted editor and `.yaml` upload plus signed
+deploy, and **Engage or clear the kill-switch** with live status. It also gives a live governance overview
+with a verdict-distribution bar, the approvals inbox, teams and agents listings, an evidence view (with a
+**Fleet evidence** panel over the central `ingested_evidence` store, each row badged verified or
+unverified), an integrity view (ledger verify, proxy **Liveness**, spike **Alerts**, a **Violations**
+feed, self-governance log), and a printable governance report. The console has a light and dark theme.
+
+The console reads its control-plane URL from `ACP_CONTROL_PLANE_URL` (default `http://127.0.0.1:8787`),
+so a compose or helm deployment can point it at the control-plane Service without a rebuild.
 
 ```sh
 # start the control plane (with a store so registration persists), then the console
@@ -78,8 +84,10 @@ than silently break isolation.
 
 ## Logging
 
-All services use structured logging. Set the level with `ACP_LOG` (or `RUST_LOG`), and switch to
-one-JSON-object-per-line for a log pipeline with `ACP_LOG_FORMAT=json`.
+All services use structured logging, and **all of them write logs to STDERR**. This is deliberate: the
+`acp-proxy` stdio transport carries the JSON-RPC protocol on STDOUT, so keeping logs off STDOUT means
+structured logging never corrupts the frame stream. Set the level with `ACP_LOG` (or `RUST_LOG`), and
+switch to one-JSON-object-per-line for a log pipeline with `ACP_LOG_FORMAT=json`.
 
 ```sh
 ACP_LOG=info ACP_LOG_FORMAT=json acp-gateway ...
@@ -188,7 +196,7 @@ usual way. For distributed tracing, the proxy can stream OTLP spans to an OpenTe
 ### The liveness dead-man's-switch
 
 A PEP that should be governing traffic but has gone silent is a governance failure, so the control plane
-watches for it. A proxy started with `--report-url <control-plane>` posts a heartbeat every ten seconds
+watches for it. A PEP started with `--report-url <control-plane>` posts a heartbeat every ten seconds
 to `POST /heartbeat/:proxy`. The control plane reports any proxy that has not been heard from inside the
 window (thirty seconds) at `GET /liveness`:
 
@@ -217,19 +225,35 @@ Each PEP reports a compact, redacted event on a non-allow decision (deny, step-u
 - **`GET /events/recent`** is the newest-first violation feed (a bounded ring) the console **Violations**
   panel renders, so an operator can see the actual deny / step-up / fail-open stream from the fleet.
 
+### The central fleet-evidence store
+
+Beyond the compact non-allow events above, a PEP started with `--evidence-url <control-plane>` pushes
+**every** decision record (allow and deny) to `POST /evidence/ingest`. The control plane signs each
+record with its `cp-key` and keeps it in a central `ingested_evidence` store, deduped by decision id.
+
+- **`GET /evidence/ingested`** returns the newest records, re-verifying each against its embedded public
+  key, which the console **Fleet evidence** panel renders with a verified or unverified badge.
+
+This central store is a convenience mirror for fleet-wide triage; it is **not** a replacement for each
+PEP's own tamper-evident Merkle ledger, which stays the authoritative, independently verifiable record
+(see [chapter 9](09-evidence.md)).
+
 ### Authenticating the reporting routes
 
-The `POST /heartbeat/:proxy` and `POST /event/:kind` routes are the ingestion side of this. Set a shared
-token so only enrolled PEPs can report: give the control plane `--report-token` (or `ACP_REPORT_TOKEN`)
-and each proxy `--report-token` with the same value (alongside its `--report-url`). When a token is set
-the routes are fail-closed; with no token they are open, which is for local development only.
+The `POST /heartbeat/:proxy`, `POST /event/:kind` and `POST /evidence/ingest` routes are the ingestion
+side of this. Set a shared token so only enrolled PEPs can report: give the control plane `--report-token`
+(or `ACP_REPORT_TOKEN`) and each PEP `--report-token` with the same value (alongside its `--report-url` or
+`--evidence-url`). When a token is set the routes are fail-closed; with no token they are open, which is
+for local development only.
 
 ### Honest scope
 
-Today the proxy is the PEP that reports heartbeats and events; the gateway, interceptor and guard
-producers are still being wired, so the liveness and violation views reflect the proxies first. The
-`/evidence/recent` and `/timeline` views read the control plane's own ledger (its control-plane actions:
-approvals, policy deploys, GRC), not yet the remote PEP decision records.
+Every PEP can now report: the proxy, the gateway, the interceptor and the guard each post heartbeats and
+non-allow events when given `--report-url` and `--report-token`, so the liveness, alerts and violation
+views cover the whole fleet. Remote PEP decision records are surfaced through the central fleet-evidence
+store (`--evidence-url`, `GET /evidence/ingested`, the console **Fleet evidence** panel) described above.
+The `/evidence/recent` and `/timeline` views remain a projection of the control plane's **own** ledger
+(its control-plane actions: approvals, policy deploys, GRC), which is separate from that fleet mirror.
 
 ## Backup, disaster recovery and restore
 

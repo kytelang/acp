@@ -182,8 +182,13 @@ Run the console pointed at the control plane to get a dashboard, approvals, poli
 kill-switch, the integrity view, and the AI-endpoints page ([chapter 14](14-operations.md)):
 
 ```sh
-cd acp-console && kyte build && ./build/debug/bin/acp-console   # http://127.0.0.1:8080
+cd acp-console && kyte build
+# ACP_CONTROL_PLANE_URL points the console at the control plane (default http://127.0.0.1:8787)
+ACP_CONTROL_PLANE_URL=http://127.0.0.1:8787 ./build/debug/bin/acp-console   # http://127.0.0.1:8080
 ```
+
+The console reads `ACP_CONTROL_PLANE_URL` (default `http://127.0.0.1:8787`), so in a compose or helm
+deployment you set it to the control-plane Service URL rather than rebuilding.
 
 ## 6. Register your AI endpoints
 
@@ -305,9 +310,10 @@ call that did not come through the proxy (see [chapter 6](06-guard.md)).
 - **An agent's calls are rejected as an invalid token.** The one-time token is wrong or the agent was
   deactivated. Re-register the agent from the console Agents page for a fresh token and update
   `--agent-token`.
-- **A step-up never resolves.** The hold may be in the proxy's local store rather than the control
-  plane's (see [chapter 11](11-containment.md)); resolve it where the proxy keeps it, or run the proxy
-  against the control plane's approval store.
+- **A step-up never resolves.** If the hold does not appear in the console inbox, start the proxy with
+  `--approvals-url <control-plane>` so holds register centrally and the operator's decision reconciles
+  back to the proxy (see [chapter 11](11-containment.md)); otherwise the hold stays proxy-local and must
+  be resolved where the proxy keeps it.
 - **A service will not start.** `journalctl -u acp-server -e` shows the structured logs; check the
   config paths under `/etc/acp` and the data-directory permissions.
 - **A probe endpoint is missing.** `/healthz` and `/readyz` are on the control plane; the proxy and

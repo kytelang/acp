@@ -72,11 +72,23 @@ See [chapter 12](12-grc.md) for discovery and enrolment.
 ## SSRF hardening
 
 The interceptor is where outbound destinations are decided, so it is the right place to block
-server-side request forgery. An egress allowlist that hard-blocks loopback, private, link-local and
-cloud-metadata targets is implemented and tested (`acp_core::egress`), and the same evaluator backs
-the egress canary (`acp canary-egress`). Honest status: wiring that allowlist into the interceptor's
-outbound dial path is tracked work, not yet on by default; today the canary uses it to detect a
-reachable target, and the block-at-CONNECT rules are the enforced control.
+server-side request forgery. By default it refuses to dial loopback, private, link-local and
+cloud-metadata targets (for example `127.0.0.1`, `10.0.0.0/8`, `192.168.0.0/16` and the
+`169.254.169.254` cloud-metadata address): such a target is blocked with a `403` on both the CONNECT
+and the plain-HTTP absolute-form paths, and the deny is recorded as an `ssrf-block` event. The same
+evaluator (`acp_core::egress`) backs the egress canary (`acp canary-egress`). If you genuinely need
+the interceptor to reach an internal host (for example to govern an internal API), pass
+`--allow-internal-egress` to turn the SSRF guard off; leave it on otherwise.
+
+## Reporting and break-glass
+
+Like the other enforcement points, the interceptor can report to the control plane. With
+`--report-url <control-plane>` and `--report-token <token>` it posts a heartbeat and a governance event
+on each block (including SSRF and break-glass denials), so the console liveness, alerts and violation
+views cover egress too; `--proxy-id <id>` sets the name it reports under. It also honours the emergency
+kill-switch: point `--break-glass-file` at the signed grant (and pin it with `--break-glass-key`), and
+an engaged `lockdown_all` blocks all interceptor egress with a `403`. See [chapter 11](11-containment.md)
+and [chapter 14](14-operations.md).
 
 ## A browser extension for managed Chromium
 

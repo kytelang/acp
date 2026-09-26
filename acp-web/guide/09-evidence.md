@@ -99,6 +99,24 @@ The control plane keeps a second ledger of its own governance events (policy cha
 RBAC changes, break-glass engage and clear), appended to the same verifiable structure, so the
 governance of the governor is itself recorded.
 
+## Central fleet evidence
+
+The Merkle ledger above is local to each PEP: every proxy signs its own decisions into its own
+`evidence.db`. To give an operator one place to see decisions from the whole fleet, a proxy started with
+`--evidence-url <control-plane>` also **pushes each decision record (allow and deny)** to the control
+plane's `POST /evidence/ingest`. The control plane signs each pushed record with its `cp-key` and stores
+it in a central `ingested_evidence` store, deduped by decision id (so a retried push never duplicates a
+record). `GET /evidence/ingested` returns the newest records, re-verifying each against its embedded
+public key, and the console **Evidence** view renders them in a **Fleet evidence** panel with a
+verified or unverified badge per row.
+
+Be precise about what this is and is not. This central store is **separate from each PEP's own Merkle
+ledger**: it is a convenience mirror, not the tamper-evident log. The metadata here is signed by the
+**control plane** (the report token authenticates the PEP hop that pushed it), so the badge tells you
+the central copy has not been altered since the control plane signed it. The authoritative,
+independently verifiable record is still the PEP's own signed ledger, checked with `acp verify` using the
+PEP's public key alone. Use the fleet view to spot and triage; use the local ledger to prove.
+
 ## SIEM export
 
 Every decision projects faithfully into your SIEM in CEF, OCSF (class 6003) and RFC 5424 syslog. (OTLP

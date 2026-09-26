@@ -59,6 +59,16 @@ Add `--entra-tenant` and `--entra-audience`
 to resolve the human principal per request from a bearer token; requests without a valid token
 degrade to `unattributed`, which your policy can then treat as it likes. See [chapter 8](08-identity.md).
 
+## Fleet reporting and break-glass
+
+The gateway reports to the control plane the same way the proxy does. With `--report-url <control-plane>`
+and `--report-token <token>` it posts a heartbeat every ten seconds and a governance event on each
+non-allow decision, so the console liveness, alerts and violation views cover model calls too, and
+`--proxy-id <id>` sets the name it reports under. It also honours the emergency kill-switch: point
+`--break-glass-file` at the signed grant (and pin it with `--break-glass-key`) and an engaged
+`lockdown_all` denies matching model calls at the gateway. See [chapter 11](11-containment.md) and
+[chapter 14](14-operations.md).
+
 ## Flags
 
 | Flag | Effect |
@@ -70,6 +80,11 @@ degrade to `unattributed`, which your policy can then treat as it likes. See [ch
 | `--content-firewall` | enable the signature content firewall on prompts |
 | `--content-ml <model.json>` | also load the trained ML classifier |
 | `--entra-tenant`, `--entra-audience` | Entra identity for the human principal |
+| `--report-url <server>` | report a heartbeat and non-allow events to the control plane |
+| `--report-token <tok>` | the shared token the control-plane reporting routes require (`ACP_REPORT_TOKEN`) |
+| `--proxy-id <id>` | the identifier this gateway reports under |
+| `--break-glass-file <file>` | honour a signed break-glass grant (lockdown, disable-enforce, bypass) |
+| `--break-glass-key <hex>` | pin the break-glass public key so a tampered or unsigned grant is rejected |
 
 Evidence at-rest encryption and HSM signing are configured by the same environment variables as the
 proxy ([chapter 9](09-evidence.md)).

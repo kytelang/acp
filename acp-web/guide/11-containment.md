@@ -35,7 +35,12 @@ while PII to an internal store might be redacted rather than denied.
 ## Break-glass: the kill-switch
 
 Break-glass is the emergency stop. It is a signed grant that overrides normal policy, and it reaches
-every surface (tool calls and model calls).
+**every enforcement point**: the proxy (tool calls), the gateway (model calls), the interceptor (egress)
+and the guard (tool-server forwards). Each PEP loads the grant with `--break-glass-file <file>` (a file
+your deployment distributes, written when you engage from the console or `POST /break-glass/engage`), and
+pins it with `--break-glass-key <hex>` so a tampered or unsigned grant is rejected. Each PEP watches the
+file and reloads on change. Under an engaged `lockdown_all` the proxy and gateway deny matching calls, the
+interceptor blocks all egress with a `403`, and the guard refuses every forward with a `503`.
 
 Operate it from the console's **Kill-switch** control (the **Engage or clear the kill-switch** popup,
 with Mode, Scope, Reason and TTL fields), or the control-plane API for scripting:
@@ -124,14 +129,18 @@ these routes.
 
 ### Where a hold lives
 
-There are two approval stores, and it matters which one a hold is in:
+There are two approval stores, and it matters how they are wired:
 
 - **Control-plane store** (`acp-server --approvals`): the holds the console inbox and the
   `/approvals/*` routes see.
 - **Proxy-local store** (`acp-proxy --approvals`, default `<ledger>.approvals`): where a workstation
-  proxy currently keeps its own holds.
+  proxy keeps its own holds.
 
-Honest limitation today: a step-up raised at a workstation proxy is held in that proxy's local store,
-so it does not yet surface in the console inbox. Run the proxy against the control plane's approval
-store, or resolve workstation holds where the proxy keeps them, until the field-approval push lands.
-For the self-contained quickstart proxy this is the `<ledger>.approvals` file beside the ledger.
+Wiring the two together: start the proxy with `--approvals-url <control-plane>` and each new step-up hold
+is **registered with the control plane** (`POST /approvals/register`), so a field hold raised at a
+workstation shows up in the console **Approvals** inbox straight away. A background reconciler then polls
+`GET /approvals/:id/status` and, when an operator approves or denies from the console (`POST
+/approvals/:id/approve` or `.../deny`), applies that decision back to the proxy's local store, so the
+agent's re-issue is released or blocked accordingly. Without `--approvals-url` a workstation hold stays
+proxy-local and must be resolved where the proxy keeps it; for the self-contained quickstart proxy that
+is the `<ledger>.approvals` file beside the ledger.

@@ -38,6 +38,16 @@ The guard exposes `/healthz`, `/readyz` and `/metrics`, so it drops into a Kuber
 cleanly. A missing, stale, or wrong-key attestation is refused with an error and logged; a valid one
 is forwarded to the upstream.
 
+## Reporting and break-glass
+
+The guard reports to the control plane the same way the other PEPs do. With `--report-url <control-plane>`
+and `--report-token <token>` it posts a heartbeat and a governance event on each refused (un-proxied)
+attempt, so a bypass attempt shows up in the console liveness, alerts and violation views; `--proxy-id <id>`
+sets the name it reports under. It also honours the emergency kill-switch: point `--break-glass-file` at the
+signed grant (and pin it with `--break-glass-key`), and an engaged `lockdown_all` makes the guard refuse
+**every** forward with a `503`, regardless of a valid attestation. See [chapter 11](11-containment.md) and
+[chapter 14](14-operations.md).
+
 ## When to use it
 
 Use the guard for any tool server that holds real power (a database, a payment API, an internal
