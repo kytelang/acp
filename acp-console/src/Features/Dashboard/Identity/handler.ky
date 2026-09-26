@@ -30,3 +30,17 @@ pub struct RegisterAgentHandler impl RouteHandler {
         return await ds_response.patch(agentRegisterResult(res));
     }
 }
+
+
+// POST /agents/{id}/deactivate: revoke a registered agent via the control plane, then patch the
+// refreshed agents panel (B1).
+pub struct DeactivateAgentHandler impl RouteHandler {
+    acp: AcpClient,
+    init(acp: AcpClient) { self.acp = acp; }
+    async fn serve(self: DeactivateAgentHandler, ctx: Context): Response {
+        let auth = ctx.request.headers.get("authorization") ?? "";
+        let id = ctx.param("id");
+        let _ = self.acp.deactivateAgent(id, auth);
+        return await ds_response.patch(agentsPanel(self.acp.agentsRows()));
+    }
+}

@@ -151,14 +151,15 @@ pub fn agentsPanel(rows: list.List<AgentRow>): Html {
             <p class="empty">No agents registered.</p>
         } else {
             <table class="tbl">
-                <thead><tr><th>Agent</th><th>Belongs to team</th><th>Status</th></tr></thead>
+                <thead><tr><th>Agent</th><th>Belongs to team</th><th>Status</th><th>Action</th></tr></thead>
                 <tbody>
                     {for (i in 0..rows.size()) {
-                        let r = rows.get(i) ?? AgentRow("", "", false);
+                        let r = rows.get(i) ?? AgentRow("", "", false, "");
                         <tr>
                             <td class="strong">{r.name}</td>
                             <td><span class="badge ok">{r.app}</span></td>
                             <td>{if (r.active) { <span class="badge ok">active</span> } else { <span class="badge bad">revoked</span> }}</td>
+                            <td>{if (r.active) { <button class="btn no" data-on:click={"@post('/agents/" + r.id + "/deactivate')"}>Deactivate</button> } else { <span class="dim">-</span> }}</td>
                         </tr>
                     }}
                 </tbody>
@@ -395,7 +396,7 @@ pub fn grcPanel(rows: list.List<GrcRow>): Html {
             <p class="empty">No governance records yet. Create one below.</p>
         } else {
             <table class="tbl">
-                <thead><tr><th>Kind</th><th>Subject</th><th>Title</th><th>Status</th><th>Signed</th><th>ID</th></tr></thead>
+                <thead><tr><th>Kind</th><th>Subject</th><th>Title</th><th>Status</th><th>Signed</th><th>ID</th><th>Advance</th></tr></thead>
                 <tbody>
                     {for (i in 0..rows.size()) {
                         let r = rows.get(i) ?? GrcRow("", "", "", "", "", false);
@@ -406,6 +407,11 @@ pub fn grcPanel(rows: list.List<GrcRow>): Html {
                             <td><span class="badge warn">{r.status}</span></td>
                             <td>{if (r.verified) { <span class="badge ok">verified</span> } else { <span class="badge bad">unverified</span> }}</td>
                             <td class="mono dim">{r.id}</td>
+                            <td>
+                                <button class="btn" data-on:click={"@post('/grc/" + r.id + "/to/in-review')"}>Review</button>
+                                <button class="btn ok" data-on:click={"@post('/grc/" + r.id + "/to/approved')"}>Approve</button>
+                                <button class="btn no" data-on:click={"@post('/grc/" + r.id + "/to/closed')"}>Close</button>
+                            </td>
                         </tr>
                     }}
                 </tbody>

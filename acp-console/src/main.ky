@@ -27,9 +27,11 @@ fn buildApp(): App {
     // The console is a read-only view over acp-server's verifiable API (default local port).
     // The static shell (wwwroot/index.html) loads datastar and opens the SSE stream, which patches
     // the live metrics fragment into #metrics. No trust lives in the UI.
-    let acp = AcpClient("http://127.0.0.1:8787");
+    let cpUrl = env.get("ACP_CONTROL_PLANE_URL");
+    let base = string.eql(cpUrl, "") ? "http://127.0.0.1:8787" : cpUrl;
+    let acp = AcpClient(base);
     app.sse("/sse/metrics", MetricsSse(acp));
-    let srv = "http://127.0.0.1:8787";
+    let srv = base;
     app.post("/approve/{id}", ResolveHandler(acp, srv, true));
     app.post("/deny/{id}", ResolveHandler(acp, srv, false));
     app.post("/policy/deploy", DeployHandler(acp));
@@ -39,6 +41,8 @@ fn buildApp(): App {
     app.post("/apps/register", RegisterAppHandler(acp));
     app.post("/agents/register", RegisterAgentHandler(acp));
     app.post("/grc/create", CreateGrcHandler(acp));
+    app.post("/agents/{id}/deactivate", DeactivateAgentHandler(acp));
+    app.post("/grc/{id}/to/{status}", GrcStatusHandler(acp));
 
     // Serve static assets (wwwroot/) for any unmatched GET.
     app.useStatic("/", "./wwwroot");

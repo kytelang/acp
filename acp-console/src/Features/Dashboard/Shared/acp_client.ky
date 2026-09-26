@@ -58,7 +58,8 @@ pub struct AgentRow {
     pub name: string,
     pub app: string,
     pub active: bool,
-    init(name: string, app: string, active: bool) { self.name = name; self.app = app; self.active = active; }
+    pub id: string,
+    init(name: string, app: string, active: bool, id: string) { self.name = name; self.app = app; self.active = active; self.id = id; }
 }
 
 pub struct EvidenceRow {
@@ -235,7 +236,8 @@ pub struct AcpClient {
             rows.push(AgentRow(
                 json.asString(json.get(item, "name")) ?? "?",
                 appName,
-                json.asBool(json.get(item, "active")) ?? false));
+                json.asBool(json.get(item, "active")) ?? false,
+                json.asString(json.get(item, "id")) ?? ""));
             i = i + 1;
         }
         return rows;
@@ -499,6 +501,33 @@ pub struct AcpClient {
         let id = json.asString(json.get(v, "id")) ?? "";
         let token = json.asString(json.get(v, "token")) ?? "";
         return DeployResult(true, id + " token: " + token + " (save it now, not shown again)");
+    }
+
+    // B1: deactivate (revoke) a registered agent via the control plane.
+    pub fn deactivateAgent(self: AcpClient, id: string, userAuth: string): DeployResult {
+        let hdrs = client.Http.emptyHeaders();
+        hdrs.set("Content-Type", "application/json");
+        if (!string.eql(userAuth, "")) { hdrs.set("Authorization", userAuth); }
+        else { let tok = self.authToken("PolicyAdmin"); if (!string.eql(tok, "")) { hdrs.set("Authorization", "Bearer " + tok); } }
+        let resp = client.Http.request("POST", self.base + "/agents/" + id + "/deactivate", hdrs, "{}");
+        if (resp.status.toCode() != 200) { return DeployResult(false, "acp-server unreachable"); }
+        let v = json.parse(resp.body);
+        if (!(json.asBool(json.get(v, "ok")) ?? false)) { return DeployResult(false, json.asString(json.get(v, "error")) ?? "rejected"); }
+        return DeployResult(true, "deactivated " + id);
+    }
+
+    // B2: advance a GRC record status via the control plane (re-signed server-side).
+    pub fn updateGrcStatus(self: AcpClient, id: string, status: string, userAuth: string): DeployResult {
+        let body = "{\"status\":" + self.jstr(status) + "}";
+        let hdrs = client.Http.emptyHeaders();
+        hdrs.set("Content-Type", "application/json");
+        if (!string.eql(userAuth, "")) { hdrs.set("Authorization", userAuth); }
+        else { let tok = self.authToken("PolicyAdmin"); if (!string.eql(tok, "")) { hdrs.set("Authorization", "Bearer " + tok); } }
+        let resp = client.Http.request("POST", self.base + "/grc/" + id + "/status", hdrs, body);
+        if (resp.status.toCode() != 200) { return DeployResult(false, "acp-server unreachable"); }
+        let v = json.parse(resp.body);
+        if (!(json.asBool(json.get(v, "ok")) ?? false)) { return DeployResult(false, json.asString(json.get(v, "error")) ?? "rejected"); }
+        return DeployResult(true, id + " -> " + status);
     }
 
     // Governance records (GRC): signed operator documents, from acp-server. Read-only.

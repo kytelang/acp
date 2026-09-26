@@ -21,3 +21,18 @@ pub struct CreateGrcHandler impl RouteHandler {
         return await ds_response.patch(grcCreateResult(res));
     }
 }
+
+
+// POST /grc/{id}/to/{status}: advance a governance record status (re-signed server-side), then patch
+// the refreshed GRC panel (B2).
+pub struct GrcStatusHandler impl RouteHandler {
+    acp: AcpClient,
+    init(acp: AcpClient) { self.acp = acp; }
+    async fn serve(self: GrcStatusHandler, ctx: Context): Response {
+        let auth = ctx.request.headers.get("authorization") ?? "";
+        let id = ctx.param("id");
+        let status = ctx.param("status");
+        let _ = self.acp.updateGrcStatus(id, status, auth);
+        return await ds_response.patch(grcPanel(self.acp.grcRows()));
+    }
+}
