@@ -96,9 +96,21 @@
     #policy-editor{height:360px;border:1px solid var(--line2);border-radius:10px;overflow:hidden}
     .polrow{display:flex;align-items:center;gap:.6rem;flex-wrap:wrap}
     @media print{.sidebar,.topbar{display:none}.app{display:block}.content{max-width:none}}
+    .card-h .card-cta{margin-left:auto;padding:.4rem .85rem;font-size:.78rem}
+    .modal-backdrop{position:fixed;inset:0;background:rgba(0,0,0,.55);z-index:50}
+    .modal{position:fixed;z-index:51;top:50%;left:50%;transform:translate(-50%,-50%);width:min(560px,94vw);max-height:88vh;overflow:auto;background:var(--panel);border:1px solid var(--line);border-radius:14px;box-shadow:0 24px 70px rgba(0,0,0,.45)}
+    .modal.wide{width:min(880px,95vw)}
+    .modal-h{display:flex;align-items:center;justify-content:space-between;gap:1rem;padding:1rem 1.25rem;border-bottom:1px solid var(--line);font-weight:600;font-size:.95rem}
+    .modal-b{padding:1.25rem;display:flex;flex-direction:column;gap:.85rem}
+    .modal-close{background:none;border:0;color:var(--dim);font-size:1.5rem;line-height:1;cursor:pointer}
+    .modal-close:hover{color:var(--txt)}
+    .tabs{display:flex;gap:.5rem;margin-bottom:.25rem}
+    .tab{padding:.45rem .95rem;border:1px solid var(--line2);border-radius:9px;background:var(--panel2);color:var(--dim);cursor:pointer;font-size:.85rem;font-weight:600}
+    .tab.active{background:var(--accent);color:#fff;border-color:var(--accent)}
+    .modal input[type=file]{color:var(--dim);font-size:.85rem;background:var(--panel2);border:1px solid var(--line2);border-radius:9px;padding:.6rem}
   </style>
 </head>
-<body data-signals="{theme: 'dark', view: 'overview', endpoint: '', disposition: 'govern', appName: '', appOwner: '', agentAppId: '', agentName: '', grcKind: 'assessment', grcSubject: '', grcTitle: '', grcStatus: 'open', grcBody: '{}'}" data-class-light="$theme === 'light'">
+<body data-signals="{theme: 'dark', view: 'overview', endpoint: '', disposition: 'govern', appName: '', appOwner: '', agentAppId: '', agentName: '', grcKind: 'assessment', grcSubject: '', grcTitle: '', grcStatus: 'open', grcBody: '{}', modal: '', policyTab: 'editor'}" data-class-light="$theme === 'light'">
   <div class="app">
     <aside class="sidebar">
       <div class="brand">
@@ -167,43 +179,166 @@
         </section>
 
         <section class="view" data-show="$view === 'apps'">
-          <div class="card"><div class="card-h"><span class="ic">&#128230;</span> Teams &amp; agents</div>
+          <div class="card"><div class="card-h"><span class="ic">&#128230;</span> Teams &amp; agents<button class="btn primary card-cta" data-on:click="$modal = 'app'">+ Register team</button></div>
             <div class="card-b"><div id="apps"><p class="empty">&#8230;</p></div></div></div>
-          <div class="card"><div class="card-h"><span class="ic">&#10133;</span> Register a team / application</div>
-            <div class="card-b"><div class="deploy"><div class="row">
-              <label class="fld">Name <input type="text" data-bind="appName" placeholder="acme-app" /></label>
-              <label class="fld">Owner <input type="text" data-bind="appOwner" placeholder="you" /></label>
-              <button class="btn primary" data-on:click="@post('/apps/register')">Register</button>
-              <div class="deploystatus" id="appresult"></div>
-            </div></div></div></div>
         </section>
 
         <section class="view" data-show="$view === 'agents'">
-          <div class="card"><div class="card-h"><span class="ic">&#129302;</span> Registered agents</div>
+          <div class="card"><div class="card-h"><span class="ic">&#129302;</span> Registered agents<button class="btn primary card-cta" data-on:click="$modal = 'agent'">+ Register agent</button></div>
             <div class="card-b"><div id="agents"><p class="empty">&#8230;</p></div></div></div>
-          <div class="card"><div class="card-h"><span class="ic">&#10133;</span> Register an agent</div>
-            <div class="card-b">
-              <p class="hint">An agent belongs to a team (app). Registering returns a one-time token; store it now, it is not shown again.</p>
-              <div class="deploy"><div class="row">
-                <label class="fld">App ID <input type="text" data-bind="agentAppId" placeholder="app-..." /></label>
-                <label class="fld">Name <input type="text" data-bind="agentName" placeholder="coding-assistant" /></label>
-                <button class="btn primary" data-on:click="@post('/agents/register')">Register</button>
-              </div>
-              <div class="deploystatus" id="agentresult" style="margin-top:.6rem"></div></div>
-            </div></div>
         </section>
 
         <section class="view" data-show="$view === 'policy'">
-          <div class="card"><div class="card-h"><span class="ic">&#128271;</span> Deployed policy &mdash; rules per app / per agent<span class="sub" id="policy"><span class="empty">&#8230;</span></span></div>
+          <div class="card"><div class="card-h"><span class="ic">&#128271;</span> Deployed policy &mdash; rules<span class="sub" id="policy"><span class="empty">&#8230;</span></span><button class="btn primary card-cta" data-on:click="$modal = 'policy'">Deploy new version</button></div>
             <div class="card-b"><div id="policyrules"><p class="empty">&#8230;</p></div></div></div>
 
-          <div class="card"><div class="card-h"><span class="ic">&#128640;</span> Deploy a new policy version</div>
-            <div class="card-b">
-              <p class="hint">Paste a policy in the YAML DSL. acp-server validates and signs it, then the proxy hot-reloads it only after verifying that signature. A policy that does not compile is rejected and nothing is written. Scope a rule to an app or agent with <span class="mono">app:</span> / <span class="mono">agent:</span> inside its <span class="mono">when</span>.</p>
-              <div class="deploy">
-                <label class="fld">Policy (YAML)
-                  <div id="policy-editor"></div>
-                  <textarea id="policy-src" data-bind="policy" spellcheck="false" style="display:none">version: 1
+          </section>
+
+        <section class="view" data-show="$view === 'endpoints'">
+          <div class="card"><div class="card-h"><span class="ic">&#127760;</span> Registered AI endpoints<span class="sub">agents and providers under governance</span><button class="btn primary card-cta" data-on:click="$modal = 'endpoint'">+ Register endpoint</button></div>
+            <div class="card-b"><div id="endpoints"><p class="empty">&#8230;</p></div></div></div>
+
+          </section>
+
+        <section class="view" data-show="$view === 'grc'">
+          <div class="card"><div class="card-h"><span class="ic">&#128209;</span> Governance records<span class="sub">signed operator documents, re-verified on read</span><button class="btn primary card-cta" data-on:click="$modal = 'grc'">+ Create record</button></div>
+            <div class="card-b"><div id="grc"><p class="empty">&#8230;</p></div></div></div>
+
+          </section>
+
+        <section class="view" data-show="$view === 'kill'">
+          <div class="card"><div class="card-h"><span class="ic">&#128721;</span> Break-glass status<button class="btn no card-cta" data-on:click="$modal = 'kill'">Engage / clear</button></div>
+            <div class="card-b"><div id="killstatus"><p class="empty">&#8230;</p></div></div></div>
+
+          </section>
+      </div>
+    </div>
+  </div>
+  <!-- Modals: opened by $modal, backdrop closes them. Forms post to the same handlers. -->
+  <div class="modal-backdrop" data-show="$modal !== ''" data-on:click="$modal = ''"></div>
+
+  <div class="modal" data-show="$modal === 'app'">
+    <div class="modal-h"><span>&#10133; Register a team / application</span><button class="modal-close" data-on:click="$modal = ''">&times;</button></div>
+    <div class="modal-b">
+      <label class="fld">Name <input type="text" data-bind="appName" placeholder="acme-app" /></label>
+      <label class="fld">Owner <input type="text" data-bind="appOwner" placeholder="you" /></label>
+      <div class="row">
+        <button class="btn primary" data-on:click="@post('/apps/register')">Register</button>
+        <button class="btn" data-on:click="$modal = ''">Close</button>
+        <div class="deploystatus" id="appresult"></div>
+      </div>
+    </div>
+  </div>
+
+  <div class="modal" data-show="$modal === 'agent'">
+    <div class="modal-h"><span>&#10133; Register an agent</span><button class="modal-close" data-on:click="$modal = ''">&times;</button></div>
+    <div class="modal-b">
+      <p class="hint">An agent belongs to a team (app). Registering returns a one-time token; store it now, it is not shown again.</p>
+      <label class="fld">App ID <input type="text" data-bind="agentAppId" placeholder="app-..." /></label>
+      <label class="fld">Name <input type="text" data-bind="agentName" placeholder="coding-assistant" /></label>
+      <div class="row">
+        <button class="btn primary" data-on:click="@post('/agents/register')">Register</button>
+        <button class="btn" data-on:click="$modal = ''">Close</button>
+      </div>
+      <div class="deploystatus" id="agentresult"></div>
+    </div>
+  </div>
+
+  <div class="modal" data-show="$modal === 'endpoint'">
+    <div class="modal-h"><span>&#10133; Register an AI endpoint</span><button class="modal-close" data-on:click="$modal = ''">&times;</button></div>
+    <div class="modal-b">
+      <p class="hint">An AI agent or provider (for example <span class="mono">claude.ai</span>, <span class="mono">chatgpt.com</span>, <span class="mono">api.x.ai</span>, or an MCP server URL). The provider is classified automatically. <span class="mono">govern</span> routes it through ACP; <span class="mono">block</span> quarantines it; <span class="mono">accept-risk</span> is a time-boxed exception.</p>
+      <label class="fld">Endpoint (host or URL) <input type="text" data-bind="endpoint" placeholder="claude.ai" /></label>
+      <label class="fld">Disposition
+        <select data-bind="disposition">
+          <option value="govern">govern (route through ACP)</option>
+          <option value="block">block (quarantine)</option>
+          <option value="accept-risk">accept-risk (time-boxed)</option>
+        </select>
+      </label>
+      <label class="fld">Reason <input type="text" data-bind="reason" value="sanctioned" /></label>
+      <div class="row">
+        <button class="btn primary" data-on:click="@post('/endpoints/register')">Register endpoint</button>
+        <button class="btn" data-on:click="$modal = ''">Close</button>
+        <div class="deploystatus" id="endpointresult"></div>
+      </div>
+    </div>
+  </div>
+
+  <div class="modal" data-show="$modal === 'grc'">
+    <div class="modal-h"><span>&#10133; Create a governance record</span><button class="modal-close" data-on:click="$modal = ''">&times;</button></div>
+    <div class="modal-b">
+      <p class="hint">Ed25519-signed by the control plane and stored in the control-plane database. <span class="mono">Details</span> is free-form JSON or text specific to the kind.</p>
+      <div class="row">
+        <label class="fld">Kind
+          <select data-bind="grcKind">
+            <option value="assessment">assessment</option>
+            <option value="conformity">conformity</option>
+            <option value="risk">risk</option>
+            <option value="model-card">model-card</option>
+            <option value="use-case">use-case</option>
+            <option value="attestation">attestation</option>
+            <option value="aibom">aibom</option>
+          </select>
+        </label>
+        <label class="fld">Subject <input type="text" data-bind="grcSubject" placeholder="checkout-agent" /></label>
+      </div>
+      <label class="fld">Title <input type="text" data-bind="grcTitle" placeholder="EU AI Act tiering" /></label>
+      <label class="fld">Status <input type="text" data-bind="grcStatus" value="open" /></label>
+      <label class="fld">Details (JSON or text)
+        <textarea data-bind="grcBody" spellcheck="false" style="min-height:120px">{}</textarea>
+      </label>
+      <div class="row">
+        <button class="btn primary" data-on:click="@post('/grc/create')">Create record</button>
+        <button class="btn" data-on:click="$modal = ''">Close</button>
+        <div class="deploystatus" id="grcresult"></div>
+      </div>
+    </div>
+  </div>
+
+  <div class="modal" data-show="$modal === 'kill'">
+    <div class="modal-h"><span>&#9888; Engage or clear the kill-switch</span><button class="modal-close" data-on:click="$modal = ''">&times;</button></div>
+    <div class="modal-b">
+      <p class="hint">Engaging writes a signed, scoped grant the proxy watches. Lockdown denies matching calls and STAYS locked until cleared; scope it (<span class="mono">resource:database</span>, <span class="mono">agent:triage</span>) to contain one resource or agent.</p>
+      <div class="row">
+        <label class="fld">Mode
+          <select data-bind="mode">
+            <option value="lockdown_all">lockdown_all (deny)</option>
+            <option value="disable_enforce">disable_enforce (observe)</option>
+            <option value="emergency_bypass">emergency_bypass (allow held)</option>
+          </select>
+        </label>
+        <label class="fld">Scope <input type="text" data-bind="scope" value="global" /></label>
+      </div>
+      <div class="row">
+        <label class="fld">Reason <input type="text" data-bind="reason" value="incident" /></label>
+        <label class="fld">TTL ms <input type="text" data-bind="ttl_ms" value="3600000" /></label>
+      </div>
+      <div class="row">
+        <button class="btn no" data-on:click="@post('/kill/engage')">Engage</button>
+        <button class="btn ok" data-on:click="@post('/kill/clear')">Clear</button>
+        <button class="btn" data-on:click="$modal = ''">Close</button>
+        <div class="deploystatus" id="killresult"></div>
+      </div>
+    </div>
+  </div>
+
+  <div class="modal wide" data-show="$modal === 'policy'">
+    <div class="modal-h"><span>&#128640; Deploy a new policy version</span><button class="modal-close" data-on:click="$modal = ''">&times;</button></div>
+    <div class="modal-b">
+      <div class="tabs">
+        <button class="tab" data-class-active="$policyTab === 'editor'" data-on:click="$policyTab = 'editor'">Editor</button>
+        <button class="tab" data-class-active="$policyTab === 'upload'" data-on:click="$policyTab = 'upload'">Upload YAML</button>
+      </div>
+      <div data-show="$policyTab === 'editor'">
+        <p class="hint">Edit the policy in the YAML DSL. acp-server validates and signs it; the proxy hot-reloads only after verifying the signature. A policy that does not compile is rejected and nothing is written.</p>
+        <div id="policy-editor"></div>
+      </div>
+      <div data-show="$policyTab === 'upload'">
+        <p class="hint">Choose a <span class="mono">.yaml</span> policy file. Its contents load into the Editor tab for review, then Deploy.</p>
+        <input type="file" id="policy-file" accept=".yaml,.yml,text/yaml,text/plain" />
+      </div>
+      <textarea id="policy-src" data-bind="policy" spellcheck="false" style="display:none">version: 1
 default: allow
 rules:
   - id: no-db-deletes
@@ -223,117 +358,15 @@ rules:
     verdict: step_up
     approvers: [finance]
 </textarea>
-                </label>
-                <div class="row">
-                  <label class="fld">Author
-                    <input type="text" data-bind="author" value="operator" />
-                  </label>
-                  <button class="btn primary" data-on:click="@post('/policy/deploy')">Deploy policy</button>
-                  <div class="deploystatus" id="deployresult"></div>
-                </div>
-              </div>
-            </div>
-          </div>
-        </section>
-
-        <section class="view" data-show="$view === 'endpoints'">
-          <div class="card"><div class="card-h"><span class="ic">&#127760;</span> Registered AI endpoints<span class="sub">agents and providers under governance</span></div>
-            <div class="card-b"><div id="endpoints"><p class="empty">&#8230;</p></div></div></div>
-
-          <div class="card"><div class="card-h"><span class="ic">&#10133;</span> Register an AI endpoint</div>
-            <div class="card-b">
-              <p class="hint">Register an endpoint for an AI agent or provider (for example <span class="mono">claude.ai</span>, <span class="mono">chatgpt.com</span>, <span class="mono">api.x.ai</span>, <span class="mono">api.openai.com</span>, or an MCP server URL). acp-server classifies the provider and records a signed disposition. <span class="mono">govern</span> routes it through ACP and counts it as governed; <span class="mono">block</span> quarantines it; <span class="mono">accept-risk</span> is a time-boxed exception.</p>
-              <div class="deploy">
-                <div class="row">
-                  <label class="fld">Endpoint (host or URL)
-                    <input type="text" data-bind="endpoint" placeholder="claude.ai" style="max-width:320px" />
-                  </label>
-                  <label class="fld">Disposition
-                    <select data-bind="disposition">
-                      <option value="govern">govern (route through ACP)</option>
-                      <option value="block">block (quarantine)</option>
-                      <option value="accept-risk">accept-risk (time-boxed)</option>
-                    </select>
-                  </label>
-                  <label class="fld">Reason <input type="text" data-bind="reason" value="sanctioned" /></label>
-                </div>
-                <div class="row">
-                  <button class="btn primary" data-on:click="@post('/endpoints/register')">Register endpoint</button>
-                  <div class="deploystatus" id="endpointresult"></div>
-                </div>
-              </div>
-            </div>
-          </div>
-        </section>
-
-        <section class="view" data-show="$view === 'grc'">
-          <div class="card"><div class="card-h"><span class="ic">&#128209;</span> Governance records<span class="sub">signed operator documents, re-verified on read</span></div>
-            <div class="card-b"><div id="grc"><p class="empty">&#8230;</p></div></div></div>
-
-          <div class="card"><div class="card-h"><span class="ic">&#10133;</span> Create a governance record</div>
-            <div class="card-b">
-              <p class="hint">Records are Ed25519-signed by the control plane and stored in the control-plane database. The <span class="mono">details</span> field is free-form JSON or text specific to the kind (for example a risk score, an EU AI Act screening, or a model card).</p>
-              <div class="deploy">
-                <div class="row">
-                  <label class="fld">Kind
-                    <select data-bind="grcKind">
-                      <option value="assessment">assessment</option>
-                      <option value="conformity">conformity</option>
-                      <option value="risk">risk</option>
-                      <option value="model-card">model-card</option>
-                      <option value="use-case">use-case</option>
-                      <option value="attestation">attestation</option>
-                      <option value="aibom">aibom</option>
-                    </select>
-                  </label>
-                  <label class="fld">Subject <input type="text" data-bind="grcSubject" placeholder="checkout-agent" /></label>
-                  <label class="fld">Title <input type="text" data-bind="grcTitle" placeholder="EU AI Act tiering" /></label>
-                  <label class="fld">Status <input type="text" data-bind="grcStatus" value="open" /></label>
-                </div>
-                <label class="fld">Details (JSON or text)
-                  <textarea data-bind="grcBody" spellcheck="false" style="min-height:120px">{}</textarea>
-                </label>
-                <div class="row">
-                  <button class="btn primary" data-on:click="@post('/grc/create')">Create record</button>
-                  <div class="deploystatus" id="grcresult"></div>
-                </div>
-              </div>
-            </div>
-          </div>
-        </section>
-
-        <section class="view" data-show="$view === 'kill'">
-          <div class="card"><div class="card-h"><span class="ic">&#128721;</span> Break-glass status</div>
-            <div class="card-b"><div id="killstatus"><p class="empty">&#8230;</p></div></div></div>
-
-          <div class="card"><div class="card-h"><span class="ic">&#9888;</span> Engage or clear the kill-switch</div>
-            <div class="card-b">
-              <p class="hint">Engaging writes a signed, scoped grant acp-server hands to the proxy. Lockdown denies matching calls and STAYS locked until cleared; scope it (<span class="mono">resource:database</span>, <span class="mono">agent:triage</span>) to contain one resource or agent without downing the fleet.</p>
-              <div class="deploy">
-                <div class="row">
-                  <label class="fld">Mode
-                    <select data-bind="mode">
-                      <option value="lockdown_all">lockdown_all (deny)</option>
-                      <option value="disable_enforce">disable_enforce (observe)</option>
-                      <option value="emergency_bypass">emergency_bypass (allow held)</option>
-                    </select>
-                  </label>
-                  <label class="fld">Scope <input type="text" data-bind="scope" value="global" /></label>
-                  <label class="fld">Reason <input type="text" data-bind="reason" value="incident" /></label>
-                  <label class="fld">TTL ms <input type="text" data-bind="ttl_ms" value="3600000" /></label>
-                </div>
-                <div class="row">
-                  <button class="btn no" data-on:click="@post('/kill/engage')">Engage</button>
-                  <button class="btn ok" data-on:click="@post('/kill/clear')">Clear</button>
-                  <div class="deploystatus" id="killresult"></div>
-                </div>
-              </div>
-            </div>
-          </div>
-        </section>
+      <div class="row">
+        <label class="fld">Author <input type="text" data-bind="author" value="operator" /></label>
+        <button class="btn primary" data-on:click="@post('/policy/deploy')">Deploy policy</button>
+        <button class="btn" data-on:click="$modal = ''">Close</button>
+        <div class="deploystatus" id="deployresult"></div>
       </div>
     </div>
   </div>
+
   <script>
   (function(){
     function boot(){
@@ -354,9 +387,34 @@ rules:
           ta.value = ed.getValue();
           ta.dispatchEvent(new Event('input', { bubbles: true }));
         });
-        // Keep the editor theme in step with the console light/dark toggle.
-        new MutationObserver(function(){ monaco.editor.setTheme(theme()); })
-          .observe(document.body, { attributes: true, attributeFilter: ['class'] });
+        // Keep the editor theme in step with the console light/dark toggle, and relayout when the
+        // policy modal opens (Monaco needs a layout pass once its container becomes visible).
+        window.__policyEditor = ed;
+        new MutationObserver(function(){
+          monaco.editor.setTheme(theme());
+          setTimeout(function(){ try { ed.layout(); } catch (e) {} }, 60);
+        }).observe(document.body, { attributes: true, attributeFilter: ['class'] });
+
+        // Upload YAML tab: read the chosen file into the editor and the bound textarea, then switch
+        // to the Editor tab so the operator reviews it before Deploy.
+        var fileInput = document.getElementById('policy-file');
+        if (fileInput) {
+          fileInput.addEventListener('change', function(e){
+            var f = e.target.files && e.target.files[0];
+            if (!f) { return; }
+            var r = new FileReader();
+            r.onload = function(){
+              var text = String(r.result || '');
+              ed.setValue(text);
+              ta.value = text;
+              ta.dispatchEvent(new Event('input', { bubbles: true }));
+              var editorTab = document.querySelector('.modal.wide .tab');
+              if (editorTab) { editorTab.click(); }
+              setTimeout(function(){ try { ed.layout(); } catch (e) {} }, 60);
+            };
+            r.readAsText(f);
+          });
+        }
       });
     }
     if(document.readyState !== 'loading'){ boot(); } else { document.addEventListener('DOMContentLoaded', boot); }
