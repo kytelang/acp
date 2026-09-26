@@ -1,0 +1,23 @@
+import web.routing;
+import web.response;
+import serde.json;
+import ds_response;
+import Features.Dashboard.Shared.acp_client;
+import Features.Dashboard.views.dashboard;
+
+// POST /grc/create: read the operator's datastar signals, forward a clean body to acp-server (which
+// signs the record and stores it in the configured database), and patch the result.
+pub struct CreateGrcHandler impl RouteHandler {
+    acp: AcpClient,
+    init(acp: AcpClient) { self.acp = acp; }
+    async fn serve(self: CreateGrcHandler, ctx: Context): Response {
+        let auth = ctx.request.headers.get("authorization") ?? "";
+        let kind = json.stringField(ctx.request.body, "grcKind");
+        let subject = json.stringField(ctx.request.body, "grcSubject");
+        let title = json.stringField(ctx.request.body, "grcTitle");
+        let status = json.stringField(ctx.request.body, "grcStatus");
+        let body = json.stringField(ctx.request.body, "grcBody");
+        let res = self.acp.createGrc(kind, subject, title, status, body, auth);
+        return await ds_response.patch(grcCreateResult(res));
+    }
+}

@@ -360,3 +360,37 @@ pub fn agentRegisterResult(res: DeployResult): Html {
         <span class="mono dim">{res.message}</span>
     </div>;
 }
+
+
+// Governance records (fragment #grc): signed operator documents (assessments, risk, model cards, ...).
+pub fn grcPanel(rows: list.List<GrcRow>): Html {
+    return <div id="grc">
+        {if (rows.size() == 0) {
+            <p class="empty">No governance records yet. Create one below.</p>
+        } else {
+            <table class="tbl">
+                <thead><tr><th>Kind</th><th>Subject</th><th>Title</th><th>Status</th><th>Signed</th><th>ID</th></tr></thead>
+                <tbody>
+                    {for (i in 0..rows.size()) {
+                        let r = rows.get(i) ?? GrcRow("", "", "", "", "", false);
+                        <tr>
+                            <td><span class="badge ver">{r.kind}</span></td>
+                            <td class="strong">{r.subject}</td>
+                            <td>{r.title}</td>
+                            <td><span class="badge warn">{r.status}</span></td>
+                            <td>{if (r.verified) { <span class="badge ok">verified</span> } else { <span class="badge bad">unverified</span> }}</td>
+                            <td class="mono dim">{r.id}</td>
+                        </tr>
+                    }}
+                </tbody>
+            </table>
+        }}
+    </div>;
+}
+
+pub fn grcCreateResult(res: DeployResult): Html {
+    return <div id="grcresult" class="deploystatus">
+        {if (res.ok) { <span class="badge ok">created</span> } else { <span class="badge bad">rejected</span> }}
+        <span class="dim">{res.message}</span>
+    </div>;
+}

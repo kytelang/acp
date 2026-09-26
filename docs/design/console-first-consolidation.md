@@ -135,7 +135,7 @@ with `acp-verify`":
 1. Split packaging into user, server and console archives; build the console in CI; installers fetch
    the right archives. Introduce `acp-verify`. (This change.)
 2. Control-plane DB and the identity and endpoint APIs and console pages.
-3. The GRC APIs and console pages; discovery review.
+3. The GRC APIs and console pages (DONE: signed GRC records in the config-driven store, created from the console or POST /grc, re-verified on read); discovery review remains.
 4. Retire the management CLI; rewrite the guides around console-first.
 
 ## 11. Compatibility

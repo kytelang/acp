@@ -124,6 +124,18 @@ pub struct EndpointRow {
     }
 }
 
+pub struct GrcRow {
+    pub id: string,
+    pub kind: string,
+    pub subject: string,
+    pub title: string,
+    pub status: string,
+    pub verified: bool,
+    init(id: string, kind: string, subject: string, title: string, status: string, verified: bool) {
+        self.id = id; self.kind = kind; self.subject = subject; self.title = title; self.status = status; self.verified = verified;
+    }
+}
+
 pub struct AcpClient {
     base: string,
     init(base: string) { self.base = base; }
@@ -449,6 +461,43 @@ pub struct AcpClient {
         let id = json.asString(json.get(v, "id")) ?? "";
         let token = json.asString(json.get(v, "token")) ?? "";
         return DeployResult(true, id + " token: " + token + " (save it now, not shown again)");
+    }
+
+    // Governance records (GRC): signed operator documents, from acp-server. Read-only.
+    pub fn grcRows(self: AcpClient): list.List<GrcRow> {
+        let rows = list.List<GrcRow>();
+        let resp = client.Http.get(self.base + "/grc");
+        if (resp.status.toCode() != 200) { return rows; }
+        let rv = json.get(json.parse(resp.body), "records");
+        let arr = json.asArray(rv);
+        if (arr == undefined) { return rows; }
+        let i = 0;
+        while (i < arr.size()) {
+            let item = json.at(rv, i);
+            rows.push(GrcRow(
+                json.asString(json.get(item, "id")) ?? "",
+                json.asString(json.get(item, "kind")) ?? "",
+                json.asString(json.get(item, "subject")) ?? "",
+                json.asString(json.get(item, "title")) ?? "",
+                json.asString(json.get(item, "status")) ?? "",
+                json.asBool(json.get(item, "verified")) ?? false));
+            i = i + 1;
+        }
+        return rows;
+    }
+
+    // Create a signed governance record. Returns the new id in the message.
+    pub fn createGrc(self: AcpClient, kind: string, subject: string, title: string, status: string, body: string, userAuth: string): DeployResult {
+        let jbody = "{\"kind\":" + self.jstr(kind) + ",\"subject\":" + self.jstr(subject) + ",\"title\":" + self.jstr(title) + ",\"status\":" + self.jstr(status) + ",\"body\":" + self.jstr(body) + "}";
+        let hdrs = client.Http.emptyHeaders();
+        hdrs.set("Content-Type", "application/json");
+        if (!string.eql(userAuth, "")) { hdrs.set("Authorization", userAuth); }
+        else { let tok = self.authToken("PolicyAdmin"); if (!string.eql(tok, "")) { hdrs.set("Authorization", "Bearer " + tok); } }
+        let resp = client.Http.request("POST", self.base + "/grc", hdrs, jbody);
+        if (resp.status.toCode() != 200) { return DeployResult(false, "acp-server unreachable"); }
+        let v = json.parse(resp.body);
+        if (!(json.asBool(json.get(v, "ok")) ?? false)) { return DeployResult(false, json.asString(json.get(v, "error")) ?? "rejected"); }
+        return DeployResult(true, "created " + (json.asString(json.get(v, "id")) ?? "") + " (" + kind + ")");
     }
 
     // Registered AI endpoints (agents/providers) and their disposition, from acp-server. Read-only.

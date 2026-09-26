@@ -44,6 +44,8 @@ pub class MetricsSse impl SseHandler {
             if (w10 < 0) { alive = false; }
             let w11 = await ds.patchElementsSimple(endpointsPanel(self.acp.endpointsRows()));
             if (w11 < 0) { alive = false; }
+            let w12 = await ds.patchElementsSimple(grcPanel(self.acp.grcRows()));
+            if (w12 < 0) { alive = false; }
             if (alive) { await aio.delay(2000); }
         }
     }

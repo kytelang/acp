@@ -41,6 +41,20 @@ pub struct Endpoint {
     pub sig_hex: String,
 }
 
+#[derive(Debug, Clone, Serialize)]
+pub struct GrcRecord {
+    pub id: String,
+    pub kind: String,
+    pub subject: String,
+    pub title: String,
+    pub status: String,
+    pub body: String,
+    pub operator: String,
+    pub created_ms: i64,
+    pub pubkey_hex: String,
+    pub sig_hex: String,
+}
+
 pub struct ControlStore {
     pool: AnyPool,
     pg: bool,
@@ -87,6 +101,7 @@ impl ControlStore {
             "CREATE TABLE IF NOT EXISTS apps (id TEXT PRIMARY KEY, name TEXT NOT NULL, owner TEXT NOT NULL, created_ms BIGINT NOT NULL)",
             "CREATE TABLE IF NOT EXISTS agents (id TEXT PRIMARY KEY, app_id TEXT NOT NULL, name TEXT NOT NULL, token_sha256 TEXT NOT NULL, active INTEGER NOT NULL, created_ms BIGINT NOT NULL)",
             "CREATE TABLE IF NOT EXISTS endpoints (endpoint TEXT PRIMARY KEY, kind TEXT NOT NULL, provider TEXT NOT NULL, disposition TEXT NOT NULL, operator TEXT NOT NULL, reason TEXT NOT NULL, decided_ms BIGINT NOT NULL, expires_ms BIGINT NOT NULL, pubkey_hex TEXT NOT NULL, sig_hex TEXT NOT NULL)",
+            "CREATE TABLE IF NOT EXISTS grc_records (id TEXT PRIMARY KEY, kind TEXT NOT NULL, subject TEXT NOT NULL, title TEXT NOT NULL, status TEXT NOT NULL, body TEXT NOT NULL, operator TEXT NOT NULL, created_ms BIGINT NOT NULL, pubkey_hex TEXT NOT NULL, sig_hex TEXT NOT NULL)",
         ] {
             sqlx::query(ddl).execute(&self.pool).await.map_err(|e| e.to_string())?;
         }
@@ -213,6 +228,53 @@ impl ControlStore {
             })
             .collect())
     }
+
+    // ---- GRC records (signed operator documents: assessments, risk, model cards, ...) ----
+    #[allow(clippy::too_many_arguments)]
+    pub async fn add_grc(
+        &self,
+        id: &str,
+        kind: &str,
+        subject: &str,
+        title: &str,
+        status: &str,
+        body: &str,
+        operator: &str,
+        created_ms: i64,
+        pubkey_hex: &str,
+        sig_hex: &str,
+    ) -> Result<(), String> {
+        let sql = self.ph("INSERT INTO grc_records (id, kind, subject, title, status, body, operator, created_ms, pubkey_hex, sig_hex) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)");
+        sqlx::query(&sql)
+            .bind(id).bind(kind).bind(subject).bind(title).bind(status).bind(body)
+            .bind(operator).bind(created_ms).bind(pubkey_hex).bind(sig_hex)
+            .execute(&self.pool).await.map_err(|e| e.to_string())?;
+        Ok(())
+    }
+
+    pub async fn update_grc_status(&self, id: &str, status: &str) -> Result<(), String> {
+        let sql = self.ph("UPDATE grc_records SET status = ? WHERE id = ?");
+        sqlx::query(&sql).bind(status).bind(id).execute(&self.pool).await.map_err(|e| e.to_string())?;
+        Ok(())
+    }
+
+    pub async fn list_grc(&self, kind: Option<&str>) -> Result<Vec<GrcRecord>, String> {
+        let rows = match kind {
+            Some(k) => sqlx::query(&self.ph("SELECT id, kind, subject, title, status, body, operator, created_ms, pubkey_hex, sig_hex FROM grc_records WHERE kind = ? ORDER BY created_ms"))
+                .bind(k).fetch_all(&self.pool).await,
+            None => sqlx::query("SELECT id, kind, subject, title, status, body, operator, created_ms, pubkey_hex, sig_hex FROM grc_records ORDER BY created_ms")
+                .fetch_all(&self.pool).await,
+        }
+        .map_err(|e| e.to_string())?;
+        Ok(rows
+            .iter()
+            .map(|r| GrcRecord {
+                id: r.get("id"), kind: r.get("kind"), subject: r.get("subject"), title: r.get("title"),
+                status: r.get("status"), body: r.get("body"), operator: r.get("operator"),
+                created_ms: r.get("created_ms"), pubkey_hex: r.get("pubkey_hex"), sig_hex: r.get("sig_hex"),
+            })
+            .collect())
+    }
 }
 
 #[cfg(test)]
@@ -233,6 +295,12 @@ mod tests {
         let eps = s.list_endpoints().await.unwrap();
         assert_eq!(eps.len(), 1, "upsert keeps one row per endpoint");
         assert_eq!(eps[0].disposition, "block", "latest disposition wins");
+        s.add_grc("grc-1", "risk", "checkout-agent", "PII exfiltration", "open", "{\"likelihood\":3,\"impact\":3}", "console", 4000, "aa", "bb").await.unwrap();
+        s.add_grc("grc-2", "assessment", "checkout-agent", "EU AI Act tiering", "high", "{}", "console", 4001, "aa", "cc").await.unwrap();
+        assert_eq!(s.list_grc(None).await.unwrap().len(), 2);
+        assert_eq!(s.list_grc(Some("risk")).await.unwrap().len(), 1);
+        s.update_grc_status("grc-1", "mitigated").await.unwrap();
+        assert_eq!(s.list_grc(Some("risk")).await.unwrap()[0].status, "mitigated");
     }
 
     #[tokio::test]

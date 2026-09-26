@@ -98,7 +98,7 @@
     @media print{.sidebar,.topbar{display:none}.app{display:block}.content{max-width:none}}
   </style>
 </head>
-<body data-signals="{theme: 'dark', view: 'overview', endpoint: '', disposition: 'govern', appName: '', appOwner: '', agentAppId: '', agentName: ''}" data-class-light="$theme === 'light'">
+<body data-signals="{theme: 'dark', view: 'overview', endpoint: '', disposition: 'govern', appName: '', appOwner: '', agentAppId: '', agentName: '', grcKind: 'assessment', grcSubject: '', grcTitle: '', grcStatus: 'open', grcBody: '{}'}" data-class-light="$theme === 'light'">
   <div class="app">
     <aside class="sidebar">
       <div class="brand">
@@ -117,6 +117,8 @@
         <div class="nav-i" data-class-active="$view === 'endpoints'" data-on:click="$view = 'endpoints'"><span class="ic">&#127760;</span> AI Endpoints</div>
         <div class="nav-l">Policy</div>
         <div class="nav-i" data-class-active="$view === 'policy'" data-on:click="$view = 'policy'"><span class="ic">&#128271;</span> Policy</div>
+        <div class="nav-l">Compliance</div>
+        <div class="nav-i" data-class-active="$view === 'grc'" data-on:click="$view = 'grc'"><span class="ic">&#128209;</span> Governance</div>
         <div class="nav-l">Emergency</div>
         <div class="nav-i" data-class-active="$view === 'kill'" data-on:click="$view = 'kill'"><span class="ic">&#128721;</span> Kill-switch</div>
         <div class="nav-l">Health</div>
@@ -126,7 +128,7 @@
 
     <div class="main">
       <div class="topbar">
-        <h1 data-text="$view === 'overview' ? 'Governance overview' : $view === 'approvals' ? 'Pending approvals' : $view === 'evidence' ? 'Evidence timeline' : $view === 'apps' ? 'Teams' : $view === 'agents' ? 'Registered agents' : $view === 'policy' ? 'Policy' : $view === 'reports' ? 'Governance report' : $view === 'health' ? 'Control-plane integrity' : $view === 'endpoints' ? 'AI endpoints' : 'Emergency kill-switch'">Governance overview</h1>
+        <h1 data-text="$view === 'overview' ? 'Governance overview' : $view === 'approvals' ? 'Pending approvals' : $view === 'evidence' ? 'Evidence timeline' : $view === 'apps' ? 'Teams' : $view === 'agents' ? 'Registered agents' : $view === 'policy' ? 'Policy' : $view === 'reports' ? 'Governance report' : $view === 'health' ? 'Control-plane integrity' : $view === 'endpoints' ? 'AI endpoints' : $view === 'grc' ? 'Governance records' : 'Emergency kill-switch'">Governance overview</h1>
         <div class="tright">
           <button class="tbtn" data-on:click="$theme = $theme === 'dark' ? 'light' : 'dark'" title="Toggle theme">
             <span data-text="$theme === 'dark' ? '&#9728;' : '&#9790;'"></span>
@@ -258,6 +260,42 @@ rules:
                 <div class="row">
                   <button class="btn primary" data-on:click="@post('/endpoints/register')">Register endpoint</button>
                   <div class="deploystatus" id="endpointresult"></div>
+                </div>
+              </div>
+            </div>
+          </div>
+        </section>
+
+        <section class="view" data-show="$view === 'grc'">
+          <div class="card"><div class="card-h"><span class="ic">&#128209;</span> Governance records<span class="sub">signed operator documents, re-verified on read</span></div>
+            <div class="card-b"><div id="grc"><p class="empty">&#8230;</p></div></div></div>
+
+          <div class="card"><div class="card-h"><span class="ic">&#10133;</span> Create a governance record</div>
+            <div class="card-b">
+              <p class="hint">Records are Ed25519-signed by the control plane and stored in the control-plane database. The <span class="mono">details</span> field is free-form JSON or text specific to the kind (for example a risk score, an EU AI Act screening, or a model card).</p>
+              <div class="deploy">
+                <div class="row">
+                  <label class="fld">Kind
+                    <select data-bind="grcKind">
+                      <option value="assessment">assessment</option>
+                      <option value="conformity">conformity</option>
+                      <option value="risk">risk</option>
+                      <option value="model-card">model-card</option>
+                      <option value="use-case">use-case</option>
+                      <option value="attestation">attestation</option>
+                      <option value="aibom">aibom</option>
+                    </select>
+                  </label>
+                  <label class="fld">Subject <input type="text" data-bind="grcSubject" placeholder="checkout-agent" /></label>
+                  <label class="fld">Title <input type="text" data-bind="grcTitle" placeholder="EU AI Act tiering" /></label>
+                  <label class="fld">Status <input type="text" data-bind="grcStatus" value="open" /></label>
+                </div>
+                <label class="fld">Details (JSON or text)
+                  <textarea data-bind="grcBody" spellcheck="false" style="min-height:120px">{}</textarea>
+                </label>
+                <div class="row">
+                  <button class="btn primary" data-on:click="@post('/grc/create')">Create record</button>
+                  <div class="deploystatus" id="grcresult"></div>
                 </div>
               </div>
             </div>

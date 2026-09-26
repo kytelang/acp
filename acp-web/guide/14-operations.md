@@ -40,7 +40,8 @@ gives you a live governance overview with a verdict-distribution bar, the approv
 agents, a policy view with a syntax-highlighted editor and deploy, the kill-switch with live status,
 an evidence view, an integrity view (ledger verify, proxy liveness, spike alerts, self-governance
 log), an AI-endpoints page to register agents and providers (govern, block or accept-risk, with the
-provider classified automatically), and a printable governance report.
+provider classified automatically), a Governance page to create signed GRC records (assessments, risk,
+model cards and the rest) stored in the control-plane database, and a printable governance report.
 
 ```sh
 # start the control plane, then the console pointed at it

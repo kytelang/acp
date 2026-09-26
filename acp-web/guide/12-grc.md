@@ -63,9 +63,11 @@ These are as strong as the ledger, because they are the ledger.
 
 ### Signed operator documents (author-attested)
 
-These are documents you author and Ed25519-sign. The signature proves the document was not altered
-after signing; it does **not** prove that the "evidence" or "linked-decision" references inside it
-correspond to real ledger records, because those are free-text today.
+You create these from the console's **Governance** page or the control-plane API (`POST /grc`), and
+they are Ed25519-signed by the control plane and stored in the control-plane database, then re-verified
+on read. The signature proves the document was not altered after signing; it does **not** prove that
+the "evidence" or "linked-decision" references inside it correspond to real ledger records, because
+those are free-text today. The `acp` commands below remain for scripting and offline use.
 
 - **`acp assess`** tiers a system under the EU AI Act (unacceptable / high / limited / minimal) from
   a questionnaire and lists the controls it must satisfy.

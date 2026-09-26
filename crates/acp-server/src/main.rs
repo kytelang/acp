@@ -307,6 +307,8 @@ async fn main() {
         .route("/apps", post(app_register))
         .route("/agents", post(agent_register))
         .route("/agents/:id/deactivate", post(agent_deactivate))
+        .route("/grc", get(grc_list).post(grc_create))
+        .route("/grc/:id/status", post(grc_status))
         .route("/approvals/pending", get(approvals_pending))
         .route("/evidence/recent", get(evidence_recent))
         .route("/break-glass", get(break_glass_status))
@@ -840,6 +842,78 @@ async fn agent_deactivate(State(st): State<Arc<AppState>>, headers: HeaderMap, P
     let store = match &st.store { Some(s) => s, None => return Json(serde_json::json!({"ok": false, "error": "no --store configured"})).into_response() };
     match store.deactivate_agent(&id).await {
         Ok(()) => Json(serde_json::json!({"ok": true, "id": id})).into_response(),
+        Err(e) => Json(serde_json::json!({"ok": false, "error": e})).into_response(),
+    }
+}
+
+const GRC_KINDS: &[&str] = &["assessment", "conformity", "risk", "model-card", "use-case", "attestation", "aibom"];
+
+fn grc_doc(id: &str, kind: &str, subject: &str, title: &str, status: &str, body: &str) -> serde_json::Value {
+    serde_json::json!({"id": id, "kind": kind, "subject": subject, "title": title, "status": status, "body": body})
+}
+
+/// GET /grc: list all governance records (the console groups them by kind). Each is re-verified
+/// against its embedded public key, so the "signed" state shown is checked, not asserted.
+async fn grc_list(State(st): State<Arc<AppState>>) -> impl IntoResponse {
+    let store = match &st.store { Some(s) => s, None => return Json(serde_json::json!({"records": []})).into_response() };
+    match store.list_grc(None).await {
+        Ok(recs) => {
+            let out: Vec<serde_json::Value> = recs.iter().map(|r| {
+                let doc = grc_doc(&r.id, &r.kind, &r.subject, &r.title, &r.status, &r.body);
+                let verified = hex::decode(&r.pubkey_hex).ok().zip(hex::decode(&r.sig_hex).ok())
+                    .map(|(pk, sig)| acp_core::sign::verify_ed25519(&pk, &acp_core::canonical::canonical_bytes(&doc), &sig))
+                    .unwrap_or(false);
+                serde_json::json!({
+                    "id": r.id, "kind": r.kind, "subject": r.subject, "title": r.title,
+                    "status": r.status, "body": r.body, "operator": r.operator,
+                    "created_ms": r.created_ms, "verified": verified,
+                })
+            }).collect();
+            Json(serde_json::json!({"records": out})).into_response()
+        }
+        Err(e) => Json(serde_json::json!({"records": [], "error": e})).into_response(),
+    }
+}
+
+/// POST /grc: create a signed governance record. Body: {kind, subject, title, status, body}.
+async fn grc_create(State(st): State<Arc<AppState>>, headers: HeaderMap, Json(body): Json<serde_json::Value>) -> Response {
+    if let Err(r) = authorize(&st.auth, &headers, acp_auth::Capability::EditPolicy) { return r; }
+    let store = match &st.store { Some(s) => s, None => return Json(serde_json::json!({"ok": false, "error": "no --store configured"})).into_response() };
+    let kind = body.get("kind").and_then(|v| v.as_str()).unwrap_or("").trim().to_string();
+    if !GRC_KINDS.contains(&kind.as_str()) {
+        return Json(serde_json::json!({"ok": false, "error": format!("unknown kind '{kind}'; expected one of {GRC_KINDS:?}")})).into_response();
+    }
+    let subject = body.get("subject").and_then(|v| v.as_str()).unwrap_or("").trim().to_string();
+    if subject.is_empty() { return Json(serde_json::json!({"ok": false, "error": "subject is required"})).into_response(); }
+    let title = body.get("title").and_then(|v| v.as_str()).unwrap_or("").to_string();
+    let status = body.get("status").and_then(|v| v.as_str()).unwrap_or("open").to_string();
+    // body field may be a string or an object; store a string.
+    let doc_body = match body.get("body") {
+        Some(serde_json::Value::String(s)) => s.clone(),
+        Some(v) => serde_json::to_string(v).unwrap_or_default(),
+        None => String::new(),
+    };
+    let id = format!("grc-{}", rand_hex(6));
+    let now = now_ms();
+    let doc = grc_doc(&id, &kind, &subject, &title, &status, &doc_body);
+    let signer = enroll_signer(&st.cp_key);
+    let sig = acp_core::sign::Signer::sign(&signer, &acp_core::canonical::canonical_bytes(&doc));
+    let pubkey_hex = hex::encode(acp_core::sign::Signer::public_key(&signer));
+    let sig_hex = hex::encode(sig);
+    match store.add_grc(&id, &kind, &subject, &title, &status, &doc_body, "console", now as i64, &pubkey_hex, &sig_hex).await {
+        Ok(()) => Json(serde_json::json!({"ok": true, "id": id, "kind": kind})).into_response(),
+        Err(e) => Json(serde_json::json!({"ok": false, "error": e})).into_response(),
+    }
+}
+
+/// POST /grc/:id/status: advance a record's status (e.g. use-case lifecycle, risk treatment).
+async fn grc_status(State(st): State<Arc<AppState>>, headers: HeaderMap, Path(id): Path<String>, Json(body): Json<serde_json::Value>) -> Response {
+    if let Err(r) = authorize(&st.auth, &headers, acp_auth::Capability::EditPolicy) { return r; }
+    let store = match &st.store { Some(s) => s, None => return Json(serde_json::json!({"ok": false, "error": "no --store configured"})).into_response() };
+    let status = body.get("status").and_then(|v| v.as_str()).unwrap_or("").trim().to_string();
+    if status.is_empty() { return Json(serde_json::json!({"ok": false, "error": "status is required"})).into_response(); }
+    match store.update_grc_status(&id, &status).await {
+        Ok(()) => Json(serde_json::json!({"ok": true, "id": id, "status": status})).into_response(),
         Err(e) => Json(serde_json::json!({"ok": false, "error": e})).into_response(),
     }
 }
