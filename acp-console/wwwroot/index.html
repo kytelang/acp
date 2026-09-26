@@ -71,11 +71,11 @@
     .btn.no{background:rgba(239,68,68,.15);color:#f87171;border:1px solid rgba(239,68,68,.35)} .btn.no:hover{background:rgba(239,68,68,.25)}
     .btn.primary{background:var(--accent);color:#fff} .btn.primary:hover{filter:brightness(1.12)}
     .deploy{display:flex;flex-direction:column;gap:.85rem}
-    .deploy label.fld{display:flex;flex-direction:column;gap:.35rem;font-size:.68rem;color:var(--muted);text-transform:uppercase;letter-spacing:.06em}
-    .deploy textarea{width:100%;min-height:230px;background:var(--panel2);border:1px solid var(--line2);border-radius:10px;color:var(--txt);font-family:ui-monospace,SFMono-Regular,Menlo,monospace;font-size:.82rem;line-height:1.55;padding:.9rem;resize:vertical}
-    .deploy select{background:var(--panel2);border:1px solid var(--line2);border-radius:9px;color:var(--txt);padding:.55rem .8rem;font-size:.85rem}
-    .deploy input{background:var(--panel2);border:1px solid var(--line2);border-radius:9px;color:var(--txt);padding:.55rem .8rem;font-size:.85rem;max-width:240px}
-    .deploy .row{display:flex;gap:1rem;align-items:flex-end;flex-wrap:wrap}
+    .deploy label.fld, .modal-b label.fld{display:flex;flex-direction:column;gap:.35rem;font-size:.68rem;color:var(--muted);text-transform:uppercase;letter-spacing:.06em}
+    .deploy textarea, .modal-b textarea{width:100%;min-height:230px;background:var(--panel2);border:1px solid var(--line2);border-radius:10px;color:var(--txt);font-family:ui-monospace,SFMono-Regular,Menlo,monospace;font-size:.82rem;line-height:1.55;padding:.9rem;resize:vertical}
+    .deploy select, .modal-b select{background:var(--panel2);border:1px solid var(--line2);border-radius:9px;color:var(--txt);padding:.55rem .8rem;font-size:.85rem}
+    .deploy input, .modal-b input{background:var(--panel2);border:1px solid var(--line2);border-radius:9px;color:var(--txt);padding:.55rem .8rem;font-size:.85rem;max-width:240px}
+    .deploy .row, .modal-b .row{display:flex;gap:1rem;align-items:flex-end;flex-wrap:wrap}
     .deploystatus{display:flex;align-items:center;gap:.6rem;min-height:1.5rem}
     .hint{color:var(--muted);font-size:.78rem;margin:.1rem 0 .4rem}
     .tbtn{background:var(--panel);border:1px solid var(--line);color:var(--txt);width:36px;height:36px;border-radius:9px;cursor:pointer;font-size:1rem;display:grid;place-items:center;transition:.15s} .tbtn:hover{background:var(--panel2)}
@@ -107,10 +107,14 @@
     .tabs{display:flex;gap:.5rem;margin-bottom:.25rem}
     .tab{padding:.45rem .95rem;border:1px solid var(--line2);border-radius:9px;background:var(--panel2);color:var(--dim);cursor:pointer;font-size:.85rem;font-weight:600}
     .tab.active{background:var(--accent);color:#fff;border-color:var(--accent)}
+    .modal-b input, .modal-b select{max-width:none;width:100%}
+    .modal-b textarea{min-height:120px}
+    .modal-b .fld{width:100%}
+    .modal-b .row{gap:.75rem}
     .modal input[type=file]{color:var(--dim);font-size:.85rem;background:var(--panel2);border:1px solid var(--line2);border-radius:9px;padding:.6rem}
   </style>
 </head>
-<body data-signals="{theme: 'dark', view: 'overview', endpoint: '', disposition: 'govern', appName: '', appOwner: '', agentAppId: '', agentName: '', grcKind: 'assessment', grcSubject: '', grcTitle: '', grcStatus: 'open', grcBody: '{}', modal: '', policyTab: 'editor'}" data-class-light="$theme === 'light'">
+<body data-signals="{view: 'overview', endpoint: '', disposition: 'govern', appName: '', appOwner: '', agentAppId: '', agentName: '', grcKind: 'assessment', grcSubject: '', grcTitle: '', grcStatus: 'open', grcBody: '{}', modal: '', policyTab: 'deployed'}">
   <div class="app">
     <aside class="sidebar">
       <div class="brand">
@@ -142,9 +146,7 @@
       <div class="topbar">
         <h1 data-text="$view === 'overview' ? 'Governance overview' : $view === 'approvals' ? 'Pending approvals' : $view === 'evidence' ? 'Evidence timeline' : $view === 'apps' ? 'Teams' : $view === 'agents' ? 'Registered agents' : $view === 'policy' ? 'Policy' : $view === 'reports' ? 'Governance report' : $view === 'health' ? 'Control-plane integrity' : $view === 'endpoints' ? 'AI endpoints' : $view === 'grc' ? 'Governance records' : 'Emergency kill-switch'">Governance overview</h1>
         <div class="tright">
-          <button class="tbtn" data-on:click="$theme = $theme === 'dark' ? 'light' : 'dark'" title="Toggle theme">
-            <span data-text="$theme === 'dark' ? '&#9728;' : '&#9790;'"></span>
-          </button>
+          <button class="tbtn" onclick="acpTheme()" title="Toggle theme"><span id="theme-ic">&#9728;</span></button>
           <div class="pill"><span class="live"></span> live</div>
         </div>
       </div>
@@ -189,10 +191,52 @@
         </section>
 
         <section class="view" data-show="$view === 'policy'">
-          <div class="card"><div class="card-h"><span class="ic">&#128271;</span> Deployed policy &mdash; rules<span class="sub" id="policy"><span class="empty">&#8230;</span></span><button class="btn primary card-cta" data-on:click="$modal = 'policy'">Deploy new version</button></div>
-            <div class="card-b"><div id="policyrules"><p class="empty">&#8230;</p></div></div></div>
-
-          </section>
+          <div class="card">
+            <div class="card-h"><span class="ic">&#128271;</span> Policy<span class="sub" id="policy"><span class="empty">&#8230;</span></span></div>
+            <div class="card-b">
+              <div class="tabs">
+                <button class="tab" data-class-active="$policyTab === 'deployed'" data-on:click="$policyTab = 'deployed'">Deployed policy</button>
+                <button class="tab" data-class-active="$policyTab === 'editor'" data-on:click="$policyTab = 'editor'">Editor</button>
+              </div>
+              <div data-show="$policyTab === 'deployed'" style="margin-top:1rem">
+                <div id="policyrules"><p class="empty">&#8230;</p></div>
+              </div>
+              <div data-show="$policyTab === 'editor'" style="margin-top:1rem">
+                <p class="hint">Edit the policy in the YAML DSL, or upload a <span class="mono">.yaml</span> file to load it into the editor. acp-server validates and signs it; the proxy hot-reloads only after verifying the signature.</p>
+                <div class="row" style="margin-bottom:.75rem">
+                  <label class="btn">Upload .yaml<input type="file" id="policy-file" accept=".yaml,.yml,text/yaml,text/plain" style="display:none" /></label>
+                  <span class="dim" style="font-size:.8rem">the file contents appear in the editor below</span>
+                </div>
+                <div id="policy-editor"></div>
+                <textarea id="policy-src" data-bind="policy" spellcheck="false" style="display:none">version: 1
+default: allow
+rules:
+  - id: no-db-deletes
+    when: { resource: database, operation: delete }
+    verdict: deny
+  - id: anon-cannot-read-secrets
+    when: { resource: secrets, principal: unattributed }
+    verdict: deny
+  - id: mask-pii-on-db-reads
+    when: { resource: database, operation: read }
+    verdict: allow
+    obligations:
+      - kind: redact
+        fields: [ssn, card]
+  - id: charges-need-approval
+    when: { resource: payments }
+    verdict: step_up
+    approvers: [finance]
+</textarea>
+                <div class="row" style="margin-top:1rem">
+                  <label class="fld">Author <input type="text" data-bind="author" value="operator" /></label>
+                  <button class="btn primary" data-on:click="@post('/policy/deploy')">Deploy policy</button>
+                  <div class="deploystatus" id="deployresult"></div>
+                </div>
+              </div>
+            </div>
+          </div>
+        </section>
 
         <section class="view" data-show="$view === 'endpoints'">
           <div class="card"><div class="card-h"><span class="ic">&#127760;</span> Registered AI endpoints<span class="sub">agents and providers under governance</span><button class="btn primary card-cta" data-on:click="$modal = 'endpoint'">+ Register endpoint</button></div>
@@ -323,50 +367,16 @@
     </div>
   </div>
 
-  <div class="modal wide" data-show="$modal === 'policy'">
-    <div class="modal-h"><span>&#128640; Deploy a new policy version</span><button class="modal-close" data-on:click="$modal = ''">&times;</button></div>
-    <div class="modal-b">
-      <div class="tabs">
-        <button class="tab" data-class-active="$policyTab === 'editor'" data-on:click="$policyTab = 'editor'">Editor</button>
-        <button class="tab" data-class-active="$policyTab === 'upload'" data-on:click="$policyTab = 'upload'">Upload YAML</button>
-      </div>
-      <div data-show="$policyTab === 'editor'">
-        <p class="hint">Edit the policy in the YAML DSL. acp-server validates and signs it; the proxy hot-reloads only after verifying the signature. A policy that does not compile is rejected and nothing is written.</p>
-        <div id="policy-editor"></div>
-      </div>
-      <div data-show="$policyTab === 'upload'">
-        <p class="hint">Choose a <span class="mono">.yaml</span> policy file. Its contents load into the Editor tab for review, then Deploy.</p>
-        <input type="file" id="policy-file" accept=".yaml,.yml,text/yaml,text/plain" />
-      </div>
-      <textarea id="policy-src" data-bind="policy" spellcheck="false" style="display:none">version: 1
-default: allow
-rules:
-  - id: no-db-deletes
-    when: { resource: database, operation: delete }
-    verdict: deny
-  - id: anon-cannot-read-secrets
-    when: { resource: secrets, principal: unattributed }
-    verdict: deny
-  - id: mask-pii-on-db-reads
-    when: { resource: database, operation: read }
-    verdict: allow
-    obligations:
-      - kind: redact
-        fields: [ssn, card]
-  - id: charges-need-approval
-    when: { resource: payments }
-    verdict: step_up
-    approvers: [finance]
-</textarea>
-      <div class="row">
-        <label class="fld">Author <input type="text" data-bind="author" value="operator" /></label>
-        <button class="btn primary" data-on:click="@post('/policy/deploy')">Deploy policy</button>
-        <button class="btn" data-on:click="$modal = ''">Close</button>
-        <div class="deploystatus" id="deployresult"></div>
-      </div>
-    </div>
-  </div>
 
+  <script>
+    function acpTheme(){
+      var light = document.body.classList.toggle('light');
+      var ic = document.getElementById('theme-ic'); if (ic) ic.innerHTML = light ? '\u263E' : '\u2600';
+      try { localStorage.setItem('acp-theme', light ? 'light' : 'dark'); } catch (e) {}
+      try { if (window.monaco && window.__policyEditor) monaco.editor.setTheme(light ? 'vs' : 'vs-dark'); } catch (e) {}
+    }
+    (function(){ try { if (localStorage.getItem('acp-theme') === 'light') { document.body.classList.add('light'); var ic = document.getElementById('theme-ic'); if (ic) ic.innerHTML = '\u263E'; } } catch (e) {} })();
+  </script>
   <script>
   (function(){
     function boot(){
@@ -408,8 +418,6 @@ rules:
               ed.setValue(text);
               ta.value = text;
               ta.dispatchEvent(new Event('input', { bubbles: true }));
-              var editorTab = document.querySelector('.modal.wide .tab');
-              if (editorTab) { editorTab.click(); }
               setTimeout(function(){ try { ed.layout(); } catch (e) {} }, 60);
             };
             r.readAsText(f);
