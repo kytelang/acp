@@ -218,6 +218,74 @@ MED = weakens a stated guarantee or blocks operations; LOW = hardening / defence
 2. Integrity breaks (A4 GRC re-sign, A5 encrypt record+spool).
 3. Advertised-but-broken (A8 MySQL, B3 help, B1/B2 console actions, D-inaccuracies): cheap credibility.
 4. Enforcement completeness (A6, A7, A10, A11, A18).
+   4b. Central violation/breach reporting (E1 producer wiring first, then E2 evidence ingestion, then
+       E3 console breach panel) so the console can actually show violations and breaches.
 5. Packaging/deploy consistency (B4-B10).
 6. Guide lifecycle content (C1-C7).
 7. Remaining MED/LOW as capacity allows.
+
+---
+
+## E. Central violation and breach reporting (the console cannot see PEP decisions)
+
+This is a cross-cutting architectural gap: the enforcement points detect and record violations, but
+that stream never reaches the control plane, so the console cannot report it.
+
+**Current state (evidence):**
+
+- Every PEP writes decision/violation evidence to its **own local ledger** (`--ledger` file):
+  `crates/acp-proxy/src/dispatch.rs:638-663` (append on decision), `crates/acp-proxy/src/evidence.rs`;
+  the interceptor and guard likewise open a local `acp_ledger::Ledger`
+  (`crates/acp-intercept/src/main.rs:126`, `crates/acp-guard/src/main.rs:93`).
+- No PEP sends anything to the server except agent verification and rule fetch. Grep for outbound
+  server calls in every PEP finds only `POST /agents/verify` and `GET /intercept/rules`; there is **no**
+  `POST /event`, `POST /heartbeat`, or evidence forwarding.
+- The server **has the ingestion API but no producers.** `POST /event/:kind` feeds the fail-open/deny
+  spike detector and `POST /heartbeat/:proxy` feeds the dead-man's-switch; the handlers exist
+  (`crates/acp-server/src/main.rs:293, 295, 1218-1235`) and are commented "a proxy reports a governance
+  event (e.g. fail_open, deny)", but nothing calls them.
+- The console reads `/alerts`, `/liveness` and `/evidence/recent`
+  (`acp-console/src/Features/Dashboard/Shared/acp_client.ky:265-267, 562-569`). Consequences:
+  - `/alerts` (spikes) and `/liveness` (heartbeats) are **permanently empty** because they have no
+    producers.
+  - `/evidence/recent` and `/timeline` read the **server's own** ledger, which holds only control-plane
+    actions (approvals, policy deploys, GRC), **not** the deny/violation records happening at the PEPs.
+- Related: `POST /event` and `POST /heartbeat` are also unauthenticated (see A15), so a producer wiring
+  must be designed together with authenticating those routes.
+
+**Severity: HIGH.** For a governance product, "show me the violations and breaches" is the primary
+console job, and today the console cannot answer it for the actual enforcement stream.
+
+### E1. No producer for the alerting surface (partially built, low effort)
+
+`POST /event/:kind` and `POST /heartbeat/:proxy` are designed for the PEPs but never called, so the
+spike detector and dead-man's-switch are dead. Fix: have each PEP (starting with the proxy) POST a
+periodic heartbeat and a compact event on each `deny` / `fail_open` to the control plane (behind the
+existing `--registry-url`/a new `--report-url`), and authenticate the routes (A15). This lights up the
+console Alerts and Liveness panels with real data.
+
+### E2. No evidence centralisation for remote PEPs (not built, larger)
+
+PEP decision records live in per-PEP local ledgers with no path to the control plane, so the console's
+Evidence/Timeline views cannot show real enforcement decisions, denials or breaches from remote PEPs.
+Options:
+
+- **Push (recommended for workstations/remote PEPs):** add a server ingestion endpoint (e.g.
+  `POST /evidence/ingest`) that accepts **signed** evidence records from a PEP (each PEP signs with a
+  persistent, pinned `--ledger-key`, see A20), verifies the signature and the PEP identity, and appends
+  them into a central ingested view the console reads. Batching + spool/retry so a transient outage does
+  not drop evidence; idempotent by `decision_id` (the ledger already dedups by decision id).
+- **Pull/scrape (for co-located PEPs):** a collector that reads each PEP ledger and folds it in. Weaker
+  for workstations behind NAT.
+- Whichever path: the console Evidence view should distinguish **control-plane actions** from **ingested
+  PEP enforcement decisions**, and surface a **breach feed** (denies, fail-opens, kill-switch activations,
+  content-firewall blocks, SSRF blocks) as a first-class panel, not just a flat recent-evidence list.
+
+### E3. Console breach/violations panel (depends on E1/E2)
+
+Once the data flows, add a dedicated **Violations / Breaches** view to the console (deny stream, spike
+alerts, liveness gaps, break-glass events) with filters by PEP, agent, resource and time. Today the
+console has only a generic "recent evidence" list sourced from the control-plane ledger.
+
+Note: this expands the "Monitoring and alerting" guide gap (C5) — once E1/E2 land, the guide needs a
+section on how violations flow from PEP to console and what each alert means.
