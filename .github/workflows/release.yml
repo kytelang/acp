@@ -1,13 +1,15 @@
 name: release
 
-# Build and publish the Varman (ACP) release bundles on a GitHub Release.
+# Build and publish the Varman (ACP) release bundles. Per the console-first / split-packaging design
+# (docs/design/console-first-consolidation.md) each tag ships THREE kinds of archive:
 #
-# One tag ships one bundle per platform: acp-<tag>-<os>-<arch>.(tar.gz|zip), containing bin/ with the
-# governance binaries (acp, acp-proxy, acp-gateway, acp-guard, acp-intercept, acp-server,
-# mock-mcp-server), the trained content model under models/, and a VERSION file. These are exactly the
-# assets the install scripts (install.sh, install-server.sh, install.ps1) fetch.
+#   1. acp-user-<tag>-<os>-<arch>     workstation tools: acp-proxy, acp-intercept, acp-verify (+ a demo
+#                                     mock MCP server). Built for macOS, Linux and Windows.
+#   2. acp-server-<tag>-linux-<arch>  server services: acp-server, acp-gateway, acp-guard, the content
+#                                     model and the systemd units. Linux only (the services target Linux).
+#   3. acp-console-<tag>-linux-<arch> the Kyte-built web console (binary + wwwroot + app.yaml).
 #
-# Fires on a version tag vX.Y.Z, or manually via workflow_dispatch with a tag name.
+# Each archive has a .sha256 sidecar. install.sh fetches (1), install-server.sh fetches (2) and (3).
 
 on:
   push:
@@ -23,8 +25,8 @@ permissions:
   contents: write
 
 jobs:
-  build:
-    name: ${{ matrix.name }}
+  binaries:
+    name: binaries ${{ matrix.name }}
     runs-on: ${{ matrix.runner }}
     strategy:
       fail-fast: false
@@ -36,70 +38,115 @@ jobs:
           - { name: windows-x86_64, runner: windows-2022,     target: x86_64-pc-windows-msvc,    os: windows, arch: x86_64,  archive: zip }
     steps:
       - uses: actions/checkout@v4
-
       - name: Resolve tag
         id: tag
         shell: bash
         run: |
-          if [ "${{ github.event_name }}" = "workflow_dispatch" ]; then
-            echo "tag=${{ inputs.tag }}" >> "$GITHUB_OUTPUT"
-          else
-            echo "tag=${GITHUB_REF_NAME}" >> "$GITHUB_OUTPUT"
-          fi
-
+          if [ "${{ github.event_name }}" = "workflow_dispatch" ]; then echo "tag=${{ inputs.tag }}" >> "$GITHUB_OUTPUT";
+          else echo "tag=${GITHUB_REF_NAME}" >> "$GITHUB_OUTPUT"; fi
       - uses: dtolnay/rust-toolchain@stable
         with:
           targets: ${{ matrix.target }}
-
-      # aws-lc-rs (used by the mTLS layer) needs nasm on Windows.
-      - name: Install nasm (Windows)
+      - name: Install nasm (Windows, for aws-lc-rs)
         if: matrix.os == 'windows'
         uses: ilammy/setup-nasm@v1
 
-      - name: Build
+      - name: Build workstation tools (all platforms)
         shell: bash
-        run: |
-          cargo build --release --locked --target ${{ matrix.target }} \
-            -p acp-cli -p acp-proxy -p acp-gateway -p acp-guard -p acp-intercept -p acp-server \
-            --bin mock-mcp-server
+        run: cargo build --release --locked --target ${{ matrix.target }} -p acp-proxy -p acp-intercept -p acp-verify --bin mock-mcp-server
 
-      - name: Stage bundle
+      - name: Build server services (Linux only)
+        if: matrix.os == 'linux'
+        run: cargo build --release --locked --target ${{ matrix.target }} -p acp-server -p acp-gateway -p acp-guard -p acp-cli
+
+      - name: Stage archives
         id: stage
         shell: bash
         run: |
           set -eu
-          TAG="${{ steps.tag.outputs.tag }}"
-          NAME="acp-${TAG}-${{ matrix.os }}-${{ matrix.arch }}"
-          EXT=""
-          [ "${{ matrix.os }}" = "windows" ] && EXT=".exe"
-          OUT="dist/${NAME}"
-          mkdir -p "${OUT}/bin" "${OUT}/models"
+          TAG="${{ steps.tag.outputs.tag }}"; OS="${{ matrix.os }}"; ARCH="${{ matrix.arch }}"
           BINDIR="target/${{ matrix.target }}/release"
-          # acp-cli installs as `acp`.
-          cp "${BINDIR}/acp-cli${EXT}" "${OUT}/bin/acp${EXT}"
-          for b in acp-proxy acp-gateway acp-guard acp-intercept acp-server mock-mcp-server; do
-            cp "${BINDIR}/${b}${EXT}" "${OUT}/bin/${b}${EXT}"
-          done
-          cp crates/acp-core/models/injection-lr.json "${OUT}/models/injection-lr.json"
-          echo "${TAG}" > "${OUT}/VERSION"
-          cd dist
-          if [ "${{ matrix.archive }}" = "zip" ]; then
-            7z a -tzip "${NAME}.zip" "${NAME}" >/dev/null
-            ASSET="${NAME}.zip"
-          else
-            tar -czf "${NAME}.tar.gz" "${NAME}"
-            ASSET="${NAME}.tar.gz"
-          fi
-          # checksum sidecar (the install scripts verify it)
-          if command -v sha256sum >/dev/null 2>&1; then sha256sum "${ASSET}" > "${ASSET}.sha256";
-          else shasum -a 256 "${ASSET}" > "${ASSET}.sha256"; fi
-          echo "asset=dist/${ASSET}" >> "$GITHUB_OUTPUT"
-          echo "sum=dist/${ASSET}.sha256" >> "$GITHUB_OUTPUT"
+          EXT=""; [ "$OS" = "windows" ] && EXT=".exe"
+          mkdir -p dist
+          pack() { # pack <dirname>  -> echoes the asset path, writes .sha256
+            d="$1"
+            ( cd dist
+              if [ "${{ matrix.archive }}" = "zip" ]; then 7z a -tzip "$d.zip" "$d" >/dev/null; a="$d.zip";
+              else tar -czf "$d.tar.gz" "$d"; a="$d.tar.gz"; fi
+              if command -v sha256sum >/dev/null 2>&1; then sha256sum "$a" > "$a.sha256"; else shasum -a 256 "$a" > "$a.sha256"; fi )
+          }
 
-      - name: Publish to the release
+          # ---- user (workstation) archive: all platforms ----
+          U="acp-user-$TAG-$OS-$ARCH"; mkdir -p "dist/$U/bin"
+          for b in acp-proxy acp-intercept acp-verify mock-mcp-server; do cp "$BINDIR/$b$EXT" "dist/$U/bin/"; done
+          echo "$TAG" > "dist/$U/VERSION"
+          pack "$U"
+
+          # ---- server archive: Linux only ----
+          if [ "$OS" = "linux" ]; then
+            S="acp-server-$TAG-linux-$ARCH"; mkdir -p "dist/$S/bin" "dist/$S/models" "dist/$S/systemd"
+            for b in acp-server acp-gateway acp-guard acp-verify; do cp "$BINDIR/$b" "dist/$S/bin/"; done
+            cp "$BINDIR/acp-cli" "dist/$S/bin/acp"   # interim admin CLI on the server (retires when the console/API cover registration)
+            cp crates/acp-core/models/injection-lr.json "dist/$S/models/"
+            cp deploy/systemd/*.service "dist/$S/systemd/" 2>/dev/null || true
+            echo "$TAG" > "dist/$S/VERSION"
+            pack "$S"
+          fi
+
+      - name: Publish archives
         uses: softprops/action-gh-release@v2
         with:
           tag_name: ${{ steps.tag.outputs.tag }}
           files: |
-            ${{ steps.stage.outputs.asset }}
-            ${{ steps.stage.outputs.sum }}
+            dist/*.tar.gz
+            dist/*.tar.gz.sha256
+            dist/*.zip
+            dist/*.zip.sha256
+
+  console:
+    name: console linux-${{ matrix.arch }}
+    runs-on: ${{ matrix.runner }}
+    # Best-effort: a Kyte-toolchain hiccup must not block the binaries release.
+    continue-on-error: true
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - { runner: ubuntu-22.04,     arch: x86_64 }
+          - { runner: ubuntu-22.04-arm, arch: aarch64 }
+    steps:
+      - uses: actions/checkout@v4
+      - name: Resolve tag
+        id: tag
+        run: |
+          if [ "${{ github.event_name }}" = "workflow_dispatch" ]; then echo "tag=${{ inputs.tag }}" >> "$GITHUB_OUTPUT";
+          else echo "tag=${GITHUB_REF_NAME}" >> "$GITHUB_OUTPUT"; fi
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+      - name: Install the Kyte toolchain
+        run: |
+          curl -fsSL https://kytelang.org/install.sh | sh
+          echo "$HOME/.kyte/bin" >> "$GITHUB_PATH"
+      - name: Build the console
+        working-directory: acp-console
+        run: |
+          npm ci || npm install
+          npm run css || true
+          kyte build
+      - name: Stage and publish
+        run: |
+          set -eu
+          TAG="${{ steps.tag.outputs.tag }}"; ARCH="${{ matrix.arch }}"
+          C="acp-console-$TAG-linux-$ARCH"; mkdir -p "dist/$C/bin"
+          cp acp-console/build/debug/bin/acp-console "dist/$C/bin/"
+          cp -R acp-console/wwwroot "dist/$C/wwwroot"
+          [ -f acp-console/app.yaml ] && cp acp-console/app.yaml "dist/$C/app.yaml" || true
+          echo "$TAG" > "dist/$C/VERSION"
+          ( cd dist && tar -czf "$C.tar.gz" "$C" && sha256sum "$C.tar.gz" > "$C.tar.gz.sha256" )
+      - uses: softprops/action-gh-release@v2
+        with:
+          tag_name: ${{ steps.tag.outputs.tag }}
+          files: |
+            dist/*.tar.gz
+            dist/*.tar.gz.sha256

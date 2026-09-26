@@ -2,7 +2,7 @@
 #
 #   powershell -c "irm https://acpdocs.web.app/install.ps1 | iex"
 #
-# Installs the ACP client tools (acp, acp-proxy, acp-intercept, acp-guard) into %USERPROFILE%\.acp\bin
+# Installs the ACP workstation tools (acp-proxy, acp-intercept, acp-verify) into %USERPROFILE%\.acp\bin
 # and adds that to your user PATH. For the control plane and gateway as services, use a Linux host and
 # install-server.sh.
 $ErrorActionPreference = 'Stop'
@@ -22,7 +22,7 @@ if (-not $Version) {
 }
 if (-not $Version) { throw 'could not determine the latest release; set $env:ACP_VERSION' }
 
-$Asset = "acp-$Version-windows-$arch.zip"
+$Asset = "acp-user-$Version-windows-$arch.zip"
 $Base = "https://github.com/$Repo/releases/download/$Version"
 Write-Host "Installing Varman (ACP) $Version (windows-$arch) into $Home_"
 
@@ -46,7 +46,7 @@ try {
 
   Write-Host 'Extracting ...'
   Expand-Archive -Path $zip -DestinationPath $Tmp -Force
-  $src = Join-Path $Tmp "acp-$Version-windows-$arch"
+  $src = Join-Path $Tmp "acp-user-$Version-windows-$arch"
   New-Item -ItemType Directory -Force -Path $Bin | Out-Null
   Copy-Item -Path (Join-Path $src 'bin\*') -Destination $Bin -Recurse -Force
 
@@ -58,7 +58,7 @@ try {
   }
   Write-Host ''
   Write-Host "Varman (ACP) $Version is installed in $Home_."
-  Write-Host 'Check it with:  acp version'
+  Write-Host 'Verify evidence independently:  acp-verify <ledger.db>'
   Write-Host 'Full runbook:   https://acpdocs.web.app/guide/16-setup'
 } finally {
   Remove-Item -Recurse -Force $Tmp -ErrorAction SilentlyContinue

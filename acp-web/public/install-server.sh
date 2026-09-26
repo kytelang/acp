@@ -44,20 +44,33 @@ if [ -z "$VERSION" ]; then
   VERSION=$(printf '%s' "$body" | sed -n 's/.*"tag_name":[[:space:]]*"\([^"]*\)".*/\1/p' | head -n1)
   [ -n "$VERSION" ] || err "could not find the latest release; set ACP_VERSION=vX.Y.Z"
 fi
-ASSET="acp-$VERSION-linux-$ARCH.tar.gz"
+ASSET="acp-server-$VERSION-linux-$ARCH.tar.gz"
+CONSOLE_ASSET="acp-console-$VERSION-linux-$ARCH.tar.gz"
 BASE="https://github.com/$REPO/releases/download/$VERSION"
 say "Installing Varman (ACP) server $VERSION (linux-$ARCH)"
 
 TMP=$(mktemp -d); trap 'rm -rf "$TMP"' EXIT INT TERM
+verify_asset() { # verify_asset <asset>
+  s=$(fetch_stdout "$BASE/$1.sha256")
+  if [ -n "$s" ]; then printf '%s\n' "$s" > "$TMP/$1.sha256"; ( cd "$TMP" && sha256sum -c "$1.sha256" >/dev/null 2>&1 ) || err "checksum failed for $1"; fi
+}
 fetch "$BASE/$ASSET" "$TMP/$ASSET" || err "download failed: $BASE/$ASSET"
-sums=$(fetch_stdout "$BASE/$ASSET.sha256")
-if [ -n "$sums" ]; then
-  printf '%s\n' "$sums" > "$TMP/$ASSET.sha256"
-  ( cd "$TMP" && sha256sum -c "$ASSET.sha256" >/dev/null 2>&1 ) || err "checksum verification failed for $ASSET"
-fi
+verify_asset "$ASSET"
 tar -xzf "$TMP/$ASSET" -C "$TMP"
-SRC="$TMP/acp-$VERSION-linux-$ARCH"
-[ -d "$SRC/bin" ] || err "unexpected archive layout"
+SRC="$TMP/acp-server-$VERSION-linux-$ARCH"
+[ -d "$SRC/bin" ] || err "unexpected server archive layout"
+
+# The console is a best-effort asset (built by the Kyte toolchain in CI). A release without it still
+# installs the control plane and gateway; only the web UI is skipped.
+CONSOLE_SRC=""
+if fetch "$BASE/$CONSOLE_ASSET" "$TMP/$CONSOLE_ASSET" 2>/dev/null; then
+  verify_asset "$CONSOLE_ASSET"
+  tar -xzf "$TMP/$CONSOLE_ASSET" -C "$TMP"
+  CONSOLE_SRC="$TMP/acp-console-$VERSION-linux-$ARCH"
+  say "Console archive found; it will be installed as a service."
+else
+  say "No console archive in this release; skipping the web UI (control plane and gateway still install)."
+fi
 
 # ---- service user, dirs ---------------------------------------------------
 id "$SVCUSER" >/dev/null 2>&1 || useradd --system --no-create-home --shell /usr/sbin/nologin "$SVCUSER"
@@ -66,7 +79,7 @@ install -d -m 0750 -o "$SVCUSER" -g "$SVCUSER" "$DATA"
 
 # ---- binaries -------------------------------------------------------------
 for b in "$SRC"/bin/*; do install -m 0755 "$b" "$PREFIX/bin/"; done
-for b in acp acp-server acp-gateway acp-guard acp-intercept; do
+for b in acp acp-server acp-gateway acp-guard acp-verify; do
   [ -f "$PREFIX/bin/$b" ] && ln -sf "$PREFIX/bin/$b" "/usr/local/bin/$b"
 done
 [ -f "$SRC/models/injection-lr.json" ] && install -m 0644 "$SRC/models/injection-lr.json" "$ETC/injection-lr.json"
@@ -110,6 +123,33 @@ ACP_BUDGET_PG=${ACP_BUDGET_PG:-}
 EOF
 chmod 0640 "$ETC"/server.env "$ETC"/gateway.env; chown root:"$SVCUSER" "$ETC"/server.env "$ETC"/gateway.env
 
+# ---- web console (best-effort) -------------------------------------------
+if [ -n "$CONSOLE_SRC" ] && [ -x "$CONSOLE_SRC/bin/acp-console" ]; then
+  install -d -m 0755 "$PREFIX/console/bin"
+  install -m 0755 "$CONSOLE_SRC/bin/acp-console" "$PREFIX/console/bin/acp-console"
+  cp -R "$CONSOLE_SRC/wwwroot" "$PREFIX/console/wwwroot"
+  [ -f "$CONSOLE_SRC/app.yaml" ] && cp "$CONSOLE_SRC/app.yaml" "$PREFIX/console/app.yaml"
+  cat > /etc/systemd/system/acp-console.service <<EOF
+[Unit]
+Description=Varman (ACP) web console
+After=network-online.target acp-server.service
+Wants=network-online.target
+[Service]
+User=$SVCUSER
+Group=$SVCUSER
+WorkingDirectory=$PREFIX/console
+ExecStart=$PREFIX/console/bin/acp-console
+Restart=on-failure
+RestartSec=2
+NoNewPrivileges=true
+ProtectSystem=strict
+ProtectHome=true
+PrivateTmp=true
+[Install]
+WantedBy=multi-user.target
+EOF
+fi
+
 # ---- systemd units --------------------------------------------------------
 cat > /etc/systemd/system/acp-server.service <<EOF
 [Unit]
@@ -120,7 +160,7 @@ Wants=network-online.target
 User=$SVCUSER
 Group=$SVCUSER
 EnvironmentFile=$ETC/server.env
-ExecStart=$PREFIX/bin/acp-server --addr 127.0.0.1:8080 --ledger $DATA/evidence.db --approvals $DATA/approvals.db --enrollment $DATA/enroll.json --policy-store $DATA/policy --break-glass-file $DATA/break-glass.signed
+ExecStart=$PREFIX/bin/acp-server --addr 127.0.0.1:8787 --ledger $DATA/evidence.db --approvals $DATA/approvals.db --enrollment $DATA/enroll.json --policy-store $DATA/policy --break-glass-file $DATA/break-glass.signed
 Restart=on-failure
 RestartSec=2
 NoNewPrivileges=true
@@ -155,6 +195,11 @@ EOF
 systemctl daemon-reload
 systemctl enable acp-server >/dev/null 2>&1 || true
 if [ "${ACP_NO_START:-0}" != "1" ]; then systemctl restart acp-server; fi
+if [ -f /etc/systemd/system/acp-console.service ]; then
+  systemctl enable acp-console >/dev/null 2>&1 || true
+  [ "${ACP_NO_START:-0}" != "1" ] && systemctl restart acp-console || true
+  say "Web console enabled (default http://127.0.0.1:8080)."
+fi
 
 # The gateway only makes sense with an upstream; enable and start it when one is configured.
 if grep -q '^ACP_UPSTREAM=..*' "$ETC/gateway.env"; then
@@ -170,7 +215,7 @@ say "Varman (ACP) server $VERSION installed."
 say "  binaries : $PREFIX/bin (acp, acp-server, acp-gateway, ...)"
 say "  config   : $ETC (policy.yaml, server.env, gateway.env, ledger.kek)"
 say "  data     : $DATA (evidence.db, approvals.db, enroll.json)"
-say "  services : systemctl status acp-server    (control plane on 127.0.0.1:8080)"
+say "  services : systemctl status acp-server acp-console   (API 127.0.0.1:8787, console 127.0.0.1:8080)"
 say ""
-say "Verify the evidence ledger:  acp verify $DATA/evidence.db"
+say "Verify the evidence ledger:  acp-verify $DATA/evidence.db"
 say "Full runbook:                https://acpdocs.web.app/guide/16-setup"

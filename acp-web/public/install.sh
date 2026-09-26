@@ -3,10 +3,11 @@
 #
 #   curl -fsSL https://acpdocs.web.app/install.sh | sh
 #
-# It downloads the release that matches your OS and CPU and installs the client tools into
-# ~/.acp/bin: `acp` (the CLI), `acp-proxy` (the MCP proxy you run in front of a tool server),
-# `acp-intercept` (the forward proxy), and `acp-guard`. These are run on demand, not as services;
-# to run the control plane and gateway as system services on a server, use install-server.sh.
+# It downloads the workstation archive for your OS and CPU and installs the client tools into
+# ~/.acp/bin: `acp-proxy` (the MCP proxy you run in front of a tool server), `acp-intercept` (a dev
+# forward proxy), and `acp-verify` (independent, offline evidence verification). These are run on
+# demand, not as services. The control plane, gateway and console run on a server: use
+# install-server.sh for those.
 #
 # Environment overrides:
 #   ACP_VERSION          a release tag such as v0.1.0 (default: the latest release)
@@ -55,7 +56,7 @@ if [ -z "$VERSION" ]; then
   [ -n "$VERSION" ] || err "could not determine the latest release tag; set ACP_VERSION=vX.Y.Z and retry"
 fi
 
-ASSET="acp-$VERSION-$OS-$ARCH.tar.gz"
+ASSET="acp-user-$VERSION-$OS-$ARCH.tar.gz"
 BASE="https://github.com/$REPO/releases/download/$VERSION"
 say "Installing Varman (ACP) $VERSION ($OS-$ARCH) into $ACP_HOME"
 
@@ -77,7 +78,7 @@ fi
 
 say "Extracting ..."
 tar -xzf "$TMP/$ASSET" -C "$TMP"
-SRC="$TMP/acp-$VERSION-$OS-$ARCH"
+SRC="$TMP/acp-user-$VERSION-$OS-$ARCH"
 [ -d "$SRC/bin" ] || err "unexpected archive layout: $SRC/bin not found"
 
 mkdir -p "$ACP_HOME/bin"
@@ -106,5 +107,6 @@ if [ -n "$added_profile" ]; then
 else
   say "Add $BIN to your PATH:  export PATH=\"$BIN:\$PATH\""
 fi
-say "Check it with:  acp version"
-say "Get started:   acp init acp-demo   (then read https://acpdocs.web.app/guide/16-setup)"
+say "Verify evidence independently:  acp-verify <ledger.db>"
+say "Run the proxy in front of an MCP server, and operate everything else from the console."
+say "Setup runbook:  https://acpdocs.web.app/guide/16-setup"
