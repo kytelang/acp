@@ -79,6 +79,19 @@ pub struct ApprovalRow {
     init(id: string, tool: string) { self.id = id; self.tool = tool; }
 }
 
+pub struct EventRow {
+    pub proxy: string,
+    pub agent: string,
+    pub tool: string,
+    pub verdict: string,
+    pub rule: string,
+    pub impact: string,
+    pub outcome: string,
+    init(proxy: string, agent: string, tool: string, verdict: string, rule: string, impact: string, outcome: string) {
+        self.proxy = proxy; self.agent = agent; self.tool = tool; self.verdict = verdict; self.rule = rule; self.impact = impact; self.outcome = outcome;
+    }
+}
+
 pub struct PolicyRuleRow {
     pub id: string,
     pub agent: string,
@@ -280,6 +293,31 @@ pub struct AcpClient {
                 json.asString(json.get(item, "verdict")) ?? "?",
                 json.asString(json.get(item, "agent")) ?? "",
                 json.asString(json.get(item, "principal")) ?? "-"));
+            i = i + 1;
+        }
+        return rows;
+    }
+
+    // Violations feed (gap E1/E3): denials, step-ups and blocks reported by the enforcement points to
+    // the control plane, newest first. Read-only over acp-server /events/recent.
+    pub fn eventRows(self: AcpClient): list.List<EventRow> {
+        let rows = list.List<EventRow>();
+        let resp = client.Http.get(self.base + "/events/recent");
+        if (resp.status.toCode() != 200) { return rows; }
+        let ev = json.get(json.parse(resp.body), "events");
+        let arr = json.asArray(ev);
+        if (arr == undefined) { return rows; }
+        let i = 0;
+        while (i < arr.size()) {
+            let item = json.at(ev, i);
+            rows.push(EventRow(
+                json.asString(json.get(item, "proxy")) ?? "-",
+                json.asString(json.get(item, "agent")) ?? "-",
+                json.asString(json.get(item, "tool")) ?? "?",
+                json.asString(json.get(item, "verdict")) ?? "?",
+                json.asString(json.get(item, "rule_id")) ?? "-",
+                json.asString(json.get(item, "impact")) ?? "-",
+                json.asString(json.get(item, "outcome")) ?? "-"));
             i = i + 1;
         }
         return rows;

@@ -145,6 +145,7 @@
         <div class="nav-i" data-class-active="$view === 'overview'" data-on:click="$view = 'overview'"><span class="ic">&#128202;</span> Overview</div>
         <div class="nav-i" data-class-active="$view === 'approvals'" data-on:click="$view = 'approvals'"><span class="ic">&#9995;</span> Approvals</div>
         <div class="nav-i" data-class-active="$view === 'evidence'" data-on:click="$view = 'evidence'"><span class="ic">&#128220;</span> Evidence</div>
+        <div class="nav-i" data-class-active="$view === 'violations'" data-on:click="$view = 'violations'"><span class="ic">&#128680;</span> Violations</div>
         <div class="nav-i" data-class-active="$view === 'reports'" data-on:click="$view = 'reports'"><span class="ic">&#128203;</span> Reports</div>
         <div class="nav-l">Identity</div>
         <div class="nav-i" data-class-active="$view === 'apps'" data-on:click="$view = 'apps'"><span class="ic">&#128230;</span> Teams</div>
@@ -163,7 +164,7 @@
 
     <div class="main">
       <div class="content" data-on-intersect="@get('/sse/metrics')">
-        <h1 class="page-title" data-text="$view === 'overview' ? 'Governance overview' : $view === 'approvals' ? 'Pending approvals' : $view === 'evidence' ? 'Evidence timeline' : $view === 'apps' ? 'Teams' : $view === 'agents' ? 'Registered agents' : $view === 'policy' ? 'Policy' : $view === 'reports' ? 'Governance report' : $view === 'health' ? 'Control-plane integrity' : $view === 'endpoints' ? 'AI endpoints' : $view === 'grc' ? 'Governance records' : 'Emergency kill-switch'">Governance overview</h1>
+        <h1 class="page-title" data-text="$view === 'overview' ? 'Governance overview' : $view === 'approvals' ? 'Pending approvals' : $view === 'evidence' ? 'Evidence timeline' : $view === 'violations' ? 'Violations and breaches' : $view === 'apps' ? 'Teams' : $view === 'agents' ? 'Registered agents' : $view === 'policy' ? 'Policy' : $view === 'reports' ? 'Governance report' : $view === 'health' ? 'Control-plane integrity' : $view === 'endpoints' ? 'AI endpoints' : $view === 'grc' ? 'Governance records' : 'Emergency kill-switch'">Governance overview</h1>
         <section class="view" data-show="$view === 'overview'">
           <div class="card"><div class="card-h"><span class="ic">&#128202;</span> Posture &amp; activity</div>
             <div class="card-b"><div id="metrics" class="stats"><p class="empty">connecting to acp-server&#8230;</p></div></div></div>
@@ -192,6 +193,10 @@
             <div class="card-b"><div id="evidence"><p class="empty">&#8230;</p></div></div></div>
         </section>
 
+        <section class="view" data-show="$view === 'violations'">
+          <div class="card"><div class="card-h"><span class="ic">&#128680;</span> Violations and breaches<span class="sub">denials, step-ups and blocks reported by enforcement points</span></div>
+          <div class="card-b"><div id="violations"><p class="empty">&#8230;</p></div></div></div>
+        </section>
         <section class="view" data-show="$view === 'apps'">
           <div class="card"><div class="card-h"><span class="ic">&#128230;</span> Teams &amp; agents<button class="btn primary card-cta" data-on:click="$modal = 'app'">+ Register team</button></div>
             <div class="card-b"><div id="apps"><p class="empty">&#8230;</p></div></div></div>

@@ -229,6 +229,32 @@ pub fn evidencePanel(rows: list.List<EvidenceRow>): Html {
     </div>;
 }
 
+pub fn violationsPanel(rows: list.List<EventRow>): Html {
+    return <div id="violations">
+        {if (rows.size() == 0) {
+            <p class="empty">No violations reported yet. Enforcement points push denials, step-ups and blocks here.</p>
+        } else {
+            <table class="tbl">
+                <thead><tr><th>PEP</th><th>Agent</th><th>Tool</th><th>Verdict</th><th>Rule</th><th>Impact</th><th>Outcome</th></tr></thead>
+                <tbody>
+                    {for (i in 0..rows.size()) {
+                        let r = rows.get(i) ?? EventRow("", "", "", "", "", "", "");
+                        <tr>
+                            <td class="mono dim">{r.proxy}</td>
+                            <td class="mono dim">{r.agent}</td>
+                            <td class="strong">{r.tool}</td>
+                            <td>{verdictBadge(r.verdict)}</td>
+                            <td class="mono dim">{r.rule}</td>
+                            <td>{r.impact}</td>
+                            <td>{r.outcome}</td>
+                        </tr>
+                    }}
+                </tbody>
+            </table>
+        }}
+    </div>;
+}
+
 
 // A scoping cell: "any" shown muted, else a coloured badge. Used for agent/principal/resource.
 fn scopeCell(val: string, cls: string): Html {

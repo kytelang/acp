@@ -228,6 +228,12 @@ MED = weakens a stated guarantee or blocks operations; LOW = hardening / defence
 
 ## E. Central violation and breach reporting (the console cannot see PEP decisions)
 
+> Status 2026-09-26: **E1 DONE** (proxy pushes heartbeats + non-allow decisions to the control plane;
+> ingestion routes authenticated with a shared report token). **E3 partly DONE**: a console
+> **Violations** panel now renders the reported deny/step-up/block feed from `GET /events/recent`.
+> Remaining: E2 (full signed evidence ingest for the Evidence/Timeline views), gateway/intercept/guard
+> producers, and richer breach filters. See section F for the other payloads.
+
 This is a cross-cutting architectural gap: the enforcement points detect and record violations, but
 that stream never reaches the control plane, so the console cannot report it.
 
