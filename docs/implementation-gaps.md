@@ -12,6 +12,23 @@ production-readiness item, that is noted.
 Severity: CRIT = security bypass or data-integrity break; HIGH = broken/advertised-but-missing;
 MED = weakens a stated guarantee or blocks operations; LOW = hardening / defence-in-depth.
 
+## Progress (2026-09-26)
+
+DONE and committed this session:
+- **E1** PEP->server violation + heartbeat reporting (authenticated); **E3** console Violations panel.
+- **A15** authenticated the /event and /heartbeat ingestion routes.
+- **A1** gate approvals approve/deny on Approve; **A3** gate + attribute /admin/meta; **A9** attribute
+  GRC/endpoint/approval writes to the verified principal (authorize now returns it).
+- **A4** GRC status change re-signs the record; **A8** MySQL-safe store DDL; **B3** honest `acp --help`.
+- **A6** HTTP transport screens tool results; **A7** argument scanning recurses into nested JSON;
+  **A11** loud warning when the proxy runs with no policy (transparent mode kept).
+- **A18** interceptor blocks SSRF to internal targets in the dial path.
+- **D2**/**D6** doc inaccuracies corrected.
+
+OPEN (larger slices, in progress): A5 (encrypt record+spool), A10 (break-glass reach to intercept/guard
++ require signature), F1 (field approvals full loop), F2/E2 + gateway/intercept/guard producers,
+B1/B2/B4-B10 (console actions, deploy, CI), C (guide lifecycle content), and the MED/LOW A-items.
+
 ---
 
 ## A. Security and correctness (implementation)
