@@ -1,118 +1,66 @@
-# 13. The acp CLI
+# 13. Command-line tools
 
-> Direction: management is moving to the console and the control-plane API, with records stored
-> centrally. On a workstation the only long-term command-line tool is `acp-verify` (independent
-> evidence verification); the enforcement binaries (`acp-proxy`, `acp-intercept`, `acp-guard`) are
-> deployed, not "run to manage". The `acp` commands below still work and ship in the server archive as
-> the interim admin tool, but prefer the console for anything that changes governance state.
+Management does not happen on the command line any more. Registration, policy, approvals, the
+kill-switch, AI endpoints and the GRC records are all created and changed from the **console** (for
+people) or the **control-plane API** (for automation), and stored centrally in the control-plane
+database. The command line is for three things only: independent verification, CI gates, and a few
+offline or generation tools.
 
+## What runs on the command line
 
-`acp-cli`, invoked as `acp`, is the operator's tool for everything that is not sitting in the request
-path: authoring and testing policy, managing identity, verifying and exporting evidence, discovery
-and enrolment, red-teaming the firewall, and the GRC surface. It talks to files and to a running
-control plane; it holds no signing key of its own for the data path.
+### acp-verify (the one durable tool)
 
-Run `acp` with no arguments for the banner, or `acp <command>` with no arguments for that command's
-usage.
-
-## Getting started
+Independent, offline verification of the evidence, run by an auditor on their own machine with only
+the public key. It never contacts or trusts the server.
 
 ```sh
-acp init acp-demo        # scaffold a workspace: a starter policy and the run commands
-acp version
+acp-verify <ledger.db>          # verify a ledger, public key only
+acp-verify --pack <pack.json>   # verify a downloaded evidence pack on a clean machine
 ```
 
-`acp init` writes a starter `policy.yaml` (with guidance toward default-deny), and prints how to run
-the proxy, resolve an approval, verify the evidence, and check posture.
+Exit 0 if the evidence verifies, non-zero if it was tampered with. See [chapter 9](09-evidence.md) and
+[chapter 15](15-security.md).
 
-## Policy
+### The enforcement binaries
 
-| Command | Purpose |
+Not "commands to manage", but the data plane you deploy: `acp-proxy`, `acp-gateway`, `acp-intercept`,
+`acp-guard`. Their flags are in chapters [3](03-proxy.md) to [6](06-guard.md).
+
+### CI and offline helpers (the `acp` tool)
+
+The `acp` tool ships in the server archive and carries the tasks that genuinely belong on a command
+line: they change no governance state, or they run in a pipeline, or they must work offline.
+
+| Command | Job |
 | --- | --- |
-| `acp policy-compile <policy.yaml>` | compile to Cedar and report errors, without deploying |
-| `acp policy-test <policy.yaml> <tests>` | evaluate example requests against a policy |
-| `acp policy ...` | inspect the deployed policy store |
-| `acp posture <ledger.db> [--required <0..1>]` | is coverage high enough to flip to default-deny? |
+| `acp policy-compile` / `policy-test` | compile and test a policy in CI, before it is deployed from the console |
+| `acp redteam` / `content-eval` / `content-scan` / `groundedness` | firewall CI gates and one-off checks |
+| `acp coverage` / `canary-egress` / `posture` | measure unavoidability and default-deny readiness |
+| `acp export` / `grc-report` / `siem` | produce an evidence pack, a framework report, or a SIEM feed from a ledger |
+| `acp ledger-backup` / `purge` / `replay` | evidence maintenance |
+| `acp native-compile` | compile a policy into coding-agent settings |
+| `acp discover` | classify shadow-AI endpoints from an egress log (then enrol them in the console) |
 
-## Identity
+## What moved to the console and the API
 
-| Command | Purpose |
+These commands are **retired**. Do the same thing from the console or the control-plane API; the
+record is stored in the database and signed server-side.
+
+| Retired command | Now |
 | --- | --- |
-| `acp app register <registry> <name> <owner>` | register an application |
-| `acp agent register <registry> <app-id> <name>` | register an agent, prints a one-time token |
-| `acp registry ...` | inspect apps, agents and principals |
+| `acp app register`, `acp agent register`, `acp registry` | console Teams / Agents pages, or `POST /apps`, `POST /agents` |
+| `acp enroll` (AI endpoints) | console AI Endpoints page, or `POST /endpoints/register` |
+| `acp approve` / `deny` / `approvals` | console Approvals inbox, or `POST /approvals/:id/approve` |
+| `acp break-glass` | console Kill-switch, or `POST /break-glass/engage` |
+| `acp assess`, `conformity`, `risk`, `modelcard`, `usecase`, `attest`, `aibom`, `controls` | console Governance page, or `POST /grc` |
+| policy deploy | console Policy page, or `POST /policy-store/deploy` |
 
-## Evidence
+The proxy no longer needs a registry file: point `--registry-url` at the control plane and it verifies
+each agent against the database ([chapter 8](08-identity.md)).
 
-| Command | Purpose |
-| --- | --- |
-| `acp verify <ledger.db>` | re-derive and verify the ledger, public-key only |
-| `acp export <ledger.db>` | write a standalone, self-verifying evidence pack |
-| `acp verify-pack <pack.json>` | verify an exported pack on a clean machine |
-| `acp replay <ledger.db> <seq> <policy.yaml>` | replay one recorded decision against a policy |
-| `acp purge <ledger.db> --before <ms>` | drop argument payloads older than a cutoff (retention) |
-| `acp ledger-backup <src.db> <dst.db>` | copy and re-verify a backup |
-| `acp siem <ledger.db> --format cef|ocsf|syslog` | project decisions into a SIEM |
+## Why verification stays local
 
-## Approvals and emergency
-
-| Command | Purpose |
-| --- | --- |
-| `acp approvals <store>` | list pending step-up holds |
-| `acp approve <store> <id> <approver>` | approve a held action |
-| `acp deny <store> <id>` | deny a held action |
-| `acp break-glass engage|clear ...` | operate the signed kill-switch |
-
-## Content firewall
-
-| Command | Purpose |
-| --- | --- |
-| `acp content-scan <text>` | scan one input for injection, PII, secrets |
-| `acp content-eval <dataset.jsonl>` | precision / recall on a labelled set |
-| `acp redteam [model.json] [--min-catch <r>]` | adversarial corpus gate for CI |
-| `acp groundedness --answer <f> --context <f>` | context-grounded faithfulness check |
-| `acp classify-eval <dataset.jsonl>` | evaluate the PII / secret classifiers |
-
-## Coverage, discovery, enrolment
-
-| Command | Purpose |
-| --- | --- |
-| `acp discover` | classify shadow-AI endpoints from an egress log |
-| `acp enroll ...` | signed dispositions; `governed`, `export-mdm`, ... |
-| `acp coverage <observed> <governed> [--require-full]` | signed governance-coverage report |
-| `acp canary-egress <probes.json>` | fail if a model / tool is reachable off-ACP |
-| `acp intercept pac|from-enrollment ...` | build interceptor rules |
-
-## Governing coding agents
-
-| Command | Purpose |
-| --- | --- |
-| `acp native-compile <policy.yaml> --vendor claude|copilot|gemini [--gateway <url>]` | compile to managed settings |
-
-## GRC
-
-| Command | Purpose |
-| --- | --- |
-| `acp grc-report <ledger.db>` | framework report graded from real records |
-| `acp controls [framework]` | the control library |
-| `acp assess ...` | EU AI Act risk tiering |
-| `acp conformity init|set|report ...` | worked conformity checklist |
-| `acp risk ...` | the AI risk register |
-| `acp modelcard add|list ...` | the model-card registry |
-| `acp usecase register|link-assessment|advance|list ...` | the use-case lifecycle |
-| `acp attest ...` | signed attestations |
-| `acp aibom <artifacts.json> [--require-scan]` | signed CycloneDX AI-BOM |
-
-## Diagnostics and artifacts
-
-| Command | Purpose |
-| --- | --- |
-| `acp diagnose ...` | environment and configuration checks |
-| `acp canary ...` | enforcement canaries |
-| `acp verify-enforcement ...` | check the enforcement attestation path |
-| `acp sign-artifact` / `acp verify-artifact` | sign and verify an arbitrary artifact |
-| `acp bench-ledger` | micro-benchmark the ledger append path |
-| `acp learn <ledger.db>` | propose a starter policy from observed tools |
-
-Chapters [2](02-policy.md), [9](09-evidence.md), [10](10-content-firewall.md) and [12](12-grc.md)
-cover the commands in these groups in depth.
+Everything else can move to the server because the server is trusted to *do* it. Verification cannot:
+if an auditor checks the ledger through the console, they are trusting the server, which is the one
+thing the tamper-evidence design refuses to require. So `acp-verify` runs on the auditor's machine,
+with the public key alone, and that is the only management-free command that must exist.

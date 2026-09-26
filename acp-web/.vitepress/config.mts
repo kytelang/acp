@@ -28,7 +28,7 @@ export default defineConfig({
     nav: [
       { text: 'Docs', link: '/guide/' },
       { text: 'Install', link: '/guide/16-setup' },
-      { text: 'CLI', link: '/guide/13-cli' },
+      { text: 'Tools', link: '/guide/13-cli' },
       { text: 'Deploy', link: '/guide/14-operations' },
       { text: 'Kyte', link: 'https://kyteweb.web.app/' },
     ],
@@ -84,7 +84,7 @@ export default defineConfig({
           text: 'Reference and operations',
           collapsed: false,
           items: [
-            { text: '13. The acp CLI', link: '/guide/13-cli' },
+            { text: '13. Command-line tools', link: '/guide/13-cli' },
             { text: '14. Operations and deployment', link: '/guide/14-operations' },
             { text: '15. Security and verification', link: '/guide/15-security' },
             { text: '16. Setting it all up (runbook)', link: '/guide/16-setup' },

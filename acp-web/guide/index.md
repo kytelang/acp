@@ -46,7 +46,7 @@ the step-by-step runbook for both sides.
 | 10 | [The content firewall](10-content-firewall.md) | injection detection, PII / secrets, obfuscation, red-team, groundedness |
 | 11 | [Sequence, boundary, break-glass](11-containment.md) | trajectory governance, the data boundary, the kill-switch |
 | 12 | [Discovery, enrolment and GRC](12-grc.md) | shadow-AI discovery, coverage, the framework reports and GRC surface |
-| 13 | [The acp CLI](13-cli.md) | every subcommand, grouped by job |
+| 13 | [Command-line tools](13-cli.md) | acp-verify and the CI/offline helpers; what moved to the console and API |
 | 14 | [Operations and deployment](14-operations.md) | the server, the console, helm, Postgres, logging, backup, production readiness |
 | 15 | [Security and verification](15-security.md) | the trust model, the threat model, how to verify the claims yourself |
 
