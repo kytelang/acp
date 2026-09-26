@@ -1,0 +1,32 @@
+import web.routing;
+import web.response;
+import serde.json;
+import ds_response;
+import Features.Dashboard.Shared.acp_client;
+import Features.Dashboard.views.dashboard;
+
+// POST /apps/register and /agents/register: read the operator's datastar signals, forward a clean
+// body to acp-server (which stores the record in the configured database), and patch the result.
+pub struct RegisterAppHandler impl RouteHandler {
+    acp: AcpClient,
+    init(acp: AcpClient) { self.acp = acp; }
+    async fn serve(self: RegisterAppHandler, ctx: Context): Response {
+        let auth = ctx.request.headers.get("authorization") ?? "";
+        let name = json.stringField(ctx.request.body, "appName");
+        let owner = json.stringField(ctx.request.body, "appOwner");
+        let res = self.acp.registerApp(name, owner, auth);
+        return await ds_response.patch(appRegisterResult(res));
+    }
+}
+
+pub struct RegisterAgentHandler impl RouteHandler {
+    acp: AcpClient,
+    init(acp: AcpClient) { self.acp = acp; }
+    async fn serve(self: RegisterAgentHandler, ctx: Context): Response {
+        let auth = ctx.request.headers.get("authorization") ?? "";
+        let appId = json.stringField(ctx.request.body, "agentAppId");
+        let name = json.stringField(ctx.request.body, "agentName");
+        let res = self.acp.registerAgent(appId, name, auth);
+        return await ds_response.patch(agentRegisterResult(res));
+    }
+}

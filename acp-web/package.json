@@ -6,7 +6,7 @@
   "scripts": {
     "dev": "vitepress dev",
     "build": "vitepress build",
-    "deploy": "firebase deploy --only hosting:acpdocs",
+    "deploy": "firebase deploy --only hosting:varman",
     "preview": "vitepress preview"
   },
   "devDependencies": {

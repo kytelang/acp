@@ -60,12 +60,14 @@ signed evidence pack"; the outside party checks it themselves with `acp-verify`.
 
 ## 4. Storage
 
-Recommendation: a single **SQLite** control-plane store in the server (a new `acp-cpstore` module or
-crate) holding apps, agents, principals, AI endpoints, and the GRC records, behind a trait so the
-existing `acp-pgstore` Postgres backend is the drop-in for high availability. Rationale: on-prem, zero
-external dependency, consistent with the evidence ledger and approvals store which are already SQLite.
-Policy stays in the signed policy store the PEPs watch, managed through the console. This is the one
-open decision (SQLite vs Postgres as the default); it does not block the packaging change below.
+Resolved (2026-09-22): the control-plane store is **config-driven**, not a fixed backend. The
+`acp-cpstore` crate is built on sqlx's Any driver, so the operator selects the database by connection
+URL (`ACP_STORE`): `sqlite://...` for small/single-node (the default), `postgres://...` or
+`mysql://...` for larger or high-availability. The same server code runs against any of them; the size
+forecast just decides which URL you point at. Portability is handled in the store (positional
+placeholders rewritten per backend, TEXT/BIGINT/INTEGER only, delete-then-insert instead of a
+dialect-specific upsert). Verified against SQLite and Postgres. Policy stays in the signed policy
+store the PEPs watch, managed through the console.
 
 ## 5. Packaging: two archives plus the console
 

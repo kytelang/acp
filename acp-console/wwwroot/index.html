@@ -98,7 +98,7 @@
     @media print{.sidebar,.topbar{display:none}.app{display:block}.content{max-width:none}}
   </style>
 </head>
-<body data-signals="{theme: 'dark', view: 'overview', endpoint: '', disposition: 'govern'}" data-class-light="$theme === 'light'">
+<body data-signals="{theme: 'dark', view: 'overview', endpoint: '', disposition: 'govern', appName: '', appOwner: '', agentAppId: '', agentName: ''}" data-class-light="$theme === 'light'">
   <div class="app">
     <aside class="sidebar">
       <div class="brand">
@@ -167,11 +167,28 @@
         <section class="view" data-show="$view === 'apps'">
           <div class="card"><div class="card-h"><span class="ic">&#128230;</span> Teams &amp; agents</div>
             <div class="card-b"><div id="apps"><p class="empty">&#8230;</p></div></div></div>
+          <div class="card"><div class="card-h"><span class="ic">&#10133;</span> Register a team / application</div>
+            <div class="card-b"><div class="deploy"><div class="row">
+              <label class="fld">Name <input type="text" data-bind="appName" placeholder="acme-app" /></label>
+              <label class="fld">Owner <input type="text" data-bind="appOwner" placeholder="you" /></label>
+              <button class="btn primary" data-on:click="@post('/apps/register')">Register</button>
+              <div class="deploystatus" id="appresult"></div>
+            </div></div></div></div>
         </section>
 
         <section class="view" data-show="$view === 'agents'">
           <div class="card"><div class="card-h"><span class="ic">&#129302;</span> Registered agents</div>
             <div class="card-b"><div id="agents"><p class="empty">&#8230;</p></div></div></div>
+          <div class="card"><div class="card-h"><span class="ic">&#10133;</span> Register an agent</div>
+            <div class="card-b">
+              <p class="hint">An agent belongs to a team (app). Registering returns a one-time token; store it now, it is not shown again.</p>
+              <div class="deploy"><div class="row">
+                <label class="fld">App ID <input type="text" data-bind="agentAppId" placeholder="app-..." /></label>
+                <label class="fld">Name <input type="text" data-bind="agentName" placeholder="coding-assistant" /></label>
+                <button class="btn primary" data-on:click="@post('/agents/register')">Register</button>
+              </div>
+              <div class="deploystatus" id="agentresult" style="margin-top:.6rem"></div></div>
+            </div></div>
         </section>
 
         <section class="view" data-show="$view === 'policy'">

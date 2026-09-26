@@ -397,6 +397,60 @@ pub struct AcpClient {
         return DeployResult(true, "break-glass cleared");
     }
 
+    // JSON-escape a string value (backslash then quote), for building small request bodies safely.
+    fn jstr(self: AcpClient, s: string): string {
+        let a = string.replace(s, "\\", "\\\\");
+        let b = string.replace(a, "\"", "\\\"");
+        return "\"" + b + "\"";
+    }
+
+    fn postJson(self: AcpClient, route: string, body: string, role: string, userAuth: string): DeployResult {
+        let hdrs = client.Http.emptyHeaders();
+        hdrs.set("Content-Type", "application/json");
+        if (!string.eql(userAuth, "")) {
+            hdrs.set("Authorization", userAuth);
+        } else {
+            let tok = self.authToken(role);
+            if (!string.eql(tok, "")) { hdrs.set("Authorization", "Bearer " + tok); }
+        }
+        let resp = client.Http.request("POST", self.base + route, hdrs, body);
+        if (resp.status.toCode() != 200) { return DeployResult(false, "acp-server unreachable"); }
+        let v = json.parse(resp.body);
+        let ok = json.asBool(json.get(v, "ok")) ?? false;
+        if (!ok) { return DeployResult(false, json.asString(json.get(v, "error")) ?? "rejected"); }
+        return DeployResult(true, "");
+    }
+
+    // Register an application in the control-plane store. Returns the new id in the message.
+    pub fn registerApp(self: AcpClient, name: string, owner: string, userAuth: string): DeployResult {
+        let body = "{\"name\":" + self.jstr(name) + ",\"owner\":" + self.jstr(owner) + "}";
+        let hdrs = client.Http.emptyHeaders();
+        hdrs.set("Content-Type", "application/json");
+        if (!string.eql(userAuth, "")) { hdrs.set("Authorization", userAuth); }
+        else { let tok = self.authToken("PolicyAdmin"); if (!string.eql(tok, "")) { hdrs.set("Authorization", "Bearer " + tok); } }
+        let resp = client.Http.request("POST", self.base + "/apps", hdrs, body);
+        if (resp.status.toCode() != 200) { return DeployResult(false, "acp-server unreachable"); }
+        let v = json.parse(resp.body);
+        if (!(json.asBool(json.get(v, "ok")) ?? false)) { return DeployResult(false, json.asString(json.get(v, "error")) ?? "rejected"); }
+        return DeployResult(true, "registered " + (json.asString(json.get(v, "id")) ?? ""));
+    }
+
+    // Register an agent under an app. Returns the one-time token in the message (shown once).
+    pub fn registerAgent(self: AcpClient, appId: string, name: string, userAuth: string): DeployResult {
+        let body = "{\"app_id\":" + self.jstr(appId) + ",\"name\":" + self.jstr(name) + "}";
+        let hdrs = client.Http.emptyHeaders();
+        hdrs.set("Content-Type", "application/json");
+        if (!string.eql(userAuth, "")) { hdrs.set("Authorization", userAuth); }
+        else { let tok = self.authToken("PolicyAdmin"); if (!string.eql(tok, "")) { hdrs.set("Authorization", "Bearer " + tok); } }
+        let resp = client.Http.request("POST", self.base + "/agents", hdrs, body);
+        if (resp.status.toCode() != 200) { return DeployResult(false, "acp-server unreachable"); }
+        let v = json.parse(resp.body);
+        if (!(json.asBool(json.get(v, "ok")) ?? false)) { return DeployResult(false, json.asString(json.get(v, "error")) ?? "rejected"); }
+        let id = json.asString(json.get(v, "id")) ?? "";
+        let token = json.asString(json.get(v, "token")) ?? "";
+        return DeployResult(true, id + " token: " + token + " (save it now, not shown again)");
+    }
+
     // Registered AI endpoints (agents/providers) and their disposition, from acp-server. Read-only.
     pub fn endpointsRows(self: AcpClient): list.List<EndpointRow> {
         let rows = list.List<EndpointRow>();

@@ -1,6 +1,6 @@
 {
   "hosting": {
-    "site": "acpdocs",
+    "site": "varman",
     "public": ".vitepress/dist",
     "cleanUrls": true,
     "ignore": ["firebase.json", "**/.*", "**/node_modules/**"]

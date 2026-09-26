@@ -84,6 +84,24 @@ For the human principal, point the control plane and gateway at your IdP (Entra 
 # or: --oidc-jwks <url> --oidc-issuer <iss> --oidc-audience <aud>
 ```
 
+### The control-plane database
+
+Identity (apps, agents), AI endpoints, and the GRC records are stored in a control-plane database. You
+choose the backend by connection URL, so you pick the database that fits your size forecast without a
+rebuild:
+
+```sh
+# in /etc/acp/server.env (the server install sets a sqlite default)
+ACP_STORE=sqlite:///var/lib/acp/control.db?mode=rwc     # small / single-node (default)
+# ACP_STORE=postgres://acp_app:secret@db/acp             # larger / high-availability
+# ACP_STORE=mysql://acp_app:secret@db/acp                # mysql, if you already run it
+```
+
+The same server code runs against any of these. Registration is then done from the console (Teams,
+Agents and AI Endpoints pages) or the control-plane API, and stored centrally in that database; you do
+not edit files on each machine. For a Postgres or MySQL backend, connect as an ordinary application
+role, not a superuser.
+
 ### Evidence at rest and key custody
 
 At-rest encryption is on by default on the server (the generated `ledger.kek`, referenced by

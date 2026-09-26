@@ -113,6 +113,11 @@ fi
 ACP_LEDGER_KEK_FILE=$ETC/ledger.kek
 ACP_LOG=info
 ACP_LOG_FORMAT=json
+# Control-plane database (identity, endpoints, GRC). The backend is chosen by the URL scheme, so you
+# pick the database that fits your size forecast: sqlite for small/single-node, postgres or mysql for
+# larger. Default is a local sqlite file; set ACP_STORE before install to use another backend, e.g.
+#   ACP_STORE=postgres://acp_app:secret@db/acp
+ACP_STORE=${ACP_STORE:-sqlite://$DATA/control.db?mode=rwc}
 EOF
 [ -f "$ETC/gateway.env" ] || cat > "$ETC/gateway.env" <<EOF
 ACP_LEDGER_KEK_FILE=$ETC/ledger.kek
@@ -160,7 +165,7 @@ Wants=network-online.target
 User=$SVCUSER
 Group=$SVCUSER
 EnvironmentFile=$ETC/server.env
-ExecStart=$PREFIX/bin/acp-server --addr 127.0.0.1:8787 --ledger $DATA/evidence.db --approvals $DATA/approvals.db --enrollment $DATA/enroll.json --policy-store $DATA/policy --break-glass-file $DATA/break-glass.signed
+ExecStart=$PREFIX/bin/acp-server --addr 127.0.0.1:8787 --ledger $DATA/evidence.db --approvals $DATA/approvals.db --store \${ACP_STORE} --cp-key $DATA/cp.key --policy-store $DATA/policy --break-glass-file $DATA/break-glass.signed
 Restart=on-failure
 RestartSec=2
 NoNewPrivileges=true

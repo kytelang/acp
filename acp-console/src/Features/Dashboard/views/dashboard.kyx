@@ -345,3 +345,18 @@ pub fn endpointRegisterResult(res: DeployResult): Html {
         <span class="dim">{res.message}</span>
     </div>;
 }
+
+
+// Outcome of registering an app (fragment #appresult) or an agent (fragment #agentresult).
+pub fn appRegisterResult(res: DeployResult): Html {
+    return <div id="appresult" class="deploystatus">
+        {if (res.ok) { <span class="badge ok">registered</span> } else { <span class="badge bad">rejected</span> }}
+        <span class="dim">{res.message}</span>
+    </div>;
+}
+pub fn agentRegisterResult(res: DeployResult): Html {
+    return <div id="agentresult" class="deploystatus">
+        {if (res.ok) { <span class="badge ok">registered</span> } else { <span class="badge bad">rejected</span> }}
+        <span class="mono dim">{res.message}</span>
+    </div>;
+}
