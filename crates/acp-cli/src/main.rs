@@ -24,12 +24,9 @@ fn main() -> ExitCode {
             Some(p) => cmd_export(p),
             None => usage("acp export <ledger.db>"),
         },
-        "approve" => cmd_resolve(&args[2..], true),
-        "deny" => cmd_resolve(&args[2..], false),
-        "approvals" => match args.get(2) {
-            Some(p) => cmd_list_approvals(p),
-            None => usage("acp approvals <approvals.db>"),
-        },
+        "approve" => retired("approve", "Resolve holds from the console Approvals inbox, or POST /approvals/:id/approve."),
+        "deny" => retired("deny", "Resolve holds from the console Approvals inbox, or POST /approvals/:id/deny."),
+        "approvals" => retired("approvals", "See the console Approvals inbox, or GET /approvals/pending."),
         "init" => cmd_init(args.get(2).map(String::as_str).unwrap_or("acp-demo")),
         "replay" => cmd_replay(&args[2..]),
         "purge" => cmd_purge(&args[2..]),
@@ -40,32 +37,32 @@ fn main() -> ExitCode {
         "sign-artifact" => cmd_sign_artifact(&args[2..]),
         "verify-artifact" => cmd_verify_artifact(&args[2..]),
         "bench-ledger" => cmd_bench_ledger(&args[2..]),
-        "break-glass" => cmd_break_glass(&args[2..]),
-        "app" => cmd_app(&args[2..]),
-        "agent" => cmd_agent(&args[2..]),
+        "break-glass" => retired("break-glass", "Operate the kill-switch from the console, or POST /break-glass/engage and /clear."),
+        "app" => retired("app", "Register teams from the console Teams page, or POST /apps."),
+        "agent" => retired("agent", "Register agents from the console Agents page, or POST /agents."),
         "native-compile" => cmd_native_compile(&args[2..]),
         "discover" => cmd_discover(&args[2..]),
         "coverage" => cmd_coverage(&args[2..]),
         "canary-egress" => cmd_canary_egress(&args[2..]),
-        "aibom" => cmd_aibom(&args[2..]),
-        "enroll" => cmd_enroll(&args[2..]),
+        "aibom" => retired("aibom", "Create an AI-BOM record from the console Governance page, or POST /grc."),
+        "enroll" => retired("enroll", "Register AI endpoints from the console AI Endpoints page, or POST /endpoints/register."),
         "siem" => cmd_siem(&args[2..]),
-        "risk" => cmd_risk(&args[2..]),
+        "risk" => retired("risk", "Manage the risk register from the console Governance page, or POST /grc."),
         "content-scan" => cmd_content_scan(&args[2..]),
         "content-eval" => cmd_content_eval(&args[2..]),
         "redteam" => cmd_redteam(&args[2..]),
         "groundedness" => cmd_groundedness(&args[2..]),
-        "controls" => cmd_controls(&args[2..]),
-        "assess" => cmd_assess(&args[2..]),
-        "attest" => cmd_attest(&args[2..]),
-        "usecase" => cmd_usecase(&args[2..]),
-        "conformity" => cmd_conformity(&args[2..]),
-        "modelcard" => cmd_modelcard(&args[2..]),
+        "controls" => retired("controls", "The control library is served by the control plane; see the console Governance page."),
+        "assess" => retired("assess", "Create an assessment from the console Governance page, or POST /grc."),
+        "attest" => retired("attest", "Create an attestation from the console Governance page, or POST /grc."),
+        "usecase" => retired("usecase", "Manage the use-case lifecycle from the console Governance page, or POST /grc and /grc/:id/status."),
+        "conformity" => retired("conformity", "Manage the conformity checklist from the console Governance page, or POST /grc."),
+        "modelcard" => retired("modelcard", "Manage model cards from the console Governance page, or POST /grc."),
         "intercept" => cmd_intercept(&args[2..]),
         "grc-report" => cmd_grc_report(&args[2..]),
         "ledger-backup" => cmd_ledger_backup(&args[2..]),
         "verify-enforcement" => cmd_verify_enforcement(&args[2..]),
-        "registry" => cmd_registry(&args[2..]),
+        "registry" => retired("registry", "Inspect teams and agents from the console, or GET /apps and /agents."),
         "policy" => cmd_policy(&args[2..]),
         "posture" => cmd_posture(&args[2..]),
         "help" | "--help" | "-h" | "version" | "--version" | "-V" => print_help(),
@@ -276,6 +273,14 @@ fn cmd_export(path: &str) -> ExitCode {
             ExitCode::from(1)
         }
     }
+}
+
+/// Management commands are retired from the CLI: registration, policy, approvals, the kill-switch, AI
+/// endpoints and the GRC records are managed from the console or the control-plane API and stored
+/// centrally. This prints where to do it instead and exits non-zero.
+fn retired(cmd: &str, hint: &str) -> ExitCode {
+    eprintln!("acp: `{cmd}` is retired from the CLI. Manage it from the console or the control-plane API. {hint}");
+    ExitCode::from(2)
 }
 
 const SAMPLE_POLICY: &str = "\
@@ -600,6 +605,7 @@ fn cmd_replay(rest: &[String]) -> ExitCode {
     }
 }
 
+#[allow(dead_code)]
 fn cmd_resolve(rest: &[String], approve: bool) -> ExitCode {
     if rest.len() < 2 {
         return usage("acp approve|deny <approvals.db> <id> [approver]");
@@ -628,6 +634,7 @@ fn cmd_resolve(rest: &[String], approve: bool) -> ExitCode {
     }
 }
 
+#[allow(dead_code)]
 fn cmd_list_approvals(path: &str) -> ExitCode {
     let store = match acp_approvals::ApprovalStore::open(path) {
         Ok(s) => s,
@@ -1193,6 +1200,7 @@ fn cmd_canary_egress(rest: &[String]) -> ExitCode {
 /// high_impact?,pin?,policy?} where scan is "clean" | "unscanned" | {"findings":[..]}.
 /// Prints the (signed) CycloneDX doc to stdout, a summary to stderr; --strict exits 3 if any
 /// artifact is denied admission.
+#[allow(dead_code)]
 fn cmd_aibom(rest: &[String]) -> ExitCode {
     use acp_core::aibom::{AiBom, BomEntry};
     use acp_core::supplychain::{admit, Artifact, ScanVerdict};
@@ -1292,6 +1300,7 @@ fn cmd_aibom(rest: &[String]) -> ExitCode {
 ///   acp enroll record <log.json> <endpoint> <enroll|quarantine|accept-risk> [--kind K] [--operator O] [--reason R] [--expires-ms N] --key <hex>
 ///   acp enroll governed <log.json>        (enrolled endpoints, one per line; feed to `acp coverage`)
 ///   acp enroll export-mdm <log.json>      (allow/block JSON for MDM/CASB)
+#[allow(dead_code)]
 fn cmd_enroll(rest: &[String]) -> ExitCode {
     use acp_core::discovery::{classify_ai, AiKind};
     use acp_core::enrollment::{Disposition, EnrollmentLog};
@@ -1458,6 +1467,7 @@ fn cmd_siem(rest: &[String]) -> ExitCode {
 ///   acp risk add <register.json> --id X --title T --owner O --likelihood <low|medium|high> --impact <low|medium|high> --treatment <mitigate|accept|transfer|avoid> [--status <open|mitigating|accepted|closed>] [--control C]... [--decision D]... [--note N] [--key <hex>]
 ///   acp risk list <register.json>
 ///   acp risk report <register.json>
+#[allow(dead_code)]
 fn cmd_risk(rest: &[String]) -> ExitCode {
     use acp_core::riskregister::{Level, RiskItem, RiskRegister, RiskStatus, Treatment};
     let multi = |flag: &str| -> Vec<String> {
@@ -1564,6 +1574,7 @@ fn cmd_content_scan(rest: &[String]) -> ExitCode {
 
 /// List the built-in control library (all frameworks, or one).
 ///   acp controls [eu-ai-act|nist-ai-rmf|iso-42001]
+#[allow(dead_code)]
 fn cmd_controls(rest: &[String]) -> ExitCode {
     let controls = match rest.first() {
         Some(fw) => acp_core::controls::for_framework(fw),
@@ -1578,6 +1589,7 @@ fn cmd_controls(rest: &[String]) -> ExitCode {
 /// Assess an AI system against the EU AI Act risk tiers and print its obligations.
 ///   acp assess <system> [--prohibited] [--safety-component] [--biometric] [--critical-infra]
 ///     [--employment] [--essential-services] [--law-enforcement] [--interacts] [--generates] [--key <hex>]
+#[allow(dead_code)]
 fn cmd_assess(rest: &[String]) -> ExitCode {
     use acp_core::assessment::{assess, Screening};
     let Some(system) = rest.iter().find(|a| !a.starts_with("--")) else {
@@ -1613,6 +1625,7 @@ fn cmd_assess(rest: &[String]) -> ExitCode {
 /// Record or verify signed attestations (governance sign-offs).
 ///   acp attest add <log.json> <subject> <statement> --attestor <who> --role <role> --key <hex>
 ///   acp attest verify <log.json>
+#[allow(dead_code)]
 fn cmd_attest(rest: &[String]) -> ExitCode {
     use acp_core::attestation::{attest, AttestationLog};
     let load = |path: &str| -> AttestationLog {
@@ -1657,6 +1670,7 @@ fn cmd_attest(rest: &[String]) -> ExitCode {
 ///   acp usecase link-assessment <reg.json> <id> <assessment-id>
 ///   acp usecase advance <reg.json> <id> <proposed|assessed|approved|deployed|retired> [--attestations <log.json>]
 ///   acp usecase list <reg.json>
+#[allow(dead_code)]
 fn cmd_usecase(rest: &[String]) -> ExitCode {
     use acp_core::usecase::{Stage, UseCase, UseCaseRegistry};
     let load = |path: &str| -> UseCaseRegistry {
@@ -1890,6 +1904,7 @@ fn emit_registry(registry: &acp_core::interception::EndpointRegistry, key: Optio
 ///   acp conformity init <out.json> <system> [--employment|--biometric|--interacts|...]
 ///   acp conformity set <file.json> <control-id> <satisfied|partial|gap> [--evidence <id>]... [--owner <who>]
 ///   acp conformity report <file.json>
+#[allow(dead_code)]
 fn cmd_conformity(rest: &[String]) -> ExitCode {
     use acp_core::assessment::{assess, Screening};
     use acp_core::conformity::ConformityAssessment;
@@ -1943,6 +1958,7 @@ fn cmd_conformity(rest: &[String]) -> ExitCode {
 /// Maintain model cards (a core GRC artifact).
 ///   acp modelcard add <reg.json> --id X --name N --provider P --version V --intended-use "..." --limitations "..." --eval "..." --owner O [--risk-tier <t>] [--usecase <id>]
 ///   acp modelcard list <reg.json>
+#[allow(dead_code)]
 fn cmd_modelcard(rest: &[String]) -> ExitCode {
     use acp_core::modelcard::{ModelCard, ModelCardRegistry};
     let load = |f: &str| -> ModelCardRegistry { std::fs::read_to_string(f).ok().and_then(|s| serde_json::from_str(&s).ok()).unwrap_or_default() };
@@ -2108,6 +2124,7 @@ fn cmd_native_compile(rest: &[String]) -> ExitCode {
 ///   scope: global | agent:<id> | resource:<class> | tool:<name>  (default global)
 ///   acp break-glass clear  <file>
 /// Modes: lockdown_all | disable_enforce | emergency_bypass. Prints a meta-audit line to record.
+#[allow(dead_code)]
 fn cmd_break_glass(rest: &[String]) -> ExitCode {
     use acp_core::breakglass::{GrantFile, Mode, Scope};
     match rest.first().map(String::as_str) {
@@ -2195,6 +2212,7 @@ fn cmd_break_glass(rest: &[String]) -> ExitCode {
 }
 
 
+#[allow(dead_code)]
 fn cmd_app(rest: &[String]) -> ExitCode {
     match (rest.first().map(String::as_str), rest.get(1), rest.get(2), rest.get(3)) {
         (Some("register"), Some(file), Some(name), owner) => {
@@ -2208,6 +2226,7 @@ fn cmd_app(rest: &[String]) -> ExitCode {
     }
 }
 
+#[allow(dead_code)]
 fn cmd_agent(rest: &[String]) -> ExitCode {
     let reg_of = |file: &str| acp_registry::Registry::load(file);
     match (rest.first().map(String::as_str), rest.get(1), rest.get(2), rest.get(3)) {
@@ -2235,6 +2254,7 @@ fn cmd_agent(rest: &[String]) -> ExitCode {
     }
 }
 
+#[allow(dead_code)]
 fn cmd_registry(rest: &[String]) -> ExitCode {
     match (rest.first().map(String::as_str), rest.get(1)) {
         (Some("list"), Some(file)) => {

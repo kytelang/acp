@@ -136,7 +136,10 @@ with `acp-verify`":
    the right archives. Introduce `acp-verify`. (This change.)
 2. Control-plane DB and the identity and endpoint APIs and console pages.
 3. The GRC APIs and console pages (DONE: signed GRC records in the config-driven store, created from the console or POST /grc, re-verified on read); discovery review remains.
-4. Retire the management CLI; rewrite the guides around console-first.
+4. Retire the management CLI; rewrite the guides around console-first. (DONE: proxy verifies
+   agents against the DB via --registry-url; the management commands redirect to the console/API; the
+   CLI chapter is rewritten around acp-verify plus CI/offline helpers. Physical removal of the retired
+   command code, and moving the CI gates to server endpoints, remain as cleanup.)
 
 ## 11. Compatibility
 
