@@ -96,33 +96,96 @@ impl OtelSink {
 /// A minimal, dependency-free HTTP/1.1 POST for OTLP/HTTP to a plain-http collector (the OTLP
 /// default is http on :4318). https collectors are a fast-follow (needs TLS).
 fn http_post(endpoint: &str, body: &str) -> std::io::Result<()> {
+    http_post_auth(endpoint, body, None, 4318)
+}
+
+/// A minimal, dependency-free HTTP/1.1 POST with an optional bearer token, used by both the OTLP
+/// sink and the control-plane reporting sink. http:// only (https is a fast-follow, matching OTLP).
+fn http_post_auth(endpoint: &str, body: &str, token: Option<&str>, default_port: u16) -> std::io::Result<()> {
     use std::io::Write as _;
     let rest = endpoint
         .strip_prefix("http://")
-        .ok_or_else(|| std::io::Error::other("otel endpoint must be http://"))?;
+        .ok_or_else(|| std::io::Error::other("report/otel endpoint must be http://"))?;
     let (authority, path) = match rest.find('/') {
         Some(i) => (&rest[..i], &rest[i..]),
         None => (rest, "/"),
     };
     let (host, port) = match authority.rsplit_once(':') {
-        Some((h, p)) => (h, p.parse::<u16>().unwrap_or(4318)),
-        None => (authority, 4318u16),
+        Some((h, p)) => (h, p.parse::<u16>().unwrap_or(default_port)),
+        None => (authority, default_port),
     };
     use std::io::Read as _;
     let mut stream = std::net::TcpStream::connect((host, port))?;
     stream
         .set_read_timeout(Some(std::time::Duration::from_secs(5)))
         .ok();
+    let auth = token
+        .map(|t| format!("Authorization: Bearer {t}\r\n"))
+        .unwrap_or_default();
     let req = format!(
-        "POST {path} HTTP/1.1\r\nHost: {host}\r\nContent-Type: application/json\r\nContent-Length: {}\r\nConnection: close\r\n\r\n{body}",
+        "POST {path} HTTP/1.1\r\nHost: {host}\r\n{auth}Content-Type: application/json\r\nContent-Length: {}\r\nConnection: close\r\n\r\n{body}",
         body.len()
     );
     stream.write_all(req.as_bytes())?;
     stream.flush()?;
-    // Read (and discard) the response so the server processes the request before we close.
     let mut sink = Vec::new();
     let _ = stream.read_to_end(&mut sink);
     Ok(())
+}
+
+/// The control-plane reporting sink (gap E1/E3): each non-allow decision is posted to
+/// `POST <base>/event/<verdict>` so the console can show the violation/deny stream and the spike
+/// detector can page. Posting happens on a background thread; emit never blocks a decision.
+pub struct ServerSink {
+    tx: Option<Sender<Value>>,
+    handle: Option<JoinHandle<()>>,
+    proxy_id: String,
+}
+
+impl ServerSink {
+    pub fn new(base: String, proxy_id: String, token: Option<String>) -> ServerSink {
+        let (tx, rx) = mpsc::channel::<Value>();
+        let base = base.trim_end_matches('/').to_string();
+        let handle = std::thread::spawn(move || {
+            for record in rx {
+                let kind = record
+                    .get("verdict")
+                    .and_then(|v| v.as_str())
+                    .unwrap_or("event")
+                    .to_string();
+                let url = format!("{base}/event/{kind}");
+                let _ = http_post_auth(&url, &record.to_string(), token.as_deref(), 8787);
+            }
+        });
+        ServerSink { tx: Some(tx), handle: Some(handle), proxy_id }
+    }
+}
+
+impl Sink for ServerSink {
+    fn emit(&self, ev: &Event<'_>) {
+        // Only non-allow decisions are reported: denies, step-ups and shadow would-blocks are the
+        // violation stream the console cares about. Allow-volume metrics are a separate rollup (F8).
+        if ev.verdict == "allow" {
+            return;
+        }
+        let record = json!({
+            "kind": ev.verdict, "ts_ms": now_ms(), "proxy": self.proxy_id,
+            "agent": ev.agent, "session": ev.session, "tool": ev.tool,
+            "verdict": ev.verdict, "rule_id": ev.rule_id, "impact": ev.impact, "outcome": ev.outcome,
+        });
+        if let Some(tx) = &self.tx {
+            let _ = tx.send(record); // best-effort; never blocks the decision
+        }
+    }
+}
+
+impl Drop for ServerSink {
+    fn drop(&mut self) {
+        self.tx.take();
+        if let Some(h) = self.handle.take() {
+            let _ = h.join();
+        }
+    }
 }
 
 fn attr(key: &str, val: &str) -> Value {

@@ -58,6 +58,9 @@ struct Opts {
     pin_pg: Option<String>,
     trajectory: Option<String>,
     data_boundary: Option<String>,
+    report_url: Option<String>,
+    report_token: Option<String>,
+    proxy_id: Option<String>,
 }
 
 fn parse_opts(items: &[String]) -> Result<(Opts, Vec<String>), String> {
@@ -105,6 +108,9 @@ fn parse_opts(items: &[String]) -> Result<(Opts, Vec<String>), String> {
             "--pin-pg" => o.pin_pg = it.next().cloned(),
             "--trajectory" => o.trajectory = it.next().cloned(),
             "--data-boundary" => o.data_boundary = it.next().cloned(),
+            "--report-url" => o.report_url = it.next().cloned(),
+            "--report-token" => o.report_token = it.next().cloned(),
+            "--proxy-id" => o.proxy_id = it.next().cloned(),
             other => return Err(format!("unknown option '{other}'")),
         }
     }
@@ -118,6 +124,12 @@ async fn load_jwks(source: &str) -> Result<acp_auth::Jwks, String> {
         std::fs::read_to_string(source).map_err(|e| e.to_string())?
     };
     acp_auth::Jwks::from_jwks_json(&body).map_err(|e| format!("{e:?}"))
+}
+
+/// Stable id for this PEP in control-plane reports (heartbeats, events). Operator-set via
+/// --proxy-id, else the agent id, else a generic default.
+fn proxy_id(o: &Opts) -> String {
+    o.proxy_id.clone().or_else(|| o.agent_id.clone()).unwrap_or_else(|| "proxy".to_string())
 }
 
 async fn build_controller(o: &Opts) -> Result<Arc<Controller>, String> {
@@ -170,6 +182,11 @@ async fn build_controller(o: &Opts) -> Result<Arc<Controller>, String> {
     if let Some(url) = &o.otel {
         sinks.push(Box::new(events::OtelSink::new(url.clone())));
         tracing::info!("OTLP governance events -> {url}");
+    }
+    if let Some(base) = &o.report_url {
+        let pid = proxy_id(o);
+        sinks.push(Box::new(events::ServerSink::new(base.clone(), pid.clone(), o.report_token.clone())));
+        tracing::info!("reporting violations to control plane -> {base} (proxy {pid})");
     }
     if let Some(cp) = &o.cef {
         sinks.push(Box::new(
@@ -369,6 +386,25 @@ async fn main() -> ExitCode {
             return ExitCode::from(1);
         }
     };
+
+    // Liveness reporting (gap E1): a periodic heartbeat to the control plane so the console can show
+    // this PEP as alive and its dead-man's-switch fires if it goes silent.
+    if let Some(base) = opts.report_url.clone() {
+        let pid = proxy_id(&opts);
+        let token = opts.report_token.clone();
+        let base = base.trim_end_matches('/').to_string();
+        tracing::info!("heartbeat -> {base} every 10s (proxy {pid})");
+        tokio::spawn(async move {
+            let client = reqwest::Client::new();
+            loop {
+                let url = format!("{base}/heartbeat/{pid}");
+                let mut req = client.post(&url);
+                if let Some(t) = &token { req = req.bearer_auth(t); }
+                let _ = req.send().await;
+                tokio::time::sleep(std::time::Duration::from_secs(10)).await;
+            }
+        });
+    }
 
     // Per-request human identity (phase B): verify each request's bearer against the org IdP and
     // stamp the resulting human principal onto governed calls.

@@ -34,6 +34,10 @@ struct AppState {
     break_glass_file: Option<String>,
     break_glass_seed: Option<[u8; 32]>,
     auth: Option<Auth>,
+    // E1: shared bearer token PEPs present when reporting heartbeats/events. None = open (dev).
+    report_token: Option<String>,
+    // E1/E3: bounded ring of recent governance events reported by PEPs, for the console feed.
+    events: std::sync::Mutex<std::collections::VecDeque<serde_json::Value>>,
 }
 
 /// Optional control-plane RBAC. When present, mutating endpoints require a verified bearer token
@@ -96,6 +100,7 @@ async fn main() {
     let mut dev_auth = false;
     let mut entra_tenant: Option<String> = None;
     let mut entra_audience: Option<String> = None;
+    let mut report_token: Option<String> = std::env::var("ACP_REPORT_TOKEN").ok().filter(|s| !s.is_empty());
     let mut it = args.iter().skip(1);
     while let Some(a) = it.next() {
         match a.as_str() {
@@ -108,6 +113,7 @@ async fn main() {
             "--policy-store" => policy_store = it.next().cloned(),
             "--enrollment" => enrollment = it.next().cloned(),
             "--store" => store_url = it.next().cloned(),
+            "--report-token" => report_token = it.next().cloned(),
             "--cp-key" => { if let Some(v) = it.next() { cp_key = v.clone(); } }
             "--oidc-jwks" => oidc_jwks = it.next().cloned(),
             "--oidc-issuer" => oidc_issuer = it.next().cloned(),
@@ -279,6 +285,8 @@ async fn main() {
         break_glass_file,
         break_glass_seed,
         auth,
+        report_token,
+        events: std::sync::Mutex::new(std::collections::VecDeque::new()),
     });
     let app = Router::new()
         .route("/", get(inbox))
@@ -294,6 +302,7 @@ async fn main() {
         .route("/liveness", get(liveness))
         .route("/event/:kind", post(record_event))
         .route("/alerts", get(alerts))
+        .route("/events/recent", get(events_recent))
         .route("/admin/meta", post(record_meta))
         .route("/meta-audit", get(meta_audit))
         .route("/timeline", get(timeline))
@@ -1214,24 +1223,60 @@ fn now_ms() -> u64 {
         .unwrap_or(0)
 }
 
-/// B1: an enrolled proxy posts a heartbeat (and, implicitly, that it is serving governed traffic).
-async fn heartbeat(State(st): State<Arc<AppState>>, Path(proxy): Path<String>) -> impl IntoResponse {
-    // A heartbeat asserts liveness only. Decision-stall detection (traffic expected but no
-    // decisions) is driven separately by the evidence stream, so a freshly-enrolled proxy that has
-    // not yet gated a call is not falsely flagged.
-    st.liveness.lock().unwrap().heartbeat(&proxy, now_ms());
-    Json(serde_json::json!({"ok": true, "proxy": proxy}))
+/// E1: PEP reporting routes present a shared bearer token when the server is configured with one.
+/// Fail-closed when a token is set; open (dev) when it is not, with the check a no-op.
+fn authorize_report(st: &AppState, headers: &HeaderMap) -> Result<(), Response> {
+    let want = match &st.report_token { Some(t) => t, None => return Ok(()) };
+    let got = headers
+        .get("authorization")
+        .and_then(|v| v.to_str().ok())
+        .and_then(|s| s.strip_prefix("Bearer "));
+    if got == Some(want.as_str()) {
+        Ok(())
+    } else {
+        Err((StatusCode::UNAUTHORIZED, Json(serde_json::json!({"ok":false,"error":"invalid report token"}))).into_response())
+    }
 }
 
-/// B3: a proxy reports a governance event (e.g. fail_open, deny) for spike detection.
-async fn record_event(State(st): State<Arc<AppState>>, Path(kind): Path<String>) -> impl IntoResponse {
+/// B1: an enrolled proxy posts a heartbeat (and, implicitly, that it is serving governed traffic).
+async fn heartbeat(State(st): State<Arc<AppState>>, headers: HeaderMap, Path(proxy): Path<String>) -> Response {
+    if let Err(r) = authorize_report(&st, &headers) { return r; }
+    st.liveness.lock().unwrap().heartbeat(&proxy, now_ms());
+    Json(serde_json::json!({"ok": true, "proxy": proxy})).into_response()
+}
+
+/// B3/E1: a PEP reports a governance event (deny, step_up, fail_open, ...) for spike detection and
+/// the console violation feed. The body carries the redacted decision shape; the path is the kind.
+async fn record_event(State(st): State<Arc<AppState>>, headers: HeaderMap, Path(kind): Path<String>, body: Option<Json<serde_json::Value>>) -> Response {
+    if let Err(r) = authorize_report(&st, &headers) { return r; }
     const WINDOW_MS: u64 = 60_000;
     const THRESHOLD: usize = 10; // >10 of one kind per minute trips
-    let mut map = st.spikes.lock().unwrap();
-    map.entry(kind.clone())
-        .or_insert_with(|| acp_core::anomaly::SpikeDetector::new(WINDOW_MS, THRESHOLD))
-        .record(now_ms());
-    Json(serde_json::json!({"ok": true, "kind": kind}))
+    {
+        let mut map = st.spikes.lock().unwrap();
+        map.entry(kind.clone())
+            .or_insert_with(|| acp_core::anomaly::SpikeDetector::new(WINDOW_MS, THRESHOLD))
+            .record(now_ms());
+    }
+    // Store a bounded, enriched copy for the console feed. The body never carries raw arguments.
+    let mut ev = body.map(|Json(v)| v).unwrap_or_else(|| serde_json::json!({}));
+    if let Some(obj) = ev.as_object_mut() {
+        obj.entry("kind".to_string()).or_insert(serde_json::json!(kind));
+        obj.entry("ts_ms".to_string()).or_insert(serde_json::json!(now_ms()));
+    }
+    {
+        let mut buf = st.events.lock().unwrap();
+        buf.push_front(ev);
+        buf.truncate(500);
+    }
+    Json(serde_json::json!({"ok": true, "kind": kind})).into_response()
+}
+
+/// E1/E3: the most recent governance events reported by the PEPs, newest first, for the console
+/// Violations feed. Read-only projection of the in-memory ring (bounded, best-effort).
+async fn events_recent(State(st): State<Arc<AppState>>) -> impl IntoResponse {
+    let buf = st.events.lock().unwrap();
+    let out: Vec<serde_json::Value> = buf.iter().take(200).cloned().collect();
+    Json(serde_json::json!({"events": out, "count": out.len()}))
 }
 
 /// B3: which event kinds are currently spiking (over threshold in the window). A fail-open surge
