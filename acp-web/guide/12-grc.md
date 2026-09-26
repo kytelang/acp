@@ -64,22 +64,26 @@ These are as strong as the ledger, because they are the ledger.
 
 ### Signed operator documents (author-attested)
 
-You create these from the console's **Governance** page or the control-plane API (`POST /grc`), and
-they are Ed25519-signed by the control plane and stored in the control-plane database, then re-verified
-on read. The signature proves the document was not altered after signing; it does **not** prove that
-the "evidence" or "linked-decision" references inside it correspond to real ledger records, because
-those are free-text today. The `acp` commands below remain for scripting and offline use.
+You create these from the console's **Governance** page (the **Create governance record** popup, which
+carries a **Kind** selector) or the control-plane API (`POST /grc`). Each record is Ed25519-signed by
+the control plane, stored in the control-plane database, and re-verified on read. The signature proves
+the document was not altered after signing; it does **not** prove that the "evidence" or
+"linked-decision" references inside it correspond to real ledger records, because those are free-text
+today. Choose the record **kind** for what you are recording:
 
-- **`acp assess`** tiers a system under the EU AI Act (unacceptable / high / limited / minimal) from
-  a questionnaire and lists the controls it must satisfy.
-- **`acp conformity`** turns those obligations into a worked checklist you drive to conformant.
-- **`acp risk`** is an AI risk register scored likelihood by impact, with treatment and lifecycle.
-- **`acp modelcard`** is a model-card registry.
-- **`acp usecase`** is a use-case lifecycle registry (proposed to assessed to approved to deployed to
-  retired) that refuses a transition without a linked assessment or attestation.
-- **`acp attest`** binds a named attestor and role to a subject, non-repudiably.
-- **`acp aibom`** emits a signed CycloneDX AI bill of materials over your supplied inventory.
-- **`acp controls`** is the static control library across the three frameworks.
+- **assessment** tiers a system under the EU AI Act (unacceptable / high / limited / minimal) and
+  lists the controls it must satisfy.
+- **conformity** turns those obligations into a worked checklist you drive to conformant.
+- **risk** is an AI risk register scored likelihood by impact, with treatment and lifecycle.
+- **model-card** is a model-card registry.
+- **use-case** is a use-case lifecycle registry (proposed to assessed to approved to deployed to
+  retired); advance its status from the console or with `POST /grc/:id/status`.
+- **attestation** binds a named attestor and role to a subject, non-repudiably.
+- **aibom** records a CycloneDX AI bill of materials over your supplied inventory.
+
+The static control library across the three frameworks is served by the control plane and shown on the
+console Governance page. (These record kinds were previously separate `acp` subcommands; management now
+lives in the console and the control-plane API, so the CLI subcommands are retired.)
 
 Both kinds are useful. An auditor gets runtime proof from the ledger-backed set and documented
 governance from the signed set. Do not present the second kind as if it were the first.

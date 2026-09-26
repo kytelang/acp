@@ -37,10 +37,16 @@ while PII to an internal store might be redacted rather than denied.
 Break-glass is the emergency stop. It is a signed grant that overrides normal policy, and it reaches
 every surface (tool calls and model calls).
 
+Operate it from the console's **Kill-switch** control (the **Engage or clear the kill-switch** popup,
+with Mode, Scope, Reason and TTL fields), or the control-plane API for scripting:
+
 ```sh
-acp break-glass engage --mode lockdown_all --scope global --reason "incident 4821" --ttl-ms 3600000
-acp break-glass engage --mode lockdown_all --scope resource:database --reason "db incident" --ttl-ms 1800000
-acp break-glass clear
+# engage: mode is lockdown_all | disable_enforce | emergency_bypass
+curl -X POST http://<host>:8787/break-glass/engage \
+  -d '{"mode":"lockdown_all","scope":"global","reason":"incident 4821","ttl_ms":3600000}'
+curl -X POST http://<host>:8787/break-glass/engage \
+  -d '{"mode":"lockdown_all","scope":"resource:database","reason":"db incident","ttl_ms":1800000}'
+curl -X POST http://<host>:8787/break-glass/clear
 ```
 
 - **Modes:** `lockdown_all` denies matching calls; `disable_enforce` observes without blocking;

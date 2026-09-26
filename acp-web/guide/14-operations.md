@@ -10,18 +10,24 @@ break-glass, health, and the read-only evidence API the console renders.
 
 ```sh
 acp-server \
-  --addr 0.0.0.0:8080 \
+  --addr 0.0.0.0:8787 \
   --ledger evidence.db \
   --approvals approvals.db \
+  --store sqlite:///var/lib/acp/control.db?mode=rwc \
+  --cp-key /var/lib/acp/cp.key \
   --policy-store /etc/acp/policy \
-  --break-glass /etc/acp/grant.signed
+  --break-glass-file /etc/acp/grant.signed
 ```
 
 It serves an approval inbox at `/`, `GET /healthz` and `/readyz`, `GET /verify` (verifies the
 ledger), `GET /report` (verdict and outcome tallies plus coverage), `GET /metrics` (Prometheus),
 heartbeat and liveness endpoints, `GET /timeline` and `/evidence/recent`, the apps and agents
 listings, the policy store with a signed `POST /policy-store/deploy` (RBAC-gated on `EditPolicy`),
-and break-glass engage and clear (gated on `BreakGlass`). It drains gracefully on `SIGTERM`.
+break-glass engage and clear (gated on `BreakGlass`), and the registration APIs that write to the
+control-plane database (`POST /apps`, `/agents`, `/endpoints/register`, `/grc`). It drains gracefully
+on `SIGTERM`. The control-plane database is chosen by `--store` connection URL (sqlite, Postgres or
+MySQL); without it the registration APIs return "no --store configured". `--cp-key` is the key the
+control plane signs endpoint dispositions and GRC records with. See [chapter 16](16-setup.md).
 
 **Auth.** With no auth flags it runs RBAC-off for local use. Enable real identity with
 `--entra-tenant`/`--entra-audience`, or `--oidc-jwks`/`--oidc-issuer`/`--oidc-audience`, or
@@ -34,18 +40,24 @@ open blocker to running the control plane in production.
 
 ## The web console
 
-`acp-console` is a read-only dashboard over the control plane's verifiable API. Every figure it shows
-is served by `acp-server` and re-derivable from the signed evidence, so no trust lives in the UI. It
-gives you a live governance overview with a verdict-distribution bar, the approvals inbox, teams and
-agents, a policy view with a syntax-highlighted editor and deploy, the kill-switch with live status,
-an evidence view, an integrity view (ledger verify, proxy liveness, spike alerts, self-governance
-log), an AI-endpoints page to register agents and providers (govern, block or accept-risk, with the
-provider classified automatically), a Governance page to create signed GRC records (assessments, risk,
-model cards and the rest) stored in the control-plane database, and a printable governance report.
+`acp-console` is the management console over the control plane's verifiable API. It is where you run
+day-to-day governance: it both **reads** figures that are all served by `acp-server` and re-derivable
+from the signed evidence (so no trust lives in the UI), and **performs management** by POSTing to the
+control-plane API, which is where signing and every policy decision actually happen. The console holds
+no signing key.
+
+Management actions are popup forms: **Register a team / application**, **Register an agent** (which
+returns a one-time token, shown once), **Register an AI endpoint** (govern, block or accept-risk, with
+the provider classified automatically), **Create a governance record** (with a Kind selector), a
+tabbed **Policy** view with a syntax-highlighted editor and `.yaml` upload plus signed deploy, and
+**Engage or clear the kill-switch** with live status. It also gives a live governance overview with a
+verdict-distribution bar, the approvals inbox, teams and agents listings, an evidence view, an
+integrity view (ledger verify, proxy liveness, spike alerts, self-governance log), and a printable
+governance report. The console has a light and dark theme.
 
 ```sh
-# start the control plane, then the console pointed at it
-acp-server --ledger evidence.db --addr 127.0.0.1:8787
+# start the control plane (with a store so registration persists), then the console
+acp-server --ledger evidence.db --addr 127.0.0.1:8787 --store sqlite://control.db?mode=rwc --cp-key cp.key
 cd acp-console && kyte build && ./build/debug/bin/acp-console   # http://127.0.0.1:8080
 ```
 
