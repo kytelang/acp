@@ -13,6 +13,8 @@ use tokio::net::{TcpListener, TcpStream};
 
 struct Cfg {
     registry: RwLock<EndpointRegistry>,
+    // A18: block dials to loopback/private/link-local/cloud-metadata (SSRF) unless explicitly allowed.
+    allow_internal: bool,
     content: ContentPolicy,
     client: reqwest::Client,
     ledger: Option<Mutex<acp_ledger::Ledger>>,
@@ -85,6 +87,7 @@ async fn main() -> std::process::ExitCode {
     let mut block_secrets = false;
     let mut ca_cert: Option<String> = None;
     let mut ca_key: Option<String> = None;
+    let mut allow_internal = false;
     let mut it = args.iter().skip(1);
     while let Some(a) = it.next() {
         match a.as_str() {
@@ -97,6 +100,7 @@ async fn main() -> std::process::ExitCode {
             "--block-secrets" => block_secrets = true,
             "--ca-cert" => ca_cert = it.next().cloned(),
             "--ca-key" => ca_key = it.next().cloned(),
+            "--allow-internal-egress" => allow_internal = true,
             other => { tracing::warn!("unknown option '{other}'"); return std::process::ExitCode::from(2); }
         }
     }
@@ -142,6 +146,7 @@ async fn main() -> std::process::ExitCode {
     };
     let cfg = Arc::new(Cfg {
         registry: RwLock::new(registry),
+        allow_internal,
         content: ContentPolicy { block_injection: true, block_secrets, redact_pii: true, denied_topics: deny_topics },
         client: http.clone(),
         ledger,
@@ -231,6 +236,10 @@ async fn handle(cfg: Arc<Cfg>, mut client: TcpStream) -> std::io::Result<()> {
         let Some((host, port)) = connect_target(&target) else {
             return write_status(&mut client, 400, "Bad Request", "bad CONNECT target").await;
         };
+        if !cfg.allow_internal && acp_core::egress::is_internal_target(&host) {
+            record(&cfg, &host, "ssrf-block", "deny", &None);
+            return write_status(&mut client, 403, "Forbidden", "SSRF: internal target blocked").await;
+        }
         let decision = { cfg.registry.read().unwrap().evaluate(&host, "", port) };
         if decision.action == Action::Block {
             record(&cfg, &host, "block", "deny", &decision.rule_id);
@@ -283,6 +292,10 @@ async fn handle(cfg: Arc<Cfg>, mut client: TcpStream) -> std::io::Result<()> {
     let Some((host, path, port)) = absolute_target(&target) else {
         return write_status(&mut client, 400, "Bad Request", "only CONNECT or absolute-form http:// supported").await;
     };
+    if !cfg.allow_internal && acp_core::egress::is_internal_target(&host) {
+        record(&cfg, &host, "ssrf-block", "deny", &None);
+        return write_status(&mut client, 403, "Forbidden", "SSRF: internal target blocked").await;
+    }
     let want = content_length(&headers);
     let mut body = leftover;
     while body.len() < want {
