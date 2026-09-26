@@ -15,6 +15,7 @@ import Features.Dashboard.Sse.metrics_sse;
 import Features.Dashboard.Approvals.handler;
 import Features.Dashboard.Policy.deploy_handler;
 import Features.Dashboard.Policy.kill_handler;
+import Features.Dashboard.Endpoints.handler;
 
 fn buildApp(): App {
     let app = App();
@@ -32,6 +33,7 @@ fn buildApp(): App {
     app.post("/policy/deploy", DeployHandler(acp));
     app.post("/kill/engage", KillHandler(acp, true));
     app.post("/kill/clear", KillHandler(acp, false));
+    app.post("/endpoints/register", RegisterEndpointHandler(acp));
 
     // Serve static assets (wwwroot/) for any unmatched GET.
     app.useStatic("/", "./wwwroot");

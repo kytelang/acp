@@ -98,7 +98,7 @@
     @media print{.sidebar,.topbar{display:none}.app{display:block}.content{max-width:none}}
   </style>
 </head>
-<body data-signals="{theme: 'dark', view: 'overview'}" data-class-light="$theme === 'light'">
+<body data-signals="{theme: 'dark', view: 'overview', endpoint: '', disposition: 'govern'}" data-class-light="$theme === 'light'">
   <div class="app">
     <aside class="sidebar">
       <div class="brand">
@@ -114,6 +114,7 @@
         <div class="nav-l">Identity</div>
         <div class="nav-i" data-class-active="$view === 'apps'" data-on:click="$view = 'apps'"><span class="ic">&#128230;</span> Teams</div>
         <div class="nav-i" data-class-active="$view === 'agents'" data-on:click="$view = 'agents'"><span class="ic">&#129302;</span> Agents</div>
+        <div class="nav-i" data-class-active="$view === 'endpoints'" data-on:click="$view = 'endpoints'"><span class="ic">&#127760;</span> AI Endpoints</div>
         <div class="nav-l">Policy</div>
         <div class="nav-i" data-class-active="$view === 'policy'" data-on:click="$view = 'policy'"><span class="ic">&#128271;</span> Policy</div>
         <div class="nav-l">Emergency</div>
@@ -125,7 +126,7 @@
 
     <div class="main">
       <div class="topbar">
-        <h1 data-text="$view === 'overview' ? 'Governance overview' : $view === 'approvals' ? 'Pending approvals' : $view === 'evidence' ? 'Evidence timeline' : $view === 'apps' ? 'Teams' : $view === 'agents' ? 'Registered agents' : $view === 'policy' ? 'Policy' : $view === 'reports' ? 'Governance report' : $view === 'health' ? 'Control-plane integrity' : 'Emergency kill-switch'">Governance overview</h1>
+        <h1 data-text="$view === 'overview' ? 'Governance overview' : $view === 'approvals' ? 'Pending approvals' : $view === 'evidence' ? 'Evidence timeline' : $view === 'apps' ? 'Teams' : $view === 'agents' ? 'Registered agents' : $view === 'policy' ? 'Policy' : $view === 'reports' ? 'Governance report' : $view === 'health' ? 'Control-plane integrity' : $view === 'endpoints' ? 'AI endpoints' : 'Emergency kill-switch'">Governance overview</h1>
         <div class="tright">
           <button class="tbtn" data-on:click="$theme = $theme === 'dark' ? 'light' : 'dark'" title="Toggle theme">
             <span data-text="$theme === 'dark' ? '&#9728;' : '&#9790;'"></span>
@@ -210,6 +211,36 @@ rules:
                   </label>
                   <button class="btn primary" data-on:click="@post('/policy/deploy')">Deploy policy</button>
                   <div class="deploystatus" id="deployresult"></div>
+                </div>
+              </div>
+            </div>
+          </div>
+        </section>
+
+        <section class="view" data-show="$view === 'endpoints'">
+          <div class="card"><div class="card-h"><span class="ic">&#127760;</span> Registered AI endpoints<span class="sub">agents and providers under governance</span></div>
+            <div class="card-b"><div id="endpoints"><p class="empty">&#8230;</p></div></div></div>
+
+          <div class="card"><div class="card-h"><span class="ic">&#10133;</span> Register an AI endpoint</div>
+            <div class="card-b">
+              <p class="hint">Register an endpoint for an AI agent or provider (for example <span class="mono">claude.ai</span>, <span class="mono">chatgpt.com</span>, <span class="mono">api.x.ai</span>, <span class="mono">api.openai.com</span>, or an MCP server URL). acp-server classifies the provider and records a signed disposition. <span class="mono">govern</span> routes it through ACP and counts it as governed; <span class="mono">block</span> quarantines it; <span class="mono">accept-risk</span> is a time-boxed exception.</p>
+              <div class="deploy">
+                <div class="row">
+                  <label class="fld">Endpoint (host or URL)
+                    <input type="text" data-bind="endpoint" placeholder="claude.ai" style="max-width:320px" />
+                  </label>
+                  <label class="fld">Disposition
+                    <select data-bind="disposition">
+                      <option value="govern">govern (route through ACP)</option>
+                      <option value="block">block (quarantine)</option>
+                      <option value="accept-risk">accept-risk (time-boxed)</option>
+                    </select>
+                  </label>
+                  <label class="fld">Reason <input type="text" data-bind="reason" value="sanctioned" /></label>
+                </div>
+                <div class="row">
+                  <button class="btn primary" data-on:click="@post('/endpoints/register')">Register endpoint</button>
+                  <div class="deploystatus" id="endpointresult"></div>
                 </div>
               </div>
             </div>

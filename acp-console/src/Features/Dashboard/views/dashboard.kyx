@@ -303,3 +303,45 @@ pub fn killResultPanel(res: DeployResult): Html {
         <span class="dim">{res.message}</span>
     </div>;
 }
+
+
+// Disposition badge for a registered AI endpoint.
+fn dispoBadge(d: string): Html {
+    if (string.eql(d, "govern")) { return <span class="badge ok">govern</span>; }
+    if (string.eql(d, "block")) { return <span class="badge bad">block</span>; }
+    if (string.eql(d, "accept-risk")) { return <span class="badge warn">accept-risk</span>; }
+    return <span class="badge ver">{d}</span>;
+}
+
+// Registered AI endpoints (fragment #endpoints): the agents and providers under governance.
+pub fn endpointsPanel(rows: list.List<EndpointRow>): Html {
+    return <div id="endpoints">
+        {if (rows.size() == 0) {
+            <p class="empty">No AI endpoints registered yet. Add one below.</p>
+        } else {
+            <table class="tbl">
+                <thead><tr><th>Endpoint</th><th>Provider</th><th>Kind</th><th>Disposition</th><th>Reason</th></tr></thead>
+                <tbody>
+                    {for (i in 0..rows.size()) {
+                        let r = rows.get(i) ?? EndpointRow("", "", "", "", "", false);
+                        <tr>
+                            <td class="strong mono">{r.endpoint}</td>
+                            <td><span class="badge ver">{r.provider}</span></td>
+                            <td class="mono dim">{r.kind}</td>
+                            <td>{dispoBadge(r.disposition)}{if (r.active) { <span></span> } else { <span class="badge dim" style="margin-left:.35rem">expired</span> }}</td>
+                            <td class="dim">{r.reason}</td>
+                        </tr>
+                    }}
+                </tbody>
+            </table>
+        }}
+    </div>;
+}
+
+// Outcome of registering an endpoint (fragment #endpointresult).
+pub fn endpointRegisterResult(res: DeployResult): Html {
+    return <div id="endpointresult" class="deploystatus">
+        {if (res.ok) { <span class="badge ok">registered</span> } else { <span class="badge bad">rejected</span> }}
+        <span class="dim">{res.message}</span>
+    </div>;
+}

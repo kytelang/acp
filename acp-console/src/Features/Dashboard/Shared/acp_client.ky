@@ -111,6 +111,19 @@ pub struct KillStatus {
     }
 }
 
+pub struct EndpointRow {
+    pub endpoint: string,
+    pub provider: string,
+    pub kind: string,
+    pub disposition: string,
+    pub reason: string,
+    pub active: bool,
+    init(endpoint: string, provider: string, kind: string, disposition: string, reason: string, active: bool) {
+        self.endpoint = endpoint; self.provider = provider; self.kind = kind;
+        self.disposition = disposition; self.reason = reason; self.active = active;
+    }
+}
+
 pub struct AcpClient {
     base: string,
     init(base: string) { self.base = base; }
@@ -382,6 +395,53 @@ pub struct AcpClient {
         let resp = client.Http.request("POST", self.base + "/break-glass/clear", hdrs, "{}");
         if (resp.status.toCode() != 200) { return DeployResult(false, "acp-server unreachable"); }
         return DeployResult(true, "break-glass cleared");
+    }
+
+    // Registered AI endpoints (agents/providers) and their disposition, from acp-server. Read-only.
+    pub fn endpointsRows(self: AcpClient): list.List<EndpointRow> {
+        let rows = list.List<EndpointRow>();
+        let resp = client.Http.get(self.base + "/endpoints");
+        if (resp.status.toCode() != 200) { return rows; }
+        let ev = json.get(json.parse(resp.body), "endpoints");
+        let arr = json.asArray(ev);
+        if (arr == undefined) { return rows; }
+        let i = 0;
+        while (i < arr.size()) {
+            let item = json.at(ev, i);
+            rows.push(EndpointRow(
+                json.asString(json.get(item, "endpoint")) ?? "",
+                json.asString(json.get(item, "provider")) ?? "",
+                json.asString(json.get(item, "kind")) ?? "",
+                json.asString(json.get(item, "disposition")) ?? "",
+                json.asString(json.get(item, "reason")) ?? "",
+                json.asBool(json.get(item, "active")) ?? false));
+            i = i + 1;
+        }
+        return rows;
+    }
+
+    // Register (enrol) an AI endpoint by forwarding the browser's datastar signals (endpoint,
+    // disposition, reason) to acp-server, which classifies the provider and records a signed
+    // disposition. The console holds no signing key; acp-server is the trust store.
+    pub fn registerEndpointRaw(self: AcpClient, body: string, userAuth: string): DeployResult {
+        let hdrs = client.Http.emptyHeaders();
+        hdrs.set("Content-Type", "application/json");
+        if (!string.eql(userAuth, "")) {
+            hdrs.set("Authorization", userAuth);
+        } else {
+            let tok = self.authToken("PolicyAdmin");
+            if (!string.eql(tok, "")) { hdrs.set("Authorization", "Bearer " + tok); }
+        }
+        let resp = client.Http.request("POST", self.base + "/endpoints/register", hdrs, body);
+        if (resp.status.toCode() != 200) { return DeployResult(false, "acp-server unreachable"); }
+        let v = json.parse(resp.body);
+        let ok = json.asBool(json.get(v, "ok")) ?? false;
+        if (ok) {
+            let ep = json.asString(json.get(v, "endpoint")) ?? "";
+            let prov = json.asString(json.get(v, "provider")) ?? "";
+            return DeployResult(true, "registered " + ep + " (" + prov + ")");
+        }
+        return DeployResult(false, json.asString(json.get(v, "error")) ?? "register rejected");
     }
 
     // Control-plane integrity and health, from acp-server's verifiable endpoints. Each figure is

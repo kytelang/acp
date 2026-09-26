@@ -1,0 +1,19 @@
+import web.routing;
+import web.response;
+import ds_response;
+import Features.Dashboard.Shared.acp_client;
+import Features.Dashboard.views.dashboard;
+
+// POST /endpoints/register: forward the operator's datastar signals (endpoint, disposition, reason)
+// to acp-server, which classifies the provider and records a signed disposition, then patch the
+// result. The live SSE stream refreshes the endpoints table on its next tick.
+pub struct RegisterEndpointHandler impl RouteHandler {
+    acp: AcpClient,
+    init(acp: AcpClient) { self.acp = acp; }
+
+    async fn serve(self: RegisterEndpointHandler, ctx: Context): Response {
+        let auth = ctx.request.headers.get("authorization") ?? "";
+        let res = self.acp.registerEndpointRaw(ctx.request.body, auth);
+        return await ds_response.patch(endpointRegisterResult(res));
+    }
+}

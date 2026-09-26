@@ -28,6 +28,7 @@ struct AppState {
     meta: Option<std::sync::Mutex<acp_ledger::Ledger>>,
     registry: Option<String>,
     policy_store: Option<String>,
+    enrollment: Option<String>,
     break_glass_file: Option<String>,
     break_glass_seed: Option<[u8; 32]>,
     auth: Option<Auth>,
@@ -80,6 +81,7 @@ async fn main() {
     let mut registry: Option<String> = None;
     let mut policy_store: Option<String> = None;
     let mut break_glass_file: Option<String> = None;
+    let mut enrollment: Option<String> = None;
     let mut tls_ca: Option<String> = None;
     let mut tls_cert: Option<String> = None;
     let mut tls_key: Option<String> = None;
@@ -100,6 +102,7 @@ async fn main() {
             "--meta-ledger" => meta_ledger = it.next().cloned(),
             "--registry" => registry = it.next().cloned(),
             "--policy-store" => policy_store = it.next().cloned(),
+            "--enrollment" => enrollment = it.next().cloned(),
             "--oidc-jwks" => oidc_jwks = it.next().cloned(),
             "--oidc-issuer" => oidc_issuer = it.next().cloned(),
             "--oidc-audience" => oidc_audience = it.next().cloned(),
@@ -249,6 +252,7 @@ async fn main() {
         meta,
         registry,
         policy_store,
+        enrollment,
         break_glass_file,
         break_glass_seed,
         auth,
@@ -275,6 +279,8 @@ async fn main() {
         .route("/policy-store", get(policy_store_current))
         .route("/policy-store/rules", get(policy_store_rules))
         .route("/policy-store/deploy", post(policy_store_deploy))
+        .route("/endpoints", get(endpoints_list))
+        .route("/endpoints/register", post(endpoints_register))
         .route("/approvals/pending", get(approvals_pending))
         .route("/evidence/recent", get(evidence_recent))
         .route("/break-glass", get(break_glass_status))
@@ -596,6 +602,131 @@ async fn policy_store_current(State(st): State<Arc<AppState>>) -> impl IntoRespo
 /// Load-or-create the Ed25519 signer used to sign console-initiated deployments. Persisted next to
 /// the store so the signed manifest stays verifiable across restarts. The proxy trusts the pubkey
 /// embedded in current.json (tamper-evidence of the file against the signed hash).
+/// Sign endpoint dispositions with a key kept next to the enrollment log (created 0600 if absent).
+fn enroll_signer(path: &str) -> acp_core::sign::Ed25519Signer {
+    let key_path = format!("{path}.key");
+    match std::fs::read(&key_path) {
+        Ok(b) if b.len() == 32 => {
+            let mut s = [0u8; 32];
+            s.copy_from_slice(&b);
+            acp_core::sign::Ed25519Signer::from_seed(&s)
+        }
+        _ => {
+            let s = acp_core::sign::Ed25519Signer::generate();
+            let _ = acp_core::secret::write_key_secure(&key_path, &s.seed());
+            s
+        }
+    }
+}
+
+fn load_enrollment(path: &str) -> acp_core::enrollment::EnrollmentLog {
+    std::fs::read_to_string(path)
+        .ok()
+        .and_then(|s| serde_json::from_str(&s).ok())
+        .unwrap_or_default()
+}
+
+fn ai_kind_str(ep: &str) -> (String, String) {
+    // (kind, provider) from the discovery classifier; falls back to a generic endpoint.
+    match acp_core::discovery::classify_ai(ep) {
+        Some(ai) => {
+            let kind = match ai.kind {
+                acp_core::discovery::AiKind::ModelApi => "model-api",
+                acp_core::discovery::AiKind::Mcp => "mcp",
+            };
+            (kind.to_string(), ai.provider)
+        }
+        None => ("endpoint".to_string(), "unclassified".to_string()),
+    }
+}
+
+/// GET /endpoints: the latest disposition per registered AI endpoint, with the provider classified
+/// (OpenAI / Anthropic / xAI / Google / ...), for the console to list.
+async fn endpoints_list(State(st): State<Arc<AppState>>) -> impl IntoResponse {
+    let path = match &st.enrollment {
+        Some(p) => p.clone(),
+        None => return Json(serde_json::json!({"configured": false, "endpoints": []})).into_response(),
+    };
+    let log = load_enrollment(&path);
+    // latest per endpoint (last write wins by decided_ms).
+    let mut by_ep: std::collections::BTreeMap<&str, &acp_core::enrollment::EndpointDisposition> =
+        std::collections::BTreeMap::new();
+    for d in &log.dispositions {
+        match by_ep.get(d.endpoint.as_str()) {
+            Some(existing) if existing.decided_ms >= d.decided_ms => {}
+            _ => {
+                by_ep.insert(&d.endpoint, d);
+            }
+        }
+    }
+    let now = now_ms();
+    let out: Vec<serde_json::Value> = by_ep
+        .values()
+        .map(|d| {
+            let (_kind, provider) = ai_kind_str(&d.endpoint);
+            let (dispo, active) = match d.disposition {
+                acp_core::enrollment::Disposition::Enroll => ("govern", true),
+                acp_core::enrollment::Disposition::Quarantine => ("block", true),
+                acp_core::enrollment::Disposition::AcceptRisk { expires_ms } => {
+                    ("accept-risk", now < expires_ms)
+                }
+            };
+            serde_json::json!({
+                "endpoint": d.endpoint,
+                "provider": provider,
+                "kind": d.kind,
+                "disposition": dispo,
+                "operator": d.operator,
+                "reason": d.reason,
+                "active": active,
+                "verified": d.verify(),
+            })
+        })
+        .collect();
+    Json(serde_json::json!({"configured": true, "endpoints": out})).into_response()
+}
+
+/// POST /endpoints/register: record a signed disposition for an AI endpoint. Body:
+/// {endpoint, disposition: govern|block|accept-risk, reason}. The provider is classified server-side.
+async fn endpoints_register(
+    State(st): State<Arc<AppState>>,
+    headers: HeaderMap,
+    Json(body): Json<serde_json::Value>,
+) -> Response {
+    if let Err(r) = authorize(&st.auth, &headers, acp_auth::Capability::EditPolicy) {
+        return r;
+    }
+    let path = match &st.enrollment {
+        Some(p) => p.clone(),
+        None => return Json(serde_json::json!({"ok": false, "error": "no enrollment store configured (--enrollment)"})).into_response(),
+    };
+    let endpoint = body.get("endpoint").and_then(|v| v.as_str()).unwrap_or("").trim().to_string();
+    if endpoint.is_empty() {
+        return Json(serde_json::json!({"ok": false, "error": "endpoint is required"})).into_response();
+    }
+    let reason = body.get("reason").and_then(|v| v.as_str()).unwrap_or("").to_string();
+    let now = now_ms();
+    let disposition = match body.get("disposition").and_then(|v| v.as_str()).unwrap_or("govern") {
+        "govern" | "enroll" => acp_core::enrollment::Disposition::Enroll,
+        "block" | "quarantine" => acp_core::enrollment::Disposition::Quarantine,
+        "accept-risk" => acp_core::enrollment::Disposition::AcceptRisk { expires_ms: now + 30 * 24 * 3600 * 1000 },
+        other => return Json(serde_json::json!({"ok": false, "error": format!("unknown disposition '{other}'")})).into_response(),
+    };
+    let (kind, provider) = ai_kind_str(&endpoint);
+    let mut log = load_enrollment(&path);
+    let signer = enroll_signer(&path);
+    log.record(&signer, &endpoint, &kind, disposition, "console", &reason, now);
+    match serde_json::to_string_pretty(&log) {
+        Ok(s) => {
+            if std::fs::write(&path, s).is_err() {
+                return Json(serde_json::json!({"ok": false, "error": "cannot write enrollment store"})).into_response();
+            }
+        }
+        Err(_) => return Json(serde_json::json!({"ok": false, "error": "serialise enrollment"})).into_response(),
+    }
+    Json(serde_json::json!({"ok": true, "endpoint": endpoint, "provider": provider, "kind": kind})).into_response()
+}
+
 fn deploy_signer(store_dir: &str) -> acp_core::sign::Ed25519Signer {
     let key_path = format!("{store_dir}/deploy.key");
     let _ = std::fs::create_dir_all(store_dir);
