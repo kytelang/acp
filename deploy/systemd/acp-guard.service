@@ -1,0 +1,30 @@
+# Optional per-tool-server sidecar. acp-guard sits IN FRONT OF a single tool/MCP server and rejects
+# any request lacking a fresh, valid x-acp-enforcement header signed by the pinned proxy key, so a
+# tool server can refuse traffic that did not pass a PEP. It is per-upstream (one instance per tool
+# server), which is why it is not started automatically: set the three required values in
+# /etc/acp/guard.env, then `systemctl enable --now acp-guard`.
+#
+#   ACP_GUARD_LISTEN    address to listen on            (default 127.0.0.1:8801)
+#   ACP_GUARD_UPSTREAM  the tool-server URL to protect  (required)
+#   ACP_GUARD_PUBKEY    the proxy's pinned public key, hex (required)
+[Unit]
+Description=Varman (ACP) enforcement guard (verifies x-acp-enforcement in front of a tool server)
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+User=acp
+Group=acp
+EnvironmentFile=/etc/acp/guard.env
+ExecStart=/usr/local/bin/acp-guard --listen ${ACP_GUARD_LISTEN} --upstream ${ACP_GUARD_UPSTREAM} \
+  --pubkey ${ACP_GUARD_PUBKEY} --ledger /var/lib/acp/guard-evidence.db
+Restart=on-failure
+RestartSec=2
+NoNewPrivileges=true
+ProtectSystem=strict
+ReadWritePaths=/var/lib/acp
+ProtectHome=true
+PrivateTmp=true
+
+[Install]
+WantedBy=multi-user.target

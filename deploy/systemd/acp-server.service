@@ -1,12 +1,17 @@
+# Shipped in the release archive. This mirrors the unit install-server.sh generates inline, so a
+# manual install and the scripted install behave identically. ACP_STORE (the control-plane database
+# URL; sqlite/postgres/mysql selected by scheme) comes from the EnvironmentFile; install-server.sh
+# writes /etc/acp/server.env with a sensible default. Binaries are symlinked into /usr/local/bin.
 [Unit]
-Description=ACP control plane (registry, policy store, evidence ledger, approvals)
+Description=Varman (ACP) control plane
 After=network-online.target
 Wants=network-online.target
 
 [Service]
 User=acp
 Group=acp
-ExecStart=/usr/local/bin/acp-server --addr 127.0.0.1:8787 --ledger /var/lib/acp/evidence.db --approvals /var/lib/acp/approvals.db --store sqlite:///var/lib/acp/control.db?mode=rwc --cp-key /var/lib/acp/cp.key --policy-store /var/lib/acp/policy --break-glass-file /var/lib/acp/break-glass.signed
+EnvironmentFile=/etc/acp/server.env
+ExecStart=/usr/local/bin/acp-server --addr 127.0.0.1:8787 --ledger /var/lib/acp/evidence.db --approvals /var/lib/acp/approvals.db --store ${ACP_STORE} --cp-key /var/lib/acp/cp.key --policy-store /var/lib/acp/policy --break-glass-file /var/lib/acp/break-glass.signed
 Restart=on-failure
 RestartSec=2
 # Hardening

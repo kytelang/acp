@@ -50,13 +50,13 @@ spec:
             - "--approvals"
             - "/data/approvals.db"
           ports:
-            - { name: http, containerPort: 8080 }
+            - { name: http, containerPort: 8787 }
           readinessProbe:
-            httpGet: { path: /readyz, port: 8080 }
+            httpGet: { path: /readyz, port: 8787 }
             initialDelaySeconds: 3
             periodSeconds: 10
           livenessProbe:
-            httpGet: { path: /healthz, port: 8080 }
+            httpGet: { path: /healthz, port: 8787 }
             periodSeconds: 15
           resources: {{ toYaml .Values.controlPlane.resources | nindent 12 }}
           volumeMounts:
@@ -121,5 +121,5 @@ metadata:
 spec:
   selector: { app: {{ .Release.Name }}-control-plane }
   ports:
-    - { name: http, port: 8080, targetPort: 8080 }
+    - { name: http, port: 8787, targetPort: 8787 }
 {{- end }}

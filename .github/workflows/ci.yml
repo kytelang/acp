@@ -72,3 +72,26 @@ jobs:
           ACP_PG_TEST_URL: host=localhost user=acp_app password=apppw dbname=acp
           ACP_PG_SUPER_URL: host=localhost user=postgres password=postgres dbname=acp
         run: cargo test -p acp-pgstore
+
+  console-build:
+    # B10: build the Kyte web console so a console build break fails a gate (release.yml builds it too,
+    # but there it is continue-on-error and does not block). Mirrors the toolchain install in release.yml.
+    name: console build
+    runs-on: ubuntu-22.04
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+      - name: Install the Kyte toolchain
+        run: |
+          curl -fsSL https://kytelang.org/install.sh | sh
+          echo "$HOME/.kyte/bin" >> "$GITHUB_PATH"
+      - name: Build the console
+        working-directory: acp-console
+        run: |
+          npm ci || npm install
+          npm run css || true
+          kyte build
+      - name: Check the console binary was produced
+        run: test -x acp-console/build/debug/bin/acp-console

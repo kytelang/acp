@@ -1,0 +1,23 @@
+# Shipped in the release archive. Matches the console unit install-server.sh generates inline. The
+# console is a Kyte app installed under /opt/acp/console (binary + wwwroot + app.yaml). It serves the
+# web UI on :8080 and reads the control plane at http://127.0.0.1:8787 (a hardcoded upstream today),
+# so it is expected to run on the same host as acp-server.
+[Unit]
+Description=Varman (ACP) web console
+After=network-online.target acp-server.service
+Wants=network-online.target
+
+[Service]
+User=acp
+Group=acp
+WorkingDirectory=/opt/acp/console
+ExecStart=/opt/acp/console/bin/acp-console
+Restart=on-failure
+RestartSec=2
+NoNewPrivileges=true
+ProtectSystem=strict
+ProtectHome=true
+PrivateTmp=true
+
+[Install]
+WantedBy=multi-user.target

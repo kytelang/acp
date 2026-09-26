@@ -20,8 +20,18 @@ services:
   control-plane:
     image: acp:local
     build: { context: .., dockerfile: deploy/Dockerfile }
-    command: ["--addr", "0.0.0.0:8080", "--ledger", "/data/evidence.db", "--approvals", "/data/approvals.db"]
-    ports: ["8080:8080"]
+    # Control-plane API on :8787 (matches systemd and install-server). The console shares this
+    # container's network namespace (see acp-console below), so its :8080 is published here too.
+    # --store points at the Postgres service so registration, policy and break-glass persist across
+    # restarts (B7); the URL scheme selects the backend (postgres:// here).
+    command: ["--addr", "0.0.0.0:8787",
+              "--ledger", "/data/evidence.db",
+              "--approvals", "/data/approvals.db",
+              "--store", "postgres://acp:${ACP_PG_PASSWORD}@postgres/acp",
+              "--cp-key", "/data/cp.key",
+              "--policy-store", "/data/policy",
+              "--break-glass-file", "/data/break-glass.signed"]
+    ports: ["8787:8787", "8080:8080"]
     healthcheck:
       test: ["CMD", "acp-cli", "verify", "/data/evidence.db"]
       interval: 15s
@@ -31,6 +41,22 @@ services:
       - cpdata:/data
     depends_on:
       postgres: { condition: service_healthy }
+
+  # Web console (read-only view over the control-plane API).
+  # LIMITATION: the console binary hardcodes the control-plane URL http://127.0.0.1:8787
+  # (acp-console/src/main.ky) and cannot yet be pointed at a service DNS name without a code change.
+  # We therefore share the control-plane's network namespace so 127.0.0.1:8787 resolves to it; the
+  # console's own :8080 is published through the control-plane service above.
+  # NOTE: this service is NOT built by deploy/Dockerfile (that image ships only the Rust binaries).
+  # The console is a Kyte app; build the acp-console:local image separately, or run the acp-console
+  # binary from the release archive. Compose will not start it until that image exists.
+  acp-console:
+    image: acp-console:local
+    entrypoint: ["acp-console"]
+    command: ["--port", "8080"]
+    network_mode: "service:control-plane"
+    depends_on:
+      control-plane: { condition: service_started }
 
   gateway-a:
     image: acp:local

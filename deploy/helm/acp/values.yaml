@@ -11,7 +11,9 @@ nameOverride: ""
 # lease) is tracked as P0-4 in docs/production-readiness.md and is not yet wired.
 controlPlane:
   enabled: true
-  addr: "0.0.0.0:8080"
+  # API listen address. Standardised on :8787 everywhere (compose, systemd, install-server) so the
+  # console's hardcoded upstream expectation holds. The console UI itself serves on :8080 (distinct).
+  addr: "0.0.0.0:8787"
   # Honest durability note (P0-3): the ledger is append-only and locally durable (SQLite WAL). It is
   # NOT replicated by this chart. Back it up (acp-cli ledger-backup or a volume snapshot) and set an
   # RPO you can live with. Do not claim replication you do not have.
@@ -28,6 +30,27 @@ controlPlane:
     enabled: false
     intervalSeconds: 3600
     size: 10Gi
+
+# Web console (read-only view over the control-plane API). It is a Kyte app, NOT one of the Rust
+# binaries in image.repository, so it has its own image. Build acp-console with the Kyte toolchain
+# and push it, then set console.image here.
+# LIMITATION: the console binary hardcodes its control-plane upstream as http://127.0.0.1:8787
+# (acp-console/src/main.ky). Across separate pods that address does not reach the control plane, so
+# controlPlaneUrl below is only documentation of the intended target until the source is made
+# configurable. Until then, run the console as a sidecar in the control-plane pod for a working URL.
+console:
+  enabled: false
+  image:
+    repository: acp-console
+    tag: local
+    pullPolicy: IfNotPresent
+  replicas: 1
+  port: 8080
+  # Documented target once the hardcoded URL is made configurable (see LIMITATION above).
+  controlPlaneUrl: "http://{{ .Release.Name }}-control-plane:8787"
+  resources:
+    requests: { cpu: "50m", memory: "64Mi" }
+    limits: { cpu: "500m", memory: "256Mi" }
 
 gateway:
   enabled: true

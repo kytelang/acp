@@ -1,5 +1,8 @@
+# Shipped in the release archive. Mirrors the unit install-server.sh generates inline. The upstream
+# and shared-budget DSN come from the EnvironmentFile (/etc/acp/gateway.env). The content firewall
+# and its ML model are on by default; remove --content-ml if the model file is not installed.
 [Unit]
-Description=ACP LLM gateway (governs direct model API calls; shared budgets via Postgres)
+Description=Varman (ACP) LLM gateway
 After=network-online.target
 Wants=network-online.target
 

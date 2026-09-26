@@ -1,0 +1,64 @@
+{{- if .Values.console.enabled }}
+# Web console (Kyte app). This is a SEPARATE image from the Rust services (image.repository); it is
+# built by the Kyte toolchain and pushed under console.image.
+#
+# LIMITATION (do not remove without a source change): the console binary hardcodes its control-plane
+# upstream as http://127.0.0.1:8787 (acp-console/src/main.ky). As a standalone Deployment it cannot
+# reach the control-plane pod at that address, so console.controlPlaneUrl below is injected only as
+# documentation of the intended target. Until the console is made configurable, run it as a sidecar
+# in the control-plane pod (shared localhost) for a working link.
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: {{ .Release.Name }}-console
+  labels:
+    {{- include "acp.labels" . | nindent 4 }}
+    app: {{ .Release.Name }}-console
+spec:
+  replicas: {{ .Values.console.replicas }}
+  selector:
+    matchLabels: { app: {{ .Release.Name }}-console }
+  template:
+    metadata:
+      labels: { app: {{ .Release.Name }}-console }
+    spec:
+      {{- with .Values.imagePullSecrets }}
+      imagePullSecrets: {{ toYaml . | nindent 8 }}
+      {{- end }}
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 10001
+      containers:
+        - name: console
+          image: "{{ .Values.console.image.repository }}:{{ .Values.console.image.tag }}"
+          imagePullPolicy: {{ .Values.console.image.pullPolicy }}
+          command: ["acp-console"]
+          args:
+            - "--port"
+            - "{{ .Values.console.port }}"
+          env:
+            # Documented intended upstream. The current binary ignores this and uses 127.0.0.1:8787
+            # (see LIMITATION above); kept so the wiring is ready when the source is made configurable.
+            - name: ACP_CONTROL_PLANE_URL
+              value: {{ tpl .Values.console.controlPlaneUrl . | quote }}
+          ports:
+            - { name: http, containerPort: {{ .Values.console.port }} }
+          readinessProbe:
+            httpGet: { path: /, port: {{ .Values.console.port }} }
+            initialDelaySeconds: 3
+            periodSeconds: 10
+          livenessProbe:
+            httpGet: { path: /, port: {{ .Values.console.port }} }
+            periodSeconds: 15
+          resources: {{ toYaml .Values.console.resources | nindent 12 }}
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: {{ .Release.Name }}-console
+  labels: {{- include "acp.labels" . | nindent 4 }}
+spec:
+  selector: { app: {{ .Release.Name }}-console }
+  ports:
+    - { name: http, port: {{ .Values.console.port }}, targetPort: {{ .Values.console.port }} }
+{{- end }}
