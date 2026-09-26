@@ -26,6 +26,17 @@ struct GuardState {
     ledger: Option<Mutex<acp_ledger::Ledger>>,
     forwarded: AtomicU64,
     rejected: AtomicU64,
+    // A10: active break-glass grant; lockdown_all makes the guard refuse all forwards.
+    bg: std::sync::RwLock<Option<acp_core::breakglass::BreakGlass>>,
+}
+
+/// Load and verify a break-glass grant file into a live grant (None when absent/invalid). With a
+/// pinned key the grant must be validly signed by it.
+fn load_grant(path: &str, pinned: Option<&[u8]>) -> Option<acp_core::breakglass::BreakGlass> {
+    let src = std::fs::read_to_string(path).ok()?;
+    let gf: acp_core::breakglass::GrantFile = serde_json::from_str(&src).ok()?;
+    if !gf.verify(pinned) { return None; }
+    gf.to_break_glass().map(|(bg, _actor)| bg)
 }
 
 fn now_ms() -> u64 {
@@ -45,6 +56,8 @@ async fn main() -> std::process::ExitCode {
     let mut max_age_ms: u64 = 30_000;
     let mut ledger_path: Option<String> = None;
     let mut ledger_key_hex: Option<String> = None;
+    let mut bg_path: Option<String> = None;
+    let mut bg_key_hex: Option<String> = None;
     let mut it = args.iter().skip(1);
     while let Some(a) = it.next() {
         match a.as_str() {
@@ -56,6 +69,8 @@ async fn main() -> std::process::ExitCode {
             }
             "--ledger" => ledger_path = it.next().cloned(),
             "--ledger-key" => ledger_key_hex = it.next().cloned(),
+            "--break-glass-file" => bg_path = it.next().cloned(),
+            "--break-glass-key" => bg_key_hex = it.next().cloned(),
             other => {
                 tracing::warn!("unknown option '{other}'");
                 return std::process::ExitCode::from(2);
@@ -103,6 +118,8 @@ async fn main() -> std::process::ExitCode {
         _ => None,
     };
 
+    let bg_key: Option<Vec<u8>> = bg_key_hex.as_ref().and_then(|h| hex::decode(acp_core::secret::resolve(h)).ok());
+    let bg_initial = bg_path.as_ref().and_then(|p| load_grant(p, bg_key.as_deref()));
     let state = Arc::new(GuardState {
         pubkey,
         upstream: upstream.clone(),
@@ -111,7 +128,21 @@ async fn main() -> std::process::ExitCode {
         ledger,
         forwarded: AtomicU64::new(0),
         rejected: AtomicU64::new(0),
+        bg: std::sync::RwLock::new(bg_initial),
     });
+    // A10: watch the break-glass grant so a lockdown engaged on the control plane reaches the guard.
+    if let Some(p) = bg_path.clone() {
+        let st_bg = state.clone();
+        let key = bg_key.clone();
+        tracing::info!("break-glass grant watched at {p}");
+        tokio::spawn(async move {
+            loop {
+                let g = load_grant(&p, key.as_deref());
+                if let Ok(mut w) = st_bg.bg.write() { *w = g; }
+                tokio::time::sleep(std::time::Duration::from_secs(5)).await;
+            }
+        });
+    }
 
     let app = Router::new()
         .route("/healthz", get(|| async { "ok" }))
@@ -180,6 +211,17 @@ async fn proxy(
     let hdr = headers
         .get("x-acp-enforcement")
         .and_then(|v| v.to_str().ok());
+
+    // A10: a break-glass lockdown refuses every forward, regardless of a valid attestation.
+    let locked = {
+        let g = state.bg.read().unwrap();
+        matches!(g.as_ref(), Some(bg) if bg.active(now_ms()) && bg.mode == acp_core::breakglass::Mode::LockdownAll)
+    };
+    if locked {
+        state.rejected.fetch_add(1, Ordering::Relaxed);
+        record_rejection(&state, path, "break-glass lockdown");
+        return (StatusCode::SERVICE_UNAVAILABLE, json!({"error": "break-glass-lockdown"}).to_string()).into_response();
+    }
 
     match decide(&state.pubkey, hdr, now_ms(), state.max_age_ms) {
         GuardDecision::Reject(reason) => {

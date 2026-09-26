@@ -15,6 +15,8 @@ struct Cfg {
     registry: RwLock<EndpointRegistry>,
     // A18: block dials to loopback/private/link-local/cloud-metadata (SSRF) unless explicitly allowed.
     allow_internal: bool,
+    // A10: active break-glass grant (lockdown_all blocks all egress). Refreshed from the grant file.
+    bg: RwLock<Option<acp_core::breakglass::BreakGlass>>,
     content: ContentPolicy,
     client: reqwest::Client,
     ledger: Option<Mutex<acp_ledger::Ledger>>,
@@ -36,6 +38,27 @@ fn record(cfg: &Cfg, host: &str, action: &str, verdict: &str, rule: &Option<Stri
         if let Ok(mut g) = l.lock() {
             let _ = g.append(&did, "intercept", &rec, None);
         }
+    }
+}
+
+/// Load and verify the break-glass grant file into a live grant (None when absent/invalid). With a
+/// pinned key the grant must carry a valid signature by it (A10 / fail-closed on tamper).
+fn load_grant(path: &str, pinned: Option<&[u8]>) -> Option<acp_core::breakglass::BreakGlass> {
+    let src = std::fs::read_to_string(path).ok()?;
+    let gf: acp_core::breakglass::GrantFile = serde_json::from_str(&src).ok()?;
+    if !gf.verify(pinned) { return None; }
+    gf.to_break_glass().map(|(bg, _actor)| bg)
+}
+
+/// True if an active break-glass grant should block egress to `host`. lockdown_all denies (scope
+/// permitting); disable_enforce/emergency_bypass do not block interception traffic.
+fn bg_blocks(cfg: &Cfg, host: &str) -> bool {
+    let g = cfg.bg.read().unwrap();
+    match g.as_ref() {
+        Some(bg) if bg.active(now_ms()) && bg.mode == acp_core::breakglass::Mode::LockdownAll => {
+            bg.scope.matches("", host, "")
+        }
+        _ => false,
     }
 }
 
@@ -88,6 +111,8 @@ async fn main() -> std::process::ExitCode {
     let mut ca_cert: Option<String> = None;
     let mut ca_key: Option<String> = None;
     let mut allow_internal = false;
+    let mut bg_path: Option<String> = None;
+    let mut bg_key_hex: Option<String> = None;
     let mut it = args.iter().skip(1);
     while let Some(a) = it.next() {
         match a.as_str() {
@@ -101,6 +126,8 @@ async fn main() -> std::process::ExitCode {
             "--ca-cert" => ca_cert = it.next().cloned(),
             "--ca-key" => ca_key = it.next().cloned(),
             "--allow-internal-egress" => allow_internal = true,
+            "--break-glass-file" => bg_path = it.next().cloned(),
+            "--break-glass-key" => bg_key_hex = it.next().cloned(),
             other => { tracing::warn!("unknown option '{other}'"); return std::process::ExitCode::from(2); }
         }
     }
@@ -144,9 +171,12 @@ async fn main() -> std::process::ExitCode {
         }
         _ => None,
     };
+    let bg_key: Option<Vec<u8>> = bg_key_hex.as_ref().and_then(|h| hex::decode(acp_core::secret::resolve(h)).ok());
+    let bg_initial = bg_path.as_ref().and_then(|p| load_grant(p, bg_key.as_deref()));
     let cfg = Arc::new(Cfg {
         registry: RwLock::new(registry),
         allow_internal,
+        bg: RwLock::new(bg_initial),
         content: ContentPolicy { block_injection: true, block_secrets, redact_pii: true, denied_topics: deny_topics },
         client: http.clone(),
         ledger,
@@ -159,6 +189,19 @@ async fn main() -> std::process::ExitCode {
         Err(e) => { tracing::error!("cannot bind {addr}: {e}"); return std::process::ExitCode::from(1); }
     };
     tracing::info!("forward proxy on {addr}; {} rule(s)", cfg.registry.read().unwrap().endpoints.len());
+    // A10: refresh the break-glass grant so a lockdown engaged on the control plane takes effect here.
+    if let Some(p) = bg_path.clone() {
+        let cfg_bg = cfg.clone();
+        let key = bg_key.clone();
+        tracing::info!("break-glass grant watched at {p}");
+        tokio::spawn(async move {
+            loop {
+                let g = load_grant(&p, key.as_deref());
+                if let Ok(mut w) = cfg_bg.bg.write() { *w = g; }
+                tokio::time::sleep(std::time::Duration::from_secs(5)).await;
+            }
+        });
+    }
     // Poll the control plane so newly enrolled or re-dispositioned endpoints take effect without a restart.
     if let Some(base) = registry_url.clone() {
         let cfg_r = cfg.clone();
@@ -240,6 +283,10 @@ async fn handle(cfg: Arc<Cfg>, mut client: TcpStream) -> std::io::Result<()> {
             record(&cfg, &host, "ssrf-block", "deny", &None);
             return write_status(&mut client, 403, "Forbidden", "SSRF: internal target blocked").await;
         }
+        if bg_blocks(&cfg, &host) {
+            record(&cfg, &host, "break-glass", "deny", &None);
+            return write_status(&mut client, 403, "Forbidden", "blocked by break-glass lockdown").await;
+        }
         let decision = { cfg.registry.read().unwrap().evaluate(&host, "", port) };
         if decision.action == Action::Block {
             record(&cfg, &host, "block", "deny", &decision.rule_id);
@@ -295,6 +342,10 @@ async fn handle(cfg: Arc<Cfg>, mut client: TcpStream) -> std::io::Result<()> {
     if !cfg.allow_internal && acp_core::egress::is_internal_target(&host) {
         record(&cfg, &host, "ssrf-block", "deny", &None);
         return write_status(&mut client, 403, "Forbidden", "SSRF: internal target blocked").await;
+    }
+    if bg_blocks(&cfg, &host) {
+        record(&cfg, &host, "break-glass", "deny", &None);
+        return write_status(&mut client, 403, "Forbidden", "blocked by break-glass lockdown").await;
     }
     let want = content_length(&headers);
     let mut body = leftover;
