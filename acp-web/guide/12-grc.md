@@ -17,13 +17,14 @@ complete.
 
 ## Enrolling endpoints
 
-`acp enroll` records **signed dispositions** over discovered endpoints, an append-only log where the
-latest disposition per endpoint wins:
+Register discovered endpoints from the console's **AI Endpoints** page, or the control-plane API,
+which records a **signed disposition** per endpoint (the latest wins) in the control-plane database:
 
 ```sh
-acp enroll ...                              # record enroll / quarantine / accept-risk (with expiry)
-acp enroll governed                         # the derived governed set
-acp enroll export-mdm                       # an allow + block list for your MDM / CASB
+curl -X POST http://<host>:8787/endpoints/register \
+  -d '{"endpoint":"claude.ai","disposition":"govern","reason":"sanctioned"}'
+# disposition is govern (route through ACP), block (quarantine), or accept-risk (time-boxed)
+curl http://<host>:8787/endpoints            # the current dispositions
 ```
 
 You can also register an endpoint from the web console's AI-endpoints page ([chapter 14](14-operations.md)),

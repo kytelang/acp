@@ -6,13 +6,16 @@ own claims.
 
 ## Agent identity: the registry
 
-`acp-registry` is the source of truth for applications and agents. Register an app, then register an
-agent under it, which issues a one-time plaintext token; the registry stores only its SHA-256.
+The control plane is the source of truth for applications and agents, stored in the control-plane
+database. Register them from the console (Teams and Agents pages) or the control-plane API; each agent
+registration issues a one-time token and the store keeps only its SHA-256.
 
 ```sh
-acp app register registry.json acme-app you       # register an application
-acp agent register registry.json <app-id> coding-assistant
-# prints the agent id (agt-...) and a one-time TOKEN, shown once
+# from the console: Teams -> Register team, then Agents -> Register agent
+# or the API:
+curl -X POST http://<host>:8787/apps   -d '{"name":"acme-app","owner":"you"}'
+curl -X POST http://<host>:8787/agents -d '{"app_id":"<app-id>","name":"coding-assistant"}'
+# the agent response carries a one-time token, shown once
 ```
 
 Register agents from the console (Teams and Agents pages) or the control-plane API; they are stored

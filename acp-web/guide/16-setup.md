@@ -67,14 +67,17 @@ DSL. Start in observe mode (`default: allow`) and move to `default: deny` once c
 
 ### Identity
 
-Register applications and agents from the console (Teams and Agents pages), or, on the server, with
-the interim admin CLI shipped in the server archive ([chapter 8](08-identity.md)):
+Register applications and agents from the console (Teams and Agents pages), or the control-plane API
+([chapter 8](08-identity.md)); they are stored in the control-plane database:
 
 ```sh
-# on the server (interim; registration is moving fully to the console and the control-plane API)
-acp app register /var/lib/acp/registry.json acme-app you
-acp agent register /var/lib/acp/registry.json <app-id> coding-assistant   # prints a one-time token
+curl -X POST http://127.0.0.1:8787/apps   -d '{"name":"acme-app","owner":"you"}'
+curl -X POST http://127.0.0.1:8787/agents -d '{"app_id":"<app-id>","name":"coding-assistant"}'
+# the agent response carries a one-time token, shown once
 ```
+
+The proxy then verifies agents against this database with `--registry-url` (see below), so no registry
+file is needed.
 
 For the human principal, point the control plane and gateway at your IdP (Entra or any OIDC):
 

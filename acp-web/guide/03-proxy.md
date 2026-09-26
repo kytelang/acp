@@ -17,7 +17,7 @@ acp-proxy stdio \
   --policy policy.yaml \
   --ledger evidence.db \
   --key signing.key \
-  --registry registry.json \
+  --registry-url http://<control-plane-host>:8787 \
   --agent-id agt-abc123 \
   --agent-token <token> \
   -- your-mcp-server --its --args

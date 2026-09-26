@@ -37,3 +37,38 @@ jobs:
       - uses: dtolnay/rust-toolchain@stable
       - name: cargo-audit
         run: cargo install cargo-audit --locked && cargo audit
+
+  db-tests:
+    # Run the Postgres-backed tests for the config-driven control-plane store and the shared-state
+    # crates against a real database (they skip when no DB is reachable, so this is where they run).
+    runs-on: ubuntu-latest
+    services:
+      postgres:
+        image: postgres:16
+        env:
+          POSTGRES_PASSWORD: postgres
+          POSTGRES_DB: acp
+        ports: ["5432:5432"]
+        options: >-
+          --health-cmd pg_isready --health-interval 5s --health-timeout 5s --health-retries 10
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+      - name: Create a non-superuser role for the RLS test
+        env: { PGPASSWORD: postgres }
+        run: |
+          psql -h localhost -U postgres -d acp -c "CREATE ROLE acp_app LOGIN PASSWORD 'apppw' NOSUPERUSER;"
+          psql -h localhost -U postgres -d acp -c "GRANT ALL ON SCHEMA public TO acp_app; ALTER DEFAULT PRIVILEGES IN SCHEMA public GRANT ALL ON TABLES TO acp_app;"
+      - name: acp-cpstore (config-driven store) against Postgres
+        env:
+          ACP_CP_PG_URL: postgres://postgres:postgres@localhost/acp
+        run: cargo test -p acp-cpstore
+      - name: acp-pgstate (shared budgets/pins) against Postgres
+        env:
+          ACP_PG_TEST: host=localhost user=postgres password=postgres dbname=acp
+        run: cargo test -p acp-pgstate
+      - name: acp-pgstore (tenant RLS) against Postgres, non-superuser + bypass guard
+        env:
+          ACP_PG_TEST_URL: host=localhost user=acp_app password=apppw dbname=acp
+          ACP_PG_SUPER_URL: host=localhost user=postgres password=postgres dbname=acp
+        run: cargo test -p acp-pgstore

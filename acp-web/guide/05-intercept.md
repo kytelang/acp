@@ -53,7 +53,7 @@ compile the enrolment into an interception registry:
 
 ```sh
 acp discover < egress.log                       # classify ungoverned AI endpoints
-acp enroll governed ...                          # record signed dispositions
+# register endpoints from the console AI Endpoints page or POST /endpoints/register
 acp intercept from-enrollment enroll.log > endpoints.json
 ```
 
