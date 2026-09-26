@@ -64,7 +64,8 @@ For each tool call the proxy runs, in order:
 | `--policy <file>` | the policy to enforce (or a policy-store directory to watch and hot-reload) |
 | `--ledger <db>` | the evidence ledger to append to |
 | `--key <file>` | the Ed25519 signing key (generated 0600 if absent; see below for HSM) |
-| `--registry <file>` | the identity registry for agent verification |
+| `--registry <file>` | verify the agent against a local registry file |
+| `--registry-url <server>` | verify the agent against the control plane's database (no registry file); preferred once agents are registered from the console |
 | `--agent-id`, `--agent-token` | the calling agent's identity and one-time token |
 | `--trajectory <policy.yaml>` | enable sequence governance ([chapter 11](11-containment.md)) |
 | `--data-boundary <policy.yaml>` | enable destination-aware DLP ([chapter 11](11-containment.md)) |

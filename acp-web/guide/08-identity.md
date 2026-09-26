@@ -15,9 +15,11 @@ acp agent register registry.json <app-id> coding-assistant
 # prints the agent id (agt-...) and a one-time TOKEN, shown once
 ```
 
-At enforcement time the PEP calls `verify(agent_id, token)`, which is fail-closed: a wrong or revoked
-token yields no identity, and the call is denied. Revoke an agent with `acp agent deactivate`, and
-verification refuses it immediately.
+Register agents from the console (Teams and Agents pages) or the control-plane API; they are stored
+in the control-plane database. At enforcement time the proxy verifies the agent against that database
+by pointing `--registry-url` at the control plane (a local registry file via `--registry` is the
+offline alternative). Verification is fail-closed: a wrong or revoked token yields no identity, and
+the call is denied. Deactivating an agent in the console refuses it immediately, verified end to end.
 
 ## Human identity: OIDC and Entra
 

@@ -42,6 +42,7 @@ struct Opts {
     break_glass: Option<String>,
     policy_dir: Option<String>,
     registry: Option<String>,
+    registry_url: Option<String>,
     agent_id: Option<String>,
     agent_token: Option<String>,
     principal: Option<String>,
@@ -91,6 +92,7 @@ fn parse_opts(items: &[String]) -> Result<(Opts, Vec<String>), String> {
             "--entra-audience" => o.entra_audience = it.next().cloned(),
             "--policy-dir" => o.policy_dir = it.next().cloned(),
             "--registry" => o.registry = it.next().cloned(),
+            "--registry-url" => o.registry_url = it.next().cloned(),
             "--agent-id" => o.agent_id = it.next().cloned(),
             "--agent-token" => o.agent_token = it.next().cloned(),
             "--principal" => o.principal = it.next().cloned(),
@@ -292,7 +294,29 @@ async fn build_controller(o: &Opts) -> Result<Arc<Controller>, String> {
     // agents; the OAuth-token subject for remote agents once wired). It is proxy-supplied and
     // trusted, never asserted by the agent. Absent -> "unattributed" so the gap is governable.
     let principal = o.principal.clone().unwrap_or_else(|| "unattributed".to_string());
-    if let Some(reg_path) = &o.registry {
+    if let Some(base) = &o.registry_url {
+        // Verify against the control-plane database (DB-registered agents, no registry file).
+        let (aid, tok) = match (&o.agent_id, &o.agent_token) {
+            (Some(a), Some(t)) => (a.clone(), t.clone()),
+            _ => return Err("--registry-url requires --agent-id and --agent-token".to_string()),
+        };
+        let base = base.trim_end_matches('/');
+        let resp = reqwest::Client::new()
+            .post(format!("{base}/agents/verify"))
+            .json(&serde_json::json!({"id": aid, "token": tok}))
+            .send()
+            .await
+            .map_err(|e| format!("control-plane verify request failed: {e}"))?;
+        let v: serde_json::Value = resp.json().await.map_err(|e| e.to_string())?;
+        if v["verified"].as_bool().unwrap_or(false) {
+            let app = v["app"].as_str().unwrap_or("").to_string();
+            let agent = v["agent"].as_str().unwrap_or("").to_string();
+            tracing::info!("verified identity via control plane agent={agent} app={app} principal={principal}");
+            controller.set_identity(app, agent, principal);
+        } else {
+            return Err(format!("agent {aid} failed control-plane verification (unknown, revoked, or bad token)"));
+        }
+    } else if let Some(reg_path) = &o.registry {
         let reg = acp_registry::Registry::load(reg_path)
             .map_err(|e| format!("cannot load registry {reg_path}: {e}"))?;
         let (aid, tok) = match (&o.agent_id, &o.agent_token) {

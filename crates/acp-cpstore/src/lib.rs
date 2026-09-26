@@ -163,6 +163,25 @@ impl ControlStore {
             .collect())
     }
 
+    /// Verify an agent by token hash and return its display identity (agent name, app id, app name)
+    /// when active. Used by the enforcement path (the proxy) so DB-registered agents are honoured
+    /// without a registry file.
+    pub async fn verify_agent_identity(&self, id: &str, token_sha256: &str) -> Result<Option<(String, String, String)>, String> {
+        let sql = self.ph("SELECT a.name AS an, a.app_id AS aid, ap.name AS apn FROM agents a LEFT JOIN apps ap ON a.app_id = ap.id WHERE a.id = ? AND a.token_sha256 = ? AND a.active <> 0");
+        let row = sqlx::query(&sql)
+            .bind(id)
+            .bind(token_sha256)
+            .fetch_optional(&self.pool)
+            .await
+            .map_err(|e| e.to_string())?;
+        Ok(row.map(|r| {
+            let an: String = r.get("an");
+            let aid: String = r.get("aid");
+            let apn: String = r.try_get("apn").unwrap_or_default();
+            (an, aid, apn)
+        }))
+    }
+
     /// Return the agent id if the token matches its stored hash and it is active.
     pub async fn verify_agent(&self, id: &str, token_sha256: &str) -> Result<bool, String> {
         let row = sqlx::query(&self.ph("SELECT active FROM agents WHERE id = ? AND token_sha256 = ?"))

@@ -138,7 +138,7 @@ generated env files.
 ```sh
 acp-proxy stdio \
   --policy acp-demo/policy.yaml --ledger acp-demo/ledger.db --key acp-demo/signing.key \
-  --registry /var/lib/acp/registry.json --agent-id <agt-id> --agent-token <token> \
+  --registry-url http://<control-plane-host>:8787 --agent-id <agt-id> --agent-token <token> \
   --content-firewall --trajectory acp-demo/trajectory.yaml \
   -- your-mcp-server --its --args
 ```

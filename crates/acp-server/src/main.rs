@@ -307,6 +307,7 @@ async fn main() {
         .route("/apps", post(app_register))
         .route("/agents", post(agent_register))
         .route("/agents/:id/deactivate", post(agent_deactivate))
+        .route("/agents/verify", post(agent_verify))
         .route("/grc", get(grc_list).post(grc_create))
         .route("/grc/:id/status", post(grc_status))
         .route("/approvals/pending", get(approvals_pending))
@@ -804,6 +805,21 @@ fn rand_hex(nbytes: usize) -> String {
     let mut b = vec![0u8; nbytes];
     let _ = getrandom::getrandom(&mut b);
     hex::encode(b)
+}
+
+/// POST /agents/verify: the enforcement path verifies an agent by id + token against the store, so a
+/// DB-registered agent is honoured without a registry file. Returns the display identity when valid.
+/// Ungated: it only confirms a token the caller already holds.
+async fn agent_verify(State(st): State<Arc<AppState>>, Json(body): Json<serde_json::Value>) -> Response {
+    let store = match &st.store { Some(s) => s, None => return Json(serde_json::json!({"ok": false, "error": "no --store configured"})).into_response() };
+    let id = body.get("id").and_then(|v| v.as_str()).unwrap_or("");
+    let token = body.get("token").and_then(|v| v.as_str()).unwrap_or("");
+    let token_sha = acp_core::canonical::sha256_hex_bytes(token.as_bytes());
+    match store.verify_agent_identity(id, &token_sha).await {
+        Ok(Some((agent, app_id, app))) => Json(serde_json::json!({"ok": true, "verified": true, "agent": agent, "app_id": app_id, "app": app})).into_response(),
+        Ok(None) => Json(serde_json::json!({"ok": true, "verified": false})).into_response(),
+        Err(e) => Json(serde_json::json!({"ok": false, "error": e})).into_response(),
+    }
 }
 
 /// POST /apps: register an application in the control-plane store. Body: {name, owner}.
