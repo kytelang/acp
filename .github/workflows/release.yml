@@ -3,7 +3,8 @@ name: release
 # Build and publish the Varman (ACP) release bundles. Per the console-first / split-packaging design
 # (docs/design/console-first-consolidation.md) each tag ships THREE kinds of archive:
 #
-#   1. acp-user-<tag>-<os>-<arch>     workstation tools: acp-proxy, acp-intercept, acp-verify (+ a demo
+#   1. acp-user-<tag>-<os>-<arch>     workstation service acp-agent (+ acp-proxy/acp-intercept wrappers,
+#                                     acp-verify, and a demo
 #                                     mock MCP server). Built for macOS, Linux and Windows.
 #   2. acp-server-<tag>-linux-<arch>  server services: acp-server, acp-gateway, acp-guard, the content
 #                                     model and the systemd units. Linux only (the services target Linux).
@@ -53,7 +54,7 @@ jobs:
 
       - name: Build workstation tools (all platforms)
         shell: bash
-        run: cargo build --release --locked --target ${{ matrix.target }} -p acp-proxy -p acp-intercept -p acp-verify --bin mock-mcp-server
+        run: cargo build --release --locked --target ${{ matrix.target }} -p acp-agent -p acp-proxy -p acp-intercept -p acp-verify --bin mock-mcp-server
 
       - name: Build server services (Linux only)
         if: matrix.os == 'linux'
@@ -78,7 +79,7 @@ jobs:
 
           # ---- user (workstation) archive: all platforms ----
           U="acp-user-$TAG-$OS-$ARCH"; mkdir -p "dist/$U/bin"
-          for b in acp-proxy acp-intercept acp-verify mock-mcp-server; do cp "$BINDIR/$b$EXT" "dist/$U/bin/"; done
+          for b in acp-agent acp-proxy acp-intercept acp-verify mock-mcp-server; do cp "$BINDIR/$b$EXT" "dist/$U/bin/"; done
           echo "$TAG" > "dist/$U/VERSION"
           pack "$U"
 
