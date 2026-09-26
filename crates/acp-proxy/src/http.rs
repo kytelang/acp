@@ -105,7 +105,8 @@ async fn handle(State(st): State<Arc<HttpState>>, headers: HeaderMap, body: Byte
                     // MCP streamable-HTTP: the upstream answered with an SSE stream (server->client
                     // notifications/results). Stream it through chunk-by-chunk without buffering the
                     // (potentially unbounded) body. The governed request already ran through
-                    // decide_frame above, so there is nothing to gate on the response body.
+                    // decide_frame above. NOTE: SSE response frames are relayed unscreened
+                    // (chunk boundaries split frames); buffered responses are screened below (A6).
                     let s = futures_util::stream::unfold(resp, |mut r| async move {
                         match r.chunk().await {
                             Ok(Some(chunk)) => Some((Ok::<_, std::io::Error>(chunk), r)),
@@ -116,9 +117,15 @@ async fn handle(State(st): State<Arc<HttpState>>, headers: HeaderMap, body: Byte
                     (status, [("content-type", "text/event-stream")], body).into_response()
                 } else {
                     let bytes = resp.bytes().await.unwrap_or_default();
-                    // Tool-integrity: inspect the (buffered) response for a tools/list result.
+                    // A6: bring the buffered HTTP path in line with stdio: tool-integrity (tools/list),
+                    // the shared pin check, and indirect-injection screening of the tool result.
                     st.controller.inspect_response(&bytes);
-                    (status, [("content-type", "application/json")], bytes).into_response()
+                    st.controller.inspect_response_shared(&bytes).await;
+                    let out: Vec<u8> = match st.controller.screen_response(&bytes) {
+                        Some(replacement) => replacement.into_bytes(),
+                        None => bytes.to_vec(),
+                    };
+                    (status, [("content-type", "application/json")], out).into_response()
                 }
             }
             Err(e) => (StatusCode::BAD_GATEWAY, format!("upstream error: {e}")).into_response(),

@@ -379,6 +379,13 @@ async fn main() -> ExitCode {
         }
     };
 
+    // A11: transparent (no-policy) mode passes tool calls through by design, so we do not refuse to
+    // start, but we make it impossible to run ungoverned unknowingly: a prominent warning when no
+    // policy is configured. Any real governance deployment sets --policy or --policy-dir.
+    if opts.policy.is_none() && opts.policy_dir.is_none() {
+        tracing::warn!("NO POLICY configured (--policy / --policy-dir): running in TRANSPARENT mode; tool calls are forwarded ungoverned. Configure a policy for enforcement.");
+    }
+
     let controller = match build_controller(&opts).await {
         Ok(c) => c,
         Err(e) => {

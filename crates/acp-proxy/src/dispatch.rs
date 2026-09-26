@@ -38,6 +38,18 @@ struct State {
     approvals: Option<ApprovalStore>,
 }
 
+/// Collect every string leaf in a JSON value, recursing into objects and arrays, so argument
+/// scanning (content firewall, data boundary) cannot be evaded by nesting a payload inside a
+/// sub-object or array (gap A7). Top-level-only scanning missed anything but flat string args.
+fn collect_arg_strings(v: &serde_json::Value, out: &mut Vec<String>) {
+    match v {
+        serde_json::Value::String(s) => out.push(s.clone()),
+        serde_json::Value::Array(a) => { for x in a { collect_arg_strings(x, out); } }
+        serde_json::Value::Object(o) => { for x in o.values() { collect_arg_strings(x, out); } }
+        _ => {}
+    }
+}
+
 pub struct Controller {
     engine: Mutex<Option<Arc<PolicyEngine>>>,
     env: String,
@@ -495,13 +507,11 @@ impl Controller {
             if a.outcome.verdict == Verdict::Allow {
                 if let Some(cp) = self.content.lock().unwrap().as_ref() {
                     let mut argtext = String::new();
-                    if let Some(obj) = tc.arguments.as_object() {
-                        for v in obj.values() {
-                            if let Some(s) = v.as_str() {
-                                argtext.push_str(s);
-                                argtext.push('\n');
-                            }
-                        }
+                    let mut leaves: Vec<String> = Vec::new();
+                    collect_arg_strings(&tc.arguments, &mut leaves);
+                    for s in &leaves {
+                        argtext.push_str(s);
+                        argtext.push('\n');
                     }
                     if !argtext.is_empty() {
                         let ml = self.content_ml.lock().unwrap().clone();
@@ -540,13 +550,11 @@ impl Controller {
             if a.outcome.verdict == Verdict::Allow {
                 if let Some(dbp) = self.data_boundary.lock().unwrap().as_ref() {
                     let mut classes = std::collections::BTreeSet::new();
-                    if let Some(obj) = tc.arguments.as_object() {
-                        for v in obj.values() {
-                            if let Some(s) = v.as_str() {
-                                if let Some(c) = acp_core::classify::classify(s) {
-                                    classes.insert(c.to_string());
-                                }
-                            }
+                    let mut leaves: Vec<String> = Vec::new();
+                    collect_arg_strings(&tc.arguments, &mut leaves);
+                    for s in &leaves {
+                        if let Some(c) = acp_core::classify::classify(s) {
+                            classes.insert(c.to_string());
                         }
                     }
                     if !classes.is_empty() {
