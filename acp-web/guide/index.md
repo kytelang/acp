@@ -14,16 +14,21 @@ product. This guide uses both.
 Varman is one control plane and several enforcement points (PEPs). You put a PEP in the path of each
 place an agent acts, and they all consult the same signed policy and write to the same signed ledger.
 
-| Component | Binary / crate | What it governs |
-| --- | --- | --- |
-| MCP proxy | `acp-proxy` | agent tool calls over MCP (stdio and streamable-HTTP) |
-| LLM gateway | `acp-gateway` | direct model API calls, holding the upstream key |
-| Forward / intercept proxy | `acp-intercept` | arbitrary HTTP and API traffic, with optional TLS interception |
-| Enforcement guard | `acp-guard` | refuses un-proxied calls in front of a tool server |
-| Native compile | `acp-nativecompile` | compiles one policy into Claude / Copilot / Gemini settings |
-| Control plane | `acp-server` | approvals, policy deploy, break-glass, health, evidence API |
-| CLI | `acp-cli` (`acp`) | policy, identity, evidence, GRC, discovery, red-team |
-| Web console | `acp-console` | a read-only dashboard over the control plane |
+| Component | Binary | Runs on | What it does |
+| --- | --- | --- | --- |
+| Control plane | `acp-server` | **server** (service) | the hub: identity, endpoints, policy, approvals, break-glass, GRC, evidence, health, and the API the console calls |
+| LLM gateway | `acp-gateway` | **server** (service) | governs direct model API calls, holding the upstream key |
+| Web console | `acp-console` | **server** (service) | the browser UI over the control plane: dashboards, approvals, policy, kill-switch, register agents and AI endpoints |
+| MCP proxy | `acp-proxy` | **workstation** (per session) | governs an agent's tool calls, wrapping a local MCP server |
+| Forward / intercept proxy | `acp-intercept` | **workstation** or an egress gateway | governs arbitrary HTTP/API traffic, with optional TLS interception |
+| Enforcement guard | `acp-guard` | **beside a tool server** | refuses un-proxied calls in front of a tool server |
+| CLI | `acp` | **workstation / CI** | an operator and CI tool: author and test policy, verify and export evidence, red-team, compile agent settings |
+
+The rule of thumb: the **control plane, gateway and console are services you run on a server**; the
+**proxy, intercept, guard and CLI run on developer machines or in CI**. Registrations and governance
+records (agents, AI endpoints, policy, GRC) are made through the console or the control-plane API and
+stored centrally; the CLI is for verification, testing and offline or air-gapped work. Chapter 16 is
+the step-by-step runbook for both sides.
 
 ## Chapters
 

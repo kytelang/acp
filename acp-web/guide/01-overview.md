@@ -46,6 +46,30 @@ PEPs consult the same signed policy and append to the same ledger.
 - **`acp-cli`** (invoked as `acp`) is the operator's tool for policy, identity, evidence, discovery,
   red-team and the GRC surface. See [chapter 13](13-cli.md).
 
+## Deploy where
+
+Two deployment surfaces, and it matters which is which.
+
+**On a server (run as services):**
+
+- `acp-server`, the control plane. This is the hub. Identity, AI endpoints, policy, approvals,
+  break-glass and the GRC records are created and stored here, and the console talks to its API.
+- `acp-gateway`, the LLM gateway.
+- `acp-console`, the browser UI.
+
+**On developer machines or in CI (run on demand):**
+
+- `acp-proxy`, launched per session in front of a local MCP server.
+- `acp-intercept` (also deployable as a shared egress gateway) and `acp-guard`.
+- `acp`, the CLI, for authoring and testing policy, verifying and exporting evidence, red-teaming, and
+  compiling coding-agent settings.
+
+You register agents, AI endpoints, policy and governance records through the console or the
+control-plane API, and they are stored centrally; you do not hand-edit files on each machine. The CLI
+exists for verification, CI gates, and offline or air-gapped work, not as the primary way to change
+governance state. Install the two sides with `install.sh` (workstation) and `install-server.sh`
+(server); see chapter 16.
+
 ## Where it fits
 
 Varman is a strong fit when you must **prove** control over AI, not just claim it: regulated or
