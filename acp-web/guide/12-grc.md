@@ -26,6 +26,9 @@ acp enroll governed                         # the derived governed set
 acp enroll export-mdm                       # an allow + block list for your MDM / CASB
 ```
 
+You can also register an endpoint from the web console's AI-endpoints page ([chapter 14](14-operations.md)),
+which classifies the provider and records the same signed disposition.
+
 Each disposition is Ed25519-signed, so it is tamper-evident evidence of an operator's decision. The
 governed set feeds the [coverage report](#measuring-unavoidability), and the enrolment feeds the
 [interceptor's rules](05-intercept.md) via `acp intercept from-enrollment`.

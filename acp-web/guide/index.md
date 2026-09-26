@@ -46,4 +46,4 @@ place an agent acts, and they all consult the same signed policy and write to th
 | 15 | [Security and verification](15-security.md) | the trust model, the threat model, how to verify the claims yourself |
 
 > **Version:** tracks `acp version` (Beta 0.1.0). This is a tested reference implementation; read
-> chapter 14 and `docs/production-readiness.md` in the repository for the honest maturity picture.
+> chapter 14 for the honest maturity picture.

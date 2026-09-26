@@ -80,5 +80,5 @@ Being honest about the edges matters for a governance product.
 
 There is also a set of governance modules that are implemented and tested but not yet wired into a
 running binary (high-availability leases, SCIM, dual-control, webhook signing, and others). They are
-listed honestly in the repository's `docs/features.md` so nobody mistakes a primitive for a shipping
-feature.
+called out as not-yet-integrated primitives rather than shipping features, so nobody mistakes one
+for the other.

@@ -75,5 +75,5 @@ and key-confusion; and is key custody sound for your intended deployment.
 Varman has no third-party security certifications (SOC 2, penetration test, independent cryptographic
 audit) yet, and no production deployments. The HSM signing path is verified against SoftHSM and
 should be validated against your specific production module. Treat the reference implementation as
-ready to evaluate and pilot, and read `docs/production-readiness.md` and
-`docs/commercial/pre-launch-requirements.md` in the repository for the path to production.
+ready to evaluate and pilot; chapter 14 sets out what is in place and what remains before an
+unattended production rollout.

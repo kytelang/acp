@@ -30,7 +30,7 @@ JWKS fails to load, the server refuses to start.
 
 **Honest limit.** The control plane is single-tenant today, and its liveness and spike-detector state
 is in-memory and resets on restart. High availability (a leader lease plus shared state) is the last
-open blocker in `docs/production-readiness.md`.
+open blocker to running the control plane in production.
 
 ## The web console
 
@@ -39,7 +39,8 @@ is served by `acp-server` and re-derivable from the signed evidence, so no trust
 gives you a live governance overview with a verdict-distribution bar, the approvals inbox, teams and
 agents, a policy view with a syntax-highlighted editor and deploy, the kill-switch with live status,
 an evidence view, an integrity view (ledger verify, proxy liveness, spike alerts, self-governance
-log), and a printable governance report.
+log), an AI-endpoints page to register agents and providers (govern, block or accept-risk, with the
+provider classified automatically), and a printable governance report.
 
 ```sh
 # start the control plane, then the console pointed at it
@@ -100,8 +101,9 @@ helm install acp deploy/helm/acp \
 
 Varman is a complete, tested reference implementation with a large passing test suite and a
 ten-of-ten end-to-end acceptance for the core vertical. It is ready for a proof of concept and a
-design-partner pilot, not an unattended production rollout without hardening. The repository's
-`docs/production-readiness.md` is the authoritative checklist; as of writing, encryption at rest, HSM
-signing, structured logging, secrets out of deploy, the complete helm chart, the DLP classifier fix,
-the staged default-deny path, and the RLS-bypass guard are done, and control-plane high availability,
-protections-on-by-default, gateway load tests, and GRC evidence reconciliation remain.
+design-partner pilot, not an unattended production rollout without hardening. In place today:
+encryption at rest, HSM signing, structured logging, secrets kept out of the deployment files, the
+full helm chart, an entropy-gated DLP classifier, the staged default-deny path, and a fail-closed
+guard against a mis-scoped database role. Remaining before an unattended rollout: control-plane high
+availability, turning the sequence and firewall protections on by default, load testing the gateway,
+and cross-checking the GRC documents against the ledger.
