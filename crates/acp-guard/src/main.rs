@@ -28,6 +28,9 @@ struct GuardState {
     rejected: AtomicU64,
     // A10: active break-glass grant; lockdown_all makes the guard refuse all forwards.
     bg: std::sync::RwLock<Option<acp_core::breakglass::BreakGlass>>,
+    report_url: Option<String>,
+    report_token: Option<String>,
+    proxy_id: String,
 }
 
 /// Load and verify a break-glass grant file into a live grant (None when absent/invalid). With a
@@ -58,6 +61,9 @@ async fn main() -> std::process::ExitCode {
     let mut ledger_key_hex: Option<String> = None;
     let mut bg_path: Option<String> = None;
     let mut bg_key_hex: Option<String> = None;
+    let mut report_url: Option<String> = None;
+    let mut report_token: Option<String> = None;
+    let mut guard_id: Option<String> = None;
     let mut it = args.iter().skip(1);
     while let Some(a) = it.next() {
         match a.as_str() {
@@ -71,6 +77,9 @@ async fn main() -> std::process::ExitCode {
             "--ledger-key" => ledger_key_hex = it.next().cloned(),
             "--break-glass-file" => bg_path = it.next().cloned(),
             "--break-glass-key" => bg_key_hex = it.next().cloned(),
+            "--report-url" => report_url = it.next().cloned(),
+            "--report-token" => report_token = it.next().cloned(),
+            "--proxy-id" => guard_id = it.next().cloned(),
             other => {
                 tracing::warn!("unknown option '{other}'");
                 return std::process::ExitCode::from(2);
@@ -129,6 +138,9 @@ async fn main() -> std::process::ExitCode {
         forwarded: AtomicU64::new(0),
         rejected: AtomicU64::new(0),
         bg: std::sync::RwLock::new(bg_initial),
+        report_url: report_url.clone(),
+        report_token: report_token.clone(),
+        proxy_id: guard_id.clone().unwrap_or_else(|| "guard".to_string()),
     });
     // A10: watch the break-glass grant so a lockdown engaged on the control plane reaches the guard.
     if let Some(p) = bg_path.clone() {
@@ -140,6 +152,20 @@ async fn main() -> std::process::ExitCode {
                 let g = load_grant(&p, key.as_deref());
                 if let Ok(mut w) = st_bg.bg.write() { *w = g; }
                 tokio::time::sleep(std::time::Duration::from_secs(5)).await;
+            }
+        });
+    }
+    if let Some(base) = report_url.clone() {
+        let pid = guard_id.clone().unwrap_or_else(|| "guard".to_string());
+        let token = report_token.clone();
+        let base = base.trim_end_matches('/').to_string();
+        tokio::spawn(async move {
+            let client = reqwest::Client::new();
+            loop {
+                let mut req = client.post(format!("{base}/heartbeat/{pid}"));
+                if let Some(t) = &token { req = req.bearer_auth(t); }
+                let _ = req.send().await;
+                tokio::time::sleep(std::time::Duration::from_secs(10)).await;
             }
         });
     }
@@ -185,6 +211,20 @@ async fn main() -> std::process::ExitCode {
 
 /// Record a refused, un-proxied attempt to the ledger (evidence of a bypass attempt).
 fn record_rejection(state: &GuardState, path: &str, reason: &str) {
+    if let Some(base) = state.report_url.clone() {
+        let token = state.report_token.clone();
+        let body = json!({
+            "kind": "deny", "verdict": "deny", "ts_ms": now_ms(), "proxy": state.proxy_id,
+            "tool": path, "resource": state.upstream, "rule_id": "guard", "impact": "tool-call", "outcome": reason,
+        }).to_string();
+        let client = state.client.clone();
+        tokio::spawn(async move {
+            let url = format!("{}/event/deny", base.trim_end_matches('/'));
+            let mut req = client.post(&url);
+            if let Some(t) = &token { req = req.bearer_auth(t); }
+            let _ = req.send().await;
+        });
+    }
     if let Some(l) = state.ledger.as_ref() {
         let did = format!("guard-reject-{}-{}", now_ms(), path.replace('/', "_"));
         let rec = json!({

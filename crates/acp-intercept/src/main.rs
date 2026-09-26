@@ -17,6 +17,10 @@ struct Cfg {
     allow_internal: bool,
     // A10: active break-glass grant (lockdown_all blocks all egress). Refreshed from the grant file.
     bg: RwLock<Option<acp_core::breakglass::BreakGlass>>,
+    // E1/producers: report block decisions and heartbeats to the control plane for the console.
+    report_url: Option<String>,
+    report_token: Option<String>,
+    proxy_id: String,
     content: ContentPolicy,
     client: reqwest::Client,
     ledger: Option<Mutex<acp_ledger::Ledger>>,
@@ -29,6 +33,23 @@ fn now_ms() -> u64 {
 }
 
 fn record(cfg: &Cfg, host: &str, action: &str, verdict: &str, rule: &Option<String>) {
+    // Report block decisions to the control plane so they appear in the console Violations feed.
+    if verdict == "deny" {
+        if let Some(base) = cfg.report_url.clone() {
+            let token = cfg.report_token.clone();
+            let body = serde_json::json!({
+                "kind": "deny", "verdict": "deny", "ts_ms": now_ms(), "proxy": cfg.proxy_id,
+                "tool": host, "resource": host, "rule_id": rule, "impact": "egress", "outcome": action,
+            }).to_string();
+            let client = cfg.client.clone();
+            tokio::spawn(async move {
+                let url = format!("{}/event/deny", base.trim_end_matches('/'));
+                let mut req = client.post(&url);
+                if let Some(t) = &token { req = req.bearer_auth(t); }
+                let _ = req.send().await;
+            });
+        }
+    }
     if let Some(l) = cfg.ledger.as_ref() {
         let did = format!("intercept-{}-{}", now_ms(), host);
         let rec = serde_json::json!({
@@ -113,6 +134,9 @@ async fn main() -> std::process::ExitCode {
     let mut allow_internal = false;
     let mut bg_path: Option<String> = None;
     let mut bg_key_hex: Option<String> = None;
+    let mut report_url: Option<String> = None;
+    let mut report_token: Option<String> = None;
+    let mut proxy_id: Option<String> = None;
     let mut it = args.iter().skip(1);
     while let Some(a) = it.next() {
         match a.as_str() {
@@ -128,6 +152,9 @@ async fn main() -> std::process::ExitCode {
             "--allow-internal-egress" => allow_internal = true,
             "--break-glass-file" => bg_path = it.next().cloned(),
             "--break-glass-key" => bg_key_hex = it.next().cloned(),
+            "--report-url" => report_url = it.next().cloned(),
+            "--report-token" => report_token = it.next().cloned(),
+            "--proxy-id" => proxy_id = it.next().cloned(),
             other => { tracing::warn!("unknown option '{other}'"); return std::process::ExitCode::from(2); }
         }
     }
@@ -177,6 +204,9 @@ async fn main() -> std::process::ExitCode {
         registry: RwLock::new(registry),
         allow_internal,
         bg: RwLock::new(bg_initial),
+        report_url: report_url.clone(),
+        report_token: report_token.clone(),
+        proxy_id: proxy_id.clone().unwrap_or_else(|| "intercept".to_string()),
         content: ContentPolicy { block_injection: true, block_secrets, redact_pii: true, denied_topics: deny_topics },
         client: http.clone(),
         ledger,
@@ -189,6 +219,21 @@ async fn main() -> std::process::ExitCode {
         Err(e) => { tracing::error!("cannot bind {addr}: {e}"); return std::process::ExitCode::from(1); }
     };
     tracing::info!("forward proxy on {addr}; {} rule(s)", cfg.registry.read().unwrap().endpoints.len());
+    // Producers: heartbeat to the control plane so the console shows this interceptor alive.
+    if let Some(base) = report_url.clone() {
+        let pid = proxy_id.clone().unwrap_or_else(|| "intercept".to_string());
+        let token = report_token.clone();
+        let base = base.trim_end_matches('/').to_string();
+        tokio::spawn(async move {
+            let client = reqwest::Client::new();
+            loop {
+                let mut req = client.post(format!("{base}/heartbeat/{pid}"));
+                if let Some(t) = &token { req = req.bearer_auth(t); }
+                let _ = req.send().await;
+                tokio::time::sleep(std::time::Duration::from_secs(10)).await;
+            }
+        });
+    }
     // A10: refresh the break-glass grant so a lockdown engaged on the control plane takes effect here.
     if let Some(p) = bg_path.clone() {
         let cfg_bg = cfg.clone();

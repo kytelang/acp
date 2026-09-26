@@ -46,6 +46,9 @@ struct GwState {
     breakglass: Mutex<acp_core::breakglass::BreakGlassRegistry>,
     bg_file: Option<String>,
     bg_mtime: Mutex<Option<std::time::SystemTime>>,
+    report_url: Option<String>,
+    report_token: Option<String>,
+    proxy_id: String,
     bg_key: Option<Vec<u8>>,
     content_scan: Option<String>,
     content_fw: Option<acp_core::content::ContentPolicy>,
@@ -71,6 +74,9 @@ async fn main() -> std::process::ExitCode {
     let mut fw_deny_topics: Vec<String> = Vec::new();
     let mut content_ml_path: Option<String> = None;
     let mut budget_pg_conn: Option<String> = None;
+    let mut report_url: Option<String> = None;
+    let mut report_token: Option<String> = None;
+    let mut gw_id: Option<String> = None;
     let mut budget_state: Option<String> = None;
     let (mut entra_tenant, mut entra_audience): (Option<String>, Option<String>) = (None, None);
     let mut it = args.iter().skip(1);
@@ -89,6 +95,9 @@ async fn main() -> std::process::ExitCode {
             "--deny-topic" => { content_fw = true; if let Some(v) = it.next() { fw_deny_topics.push(v.clone()); } }
             "--content-ml" => { content_fw = true; content_ml_path = it.next().cloned(); }
             "--budget-pg" => budget_pg_conn = it.next().cloned(),
+            "--report-url" => report_url = it.next().cloned(),
+            "--report-token" => report_token = it.next().cloned(),
+            "--proxy-id" => gw_id = it.next().cloned(),
             "--budget-state" => budget_state = it.next().cloned(),
             "--env" => env = it.next().cloned().unwrap_or(env),
             "--entra-tenant" => entra_tenant = it.next().cloned(),
@@ -167,6 +176,9 @@ async fn main() -> std::process::ExitCode {
         upstream,
         upstream_key,
         env,
+        report_url: report_url.clone(),
+        report_token: report_token.clone(),
+        proxy_id: gw_id.clone().unwrap_or_else(|| "gateway".to_string()),
         oidc,
         client: reqwest::Client::builder().timeout(Duration::from_secs(30)).build().unwrap_or_default(),
         sem: std::sync::Arc::new(tokio::sync::Semaphore::new(256)),
@@ -197,6 +209,20 @@ async fn main() -> std::process::ExitCode {
         .route("/*path", any(handle))
         .layer(DefaultBodyLimit::max(4 * 1024 * 1024))
         .with_state(st);
+    if let Some(base) = report_url.clone() {
+        let pid = gw_id.clone().unwrap_or_else(|| "gateway".to_string());
+        let token = report_token.clone();
+        let base = base.trim_end_matches('/').to_string();
+        tokio::spawn(async move {
+            let client = reqwest::Client::new();
+            loop {
+                let mut req = client.post(format!("{base}/heartbeat/{pid}"));
+                if let Some(t) = &token { req = req.bearer_auth(t); }
+                let _ = req.send().await;
+                tokio::time::sleep(std::time::Duration::from_secs(10)).await;
+            }
+        });
+    }
     let listener = match tokio::net::TcpListener::bind(&addr).await {
         Ok(l) => l,
         Err(e) => {
@@ -436,6 +462,24 @@ async fn handle(
         path, model, d.resource, d.operation, app, principal, d.verdict
     );
 
+    // Producers: report a model-call denial to the control plane for the console Violations feed.
+    if d.verdict == Verdict::Deny {
+        if let Some(base) = st.report_url.clone() {
+            let token = st.report_token.clone();
+            let body = json!({
+                "kind": "deny", "verdict": "deny", "ts_ms": now_ms(), "proxy": st.proxy_id,
+                "agent": app, "tool": model, "resource": d.resource, "rule_id": d.rule_id,
+                "impact": "model-call", "outcome": "blocked",
+            }).to_string();
+            let client = st.client.clone();
+            tokio::spawn(async move {
+                let url = format!("{}/event/deny", base.trim_end_matches('/'));
+                let mut req = client.post(&url);
+                if let Some(t) = &token { req = req.bearer_auth(t); }
+                let _ = req.send().await;
+            });
+        }
+    }
     match d.verdict {
         Verdict::Deny => {
             st.metrics.denied.fetch_add(1, std::sync::atomic::Ordering::Relaxed);
