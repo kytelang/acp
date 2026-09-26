@@ -24,15 +24,13 @@ curl -fsSL https://acpdocs.web.app/install.sh | sh          # macOS, Linux
 powershell -c "irm https://acpdocs.web.app/install.ps1 | iex"
 ```
 
-This installs the client binaries into `~/.acp/bin` (or `%USERPROFILE%\.acp\bin`) and adds it to your
-PATH. Open a new terminal and check:
+This installs the workstation tools into `~/.acp/bin` (or `%USERPROFILE%\.acp\bin`) and adds it to
+your PATH: `acp-proxy` (wraps a local MCP server), `acp-intercept` (a dev forward proxy), and
+`acp-verify` (independent evidence verification). These run on demand, not as services. The installer
+refuses to run under `sudo`: it installs into your home directory.
 
-```sh
-acp version
-acp init acp-demo        # writes a starter policy and prints the next commands
-```
-
-The installer refuses to run under `sudo`: it installs into your home directory, not system-wide.
+You do not register agents or author policy from the workstation: that is done centrally, from the
+console or the control-plane API on the server (below). The workstation tools enforce and verify.
 
 ## 2. Install the services on a server
 
@@ -69,9 +67,11 @@ DSL. Start in observe mode (`default: allow`) and move to `default: deny` once c
 
 ### Identity
 
-Register applications and agents ([chapter 8](08-identity.md)):
+Register applications and agents from the console (Teams and Agents pages), or, on the server, with
+the interim admin CLI shipped in the server archive ([chapter 8](08-identity.md)):
 
 ```sh
+# on the server (interim; registration is moving fully to the console and the control-plane API)
 acp app register /var/lib/acp/registry.json acme-app you
 acp agent register /var/lib/acp/registry.json <app-id> coding-assistant   # prints a one-time token
 ```
@@ -166,16 +166,18 @@ exception.
 
 ## 7. Check you are getting the expected results
 
-This is how you prove the system works, not just that it started.
+This is how you prove the system works, not just that it started. `acp-verify` runs anywhere; the
+other checks below run on the server (where the interim admin CLI lives) or are shown in the console.
 
 ```sh
 # 1. End-to-end acceptance: identity, decision, approval, execution, evidence, verification, plus
 #    fail-closed checks (a tampered ledger fails, an invalid token is rejected).
 bash demo/vertical/run.sh          # expect: 10/10 PASS
 
-# 2. Verify the evidence ledger independently, with the public key alone.
-acp verify /var/lib/acp/evidence.db          # expect: verifies
-acp export /var/lib/acp/evidence.db > pack.json && acp verify-pack pack.json
+# 2. Verify the evidence ledger independently, with the public key alone. acp-verify is the one tool
+#    an outside auditor runs; it never contacts or trusts the server.
+acp-verify /var/lib/acp/evidence.db          # expect: OK ... verifies
+acp-verify --pack pack.json                  # verify a downloaded evidence pack on a clean machine
 
 # 3. Prove the content firewall on an obfuscation corpus.
 acp redteam models/injection-lr.json --min-catch 0.9

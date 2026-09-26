@@ -1,5 +1,12 @@
 # 13. The acp CLI
 
+> Direction: management is moving to the console and the control-plane API, with records stored
+> centrally. On a workstation the only long-term command-line tool is `acp-verify` (independent
+> evidence verification); the enforcement binaries (`acp-proxy`, `acp-intercept`, `acp-guard`) are
+> deployed, not "run to manage". The `acp` commands below still work and ship in the server archive as
+> the interim admin tool, but prefer the console for anything that changes governance state.
+
+
 `acp-cli`, invoked as `acp`, is the operator's tool for everything that is not sitting in the request
 path: authoring and testing policy, managing identity, verifying and exporting evidence, discovery
 and enrolment, red-teaming the firewall, and the GRC surface. It talks to files and to a running

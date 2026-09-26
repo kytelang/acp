@@ -114,9 +114,10 @@ const chips = [
       <div class="nv-dl-aside">
         <span class="nv-eyebrow">Install</span>
         <p class="nv-dl-note">
-          One command installs the client tools for your machine into an <code>.acp</code> folder in
-          your home directory: the <code>acp</code> CLI, the MCP proxy, the forward proxy and the
-          guard. No package manager, no system dependencies.
+          One command installs the workstation tools into an <code>.acp</code> folder in your home
+          directory: the MCP proxy, a dev forward proxy, and <code>acp-verify</code> for independent
+          evidence verification. The control plane, gateway and console run on a server. No package
+          manager, no system dependencies.
         </p>
         <div class="nv-badge-one">macOS &middot; Linux &middot; Windows</div>
       </div>
