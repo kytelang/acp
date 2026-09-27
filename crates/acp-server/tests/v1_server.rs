@@ -153,7 +153,9 @@ async fn control_service_inbox_and_endpoints() {
     let store = acp_approvals::ApprovalStore::open(&approvals).unwrap();
     let view = store.get("appr-1").unwrap().unwrap();
     assert_eq!(view.state, "approved");
-    assert_eq!(view.approver.as_deref(), Some("web-user"));
+    // With RBAC off (no auth flags), an approve is attributed to the local operator "console"
+    // (see actor_of); it was "web-user" before attribution went through the principal.
+    assert_eq!(view.approver.as_deref(), Some("console"));
 
     // B1: before any heartbeat, liveness is healthy (no enrolled proxies to be silent).
     let live0: serde_json::Value = c.get(format!("{base}/liveness")).send().await.unwrap().json().await.unwrap();
