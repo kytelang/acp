@@ -56,6 +56,9 @@ struct AppState {
     threat_feed_url: Option<String>,
     // M2: optional ticket-resolution feed the control plane polls (pull complement to /tickets/callback).
     ticket_poll_url: Option<String>,
+    // Named connector adapters: Slack notify delivery and MLflow model import.
+    slack_webhook_url: Option<String>,
+    mlflow_url: Option<String>,
     // M3: periodic framework-report snapshotting + delivery.
     snapshot_interval_ms: i64,
     snapshot_frameworks: Vec<String>,
@@ -385,21 +388,75 @@ async fn restore_control_state(st: &Arc<AppState>, store: &acp_cpstore::ControlS
 /// G4: fire a structured, HMAC-signed event to the configured webhook (best-effort, non-blocking).
 /// User-controlled fields (tool name, subject, ...) are placed only as JSON values, never interpolated
 /// into markup, so a crafted value cannot forge the notification.
+/// Named MLflow adapter: fetch the registry, map latest versions, and register any not already in the
+/// ACP inventory (tenant "default"). Uses the normal admission-scan + signed AI-BOM path so imported
+/// models are governed exactly like manually registered ones. Idempotent by (name, version).
+async fn import_mlflow(st: &Arc<AppState>, mlflow_url: &str) {
+    let store = match &st.store { Some(s) => s.clone(), None => return };
+    let base = mlflow_url.trim_end_matches('/');
+    let url = format!("{base}/api/2.0/mlflow/registered-models/search");
+    let client = reqwest::Client::new();
+    let v = match client.get(&url).send().await {
+        Ok(resp) => match resp.json::<serde_json::Value>().await {
+            Ok(v) => v,
+            Err(e) => { tracing::warn!("mlflow import: bad response body: {e}"); return; }
+        },
+        Err(e) => { tracing::warn!("mlflow import: cannot reach {url}: {e}"); return; }
+    };
+    if v.get("next_page_token").and_then(|t| t.as_str()).map(|t| !t.is_empty()).unwrap_or(false) {
+        tracing::warn!("mlflow import: registry has more than one page; only the first page was imported");
+    }
+    let models = acp_core::mlflow::models_from_search(&v);
+    // Existing (name, version) pairs in the default tenant, to skip re-registration.
+    let existing: std::collections::BTreeSet<(String, String)> = match store.list_models("default").await {
+        Ok(ms) => ms.into_iter().map(|m| (m.name, m.version)).collect(),
+        Err(_) => std::collections::BTreeSet::new(),
+    };
+    let mut imported = 0usize;
+    for m in &models {
+        if existing.contains(&(m.name.clone(), m.version.clone())) { continue; }
+        let card = serde_json::json!({"stage": m.stage, "source": m.source, "origin": "mlflow"}).to_string();
+        let id = format!("mdl-{}", rand_hex(6));
+        let (scan_status, aibom, refused) = admission_scan(st, &m.name, "mlflow", &m.version).await;
+        if refused {
+            tracing::warn!("mlflow import: model '{}' v{} refused by admission scan ({scan_status})", m.name, m.version);
+            continue;
+        }
+        if store.add_model(&id, &m.name, "mlflow", &m.version, &card, &scan_status, &aibom, "default", now_ms() as i64).await.is_ok() {
+            imported += 1;
+        }
+    }
+    tracing::info!("mlflow import: {imported} new model(s) imported from {base} ({} in registry)", models.len());
+}
+
 fn fire_webhook(st: &Arc<AppState>, event_type: &str, fields: serde_json::Value) {
-    let url = match &st.webhook_url { Some(u) => u.clone(), None => return };
-    let secret = st.webhook_secret.clone().unwrap_or_default();
     let now = now_ms();
-    let payload = serde_json::json!({"type": event_type, "ts_ms": now, "event": fields});
-    let body = payload.to_string();
-    let header = acp_core::webhook::sign_webhook(secret.as_bytes(), (now / 1000) as u64, &body);
-    tokio::spawn(async move {
-        let client = reqwest::Client::new();
-        let _ = client.post(&url)
-            .header("content-type", "application/json")
-            .header("x-acp-signature", header)
-            .body(body)
-            .send().await;
-    });
+    // Generic HMAC-signed webhook sink.
+    if let Some(url) = st.webhook_url.clone() {
+        let secret = st.webhook_secret.clone().unwrap_or_default();
+        let payload = serde_json::json!({"type": event_type, "ts_ms": now, "event": fields});
+        let body = payload.to_string();
+        let header = acp_core::webhook::sign_webhook(secret.as_bytes(), (now / 1000) as u64, &body);
+        tokio::spawn(async move {
+            let client = reqwest::Client::new();
+            let _ = client.post(&url)
+                .header("content-type", "application/json")
+                .header("x-acp-signature", header)
+                .body(body)
+                .send().await;
+        });
+    }
+    // Named Slack adapter: post the same event as an injection-safe Block Kit message.
+    if let Some(url) = st.slack_webhook_url.clone() {
+        let msg = acp_core::notify::render_slack_event(event_type, &fields);
+        tokio::spawn(async move {
+            let client = reqwest::Client::new();
+            let _ = client.post(&url)
+                .header("content-type", "application/json")
+                .body(msg.to_string())
+                .send().await;
+        });
+    }
 }
 
 /// A5: load the SCIM user directory (id, email, role groups) from a JSON file, or return a demo
@@ -514,6 +571,8 @@ async fn main() {
     let mut packs_feed_url: Option<String> = None;
     let mut threat_feed_url: Option<String> = None;
     let mut ticket_poll_url: Option<String> = None;
+    let mut slack_webhook_url: Option<String> = None;
+    let mut mlflow_url: Option<String> = None;
     let mut snapshot_interval_ms: i64 = 0;
     let mut snapshot_frameworks: Vec<String> = Vec::new();
     let mut approval_sla_ms: i64 = 0;
@@ -542,6 +601,8 @@ async fn main() {
             "--packs-feed-url" => packs_feed_url = it.next().cloned(),
             "--threat-feed-url" => threat_feed_url = it.next().cloned(),
             "--ticket-poll-url" => ticket_poll_url = it.next().cloned(),
+            "--slack-webhook-url" => slack_webhook_url = it.next().cloned(),
+            "--mlflow-url" => mlflow_url = it.next().cloned(),
             "--snapshot-interval-ms" => snapshot_interval_ms = it.next().and_then(|v| v.parse().ok()).unwrap_or(0),
             "--snapshot-frameworks" => snapshot_frameworks = it.next().map(|v| v.split(',').map(|x| x.trim().to_string()).filter(|x| !x.is_empty()).collect()).unwrap_or_default(),
             "--approval-sla-ms" => approval_sla_ms = it.next().and_then(|v| v.parse().ok()).unwrap_or(0),
@@ -785,6 +846,8 @@ async fn main() {
         packs_feed_url,
         threat_feed_url,
         ticket_poll_url,
+        slack_webhook_url,
+        mlflow_url,
         snapshot_interval_ms,
         snapshot_frameworks,
         approval_sla_ms,
@@ -867,6 +930,15 @@ async fn main() {
                 }
                 tokio::time::sleep(std::time::Duration::from_secs(60)).await;
             }
+        });
+    }
+    // Named MLflow adapter: on start-up, import the model registry into ACP's inventory (idempotent),
+    // running each imported model through the same admission scan + signed AI-BOM path as a manual
+    // registration. Re-runs on restart; already-present name+version pairs are skipped.
+    if let (Some(_store), Some(mlflow)) = (state.store.clone(), state.mlflow_url.clone()) {
+        let st2 = state.clone();
+        tokio::spawn(async move {
+            import_mlflow(&st2, &mlflow).await;
         });
     }
     // M2: poll a ticket-resolution feed and apply each resolution (idempotent), the pull complement to
@@ -953,6 +1025,7 @@ async fn main() {
         .route("/liveness", get(liveness))
         .route("/event/:kind", post(record_event))
         .route("/tickets/callback", post(ticket_callback))
+        .route("/tickets/jira", post(ticket_jira))
         .route("/monitor/drift", get(monitor_drift_get).post(monitor_drift_post))
         .route("/monitor/lineage", get(monitor_lineage_get).post(monitor_lineage_post))
         .route("/alerts", get(alerts))
@@ -2669,6 +2742,33 @@ async fn ticket_callback(State(st): State<Arc<AppState>>, headers: HeaderMap, ra
     let tenant = tenant_of(&headers, &None);
     match apply_ticket_resolution(&st, &action, &id, status.as_deref(), &tenant).await {
         Ok(()) => Json(serde_json::json!({"ok": true, "id": id, "action": action})).into_response(),
+        Err(e) => Json(serde_json::json!({"ok": false, "error": e})).into_response(),
+    }
+}
+
+/// Named Jira adapter: accept a Jira `issue_updated` webhook, map it via acp_core::ticket::jira to the
+/// generic ticket vocabulary, and apply it. Verified with the same HMAC (x-acp-signature over the raw
+/// body, keyed by --webhook-secret) as /tickets/callback: point a Jira Automation / a thin relay that
+/// signs the forwarded payload at this endpoint. A webhook that does not concern ACP (no acp label) or
+/// is not a terminal transition is accepted as a no-op.
+async fn ticket_jira(State(st): State<Arc<AppState>>, headers: HeaderMap, raw: axum::body::Bytes) -> Response {
+    let secret = match &st.webhook_secret {
+        Some(s) if !s.is_empty() => s.clone(),
+        _ => return (StatusCode::FORBIDDEN, Json(serde_json::json!({"ok": false, "error": "Jira callbacks require --webhook-secret"}))).into_response(),
+    };
+    let sig = headers.get("x-acp-signature").and_then(|v| v.to_str().ok()).unwrap_or("");
+    let body_str = String::from_utf8_lossy(&raw).to_string();
+    if !acp_core::webhook::verify_webhook(secret.as_bytes(), sig, &body_str, (now_ms() / 1000) as u64, 300) {
+        return (StatusCode::UNAUTHORIZED, Json(serde_json::json!({"ok": false, "error": "signature verification failed"}))).into_response();
+    }
+    let payload: serde_json::Value = serde_json::from_slice(&raw).unwrap_or_else(|_| serde_json::json!({}));
+    let resolution = match acp_core::ticket::jira::map_jira_webhook(&payload) {
+        Some(r) => r,
+        None => return Json(serde_json::json!({"ok": true, "applied": false, "note": "no ACP label or non-terminal transition"})).into_response(),
+    };
+    let tenant = tenant_of(&headers, &None);
+    match apply_ticket_resolution(&st, &resolution.action, &resolution.id, resolution.status.as_deref(), &tenant).await {
+        Ok(()) => Json(serde_json::json!({"ok": true, "applied": true, "id": resolution.id, "action": resolution.action})).into_response(),
         Err(e) => Json(serde_json::json!({"ok": false, "error": e})).into_response(),
     }
 }

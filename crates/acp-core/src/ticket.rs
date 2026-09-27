@@ -110,3 +110,140 @@ mod tests {
         assert_eq!(t.approve(), Err(TicketError::AlreadyResolved));
     }
 }
+
+/// Jira connector (named adapter over the generic ticket-resolution rail).
+///
+/// ACP does not embed a Jira client; it exchanges two small, pure JSON mappings with Jira:
+/// - outbound: `render_jira_issue` builds a create-issue REST body, tagging the issue with a label
+///   that carries the ACP object id so the round-trip is unambiguous.
+/// - inbound: `map_jira_webhook` reads a Jira `issue_updated` webhook and, from the ACP label plus
+///   the new status, produces the same `{action, id, status}` the generic `/tickets/callback` rail
+///   already applies. Intermediate transitions (no terminal status) map to nothing.
+///
+/// The label convention is `acp-approval:<id>` for a step-up hold and `acp-grc:<id>` for a GRC
+/// record. Unknown labels map to nothing (fail-closed): a stray Jira issue cannot resolve anything.
+pub mod jira {
+    use serde_json::{json, Value};
+
+    /// A resolution decoded from a Jira webhook, in the generic ticket-rail vocabulary.
+    #[derive(Debug, Clone, PartialEq, Eq)]
+    pub struct JiraResolution {
+        /// "approve" | "deny" | "grc-status".
+        pub action: String,
+        /// The ACP object id (an approval id or a GRC record id).
+        pub id: String,
+        /// The GRC status to set (only for action "grc-status").
+        pub status: Option<String>,
+    }
+
+    /// Build a Jira create-issue REST body for an ACP object. `acp_label` is the full label, for
+    /// example "acp-approval:ap-123". Summary and description are placed only as values.
+    pub fn render_jira_issue(project_key: &str, summary: &str, description: &str, acp_label: &str) -> Value {
+        json!({
+            "fields": {
+                "project": {"key": project_key},
+                "summary": summary,
+                "description": description,
+                "issuetype": {"name": "Task"},
+                "labels": [acp_label]
+            }
+        })
+    }
+
+    /// Classify a Jira status name into a terminal decision: Some(true) = approved/done,
+    /// Some(false) = rejected/declined, None = an intermediate transition to ignore.
+    fn decision_of(status: &str) -> Option<bool> {
+        let s = status.to_ascii_lowercase();
+        if s.contains("done") || s.contains("approve") || s.contains("resolved") || s.contains("accept") || s.contains("complete") {
+            Some(true)
+        } else if s.contains("reject") || s.contains("declin") || s.contains("deny") || s.contains("won't") || s.contains("wont") {
+            Some(false)
+        } else {
+            None
+        }
+    }
+
+    /// Extract the (kind, id) from the ACP label on the issue. kind is "approval" or "grc".
+    fn acp_ref(labels: &[&str]) -> Option<(&'static str, String)> {
+        for l in labels {
+            if let Some(id) = l.strip_prefix("acp-approval:") {
+                if !id.is_empty() { return Some(("approval", id.to_string())); }
+            }
+            if let Some(id) = l.strip_prefix("acp-grc:") {
+                if !id.is_empty() { return Some(("grc", id.to_string())); }
+            }
+        }
+        None
+    }
+
+    /// Map a Jira `issue_updated` webhook to an ACP ticket resolution, or None when it does not
+    /// concern ACP or is not a terminal transition.
+    pub fn map_jira_webhook(payload: &Value) -> Option<JiraResolution> {
+        let fields = payload.get("issue").and_then(|i| i.get("fields"))?;
+        let labels: Vec<&str> = fields
+            .get("labels")
+            .and_then(|l| l.as_array())
+            .map(|a| a.iter().filter_map(|x| x.as_str()).collect())
+            .unwrap_or_default();
+        let (kind, id) = acp_ref(&labels)?;
+        let status = fields.get("status").and_then(|s| s.get("name")).and_then(|n| n.as_str())?;
+        let approved = decision_of(status)?;
+        Some(match kind {
+            "approval" => JiraResolution {
+                action: if approved { "approve".into() } else { "deny".into() },
+                id,
+                status: None,
+            },
+            _ => JiraResolution {
+                action: "grc-status".into(),
+                id,
+                status: Some(if approved { "approved".into() } else { "rejected".into() }),
+            },
+        })
+    }
+
+    #[cfg(test)]
+    mod tests {
+        use super::*;
+
+        fn webhook(labels: Value, status: &str) -> Value {
+            json!({"webhookEvent": "jira:issue_updated",
+                   "issue": {"key": "OPS-7", "fields": {"labels": labels, "status": {"name": status}}}})
+        }
+
+        #[test]
+        fn approval_done_maps_to_approve() {
+            let r = map_jira_webhook(&webhook(json!(["acp-approval:ap-9"]), "Done")).unwrap();
+            assert_eq!(r, JiraResolution { action: "approve".into(), id: "ap-9".into(), status: None });
+        }
+
+        #[test]
+        fn approval_rejected_maps_to_deny() {
+            let r = map_jira_webhook(&webhook(json!(["acp-approval:ap-9"]), "Rejected")).unwrap();
+            assert_eq!(r.action, "deny");
+        }
+
+        #[test]
+        fn grc_done_maps_to_grc_status_approved() {
+            let r = map_jira_webhook(&webhook(json!(["acp-grc:grc-3"]), "Approved")).unwrap();
+            assert_eq!(r, JiraResolution { action: "grc-status".into(), id: "grc-3".into(), status: Some("approved".into()) });
+        }
+
+        #[test]
+        fn intermediate_transition_maps_to_nothing() {
+            assert!(map_jira_webhook(&webhook(json!(["acp-approval:ap-9"]), "In Progress")).is_none());
+        }
+
+        #[test]
+        fn non_acp_issue_maps_to_nothing() {
+            assert!(map_jira_webhook(&webhook(json!(["backend", "urgent"]), "Done")).is_none());
+        }
+
+        #[test]
+        fn render_issue_carries_the_acp_label() {
+            let v = render_jira_issue("OPS", "hold: fs.delete", "redacted", "acp-approval:ap-1");
+            assert_eq!(v["fields"]["labels"][0], json!("acp-approval:ap-1"));
+            assert_eq!(v["fields"]["project"]["key"], json!("OPS"));
+        }
+    }
+}

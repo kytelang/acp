@@ -47,6 +47,7 @@ pub mod modelcard;
 pub mod modelclass;
 pub mod metaaudit;
 pub mod metering;
+pub mod mlflow;
 pub mod notify;
 pub mod offboarding;
 pub mod otelspan;
