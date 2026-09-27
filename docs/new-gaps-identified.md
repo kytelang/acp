@@ -11,7 +11,7 @@ Guiding rule (from `docs/positioning.md`): Varman owns the middle no incumbent b
 per-action authorization, verified identity, verifiable evidence, one policy, one kill-switch). For
 governance-workflow depth we BUILD (that is the product); for best-in-class detection and model
 scanning we INTEGRATE (call the specialist), and lean on the moat. Each gap below states build vs
-integrate.
+integrate, and lists Acceptance criteria that must all pass for the item to be considered done.
 
 Effort key: S = a few days, M = 1-2 weeks, L = multi-week. Priority: P1 (close to compete), P2, P3.
 
@@ -32,103 +32,149 @@ questionnaires, multi-step conformity workflows, evidence collection and sign-of
 Design:
 - `acp-cpstore`: `grc_templates(id, kind, name, schema_json)` (a questionnaire = ordered questions with
   types and control mappings) and extend `grc_records` with `answers_json`, `assignee`, `due_ms`,
-  `linked_refs_json` (evidence/decision ids), `stage`.
-- `acp-core`: a small assessment engine that scores answers into an EU AI Act tier and emits the
-  required-control checklist (reuse `controls.rs`); a conformity record is the checklist driven to done.
-- `acp-server`: `GET /grc/templates`, `POST /grc/:id/answers` (re-signs), `POST /grc/:id/assign`,
-  status transitions already exist. Validate `linked_refs` against the ledger (closes P1-7 too).
-- Console: a guided "New assessment" wizard (question steps -> tier + checklist), per-record answer/
-  evidence panel, assignee + due date, a stage badge.
-Reuse: signed-record + re-verify pattern; the status controls already shipped.
+  `linked_refs_json`, `stage`.
+- `acp-core`: an assessment engine that scores answers into an EU AI Act tier and emits the required
+  control checklist (reuse `controls.rs`); a conformity record is that checklist driven to done.
+- `acp-server`: `GET /grc/templates`, `POST /grc/:id/answers` (re-signs), `POST /grc/:id/assign`;
+  status transitions already exist.
+- Console: a guided "New assessment" wizard, a per-record answers/evidence panel, assignee + due, stage.
+Acceptance:
+- A questionnaire template can be seeded and listed via `GET /grc/templates`.
+- Completing the wizard in the console produces a persisted record with `answers_json`, a computed EU
+  AI Act tier, and a control checklist derived from `controls.rs`.
+- `assignee`, `due_ms`, and `stage` persist; advancing the stage re-signs the record and it still
+  verifies on read (`verified: true` in `/grc`).
+- A conformity record shows checklist progress (k/m controls done) in the console and can be driven to
+  complete.
+- End-to-end run captured: create assessment -> tier + checklist rendered -> assign -> advance stage
+  -> `/grc` shows the record verified.
 
 ### A2. Linked-evidence reconciliation (P1, S) - refines P1-7
 Gap: GRC "evidence" and "linked-decision" references are free-text, never checked against the ledger.
-Design: define a structured `linked_refs: [{type: decision|evidence|coverage, id}]` on the record;
-on create/update, `acp-server` verifies each id exists in the evidence ledger / ingested store and
-records a `verified_refs` count; the console shows "3/3 linked decisions verified". Makes GRC
-paperwork provably tied to runtime evidence, which no competitor does.
+Design: a structured `linked_refs: [{type: decision|evidence|coverage, id}]`; on create/update
+`acp-server` verifies each id against the evidence ledger / ingested store and stores `verified_refs`
+and `total_refs`; the console shows the ratio.
+Acceptance:
+- Creating a GRC record with one real `decision_id` and one fake id yields `verified_refs=1`,
+  `total_refs=2` from `/grc` (verified via curl).
+- The console record row shows "1/2 linked decisions verified".
+- A record with zero linked refs is allowed and shows "0/0" (no regression).
+- The reconciliation never mutates or trusts the ref payload; it only checks existence in the ledger.
 
 ### A3. Model + use-case + vendor registry richness (P2, M)
-Gap: Credo/OneTrust have model registries with lineage, dependency graphs, agent cards, third-party
-vendor AI risk. Varman has apps/agents only.
-Design:
-- `acp-cpstore`: `models(id, name, provider, version, card_json, created_ms)`, extend `apps`/`agents`
-  with `owner`, `metadata_json` (lineage, dependencies); `vendors(id, name, risk_json)`.
-- `acp-server`: CRUD routes; a model-card is a GRC `model-card` record linked to a `models` row.
-- Console: a Models page and richer Team/Agent detail (owner, dependencies). Agent cards already exist
-  conceptually via registration; add the metadata fields.
+Gap: Credo/OneTrust have model registries with lineage, dependency graphs, agent cards, vendor risk.
+Design: `acp-cpstore` `models(id, name, provider, version, card_json, created_ms)`; extend
+`apps`/`agents` with `owner`, `metadata_json`; `vendors(id, name, risk_json)`. `acp-server` CRUD; a
+model-card GRC record links to a `models` row. Console: a Models page and richer team/agent detail.
+Acceptance:
+- A model can be created/listed via the API and the console Models page (provider, version, card).
+- An agent/team shows its `owner` and `metadata_json` (dependencies) in the console.
+- A `model-card` GRC record can reference a `models` row and the link resolves.
+- A vendor entry with a risk score persists and lists.
 
 ### A4. Framework breadth + signed policy packs (P2, M) - part build, part content
-Gap: Credo ships continuously-updated policy packs across many jurisdictions/frameworks.
-Design: a **signed pack** format (`acp-core`): a control library + framework mappings + policy
-templates, Ed25519-signed, versioned, loaded into `acp-cpstore` (`control_packs` table) and served to
-the console. Ship EU AI Act / NIST AI RMF / ISO 42001 as the first packs; the format lets an org add
-its own or subscribe to updates. This is mostly content plus a small loader; reuse the signed-record
-verify pattern for pack authenticity.
+Gap: Credo ships continuously-updated policy packs across many frameworks/jurisdictions.
+Design: a signed pack format in `acp-core` (control library + framework mappings + policy templates),
+versioned, loaded into `acp-cpstore` (`control_packs`) and served to the console. Ship EU AI Act /
+NIST AI RMF / ISO 42001 as the first packs.
+Acceptance:
+- A signed pack loads via `POST /packs`, is stored, and its version + framework list show in the console.
+- Pack signature is verified on load; a tampered pack is rejected with a clear error.
+- The three framework packs (EU AI Act, NIST AI RMF, ISO 42001) load and their controls appear in the
+  control library used by A1.
+- Re-verify-on-read: `GET /packs` reports each pack `verified: true`.
 
 ### A5. RBAC depth + SCIM (P2, M)
-Gap: coarse RBAC (5 capabilities, only 3 enforced), no SCIM provisioning, no separation of duty.
-Design (also A2/A16/A23 in implementation-gaps):
-- `acp-auth`: add capabilities `RegisterAgent`, `EditGrc`, `EditFirewall`; enforce `Export`/`SeeArgs`
-  on the read/export routes; distinct roles for SoD (policy author != agent registrar != approver).
-- `acp-server`: gate each mutating route on its specific capability; a `GET /scim/v2/Users` +
-  `/Groups` SCIM 2.0 endpoint mapping roles from the IdP.
-- Console: role-aware UI (hide actions the token cannot perform).
+Gap: coarse RBAC (5 capabilities, 3 enforced), no SCIM, no separation of duty.
+Design: `acp-auth` adds `RegisterAgent`, `EditGrc`, `EditFirewall`; enforce `Export`/`SeeArgs`;
+distinct roles for SoD. `acp-server` gates each mutating route on its specific capability; SCIM 2.0
+`GET /scim/v2/Users` + `/Groups`. Console: role-aware UI.
+Acceptance:
+- With RBAC enabled, each mutating route rejects (403) a token lacking its specific capability and
+  accepts one that has it (verified per route: apps, agents, grc, firewall, policy, break-glass,
+  approvals).
+- `Export` and `SeeArgs` are enforced on the export / read-args routes (a token without them gets 403).
+- `GET /scim/v2/Users` and `/Groups` return IdP-mapped users and role groups.
+- The console hides or disables actions the current token cannot perform.
 
 ### A6. Regulator-ready report exports (P2, S)
-Gap: templated, branded, regulator-facing report exports.
-Design: extend the Reports view with framework-scoped report generation (`GET /report/framework/:name`
--> a structured EU AI Act / NIST / ISO report combining the GRC records + coverage + the breach report),
-downloadable as CSV today and a print-to-PDF layout; a templated HTML print stylesheet in the console.
+Gap: templated, regulator-facing report exports.
+Design: `GET /report/framework/:name` returns a structured report combining GRC records + coverage +
+the breach report; console print-to-PDF layout + CSV.
+Acceptance:
+- `GET /report/framework/eu-ai-act` returns a structured JSON report (controls status + linked evidence
+  counts + breach summary + coverage).
+- The console renders it and Print produces a clean, single-purpose PDF layout (no nav chrome).
+- A CSV of the framework report downloads.
 
 ---
 
 ## B. Firewall / detection depth (vs Aegis / Lakera) - mostly INTEGRATE
 
 ### B1. Best-in-class detection via a first-class external hook (P1, M)
-Gap: the built-in content firewall is deliberately lightweight; Aegis/Lakera/Prompt Security ship
-stronger, continuously-updated, multilingual, evasion-hardened detection.
-Design (integrate, do not rebuild): define a stable **content-scan hook contract**: the PEP POSTs
-`{text, direction: prompt|response|tool_args|tool_result, context}` to a configured scanner URL and
-gets `{block: bool, findings: [{kind, score, span}], redactions}`. Wire it on all PEPs behind the
-central firewall config (`scan_url` field added to `firewall_config`, fetched via `--control-plane`),
-fail-closed on scanner error when `block_on_scanner_error` is set. Ship reference adapters for a
-generic HTTP scanner; document Lakera/Prompt Security integration. Keep the lightweight built-in as the
-default/offline path.
+Gap: the built-in content firewall is deliberately lightweight.
+Design (integrate): a stable content-scan hook contract: PEP POSTs
+`{text, direction: prompt|response|tool_args|tool_result, context}` to a configured `scan_url` and gets
+`{block, findings:[{kind,score,span}], redactions}`. Add `scan_url` + `block_on_scanner_error` to
+`firewall_config` (fetched via `--control-plane`); fail-closed on scanner error when set; keep the
+built-in as default/offline.
+Acceptance:
+- With `scan_url` set to a mock scanner returning `block:true`, a matching prompt/tool-call is blocked
+  by the PEP; with `block:false` it passes.
+- The hook is invoked on all four directions (prompt, response, tool_args, tool_result) - verified in
+  the mock scanner's received requests.
+- With the scanner unreachable and `block_on_scanner_error:true`, the call fails closed (blocked); with
+  it false, the built-in engine still runs and the call proceeds.
+- With no `scan_url`, behaviour is unchanged (offline default).
 
 ### B2. Output-safety breadth (P2, M)
 Gap: gateway scans the prompt path only; limited toxicity/groundedness/PII breadth.
-Design: run the content engine (and the B1 hook) on the **response** path in the gateway and the proxy
-tool-result path (partly done for tool results); add groundedness as an inline obligation on model
-responses (reuse `acp groundedness`); expand PII entity coverage via the external hook rather than
-rebuilding a classifier.
+Design: run the content engine + B1 hook on the gateway response path and the proxy tool-result path;
+groundedness as an inline obligation on model responses (reuse `acp groundedness`).
+Acceptance:
+- A model response containing a blocked category is blocked/redacted by the gateway (verified e2e).
+- A tool result containing injected content is screened on both stdio and HTTP transports.
+- A groundedness obligation on a rule causes an ungrounded response to be flagged/blocked per the
+  configured threshold.
 
 ### B3. Model / artifact scanning admission (P2, M) - integrate + enforce
-Gap: Protect AI/HiddenLayer scan model files; Varman has only a supply-chain seam.
-Design: an **admission gate** on model/agent registration: `acp-server` calls a configured scanner
-(`scanner_url`) with the model reference, stores the verdict + a signed CycloneDX AI-BOM
-(`acp_core::aibom` exists), and refuses registration (or flags) on a bad verdict. Console: a scan
-status badge on the Models page. Varman calls the scanner; it does not build one.
+Gap: Varman has only a supply-chain seam.
+Design: an admission gate on model/agent registration that calls a configured `scanner_url`, stores the
+verdict + a signed CycloneDX AI-BOM (`acp_core::aibom`), and refuses/flags on a bad verdict. Console:
+a scan-status badge.
+Acceptance:
+- Registering a model with a mock scanner returning "malicious" is refused (or flagged, per config) and
+  the reason is recorded.
+- A "clean" verdict allows registration and stores a signed AI-BOM retrievable via the API.
+- The console Models page shows the scan-status badge.
 
 ### B4. Continuous red-teaming (P3, M)
-Gap: `acp redteam` is a one-shot gate, not a continuous programme.
-Design: a scheduled red-team runner (a control-plane job or external cron calling `acp redteam`) whose
-results are stored as signed GRC `attestation`/`risk` records and surfaced in Reports over time. Reuse
-the GRC record + report pattern; the scheduling can be external (documented) to avoid a scheduler in
-the control plane.
+Gap: `acp redteam` is a one-shot gate.
+Design: a scheduled runner (external cron or a control-plane job) calling `acp redteam`, storing results
+as signed GRC `attestation`/`risk` records surfaced in Reports over time.
+Acceptance:
+- A red-team run produces a signed GRC record with the pass/catch metrics.
+- Reports shows red-team results as a time series (at least last-N runs).
+- A failing red-team run (below `--min-catch`) is visibly flagged.
 
 ### B5. Threat-intelligence feed for the firewall (P3, M)
-Gap: no managed/updated threat feed; signatures/denied-topics are static.
-Design: a **signed threat-pack** ingested into `firewall_config` (new `signatures_json` / feed version),
-served to every acp-agent via the existing `--control-plane` firewall fetch. An org points the control
-plane at a feed URL (or uploads a pack from the console). Reuses the firewall-config fetch+refresh
-already built; the feed itself is content, optionally subscribed.
+Gap: signatures/denied-topics are static.
+Design: a signed threat-pack ingested into `firewall_config` (feed version + `signatures_json`), served
+to every acp-agent via the existing firewall fetch. Org points the control plane at a feed URL or
+uploads a pack.
+Acceptance:
+- Uploading/ingesting a signed threat-pack updates `firewall_config` and bumps a feed version.
+- A tampered pack is rejected.
+- An acp-agent picks up the new signatures on its next refresh (verified: a payload matching a new
+  signature is blocked after refresh, not before).
 
 ### B6. Agent / MCP discovery breadth (P3, L)
-Gap: Zenity/Noma discover across many SaaS agent platforms; Varman's discovery is narrower.
+Gap: Varman's discovery is narrower than Zenity/Noma.
 Design: extend `acp discover` + enrollment with connectors (egress-log importers, CASB/proxy log
-formats, cloud audit logs) that end in signed dispositions feeding coverage. Connector-per-source;
-integrate rather than rebuild each platform's telemetry.
+formats, cloud audit logs) ending in signed dispositions feeding coverage.
+Acceptance:
+- At least one new connector imports a real-world log format into classified endpoints.
+- Imported endpoints become signed dispositions that appear in `/intercept/rules` and the coverage report.
 
 ---
 
@@ -136,16 +182,23 @@ integrate rather than rebuild each platform's telemetry.
 
 ### C1. Control-plane HA / DR / shared state (P1, L) - already tracked (P0-4)
 Design: leader lease + shared Postgres state (budgets/pins already support `--pin-pg`/`--budget-pg`);
-move liveness/spike state off in-memory into Postgres; documented DR/restore (WAL streaming, warm
-standby) already drafted in the guide. This is the top production blocker.
+move liveness/spike state off in-memory into Postgres; documented DR/restore.
+Acceptance:
+- Two control-plane replicas run behind one Postgres; a leader lease prevents split-brain.
+- Liveness and spike state survive a restart (no loss of the dead-man's-switch or alert state).
+- A documented restore-from-backup is exercised and the restored ledger passes `acp verify`.
+- A failover drill (kill the leader) keeps the console and PEP reporting working.
 
 ### C2. Enterprise trust: certifications, SLA, support (P2, process)
-Not code: SOC 2 / ISO 27001 path, support model, security review. Track separately; note that the
-verifiable-evidence architecture is an asset for audits.
+Not code. Acceptance: a written plan exists (SOC 2 / ISO 27001 path, support/SLA model, security-review
+cadence), and the verifiable-evidence architecture is documented as an audit asset.
 
 ### C3. Detection corpus + CI efficacy gates (P2, M) - refines A24
-Design: a larger labelled corpus for the content classifier with precision/recall/FPR CI gates for
-both injection and PII, so the built-in floor is measured and does not regress. Publish the numbers.
+Design: a larger labelled corpus with CI precision/recall/FPR gates for both injection and PII.
+Acceptance:
+- The corpus has a stated size and provenance and is checked into the repo.
+- CI fails if injection OR PII precision/recall/FPR regress below the published thresholds.
+- The current numbers are published in the guide.
 
 ---
 
