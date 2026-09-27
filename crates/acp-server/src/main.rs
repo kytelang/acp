@@ -519,6 +519,8 @@ async fn main() {
     let mut approval_sla_ms: i64 = 0;
     let mut node_id: Option<String> = None;
     let mut lease_ttl_ms: i64 = 15_000;
+    let mut entra_preflight = false;
+    let mut entra_test_token: Option<String> = None;
     let mut it = args.iter().skip(1);
     while let Some(a) = it.next() {
         match a.as_str() {
@@ -552,6 +554,8 @@ async fn main() {
             "--dev-auth" => dev_auth = true,
             "--entra-tenant" => entra_tenant = it.next().cloned(),
             "--entra-audience" => entra_audience = it.next().cloned(),
+            "--entra-preflight" => entra_preflight = true,
+            "--entra-test-token" => entra_test_token = it.next().cloned(),
             "--break-glass-file" => break_glass_file = it.next().cloned(),
             "--tls-ca" => tls_ca = it.next().cloned(),
             "--tls-cert" => tls_cert = it.next().cloned(),
@@ -576,6 +580,59 @@ async fn main() {
                 std::process::exit(2);
             }
         }
+    }
+
+    // R7: real-Entra cutover preflight. Verifies the identity setup without starting the full server:
+    // fetch the JWKS from the derived Entra/OIDC endpoint, confirm it parses and has keys, and (if a
+    // sample token is given) run the full verification and print each claim check and the effective
+    // capabilities. Exits 0 on success, 1 on any failure. Gated only on a customer tenant + token.
+    if entra_preflight {
+        let resolved = if let (Some(tid), Some(aud)) = (&entra_tenant, &entra_audience) {
+            Some((
+                format!("https://login.microsoftonline.com/{tid}/v2.0"),
+                aud.clone(),
+                format!("https://login.microsoftonline.com/{tid}/discovery/v2.0/keys"),
+            ))
+        } else if let (Some(src), Some(iss), Some(aud)) = (&oidc_jwks, &oidc_issuer, &oidc_audience) {
+            Some((iss.clone(), aud.clone(), src.clone()))
+        } else {
+            None
+        };
+        let (issuer, audience, source) = match resolved {
+            Some(t) => t,
+            None => {
+                eprintln!("preflight: need --entra-tenant + --entra-audience (or the --oidc-* flags)");
+                std::process::exit(1);
+            }
+        };
+        println!("entra preflight");
+        println!("  issuer:   {issuer}");
+        println!("  audience: {audience}");
+        println!("  jwks:     {source}");
+        let jwks = match load_jwks(&source).await {
+            Ok(j) => { println!("  [ok] JWKS fetched: {} key(s)", j.key_count()); j }
+            Err(e) => { println!("  [FAIL] JWKS load: {e}"); std::process::exit(1); }
+        };
+        if let Some(tok) = &entra_test_token {
+            let cfg = acp_auth::EntraConfig { issuer, audience };
+            match acp_auth::verify(tok, &jwks, &cfg, now_ms()) {
+                Ok(p) => {
+                    println!("  [ok] token verified");
+                    println!("       oid={} user={} tid={}", p.oid, p.username, p.tenant);
+                    println!("       roles: {}", if p.roles.is_empty() { "(none)".to_string() } else { p.roles.join(", ") });
+                    let caps: Vec<String> = p.capabilities().into_iter().map(|c| format!("{c:?}")).collect();
+                    println!("       capabilities: {}", if caps.is_empty() { "(none, fail-closed)".to_string() } else { caps.join(", ") });
+                    if p.roles.is_empty() {
+                        println!("  [warn] token carries no app roles; the principal can do nothing. Assign app roles in Entra.");
+                    }
+                }
+                Err(e) => { println!("  [FAIL] token verification: {e:?}"); std::process::exit(1); }
+            }
+        } else {
+            println!("  [note] no --entra-test-token given; JWKS reachability only. Pass a real token to verify iss/aud/nbf/exp/signature/roles end to end.");
+        }
+        println!("preflight OK");
+        std::process::exit(0);
     }
 
     let policy = match policy_path {

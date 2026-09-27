@@ -56,6 +56,10 @@ impl Jwks {
     pub fn new() -> Self {
         Self::default()
     }
+    /// The number of keys currently loaded (used by the R7 Entra preflight).
+    pub fn key_count(&self) -> usize {
+        self.keys.len()
+    }
     pub fn add(&mut self, kid: &str, alg: &str, public_key: Vec<u8>) {
         self.keys.insert(
             kid.to_string(),
