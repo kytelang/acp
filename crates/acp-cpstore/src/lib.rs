@@ -158,6 +158,8 @@ impl ControlStore {
             "CREATE TABLE IF NOT EXISTS firewall_config (id INTEGER PRIMARY KEY, enabled INTEGER NOT NULL, block_secrets INTEGER NOT NULL, deny_topics TEXT NOT NULL, model TEXT NOT NULL, scan_url TEXT NOT NULL DEFAULT '', block_on_scanner_error INTEGER NOT NULL DEFAULT 0, updated_ms BIGINT NOT NULL)",
             "CREATE TABLE IF NOT EXISTS firewall_rules (id VARCHAR(255) PRIMARY KEY, match_json TEXT NOT NULL, classify TEXT NOT NULL, action TEXT NOT NULL, created_ms BIGINT NOT NULL)",
             "CREATE TABLE IF NOT EXISTS violation_events (id VARCHAR(255) PRIMARY KEY, kind TEXT NOT NULL, pep TEXT NOT NULL, agent TEXT NOT NULL, tool TEXT NOT NULL, verdict TEXT NOT NULL, rule_id TEXT NOT NULL, impact TEXT NOT NULL, outcome TEXT NOT NULL, ts_ms BIGINT NOT NULL)",
+            "CREATE TABLE IF NOT EXISTS control_leader (id INTEGER PRIMARY KEY, holder TEXT NOT NULL, token BIGINT NOT NULL, expires_ms BIGINT NOT NULL)",
+            "CREATE TABLE IF NOT EXISTS control_state (k VARCHAR(255) PRIMARY KEY, v TEXT NOT NULL, updated_ms BIGINT NOT NULL)",
         ] {
             sqlx::query(ddl).execute(&self.pool).await.map_err(|e| e.to_string())?;
         }
@@ -425,6 +427,64 @@ impl ControlStore {
         Ok(row.is_some())
     }
 
+    // ---- C1: HA leader lease (shared-store, fenced) + persisted control state ----
+    /// Atomically try to acquire or renew the single control-plane leadership lease. Returns
+    /// (is_leader, holder, token). Fencing token increases monotonically on every (re)acquisition, so
+    /// a paused old leader that wakes up sees a larger token elsewhere and stands down. Split-brain is
+    /// prevented because only the row's current holder or an expired lease can be taken.
+    pub async fn try_acquire_leader(&self, node: &str, now_ms: i64, ttl_ms: i64) -> Result<(bool, String, i64), String> {
+        let exp = now_ms + ttl_ms;
+        // Seed the row on first ever call (no-op if it exists).
+        let ins = self.ph("INSERT OR IGNORE INTO control_leader(id,holder,token,expires_ms) VALUES(1,?,1,?)");
+        sqlx::query(&ins).bind(node).bind(exp).execute(&self.pool).await.map_err(|e| e.to_string())?;
+        // Take over iff the lease is expired or already ours; bump the fencing token. This single
+        // conditional UPDATE is atomic per row on both SQLite and Postgres.
+        let upd = self.ph("UPDATE control_leader SET holder=?, token=token+1, expires_ms=? WHERE id=1 AND (expires_ms<=? OR holder=?)");
+        sqlx::query(&upd).bind(node).bind(exp).bind(now_ms).bind(node)
+            .execute(&self.pool).await.map_err(|e| e.to_string())?;
+        // Read back the authoritative row.
+        let row = sqlx::query("SELECT holder, token, expires_ms FROM control_leader WHERE id=1")
+            .fetch_one(&self.pool).await.map_err(|e| e.to_string())?;
+        let holder: String = row.get("holder");
+        let token: i64 = row.get("token");
+        let expires: i64 = row.get("expires_ms");
+        let is_leader = holder == node && expires > now_ms;
+        Ok((is_leader, holder, token))
+    }
+
+    /// Store a control-state snapshot under a key (liveness/spike survive a restart). Idempotent
+    /// replace of the single row for that key.
+    pub async fn put_state(&self, key: &str, value: &str, now_ms: i64) -> Result<(), String> {
+        let del = self.ph("DELETE FROM control_state WHERE k=?");
+        sqlx::query(&del).bind(key).execute(&self.pool).await.map_err(|e| e.to_string())?;
+        let ins = self.ph("INSERT INTO control_state(k,v,updated_ms) VALUES(?,?,?)");
+        sqlx::query(&ins).bind(key).bind(value).bind(now_ms).execute(&self.pool).await.map_err(|e| e.to_string())?;
+        Ok(())
+    }
+
+    /// Read a control-state snapshot by key.
+    pub async fn get_state(&self, key: &str) -> Result<Option<String>, String> {
+        let sql = self.ph("SELECT v FROM control_state WHERE k=?");
+        let row = sqlx::query(&sql).bind(key).fetch_optional(&self.pool).await.map_err(|e| e.to_string())?;
+        Ok(row.map(|r| r.get("v")))
+    }
+
+    /// List all control-state rows whose key starts with `prefix` (used to restore per-proxy liveness
+    /// and per-event spike state across a restart, without any node clobbering another's snapshot).
+    pub async fn list_state_prefix(&self, prefix: &str) -> Result<Vec<(String, String)>, String> {
+        let like = format!("{prefix}%");
+        let sql = self.ph("SELECT k, v FROM control_state WHERE k LIKE ?");
+        let rows = sqlx::query(&sql).bind(like).fetch_all(&self.pool).await.map_err(|e| e.to_string())?;
+        Ok(rows.iter().map(|r| (r.get::<String,_>("k"), r.get::<String,_>("v"))).collect())
+    }
+
+    /// Delete one control-state row (used to prune expired spike-event keys).
+    pub async fn delete_state(&self, key: &str) -> Result<(), String> {
+        let sql = self.ph("DELETE FROM control_state WHERE k=?");
+        sqlx::query(&sql).bind(key).execute(&self.pool).await.map_err(|e| e.to_string())?;
+        Ok(())
+    }
+
     /// E2: most recent ingested decisions, newest first, for the console Fleet evidence view.
     pub async fn list_ingested(&self, limit: i64) -> Result<Vec<IngestedRecord>, String> {
         let sql = self.ph("SELECT decision_id,pep,kind,verdict,record,operator,created_ms,pubkey_hex,sig_hex FROM ingested_evidence ORDER BY created_ms DESC LIMIT ?");
@@ -524,6 +584,38 @@ mod tests {
         let f = std::env::temp_dir().join(format!("acp-cp-{}-s.db", std::process::id()));
         let _ = std::fs::remove_file(&f);
         check(&format!("sqlite://{}?mode=rwc", f.display())).await;
+        let _ = std::fs::remove_file(&f);
+    }
+
+    #[tokio::test]
+    async fn leader_lease_prevents_split_brain_and_fences() {
+        let f = std::env::temp_dir().join(format!("acp-cp-{}-lease.db", std::process::id()));
+        let _ = std::fs::remove_file(&f);
+        let s = ControlStore::connect(&format!("sqlite://{}?mode=rwc", f.display())).await.unwrap();
+        let now = 1_000_000i64;
+        let ttl = 10_000i64;
+        // nodeA acquires; nodeB cannot while the lease is valid.
+        let (a_leader, _, a_tok) = s.try_acquire_leader("nodeA", now, ttl).await.unwrap();
+        assert!(a_leader, "first acquirer leads");
+        let (b_leader, holder, _) = s.try_acquire_leader("nodeB", now + 1, ttl).await.unwrap();
+        assert!(!b_leader && holder == "nodeA", "no split-brain: B cannot take a valid lease");
+        // nodeA renews; the fencing token strictly increases.
+        let (_, _, a_tok2) = s.try_acquire_leader("nodeA", now + 2, ttl).await.unwrap();
+        assert!(a_tok2 > a_tok, "fencing token increases on renew");
+        // After expiry nodeB takes over with a larger token; the paused nodeA is fenced out.
+        // The last renew was at now+2 with expiry (now+2)+ttl, so wait past that.
+        let later = now + 2 + ttl + 1;
+        let (b_leader2, holder2, b_tok) = s.try_acquire_leader("nodeB", later, ttl).await.unwrap();
+        assert!(b_leader2 && holder2 == "nodeB", "B takes over an expired lease");
+        assert!(b_tok > a_tok2, "takeover token strictly larger (fences the old leader)");
+        // control-state per-entity round-trip (liveness/spike survive restart).
+        s.put_state("liveness:proxy-1", "42", later).await.unwrap();
+        s.put_state("spike:deny:100", "1", later).await.unwrap();
+        let rows = s.list_state_prefix("liveness:").await.unwrap();
+        assert_eq!(rows.len(), 1);
+        assert_eq!(rows[0], ("liveness:proxy-1".to_string(), "42".to_string()));
+        s.delete_state("spike:deny:100").await.unwrap();
+        assert!(s.list_state_prefix("spike:").await.unwrap().is_empty());
         let _ = std::fs::remove_file(&f);
     }
 

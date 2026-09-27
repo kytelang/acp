@@ -210,7 +210,7 @@ Acceptance:
 
 ## C. Cross-cutting maturity (both categories) - OPERATIONS
 
-### C1. Control-plane HA / DR / shared state (P1, L) - already tracked (P0-4)
+### C1. Control-plane HA / DR / shared state (P1, L) - already tracked (P0-4)  [DONE 2026-09-27]
 Design: leader lease + shared Postgres state (budgets/pins already support `--pin-pg`/`--budget-pg`);
 move liveness/spike state off in-memory into Postgres; documented DR/restore.
 Acceptance:
@@ -218,6 +218,14 @@ Acceptance:
 - Liveness and spike state survive a restart (no loss of the dead-man's-switch or alert state).
 - A documented restore-from-backup is exercised and the restored ledger passes `acp verify`.
 - A failover drill (kill the leader) keeps the console and PEP reporting working.
+Status (2026-09-27): SHIPPED. `acp-cpstore` gained a fenced leader lease (`try_acquire_leader`,
+monotonic token) and per-entity control-state (`control_state`, prefix list/delete). `acp-server`
+runs a lease loop (`--node-id`, `--lease-ttl-ms`), exposes `GET /leader`, persists liveness per proxy
+and spike events per event to the shared store, and restores them on boot (no cross-node clobber).
+Verified live with two replicas on one shared store: exactly one leader (split-brain prevented);
+killing the leader fails over with a strictly larger token and reporting keeps working; liveness +
+spike alert state survive a restart; a backed-up ledger restored to a new path passes `acp verify`.
+cpstore lease test added; guide chapter 14 documents the HA topology and the DR runbook.
 
 ### C2. Enterprise trust: certifications, SLA, support (P2, process)
 Not code. Acceptance: a written plan exists (SOC 2 / ISO 27001 path, support/SLA model, security-review

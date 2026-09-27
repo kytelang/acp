@@ -34,9 +34,12 @@ control plane signs endpoint dispositions and GRC records with. See [chapter 16]
 `--dev-auth` (a mock issuer, itself gated behind an environment flag). If auth is requested and the
 JWKS fails to load, the server refuses to start.
 
-**Honest limit.** The control plane is single-tenant today, and its liveness and spike-detector state
-is in-memory and resets on restart. High availability (a leader lease plus shared state) is the last
-open blocker to running the control plane in production.
+**High availability.** The control plane is single-tenant today. It supports running more than one
+replica behind one shared `--store`: a fenced leader lease elects a single active leader (so there is
+no split-brain), and the liveness and spike-detector state is persisted to the shared store, so the
+dead-man's-switch and alert state survive a restart or a failover. Give each replica a stable
+`--node-id` and, optionally, a `--lease-ttl-ms` (default 15000). `GET /leader` reports which node
+holds the lease and the current fencing token.
 
 ## The web console
 
@@ -82,6 +85,41 @@ Postgres row-level security. **Important:** connect as a **non-superuser** role.
 (and roles with BYPASSRLS) ignore RLS, so the store refuses to initialise against such a role rather
 than silently break isolation.
 
+### Two control-plane replicas and failover
+
+Run two (or more) `acp-server` replicas against the same `--store`. Each acquires and renews a fenced
+leadership lease; only one is the leader at a time.
+
+```sh
+acp-server --addr 0.0.0.0:8787 --store "$STORE" --node-id node-a --lease-ttl-ms 15000
+acp-server --addr 0.0.0.0:8788 --store "$STORE" --node-id node-b --lease-ttl-ms 15000
+```
+
+`GET /leader` on each returns `{node, leader, holder, token}`. Exactly one reports `leader: true`. If
+the leader is killed, the survivor acquires the lease after at most one TTL with a strictly larger
+fencing token, so a paused old leader that wakes up is fenced out. PEP heartbeats and events keep
+being accepted by whichever replica serves them, and their liveness and spike state is shared, so the
+dead-man's-switch and alerts do not reset on failover. `deploy/` ships a failover drill.
+
+### Backup and restore (DR)
+
+The durable state is the control-plane store (the `--store` database) and each PEP's append-only
+signed ledger.
+
+1. **Back up** the store (for SQLite copy the file with the WAL, e.g. `sqlite3 store.db ".backup
+   backup.db"`; for Postgres use `pg_dump`) and copy each PEP's `--ledger` file.
+2. **Restore** by putting the store back in place and pointing the replicas at it, and by restoring
+   the ledger files to their PEP hosts.
+3. **Verify** the restored ledger before trusting it:
+
+   ```sh
+   acp verify restored-ledger.db
+   # OK: restored-ledger.db verifies
+   ```
+
+   The Merkle chain and every record signature are checked, so a truncated or tampered restore is
+   rejected rather than silently accepted.
+
 ## Logging
 
 All services use structured logging, and **all of them write logs to STDERR**. This is deliberate: the
@@ -125,9 +163,10 @@ ten-of-ten end-to-end acceptance for the core vertical. It is ready for a proof 
 design-partner pilot, not an unattended production rollout without hardening. In place today:
 encryption at rest, HSM signing, structured logging, secrets kept out of the deployment files, the
 full helm chart, an entropy-gated DLP classifier, the staged default-deny path, and a fail-closed
-guard against a mis-scoped database role. Remaining before an unattended rollout: control-plane high
-availability, turning the sequence and firewall protections on by default, load testing the gateway,
-and cross-checking the GRC documents against the ledger.
+guard against a mis-scoped database role, and control-plane high availability (a fenced leader lease,
+shared-store liveness and spike state, and a verify-on-restore DR path). Remaining before an
+unattended rollout: turning the sequence and firewall protections on by default, load testing the
+gateway, and a wider detection-efficacy CI gate.
 
 ## Setting up Postgres or MySQL
 

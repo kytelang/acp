@@ -41,6 +41,10 @@ struct AppState {
     // A5: user->role-group directory surfaced over SCIM (id, email, groups). Loaded from
     // --scim-users JSON, or a demo default in the mocked-IdP dev setup.
     scim_users: Vec<(String, String, Vec<String>)>,
+    // C1 (HA): this replica's node id, and the current leadership view (is_leader, holder, token).
+    node_id: String,
+    lease_ttl_ms: i64,
+    lease: std::sync::Mutex<(bool, String, i64)>,
 }
 
 /// Optional control-plane RBAC. When present, mutating endpoints require a verified bearer token
@@ -50,6 +54,42 @@ struct Auth {
     jwks: std::sync::Arc<std::sync::RwLock<acp_auth::Jwks>>,
     cfg: acp_auth::EntraConfig,
     dev: Option<acp_auth::MockEntra>,
+}
+
+/// C1: report this replica's HA leadership view (is it the leader, who holds the lease, the fencing
+/// token). The console and ops can see which node is active without guessing.
+async fn leader_status(State(st): State<Arc<AppState>>) -> impl IntoResponse {
+    let (is_leader, holder, token) = st.lease.lock().unwrap().clone();
+    Json(serde_json::json!({"node": st.node_id, "leader": is_leader, "holder": holder, "token": token}))
+}
+
+/// C1: restore persisted liveness heartbeats and spike-event timestamps from the shared store into
+/// the in-memory detectors, so a restart does not lose the dead-man's-switch or the alert state.
+async fn restore_control_state(st: &Arc<AppState>, store: &acp_cpstore::ControlStore) {
+    // Liveness: one row per proxy ("liveness:{proxy}" -> ts), so replicas never clobber each other.
+    if let Ok(rows) = store.list_state_prefix("liveness:").await {
+        let mut live = st.liveness.lock().unwrap();
+        for (k, v) in rows {
+            if let (Some(proxy), Ok(ts)) = (k.strip_prefix("liveness:"), v.parse::<u64>()) {
+                live.heartbeat(proxy, ts);
+            }
+        }
+    }
+    // Spikes: one row per event ("spike:{kind}:{ts}"), append-only, replayed within the window.
+    let cutoff = now_ms() - 300_000;
+    if let Ok(rows) = store.list_state_prefix("spike:").await {
+        let mut spikes = st.spikes.lock().unwrap();
+        for (k, _) in rows {
+            let mut it = k.splitn(3, ':'); // "spike", kind, ts
+            let _ = it.next();
+            if let (Some(kind), Some(ts)) = (it.next(), it.next().and_then(|t| t.parse::<u64>().ok())) {
+                if ts >= cutoff {
+                    spikes.entry(kind.to_string()).or_insert_with(|| acp_core::anomaly::SpikeDetector::new(60_000, 10)).record(ts);
+                }
+            }
+        }
+    }
+    tracing::info!("restored control state (liveness + spike) from shared store");
 }
 
 /// A5: load the SCIM user directory (id, email, role groups) from a JSON file, or return a demo
@@ -144,6 +184,8 @@ async fn main() {
     let mut entra_audience: Option<String> = None;
     let mut report_token: Option<String> = std::env::var("ACP_REPORT_TOKEN").ok().filter(|s| !s.is_empty());
     let mut scim_users_path: Option<String> = None;
+    let mut node_id: Option<String> = None;
+    let mut lease_ttl_ms: i64 = 15_000;
     let mut it = args.iter().skip(1);
     while let Some(a) = it.next() {
         match a.as_str() {
@@ -158,6 +200,8 @@ async fn main() {
             "--store" => store_url = it.next().cloned(),
             "--report-token" => report_token = it.next().cloned(),
             "--scim-users" => scim_users_path = it.next().cloned(),
+            "--node-id" => node_id = it.next().cloned(),
+            "--lease-ttl-ms" => lease_ttl_ms = it.next().and_then(|v| v.parse().ok()).unwrap_or(15_000),
             "--cp-key" => { if let Some(v) = it.next() { cp_key = v.clone(); } }
             "--oidc-jwks" => oidc_jwks = it.next().cloned(),
             "--oidc-issuer" => oidc_issuer = it.next().cloned(),
@@ -332,7 +376,38 @@ async fn main() {
         report_token,
         events: std::sync::Mutex::new(std::collections::VecDeque::new()),
         scim_users: load_scim_users(scim_users_path.as_deref()),
+        node_id: node_id.unwrap_or_else(|| format!("node-{}", rand_hex(6))),
+        lease_ttl_ms,
+        lease: std::sync::Mutex::new((false, String::new(), 0)),
     });
+    // C1 (HA): restore persisted liveness/spike state so the dead-man's-switch and alert state survive
+    // a restart, then start the leader-lease loop (shared-store fencing prevents split-brain).
+    if let Some(store) = state.store.clone() {
+        restore_control_state(&state, &store).await;
+        let st2 = state.clone();
+        let node = st2.node_id.clone();
+        let ttl = st2.lease_ttl_ms.max(3000);
+        tracing::info!("HA leader lease active as node '{node}' (ttl {ttl}ms)");
+        tokio::spawn(async move {
+            let period = std::time::Duration::from_millis(((ttl / 3).max(1000)) as u64);
+            loop {
+                match store.try_acquire_leader(&node, now_ms() as i64, ttl).await {
+                    Ok((is_leader, holder, token)) => { *st2.lease.lock().unwrap() = (is_leader, holder, token); }
+                    Err(e) => tracing::warn!("leader lease error: {e}"),
+                }
+                // Prune spike-event keys older than the detection window so control_state stays bounded.
+                let cutoff = now_ms() as i64 - 300_000;
+                if let Ok(rows) = store.list_state_prefix("spike:").await {
+                    for (k, _) in rows {
+                        if let Some(ts) = k.rsplit(':').next().and_then(|t| t.parse::<i64>().ok()) {
+                            if ts < cutoff { let _ = store.delete_state(&k).await; }
+                        }
+                    }
+                }
+                tokio::time::sleep(period).await;
+            }
+        });
+    }
     let app = Router::new()
         .route("/", get(inbox))
         .route("/healthz", get(|| async { "ok" }))
@@ -383,6 +458,7 @@ async fn main() {
         .route("/break-glass", get(break_glass_status))
         .route("/break-glass/engage", post(break_glass_engage))
         .route("/break-glass/clear", post(break_glass_clear))
+        .route("/leader", get(leader_status))
         .route("/scim/v2/Users", get(scim_users))
         .route("/scim/v2/Groups", get(scim_groups))
         .route("/auth/dev-token", get(dev_token))
@@ -1652,7 +1728,13 @@ fn authorize_report(st: &AppState, headers: &HeaderMap) -> Result<(), Response> 
 /// B1: an enrolled proxy posts a heartbeat (and, implicitly, that it is serving governed traffic).
 async fn heartbeat(State(st): State<Arc<AppState>>, headers: HeaderMap, Path(proxy): Path<String>) -> Response {
     if let Err(r) = authorize_report(&st, &headers) { return r; }
-    st.liveness.lock().unwrap().heartbeat(&proxy, now_ms());
+    let ts = now_ms();
+    st.liveness.lock().unwrap().heartbeat(&proxy, ts);
+    // C1: persist one row per proxy so the dead-man's-switch survives a restart and replicas do not
+    // clobber each other's view.
+    if let Some(store) = &st.store {
+        let _ = store.put_state(&format!("liveness:{proxy}"), &ts.to_string(), ts as i64).await;
+    }
     Json(serde_json::json!({"ok": true, "proxy": proxy})).into_response()
 }
 
@@ -1662,11 +1744,17 @@ async fn record_event(State(st): State<Arc<AppState>>, headers: HeaderMap, Path(
     if let Err(r) = authorize_report(&st, &headers) { return r; }
     const WINDOW_MS: u64 = 60_000;
     const THRESHOLD: usize = 10; // >10 of one kind per minute trips
+    let now = now_ms();
     {
         let mut map = st.spikes.lock().unwrap();
         map.entry(kind.clone())
             .or_insert_with(|| acp_core::anomaly::SpikeDetector::new(WINDOW_MS, THRESHOLD))
-            .record(now_ms());
+            .record(now);
+    }
+    // C1: persist one append-only row per spike event so alert state survives a restart; old keys are
+    // pruned by the lease loop.
+    if let Some(store) = &st.store {
+        let _ = store.put_state(&format!("spike:{kind}:{now}"), "1", now as i64).await;
     }
     // Store a bounded, enriched copy for the console feed. The body never carries raw arguments.
     let mut ev = body.map(|Json(v)| v).unwrap_or_else(|| serde_json::json!({}));
