@@ -552,10 +552,6 @@ pub fn verdict_from(policy: &ContentPolicy, signals: &[Signal], text: &str) -> C
                 findings.push(ContentFinding { kind: s.detector.clone(), detail: s.label.clone() });
                 block = true;
             }
-            "toxicity" => {
-                findings.push(ContentFinding { kind: s.detector.clone(), detail: s.label.clone() });
-                block = true;
-            }
             "secret" => {
                 findings.push(ContentFinding { kind: s.detector.clone(), detail: s.label.clone() });
                 if policy.block_secrets {
