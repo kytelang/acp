@@ -127,7 +127,7 @@
     .modal input[type=file]{display:none}
   </style>
 </head>
-<body data-signals="{view: 'overview', endpoint: '', disposition: 'govern', appName: '', appOwner: '', agentAppId: '', agentName: '', grcKind: 'assessment', grcSubject: '', grcTitle: '', grcStatus: 'open', grcBody: '{}', grcLinks: '', asSubject: '', asTitle: '', asAssignee: '', as_prohibited_practice: 'false', as_safety_component: 'false', as_biometric_identification: 'false', as_critical_infrastructure: 'false', as_employment_or_education: 'false', as_essential_services: 'false', as_law_enforcement: 'false', as_interacts_with_humans: 'false', as_generates_content: 'false', modal: '', policyTab: 'deployed', fwEnabled: 'false', fwBlockSecrets: 'false', fwDenyTopics: '', fwModel: '', fwScanUrl: '', fwBlockOnScannerError: 'false', frMatchKind: 'host_contains', frMatchValue: '', frPath: '', frAction: 'block', frClassify: '', author: 'operator', epReason: 'sanctioned', mode: 'lockdown_all', scope: 'global', killReason: 'incident', ttl_ms: '3600000', reason: ''}">
+<body data-signals="{view: 'overview', endpoint: '', disposition: 'govern', appName: '', appOwner: '', agentAppId: '', agentName: '', agentOwner: '', agentDeps: '', modelName: '', modelProvider: '', modelVersion: '', vendorName: '', vendorRisk: '', grcKind: 'assessment', grcSubject: '', grcTitle: '', grcStatus: 'open', grcBody: '{}', grcLinks: '', asSubject: '', asTitle: '', asAssignee: '', as_prohibited_practice: 'false', as_safety_component: 'false', as_biometric_identification: 'false', as_critical_infrastructure: 'false', as_employment_or_education: 'false', as_essential_services: 'false', as_law_enforcement: 'false', as_interacts_with_humans: 'false', as_generates_content: 'false', modal: '', policyTab: 'deployed', fwEnabled: 'false', fwBlockSecrets: 'false', fwDenyTopics: '', fwModel: '', fwScanUrl: '', fwBlockOnScannerError: 'false', frMatchKind: 'host_contains', frMatchValue: '', frPath: '', frAction: 'block', frClassify: '', author: 'operator', epReason: 'sanctioned', mode: 'lockdown_all', scope: 'global', killReason: 'incident', ttl_ms: '3600000', reason: ''}">
   <div class="navbar">
     <div class="brand">
       <img class="logo" src="/varman-logo.svg" alt="Varman" />
@@ -150,6 +150,7 @@
         <div class="nav-l">Identity</div>
         <div class="nav-i" data-class-active="$view === 'apps'" data-on:click="$view = 'apps'"><span class="ic">&#128230;</span> Teams</div>
         <div class="nav-i" data-class-active="$view === 'agents'" data-on:click="$view = 'agents'"><span class="ic">&#129302;</span> Agents</div>
+        <div class="nav-i" data-class-active="$view === 'models'" data-on:click="$view = 'models'"><span class="ic">&#129520;</span> Models</div>
         <div class="nav-i" data-class-active="$view === 'endpoints'" data-on:click="$view = 'endpoints'"><span class="ic">&#127760;</span> AI Endpoints</div>
         <div class="nav-l">Policy</div>
         <div class="nav-i" data-class-active="$view === 'policy'" data-on:click="$view = 'policy'"><span class="ic">&#128271;</span> Policy</div>
@@ -165,7 +166,7 @@
 
     <div class="main">
       <div class="content" data-on-intersect="@get('/sse/metrics')">
-        <h1 class="page-title" data-text="$view === 'overview' ? 'Governance overview' : $view === 'approvals' ? 'Pending approvals' : $view === 'evidence' ? 'Evidence timeline' : $view === 'violations' ? 'Violations and breaches' : $view === 'apps' ? 'Teams' : $view === 'agents' ? 'Registered agents' : $view === 'policy' ? 'Policy' : $view === 'firewall' ? 'Content firewall' : $view === 'reports' ? 'Governance report' : $view === 'health' ? 'Control-plane integrity' : $view === 'endpoints' ? 'AI endpoints' : $view === 'grc' ? 'Governance records' : 'Emergency kill-switch'">Governance overview</h1>
+        <h1 class="page-title" data-text="$view === 'overview' ? 'Governance overview' : $view === 'approvals' ? 'Pending approvals' : $view === 'evidence' ? 'Evidence timeline' : $view === 'violations' ? 'Violations and breaches' : $view === 'apps' ? 'Teams' : $view === 'agents' ? 'Registered agents' : $view === 'models' ? 'Model registry' : $view === 'policy' ? 'Policy' : $view === 'firewall' ? 'Content firewall' : $view === 'reports' ? 'Governance report' : $view === 'health' ? 'Control-plane integrity' : $view === 'endpoints' ? 'AI endpoints' : $view === 'grc' ? 'Governance records' : 'Emergency kill-switch'">Governance overview</h1>
         <section class="view" data-show="$view === 'overview'">
           <div class="card"><div class="card-h"><span class="ic">&#128202;</span> Posture &amp; activity</div>
             <div class="card-b"><div id="metrics" class="stats"><p class="empty">connecting to acp-server&#8230;</p></div></div></div>
@@ -210,6 +211,13 @@
         <section class="view" data-show="$view === 'agents'">
           <div class="card"><div class="card-h"><span class="ic">&#129302;</span> Registered agents<button class="btn primary card-cta" data-on:click="$modal = 'agent'">+ Register agent</button></div>
             <div class="card-b"><div id="agents"><p class="empty">&#8230;</p></div></div></div>
+        </section>
+
+        <section class="view" data-show="$view === 'models'">
+          <div class="card"><div class="card-h"><span class="ic">&#129520;</span> Models<span class="sub">provider, version, admission scan and signed AI-BOM</span><button class="btn primary card-cta" data-on:click="$modal = 'model'">+ Register model</button></div>
+            <div class="card-b"><div id="models"><p class="empty">&#8230;</p></div></div></div>
+          <div class="card"><div class="card-h"><span class="ic">&#127970;</span> Vendors<span class="sub">third-party risk</span><button class="btn primary card-cta" data-on:click="$modal = 'vendor'">+ Add vendor</button></div>
+            <div class="card-b"><div id="vendors"><p class="empty">&#8230;</p></div></div></div>
         </section>
 
         <section class="view" data-show="$view === 'policy'">
@@ -347,11 +355,41 @@ rules:
       <p class="hint">An agent belongs to a team (app). Registering returns a one-time token; store it now, it is not shown again.</p>
       <label class="fld">App ID<span class="req">*</span> <input type="text" data-bind="agentAppId" placeholder="app-..." /></label>
       <label class="fld">Name<span class="req">*</span> <input type="text" data-bind="agentName" placeholder="coding-assistant" /></label>
+      <label class="fld">Owner <input type="text" data-bind="agentOwner" placeholder="asha (optional)" /></label>
+      <label class="fld">Dependencies <input type="text" data-bind="agentDeps" placeholder="kaidb, stripe (comma separated, optional)" /></label>
       <div class="row">
         <button class="btn primary" data-on:click="@post('/agents/register')">Register</button>
         <button class="btn" data-on:click="$modal = ''">Close</button>
       </div>
       <div class="deploystatus" id="agentresult"></div>
+    </div>
+  </div>
+
+  <div class="modal" data-show="$modal === 'model'">
+    <div class="modal-h"><span>&#10133; Register a model</span><button class="modal-close" data-on:click="$modal = ''">&times;</button></div>
+    <div class="modal-b">
+      <p class="hint">On registration the control plane runs the configured admission scanner and, on a clean verdict, stores a signed CycloneDX AI-BOM. A bad verdict is refused or flagged per the server config.</p>
+      <label class="fld">Name<span class="req">*</span> <input type="text" data-bind="modelName" placeholder="gpt-4o" /></label>
+      <label class="fld">Provider <input type="text" data-bind="modelProvider" placeholder="openai" /></label>
+      <label class="fld">Version <input type="text" data-bind="modelVersion" placeholder="2024-08" /></label>
+      <div class="row">
+        <button class="btn primary" data-on:click="@post('/models/create')">Register model</button>
+        <button class="btn" data-on:click="$modal = ''">Close</button>
+        <div class="deploystatus" id="modelresult"></div>
+      </div>
+    </div>
+  </div>
+
+  <div class="modal" data-show="$modal === 'vendor'">
+    <div class="modal-h"><span>&#10133; Add a vendor</span><button class="modal-close" data-on:click="$modal = ''">&times;</button></div>
+    <div class="modal-b">
+      <label class="fld">Name<span class="req">*</span> <input type="text" data-bind="vendorName" placeholder="OpenAI" /></label>
+      <label class="fld">Risk (JSON) <input type="text" data-bind="vendorRisk" placeholder='{"score":7,"tier":"high"}' /></label>
+      <div class="row">
+        <button class="btn primary" data-on:click="@post('/vendors/create')">Add vendor</button>
+        <button class="btn" data-on:click="$modal = ''">Close</button>
+        <div class="deploystatus" id="modelresult"></div>
+      </div>
     </div>
   </div>
 

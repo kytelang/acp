@@ -1,6 +1,7 @@
 import web.routing;
 import web.response;
 import serde.json;
+import string;
 import ds_response;
 import Features.Dashboard.Shared.acp_client;
 import Features.Dashboard.views.dashboard;
@@ -26,7 +27,21 @@ pub struct RegisterAgentHandler impl RouteHandler {
         let auth = ctx.request.headers.get("authorization") ?? "";
         let appId = json.stringField(ctx.request.body, "agentAppId");
         let name = json.stringField(ctx.request.body, "agentName");
-        let res = self.acp.registerAgent(appId, name, auth);
+        let owner = json.stringField(ctx.request.body, "agentOwner");
+        let deps = json.stringField(ctx.request.body, "agentDeps");
+        // deps is an optional comma-separated dependency list -> metadata_json {"deps":[...]}.
+        let meta = "{\"deps\":[";
+        let parts = string.split(deps, ",");
+        let n = 0;
+        for (p in 0..parts.size()) {
+            let d = string.trim(parts.get(p) ?? "");
+            if (string.eql(d, "")) { continue; }
+            if (n > 0) { meta = meta + ","; }
+            meta = meta + "\"" + d + "\"";
+            n = n + 1;
+        }
+        meta = meta + "]}";
+        let res = self.acp.registerAgent(appId, name, owner, meta, auth);
         return await ds_response.patch(agentRegisterResult(res));
     }
 }
@@ -42,5 +57,32 @@ pub struct DeactivateAgentHandler impl RouteHandler {
         let id = ctx.param("id");
         let _ = self.acp.deactivateAgent(id, auth);
         return await ds_response.patch(agentsPanel(self.acp.agentsRows()));
+    }
+}
+
+// A3: register a model in the registry (B3 admission scan runs server-side).
+pub struct RegisterModelHandler impl RouteHandler {
+    acp: AcpClient,
+    init(acp: AcpClient) { self.acp = acp; }
+    async fn serve(self: RegisterModelHandler, ctx: Context): Response {
+        let auth = ctx.request.headers.get("authorization") ?? "";
+        let name = json.stringField(ctx.request.body, "modelName");
+        let provider = json.stringField(ctx.request.body, "modelProvider");
+        let version = json.stringField(ctx.request.body, "modelVersion");
+        let res = self.acp.registerModel(name, provider, version, auth);
+        return await ds_response.patch(modelCreateResult(res));
+    }
+}
+
+// A3: record a vendor with a risk score.
+pub struct RegisterVendorHandler impl RouteHandler {
+    acp: AcpClient,
+    init(acp: AcpClient) { self.acp = acp; }
+    async fn serve(self: RegisterVendorHandler, ctx: Context): Response {
+        let auth = ctx.request.headers.get("authorization") ?? "";
+        let name = json.stringField(ctx.request.body, "vendorName");
+        let risk = json.stringField(ctx.request.body, "vendorRisk");
+        let res = self.acp.registerVendor(name, risk, auth);
+        return await ds_response.patch(modelCreateResult(res));
     }
 }

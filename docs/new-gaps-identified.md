@@ -74,7 +74,7 @@ signed doc); `POST /grc` accepts `linked_refs`; `GET /grc` reconciles each id vi
 comma-separated decision-id list; the record row shows "k/n linked decisions verified". Verified by
 live curl: one real + one fake id -> 1/2; zero refs -> 0/0; signature still verifies.
 
-### A3. Model + use-case + vendor registry richness (P2, M)
+### A3. Model + use-case + vendor registry richness (P2, M)  [DONE 2026-09-27]
 Gap: Credo/OneTrust have model registries with lineage, dependency graphs, agent cards, vendor risk.
 Design: `acp-cpstore` `models(id, name, provider, version, card_json, created_ms)`; extend
 `apps`/`agents` with `owner`, `metadata_json`; `vendors(id, name, risk_json)`. `acp-server` CRUD; a
@@ -84,7 +84,11 @@ Acceptance:
 - An agent/team shows its `owner` and `metadata_json` (dependencies) in the console.
 - A `model-card` GRC record can reference a `models` row and the link resolves.
 - A vendor entry with a risk score persists and lists.
-
+Status (2026-09-27): SHIPPED. cpstore `models`/`vendors` tables + `owner`/`metadata_json` on
+apps/agents; server `GET/POST /models`, `GET /models/:id`, `GET/POST /vendors`; agent/app register
+accept owner+metadata. Console Models page (list + scan badge + create), Vendors card, and agent
+Owner/Dependencies columns. Verified via curl: model create/list, vendor persist+list, agent owner+
+metadata round-trip.
 ### A4. Framework breadth + signed policy packs (P2, M) - part build, part content
 Gap: Credo ships continuously-updated policy packs across many frameworks/jurisdictions.
 Design: a signed pack format in `acp-core` (control library + framework mappings + policy templates),
@@ -167,7 +171,7 @@ Acceptance:
 - A groundedness obligation on a rule causes an ungrounded response to be flagged/blocked per the
   configured threshold.
 
-### B3. Model / artifact scanning admission (P2, M) - integrate + enforce
+### B3. Model / artifact scanning admission (P2, M) - integrate + enforce  [DONE 2026-09-27]
 Gap: Varman has only a supply-chain seam.
 Design: an admission gate on model/agent registration that calls a configured `scanner_url`, stores the
 verdict + a signed CycloneDX AI-BOM (`acp_core::aibom`), and refuses/flags on a bad verdict. Console:
@@ -177,7 +181,12 @@ Acceptance:
   the reason is recorded.
 - A "clean" verdict allows registration and stores a signed AI-BOM retrievable via the API.
 - The console Models page shows the scan-status badge.
-
+Status (2026-09-27): SHIPPED. `--model-scanner-url` + `--model-scan-block`; `model_register` calls
+the scanner, builds a `supplychain::Artifact` + `admit()` decision, and on a clean/flagged pass stores
+a signed CycloneDX AI-BOM (`acp_core::aibom`) in `models.aibom_json`; a bad verdict is refused (block)
+or flagged. Console Models page shows the scan badge; AI-BOM retrievable via `GET /models/:id`.
+Verified via curl against a mock scanner: clean -> registered + signed AI-BOM; "malicious" -> refused
+with the issues recorded.
 ### B4. Continuous red-teaming (P3, M)
 Gap: `acp redteam` is a one-shot gate.
 Design: a scheduled runner (external cron or a control-plane job) calling `acp redteam`, storing results

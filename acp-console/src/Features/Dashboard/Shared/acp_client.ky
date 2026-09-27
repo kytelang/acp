@@ -59,7 +59,30 @@ pub struct AgentRow {
     pub app: string,
     pub active: bool,
     pub id: string,
-    init(name: string, app: string, active: bool, id: string) { self.name = name; self.app = app; self.active = active; self.id = id; }
+    pub owner: string,
+    pub meta: string,
+    init(name: string, app: string, active: bool, id: string, owner: string, meta: string) {
+        self.name = name; self.app = app; self.active = active; self.id = id; self.owner = owner; self.meta = meta;
+    }
+}
+
+pub struct ModelRow {
+    pub id: string,
+    pub name: string,
+    pub provider: string,
+    pub version: string,
+    pub scanStatus: string,
+    pub hasBom: bool,
+    init(id: string, name: string, provider: string, version: string, scanStatus: string, hasBom: bool) {
+        self.id = id; self.name = name; self.provider = provider; self.version = version; self.scanStatus = scanStatus; self.hasBom = hasBom;
+    }
+}
+
+pub struct VendorRow {
+    pub id: string,
+    pub name: string,
+    pub risk: string,
+    init(id: string, name: string, risk: string) { self.id = id; self.name = name; self.risk = risk; }
 }
 
 pub struct EvidenceRow {
@@ -306,10 +329,78 @@ pub struct AcpClient {
                 json.asString(json.get(item, "name")) ?? "?",
                 appName,
                 json.asBool(json.get(item, "active")) ?? false,
-                json.asString(json.get(item, "id")) ?? ""));
+                json.asString(json.get(item, "id")) ?? "",
+                json.asString(json.get(item, "owner")) ?? "",
+                json.asString(json.get(item, "metadata_json")) ?? "{}"));
             i = i + 1;
         }
         return rows;
+    }
+
+    // A3: registered models (with B3 scan status).
+    pub fn modelRows(self: AcpClient): list.List<ModelRow> {
+        let rows = list.List<ModelRow>();
+        let resp = client.Http.get(self.base + "/models");
+        if (resp.status.toCode() != 200) { return rows; }
+        let mv = json.get(json.parse(resp.body), "models");
+        let arr = json.asArray(mv);
+        if (arr == undefined) { return rows; }
+        let i = 0;
+        while (i < arr.size()) {
+            let m = json.at(mv, i);
+            rows.push(ModelRow(
+                json.asString(json.get(m, "id")) ?? "",
+                json.asString(json.get(m, "name")) ?? "",
+                json.asString(json.get(m, "provider")) ?? "",
+                json.asString(json.get(m, "version")) ?? "",
+                json.asString(json.get(m, "scan_status")) ?? "unscanned",
+                !string.eql(json.asString(json.get(m, "aibom_json")) ?? "", "")));
+            i = i + 1;
+        }
+        return rows;
+    }
+    pub fn registerModel(self: AcpClient, name: string, provider: string, version: string, userAuth: string): DeployResult {
+        let body = "{\"name\":" + self.jstr(name) + ",\"provider\":" + self.jstr(provider) + ",\"version\":" + self.jstr(version) + "}";
+        let hdrs = client.Http.emptyHeaders();
+        hdrs.set("Content-Type", "application/json");
+        if (!string.eql(userAuth, "")) { hdrs.set("Authorization", userAuth); }
+        else { let tok = self.authToken("AppRegistrar"); if (!string.eql(tok, "")) { hdrs.set("Authorization", "Bearer " + tok); } }
+        let resp = client.Http.request("POST", self.base + "/models", hdrs, body);
+        if (resp.status.toCode() != 200) { return DeployResult(false, "acp-server unreachable"); }
+        let v = json.parse(resp.body);
+        if (!(json.asBool(json.get(v, "ok")) ?? false)) { return DeployResult(false, json.asString(json.get(v, "error")) ?? "rejected"); }
+        return DeployResult(true, "registered " + name + " (scan: " + (json.asString(json.get(v, "scan_status")) ?? "?") + ")");
+    }
+    pub fn vendorRows(self: AcpClient): list.List<VendorRow> {
+        let rows = list.List<VendorRow>();
+        let resp = client.Http.get(self.base + "/vendors");
+        if (resp.status.toCode() != 200) { return rows; }
+        let vv = json.get(json.parse(resp.body), "vendors");
+        let arr = json.asArray(vv);
+        if (arr == undefined) { return rows; }
+        let i = 0;
+        while (i < arr.size()) {
+            let x = json.at(vv, i);
+            rows.push(VendorRow(
+                json.asString(json.get(x, "id")) ?? "",
+                json.asString(json.get(x, "name")) ?? "",
+                json.asString(json.get(x, "risk_json")) ?? "{}"));
+            i = i + 1;
+        }
+        return rows;
+    }
+    pub fn registerVendor(self: AcpClient, name: string, risk: string, userAuth: string): DeployResult {
+        let r = string.eql(risk, "") ? "{}" : risk;
+        let body = "{\"name\":" + self.jstr(name) + ",\"risk\":" + r + "}";
+        let hdrs = client.Http.emptyHeaders();
+        hdrs.set("Content-Type", "application/json");
+        if (!string.eql(userAuth, "")) { hdrs.set("Authorization", userAuth); }
+        else { let tok = self.authToken("AppRegistrar"); if (!string.eql(tok, "")) { hdrs.set("Authorization", "Bearer " + tok); } }
+        let resp = client.Http.request("POST", self.base + "/vendors", hdrs, body);
+        if (resp.status.toCode() != 200) { return DeployResult(false, "acp-server unreachable"); }
+        let v = json.parse(resp.body);
+        if (!(json.asBool(json.get(v, "ok")) ?? false)) { return DeployResult(false, json.asString(json.get(v, "error")) ?? "rejected"); }
+        return DeployResult(true, "vendor " + name + " added");
     }
 
     pub fn policyVersion(self: AcpClient): string {
@@ -755,8 +846,9 @@ pub struct AcpClient {
     }
 
     // Register an agent under an app. Returns the one-time token in the message (shown once).
-    pub fn registerAgent(self: AcpClient, appId: string, name: string, userAuth: string): DeployResult {
-        let body = "{\"app_id\":" + self.jstr(appId) + ",\"name\":" + self.jstr(name) + "}";
+    pub fn registerAgent(self: AcpClient, appId: string, name: string, owner: string, metadata: string, userAuth: string): DeployResult {
+        let meta = string.eql(metadata, "") ? "{}" : metadata;
+        let body = "{\"app_id\":" + self.jstr(appId) + ",\"name\":" + self.jstr(name) + ",\"owner\":" + self.jstr(owner) + ",\"metadata\":" + meta + "}";
         let hdrs = client.Http.emptyHeaders();
         hdrs.set("Content-Type", "application/json");
         if (!string.eql(userAuth, "")) { hdrs.set("Authorization", userAuth); }

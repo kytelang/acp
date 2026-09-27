@@ -15,6 +15,7 @@ pub struct App {
     pub id: String,
     pub name: String,
     pub owner: String,
+    pub metadata_json: String,
     pub created_ms: i64,
 }
 
@@ -23,7 +24,29 @@ pub struct Agent {
     pub id: String,
     pub app_id: String,
     pub name: String,
+    pub owner: String,
+    pub metadata_json: String,
     pub active: bool,
+    pub created_ms: i64,
+}
+
+#[derive(Debug, Clone, Serialize)]
+pub struct Model {
+    pub id: String,
+    pub name: String,
+    pub provider: String,
+    pub version: String,
+    pub card_json: String,
+    pub scan_status: String,
+    pub aibom_json: String,
+    pub created_ms: i64,
+}
+
+#[derive(Debug, Clone, Serialize)]
+pub struct Vendor {
+    pub id: String,
+    pub name: String,
+    pub risk_json: String,
     pub created_ms: i64,
 }
 
@@ -150,8 +173,10 @@ impl ControlStore {
 
     async fn migrate(&self) -> Result<(), String> {
         for ddl in [
-            "CREATE TABLE IF NOT EXISTS apps (id VARCHAR(255) PRIMARY KEY, name TEXT NOT NULL, owner TEXT NOT NULL, created_ms BIGINT NOT NULL)",
-            "CREATE TABLE IF NOT EXISTS agents (id VARCHAR(255) PRIMARY KEY, app_id TEXT NOT NULL, name TEXT NOT NULL, token_sha256 TEXT NOT NULL, active INTEGER NOT NULL, created_ms BIGINT NOT NULL)",
+            "CREATE TABLE IF NOT EXISTS apps (id VARCHAR(255) PRIMARY KEY, name TEXT NOT NULL, owner TEXT NOT NULL, metadata_json TEXT NOT NULL DEFAULT '{}', created_ms BIGINT NOT NULL)",
+            "CREATE TABLE IF NOT EXISTS agents (id VARCHAR(255) PRIMARY KEY, app_id TEXT NOT NULL, name TEXT NOT NULL, token_sha256 TEXT NOT NULL, active INTEGER NOT NULL, owner TEXT NOT NULL DEFAULT '', metadata_json TEXT NOT NULL DEFAULT '{}', created_ms BIGINT NOT NULL)",
+            "CREATE TABLE IF NOT EXISTS models (id VARCHAR(255) PRIMARY KEY, name TEXT NOT NULL, provider TEXT NOT NULL, version TEXT NOT NULL, card_json TEXT NOT NULL DEFAULT '{}', scan_status TEXT NOT NULL DEFAULT 'unscanned', aibom_json TEXT NOT NULL DEFAULT '', created_ms BIGINT NOT NULL)",
+            "CREATE TABLE IF NOT EXISTS vendors (id VARCHAR(255) PRIMARY KEY, name TEXT NOT NULL, risk_json TEXT NOT NULL DEFAULT '{}', created_ms BIGINT NOT NULL)",
             "CREATE TABLE IF NOT EXISTS endpoints (endpoint VARCHAR(255) PRIMARY KEY, kind TEXT NOT NULL, provider TEXT NOT NULL, disposition TEXT NOT NULL, operator TEXT NOT NULL, reason TEXT NOT NULL, decided_ms BIGINT NOT NULL, expires_ms BIGINT NOT NULL, pubkey_hex TEXT NOT NULL, sig_hex TEXT NOT NULL)",
             "CREATE TABLE IF NOT EXISTS grc_records (id VARCHAR(255) PRIMARY KEY, kind TEXT NOT NULL, subject TEXT NOT NULL, title TEXT NOT NULL, status TEXT NOT NULL, body TEXT NOT NULL, operator TEXT NOT NULL, created_ms BIGINT NOT NULL, pubkey_hex TEXT NOT NULL, sig_hex TEXT NOT NULL, linked_refs TEXT NOT NULL DEFAULT '[]', answers_json TEXT NOT NULL DEFAULT '{}', assignee TEXT NOT NULL DEFAULT '', due_ms BIGINT NOT NULL DEFAULT 0, stage TEXT NOT NULL DEFAULT '')",
             "CREATE TABLE IF NOT EXISTS ingested_evidence (decision_id VARCHAR(255) PRIMARY KEY, pep TEXT NOT NULL, kind TEXT NOT NULL, verdict TEXT NOT NULL, record TEXT NOT NULL, operator TEXT NOT NULL, created_ms BIGINT NOT NULL, pubkey_hex TEXT NOT NULL, sig_hex TEXT NOT NULL)",
@@ -167,15 +192,15 @@ impl ControlStore {
     }
 
     // ---- apps ----
-    pub async fn add_app(&self, id: &str, name: &str, owner: &str, now_ms: i64) -> Result<(), String> {
-        let sql = self.ph("INSERT INTO apps (id, name, owner, created_ms) VALUES (?, ?, ?, ?)");
-        sqlx::query(&sql).bind(id).bind(name).bind(owner).bind(now_ms)
+    pub async fn add_app(&self, id: &str, name: &str, owner: &str, metadata_json: &str, now_ms: i64) -> Result<(), String> {
+        let sql = self.ph("INSERT INTO apps (id, name, owner, metadata_json, created_ms) VALUES (?, ?, ?, ?, ?)");
+        sqlx::query(&sql).bind(id).bind(name).bind(owner).bind(metadata_json).bind(now_ms)
             .execute(&self.pool).await.map_err(|e| e.to_string())?;
         Ok(())
     }
 
     pub async fn list_apps(&self) -> Result<Vec<App>, String> {
-        let rows = sqlx::query("SELECT id, name, owner, created_ms FROM apps ORDER BY created_ms")
+        let rows = sqlx::query("SELECT id, name, owner, metadata_json, created_ms FROM apps ORDER BY created_ms")
             .fetch_all(&self.pool)
             .await
             .map_err(|e| e.to_string())?;
@@ -185,15 +210,17 @@ impl ControlStore {
                 id: r.get("id"),
                 name: r.get("name"),
                 owner: r.get("owner"),
+                metadata_json: r.get("metadata_json"),
                 created_ms: r.get("created_ms"),
             })
             .collect())
     }
 
     // ---- agents ----
-    pub async fn add_agent(&self, id: &str, app_id: &str, name: &str, token_sha256: &str, now_ms: i64) -> Result<(), String> {
-        let sql = self.ph("INSERT INTO agents (id, app_id, name, token_sha256, active, created_ms) VALUES (?, ?, ?, ?, 1, ?)");
-        sqlx::query(&sql).bind(id).bind(app_id).bind(name).bind(token_sha256).bind(now_ms)
+    #[allow(clippy::too_many_arguments)]
+    pub async fn add_agent(&self, id: &str, app_id: &str, name: &str, token_sha256: &str, owner: &str, metadata_json: &str, now_ms: i64) -> Result<(), String> {
+        let sql = self.ph("INSERT INTO agents (id, app_id, name, token_sha256, active, owner, metadata_json, created_ms) VALUES (?, ?, ?, ?, 1, ?, ?, ?)");
+        sqlx::query(&sql).bind(id).bind(app_id).bind(name).bind(token_sha256).bind(owner).bind(metadata_json).bind(now_ms)
             .execute(&self.pool).await.map_err(|e| e.to_string())?;
         Ok(())
     }
@@ -205,7 +232,7 @@ impl ControlStore {
     }
 
     pub async fn list_agents(&self) -> Result<Vec<Agent>, String> {
-        let rows = sqlx::query("SELECT id, app_id, name, active, created_ms FROM agents ORDER BY created_ms")
+        let rows = sqlx::query("SELECT id, app_id, name, owner, metadata_json, active, created_ms FROM agents ORDER BY created_ms")
             .fetch_all(&self.pool)
             .await
             .map_err(|e| e.to_string())?;
@@ -215,10 +242,52 @@ impl ControlStore {
                 id: r.get("id"),
                 app_id: r.get("app_id"),
                 name: r.get("name"),
+                owner: r.get("owner"),
+                metadata_json: r.get("metadata_json"),
                 active: r.get::<i32, _>("active") != 0,
                 created_ms: r.get("created_ms"),
             })
             .collect())
+    }
+
+    // ---- A3: model registry ----
+    #[allow(clippy::too_many_arguments)]
+    pub async fn add_model(&self, id: &str, name: &str, provider: &str, version: &str, card_json: &str, scan_status: &str, aibom_json: &str, now_ms: i64) -> Result<(), String> {
+        let sql = self.ph("INSERT INTO models (id, name, provider, version, card_json, scan_status, aibom_json, created_ms) VALUES (?, ?, ?, ?, ?, ?, ?, ?)");
+        sqlx::query(&sql).bind(id).bind(name).bind(provider).bind(version).bind(card_json).bind(scan_status).bind(aibom_json).bind(now_ms)
+            .execute(&self.pool).await.map_err(|e| e.to_string())?;
+        Ok(())
+    }
+    pub async fn list_models(&self) -> Result<Vec<Model>, String> {
+        let rows = sqlx::query("SELECT id, name, provider, version, card_json, scan_status, aibom_json, created_ms FROM models ORDER BY created_ms")
+            .fetch_all(&self.pool).await.map_err(|e| e.to_string())?;
+        Ok(rows.iter().map(|r| Model {
+            id: r.get("id"), name: r.get("name"), provider: r.get("provider"), version: r.get("version"),
+            card_json: r.get("card_json"), scan_status: r.get("scan_status"), aibom_json: r.get("aibom_json"), created_ms: r.get("created_ms"),
+        }).collect())
+    }
+    pub async fn get_model(&self, id: &str) -> Result<Option<Model>, String> {
+        let sql = self.ph("SELECT id, name, provider, version, card_json, scan_status, aibom_json, created_ms FROM models WHERE id = ?");
+        let row = sqlx::query(&sql).bind(id).fetch_optional(&self.pool).await.map_err(|e| e.to_string())?;
+        Ok(row.map(|r| Model {
+            id: r.get("id"), name: r.get("name"), provider: r.get("provider"), version: r.get("version"),
+            card_json: r.get("card_json"), scan_status: r.get("scan_status"), aibom_json: r.get("aibom_json"), created_ms: r.get("created_ms"),
+        }))
+    }
+
+    // ---- A3: vendor registry ----
+    pub async fn add_vendor(&self, id: &str, name: &str, risk_json: &str, now_ms: i64) -> Result<(), String> {
+        let sql = self.ph("INSERT INTO vendors (id, name, risk_json, created_ms) VALUES (?, ?, ?, ?)");
+        sqlx::query(&sql).bind(id).bind(name).bind(risk_json).bind(now_ms)
+            .execute(&self.pool).await.map_err(|e| e.to_string())?;
+        Ok(())
+    }
+    pub async fn list_vendors(&self) -> Result<Vec<Vendor>, String> {
+        let rows = sqlx::query("SELECT id, name, risk_json, created_ms FROM vendors ORDER BY created_ms")
+            .fetch_all(&self.pool).await.map_err(|e| e.to_string())?;
+        Ok(rows.iter().map(|r| Vendor {
+            id: r.get("id"), name: r.get("name"), risk_json: r.get("risk_json"), created_ms: r.get("created_ms"),
+        }).collect())
     }
 
     /// Verify an agent by token hash and return its display identity (agent name, app id, app name)
@@ -552,9 +621,9 @@ mod tests {
 
     async fn check(url: &str) {
         let s = ControlStore::connect(url).await.expect("connect");
-        s.add_app("app-1", "acme", "you", 1000).await.unwrap();
+        s.add_app("app-1", "acme", "you", "{}", 1000).await.unwrap();
         assert_eq!(s.list_apps().await.unwrap().len(), 1);
-        s.add_agent("agt-1", "app-1", "asst", "deadbeef", 1001).await.unwrap();
+        s.add_agent("agt-1", "app-1", "asst", "deadbeef", "you", "{\"deps\":[]}", 1001).await.unwrap();
         assert!(s.verify_agent("agt-1", "deadbeef").await.unwrap());
         assert!(!s.verify_agent("agt-1", "wrong").await.unwrap());
         s.deactivate_agent("agt-1").await.unwrap();

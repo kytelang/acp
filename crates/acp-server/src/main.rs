@@ -44,6 +44,10 @@ struct AppState {
     // C1 (HA): this replica's node id, and the current leadership view (is_leader, holder, token).
     node_id: String,
     lease_ttl_ms: i64,
+    // B3: optional model/artifact admission scanner. When set, model registration calls it and
+    // refuses (block) or flags (default) on a bad verdict, storing a signed AI-BOM on a clean pass.
+    model_scanner_url: Option<String>,
+    model_scan_block: bool,
     lease: std::sync::Mutex<(bool, String, i64)>,
 }
 
@@ -54,6 +58,117 @@ struct Auth {
     jwks: std::sync::Arc<std::sync::RwLock<acp_auth::Jwks>>,
     cfg: acp_auth::EntraConfig,
     dev: Option<acp_auth::MockEntra>,
+}
+
+/// B3: run the model/artifact admission scanner (if configured) and produce a scan status and, on a
+/// clean pass, a signed CycloneDX AI-BOM. Returns (scan_status, aibom_json, refused). With no scanner
+/// configured the model is stored "unscanned" and not refused. On a bad verdict, the model is refused
+/// when --model-scan-block is set, else flagged (stored with the finding recorded in the AI-BOM).
+async fn admission_scan(st: &Arc<AppState>, name: &str, provider: &str, version: &str) -> (String, String, bool) {
+    let url = match &st.model_scanner_url { Some(u) => u.clone(), None => return ("unscanned".to_string(), String::new(), false) };
+    let client = reqwest::Client::new();
+    let req = serde_json::json!({"name": name, "provider": provider, "version": version});
+    let verdict = match client.post(&url).json(&req).send().await {
+        Ok(resp) => resp.json::<serde_json::Value>().await.ok(),
+        Err(_) => None,
+    };
+    let (scan, issues): (acp_core::supplychain::ScanVerdict, Vec<String>) = match &verdict {
+        Some(v) => {
+            let vs = v.get("verdict").and_then(|x| x.as_str()).unwrap_or("");
+            let issues: Vec<String> = v.get("issues").and_then(|x| x.as_array())
+                .map(|a| a.iter().filter_map(|i| i.as_str().map(|s| s.to_string())).collect()).unwrap_or_default();
+            match vs {
+                "clean" => (acp_core::supplychain::ScanVerdict::Clean, issues),
+                "" => (acp_core::supplychain::ScanVerdict::Unscanned, issues),
+                _ => (acp_core::supplychain::ScanVerdict::Findings { issues: if issues.is_empty() { vec![vs.to_string()] } else { issues.clone() } }, issues),
+            }
+        }
+        None => {
+            // Scanner unreachable: fail closed only when blocking is on.
+            return ("scanner-error".to_string(), String::new(), st.model_scan_block);
+        }
+    };
+    // Provenance digest so the AI-BOM admission is not denied for lack of a digest.
+    let digest = acp_core::canonical::sha256_hex_bytes(format!("{name}:{provider}:{version}").as_bytes());
+    let artifact = acp_core::supplychain::Artifact {
+        kind: "model-class".to_string(), name: name.to_string(), digest, source: provider.to_string(),
+        publisher: provider.to_string(), signature: None,
+    };
+    let admission = acp_core::supplychain::admit(&artifact, &scan, true, true);
+    let refused = !admission.admitted() && st.model_scan_block;
+    let scan_status = match &scan {
+        acp_core::supplychain::ScanVerdict::Clean => "clean".to_string(),
+        acp_core::supplychain::ScanVerdict::Unscanned => "unscanned".to_string(),
+        acp_core::supplychain::ScanVerdict::Findings { issues } => format!("findings: {}", issues.join(", ")),
+    };
+    if refused {
+        return (scan_status, String::new(), true);
+    }
+    // Store a signed AI-BOM for the registered model (clean or flagged).
+    let bom = acp_core::aibom::AiBom {
+        generated_ms: now_ms(),
+        entries: vec![acp_core::aibom::BomEntry { artifact, scan, admission, integrity_pin: None, policy_in_force: None }],
+    };
+    let signer = enroll_signer(&st.cp_key);
+    let signed = bom.sign(&signer);
+    let aibom_json = serde_json::to_string(&signed).unwrap_or_default();
+    (scan_status, aibom_json, false)
+}
+
+/// A3: register a model in the registry (provider, version, card). B3 later wires an admission scan;
+/// here the scan_status defaults to "unscanned".
+async fn model_register(State(st): State<Arc<AppState>>, headers: HeaderMap, Json(body): Json<serde_json::Value>) -> Response {
+    if let Err(r) = authorize(&st.auth, &headers, acp_auth::Capability::RegisterApp) { return r; }
+    let store = match &st.store { Some(s) => s, None => return Json(serde_json::json!({"ok": false, "error": "no --store configured"})).into_response() };
+    let name = body.get("name").and_then(|v| v.as_str()).unwrap_or("").trim().to_string();
+    if name.is_empty() { return Json(serde_json::json!({"ok": false, "error": "name is required"})).into_response(); }
+    let provider = body.get("provider").and_then(|v| v.as_str()).unwrap_or("").to_string();
+    let version = body.get("version").and_then(|v| v.as_str()).unwrap_or("").to_string();
+    let card = body.get("card").map(|v| v.to_string()).unwrap_or_else(|| "{}".to_string());
+    let id = format!("mdl-{}", rand_hex(6));
+    // B3: run the admission scanner (if configured) before storing; refuse/flag per config.
+    let (scan_status, aibom, refused) = admission_scan(&st, &name, &provider, &version).await;
+    if refused {
+        return Json(serde_json::json!({"ok": false, "error": format!("model refused by admission scan: {scan_status}"), "scan_status": scan_status})).into_response();
+    }
+    match store.add_model(&id, &name, &provider, &version, &card, &scan_status, &aibom, now_ms() as i64).await {
+        Ok(()) => Json(serde_json::json!({"ok": true, "id": id, "name": name, "scan_status": scan_status})).into_response(),
+        Err(e) => Json(serde_json::json!({"ok": false, "error": e})).into_response(),
+    }
+}
+async fn models_list(State(st): State<Arc<AppState>>) -> Response {
+    let store = match &st.store { Some(s) => s, None => return Json(serde_json::json!({"models": []})).into_response() };
+    match store.list_models().await {
+        Ok(ms) => Json(serde_json::json!({"models": ms})).into_response(),
+        Err(e) => Json(serde_json::json!({"models": [], "error": e})).into_response(),
+    }
+}
+async fn model_get(State(st): State<Arc<AppState>>, Path(id): Path<String>) -> Response {
+    let store = match &st.store { Some(s) => s, None => return Json(serde_json::json!({"error": "no --store configured"})).into_response() };
+    match store.get_model(&id).await {
+        Ok(Some(m)) => Json(serde_json::json!(m)).into_response(),
+        Ok(None) => (StatusCode::NOT_FOUND, Json(serde_json::json!({"error": "no such model"}))).into_response(),
+        Err(e) => Json(serde_json::json!({"error": e})).into_response(),
+    }
+}
+async fn vendor_register(State(st): State<Arc<AppState>>, headers: HeaderMap, Json(body): Json<serde_json::Value>) -> Response {
+    if let Err(r) = authorize(&st.auth, &headers, acp_auth::Capability::RegisterApp) { return r; }
+    let store = match &st.store { Some(s) => s, None => return Json(serde_json::json!({"ok": false, "error": "no --store configured"})).into_response() };
+    let name = body.get("name").and_then(|v| v.as_str()).unwrap_or("").trim().to_string();
+    if name.is_empty() { return Json(serde_json::json!({"ok": false, "error": "name is required"})).into_response(); }
+    let risk = body.get("risk").map(|v| v.to_string()).unwrap_or_else(|| "{}".to_string());
+    let id = format!("vnd-{}", rand_hex(6));
+    match store.add_vendor(&id, &name, &risk, now_ms() as i64).await {
+        Ok(()) => Json(serde_json::json!({"ok": true, "id": id, "name": name})).into_response(),
+        Err(e) => Json(serde_json::json!({"ok": false, "error": e})).into_response(),
+    }
+}
+async fn vendors_list(State(st): State<Arc<AppState>>) -> Response {
+    let store = match &st.store { Some(s) => s, None => return Json(serde_json::json!({"vendors": []})).into_response() };
+    match store.list_vendors().await {
+        Ok(vs) => Json(serde_json::json!({"vendors": vs})).into_response(),
+        Err(e) => Json(serde_json::json!({"vendors": [], "error": e})).into_response(),
+    }
 }
 
 /// C1: report this replica's HA leadership view (is it the leader, who holds the lease, the fencing
@@ -184,6 +299,8 @@ async fn main() {
     let mut entra_audience: Option<String> = None;
     let mut report_token: Option<String> = std::env::var("ACP_REPORT_TOKEN").ok().filter(|s| !s.is_empty());
     let mut scim_users_path: Option<String> = None;
+    let mut model_scanner_url: Option<String> = None;
+    let mut model_scan_block = false;
     let mut node_id: Option<String> = None;
     let mut lease_ttl_ms: i64 = 15_000;
     let mut it = args.iter().skip(1);
@@ -200,6 +317,8 @@ async fn main() {
             "--store" => store_url = it.next().cloned(),
             "--report-token" => report_token = it.next().cloned(),
             "--scim-users" => scim_users_path = it.next().cloned(),
+            "--model-scanner-url" => model_scanner_url = it.next().cloned(),
+            "--model-scan-block" => model_scan_block = true,
             "--node-id" => node_id = it.next().cloned(),
             "--lease-ttl-ms" => lease_ttl_ms = it.next().and_then(|v| v.parse().ok()).unwrap_or(15_000),
             "--cp-key" => { if let Some(v) = it.next() { cp_key = v.clone(); } }
@@ -378,6 +497,8 @@ async fn main() {
         scim_users: load_scim_users(scim_users_path.as_deref()),
         node_id: node_id.unwrap_or_else(|| format!("node-{}", rand_hex(6))),
         lease_ttl_ms,
+        model_scanner_url,
+        model_scan_block,
         lease: std::sync::Mutex::new((false, String::new(), 0)),
     });
     // C1 (HA): restore persisted liveness/spike state so the dead-man's-switch and alert state survive
@@ -458,6 +579,9 @@ async fn main() {
         .route("/break-glass", get(break_glass_status))
         .route("/break-glass/engage", post(break_glass_engage))
         .route("/break-glass/clear", post(break_glass_clear))
+        .route("/models", get(models_list).post(model_register))
+        .route("/models/:id", get(model_get))
+        .route("/vendors", get(vendors_list).post(vendor_register))
         .route("/leader", get(leader_status))
         .route("/scim/v2/Users", get(scim_users))
         .route("/scim/v2/Groups", get(scim_groups))
@@ -1167,8 +1291,9 @@ async fn app_register(State(st): State<Arc<AppState>>, headers: HeaderMap, Json(
     let name = body.get("name").and_then(|v| v.as_str()).unwrap_or("").trim().to_string();
     if name.is_empty() { return Json(serde_json::json!({"ok": false, "error": "name is required"})).into_response(); }
     let owner = body.get("owner").and_then(|v| v.as_str()).unwrap_or("").to_string();
+    let metadata = body.get("metadata").map(|v| v.to_string()).unwrap_or_else(|| "{}".to_string());
     let id = format!("app-{}", rand_hex(6));
-    match store.add_app(&id, &name, &owner, now_ms() as i64).await {
+    match store.add_app(&id, &name, &owner, &metadata, now_ms() as i64).await {
         Ok(()) => Json(serde_json::json!({"ok": true, "id": id, "name": name})).into_response(),
         Err(e) => Json(serde_json::json!({"ok": false, "error": e})).into_response(),
     }
@@ -1181,10 +1306,12 @@ async fn agent_register(State(st): State<Arc<AppState>>, headers: HeaderMap, Jso
     let app_id = body.get("app_id").and_then(|v| v.as_str()).unwrap_or("").trim().to_string();
     let name = body.get("name").and_then(|v| v.as_str()).unwrap_or("").trim().to_string();
     if app_id.is_empty() || name.is_empty() { return Json(serde_json::json!({"ok": false, "error": "app_id and name are required"})).into_response(); }
+    let owner = body.get("owner").and_then(|v| v.as_str()).unwrap_or("").to_string();
+    let metadata = body.get("metadata").map(|v| v.to_string()).unwrap_or_else(|| "{}".to_string());
     let id = format!("agt-{}", rand_hex(6));
     let token = rand_hex(24);
     let token_sha = acp_core::canonical::sha256_hex_bytes(token.as_bytes());
-    match store.add_agent(&id, &app_id, &name, &token_sha, now_ms() as i64).await {
+    match store.add_agent(&id, &app_id, &name, &token_sha, &owner, &metadata, now_ms() as i64).await {
         Ok(()) => Json(serde_json::json!({"ok": true, "id": id, "token": token, "note": "store this token now; it is not shown again"})).into_response(),
         Err(e) => Json(serde_json::json!({"ok": false, "error": e})).into_response(),
     }
