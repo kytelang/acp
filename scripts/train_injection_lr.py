@@ -3,7 +3,7 @@
 Exports model.json {dim, bias, weights[dim]} for the Rust LinearScorer. Featurisation MUST match
 acp_core::content::features exactly: lowercase, [a-z0-9]+ tokens, word uni+bi-grams, FNV-1a % dim,
 binary presence."""
-import json, math, re, sys
+import json, math, os, re, sys
 
 DIM = 4096
 
@@ -82,6 +82,29 @@ NEG = [
 ]
 
 data = [(t,1) for t in POS] + [(t,0) for t in NEG]
+
+# R2: also train from the grown labelled corpus when present. For the injection detector, "injection"
+# is positive; "benign" and "pii" text are negative (pii is a separate detector, not injection).
+CORPUS = os.environ.get("ACP_CORPUS", "crates/acp-core/corpus/detection-corpus.jsonl")
+if os.path.exists(CORPUS):
+    n_added = 0
+    for line in open(CORPUS):
+        line = line.strip()
+        if not line:
+            continue
+        d = json.loads(line)
+        label = d.get("label", "")
+        text = d.get("text", "")
+        if not text:
+            continue
+        if label == "injection":
+            data.append((text, 1)); n_added += 1
+        elif label in ("benign", "pii"):
+            data.append((text, 0)); n_added += 1
+    print(f"loaded {n_added} corpus examples from {CORPUS}", file=sys.stderr)
+else:
+    print(f"corpus {CORPUS} not found; training on the inline seed only", file=sys.stderr)
+
 feats = [(features(t), y) for t,y in data]
 
 w = [0.0]*DIM

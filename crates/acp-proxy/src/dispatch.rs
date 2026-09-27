@@ -1372,3 +1372,108 @@ mod media_scan_tests {
         assert!(out.is_empty());
     }
 }
+
+#[cfg(test)]
+mod scan_hook_conformance {
+    //! R2: the external scan-hook is a versioned, vendor-neutral contract (see
+    //! `docs/scan-hook-contract.md`). This is the conformance suite: a mock scanner that speaks the
+    //! contract, driven through the real Controller hook. Any adapter that satisfies these cases is a
+    //! drop-in. The mock decides purely from the request body, exactly as a real vendor adapter would.
+    use super::*;
+
+    fn controller() -> Controller {
+        let engine = Arc::new(PolicyEngine::from_yaml("version: 1\ndefault: allow\nrules: []\n").unwrap());
+        Controller::new(Some(engine), "prod".to_string(), false, None, None, vec![], false, ImpactTaxonomy::default())
+    }
+
+    /// A conformance-mock scanner. Contract:
+    /// - modality image/audio: block.
+    /// - text containing "BLOCKME": block.
+    /// - text containing "REDACTME": pass with redactions "[REDACTED]".
+    /// - text containing "ERRORME": reply with a non-JSON body (a scanner error).
+    /// - otherwise: pass.
+    /// Returns the bound "http://127.0.0.1:PORT/scan" URL. Runs on a daemon thread for the test.
+    fn start_mock_scanner() -> String {
+        use std::io::{Read, Write};
+        let listener = std::net::TcpListener::bind("127.0.0.1:0").unwrap();
+        let port = listener.local_addr().unwrap().port();
+        std::thread::spawn(move || {
+            for stream in listener.incoming() {
+                let mut s = match stream { Ok(s) => s, Err(_) => continue };
+                let mut buf = [0u8; 8192];
+                let n = s.read(&mut buf).unwrap_or(0);
+                let req = String::from_utf8_lossy(&buf[..n]);
+                let body = req.split("\r\n\r\n").nth(1).unwrap_or("");
+                let v: serde_json::Value = serde_json::from_str(body).unwrap_or(serde_json::json!({}));
+                let modality = v.get("modality").and_then(|m| m.as_str()).unwrap_or("text");
+                let text = v.get("text").and_then(|t| t.as_str()).unwrap_or("");
+                let (status, payload): (&str, String) = if modality == "image" || modality == "audio" {
+                    ("200 OK", serde_json::json!({"block": true}).to_string())
+                } else if text.contains("ERRORME") {
+                    ("200 OK", "this is not json".to_string())
+                } else if text.contains("BLOCKME") {
+                    ("200 OK", serde_json::json!({"block": true}).to_string())
+                } else if text.contains("REDACTME") {
+                    ("200 OK", serde_json::json!({"block": false, "redactions": "[REDACTED]"}).to_string())
+                } else {
+                    ("200 OK", serde_json::json!({"block": false}).to_string())
+                };
+                let resp = format!(
+                    "HTTP/1.1 {status}\r\nContent-Type: application/json\r\nContent-Length: {}\r\nConnection: close\r\n\r\n{payload}",
+                    payload.len()
+                );
+                let _ = s.write_all(resp.as_bytes());
+            }
+        });
+        format!("http://127.0.0.1:{port}/scan")
+    }
+
+    #[tokio::test]
+    async fn text_block_verdict_is_honoured() {
+        let c = controller();
+        c.set_external_scanner(Some(start_mock_scanner()), false);
+        let out = c.external_scan("please BLOCKME now", "prompt", serde_json::json!({})).await;
+        assert!(out.block, "block=true must block");
+        assert!(!out.scanner_error);
+    }
+
+    #[tokio::test]
+    async fn clean_text_passes() {
+        let c = controller();
+        c.set_external_scanner(Some(start_mock_scanner()), false);
+        let out = c.external_scan("the weather in pune is sunny", "prompt", serde_json::json!({})).await;
+        assert!(!out.block);
+    }
+
+    #[tokio::test]
+    async fn redactions_are_returned() {
+        let c = controller();
+        c.set_external_scanner(Some(start_mock_scanner()), false);
+        let out = c.external_scan("card REDACTME 4111", "tool_result", serde_json::json!({})).await;
+        assert!(!out.block);
+        assert_eq!(out.redacted.as_deref(), Some("[REDACTED]"));
+    }
+
+    #[tokio::test]
+    async fn image_modality_is_blocked() {
+        let c = controller();
+        c.set_external_scanner(Some(start_mock_scanner()), false);
+        let part = MediaPart { modality: "image".into(), content_ref: "QUJD".into(), mime: "image/png".into() };
+        let out = c.external_scan_media(&part, "tool_args", serde_json::json!({})).await;
+        assert!(out.block, "image modality must block");
+    }
+
+    #[tokio::test]
+    async fn scanner_error_fails_open_by_default_and_closed_when_configured() {
+        // fail-open: scanner error does not block.
+        let c_open = controller();
+        c_open.set_external_scanner(Some(start_mock_scanner()), false);
+        let open = c_open.external_scan("ERRORME here", "prompt", serde_json::json!({})).await;
+        assert!(!open.block && open.scanner_error, "fail-open: error must not block");
+        // fail-closed: scanner error blocks.
+        let c_closed = controller();
+        c_closed.set_external_scanner(Some(start_mock_scanner()), true);
+        let closed = c_closed.external_scan("ERRORME here", "prompt", serde_json::json!({})).await;
+        assert!(closed.block && closed.scanner_error, "fail-closed: error must block");
+    }
+}
