@@ -1091,17 +1091,32 @@ async fn grc_list(State(st): State<Arc<AppState>>) -> impl IntoResponse {
     let store = match &st.store { Some(s) => s, None => return Json(serde_json::json!({"records": []})).into_response() };
     match store.list_grc(None).await {
         Ok(recs) => {
-            let out: Vec<serde_json::Value> = recs.iter().map(|r| {
+            let mut out: Vec<serde_json::Value> = Vec::with_capacity(recs.len());
+            for r in &recs {
                 let doc = grc_doc(&r.id, &r.kind, &r.subject, &r.title, &r.status, &r.body);
                 let verified = hex::decode(&r.pubkey_hex).ok().zip(hex::decode(&r.sig_hex).ok())
                     .map(|(pk, sig)| acp_core::sign::verify_ed25519(&pk, &acp_core::canonical::canonical_bytes(&doc), &sig))
                     .unwrap_or(false);
-                serde_json::json!({
+                // A2: linked_refs are advisory and unsigned. We never trust or mutate the
+                // payload; we only check whether each referenced decision id exists in the
+                // central ledger, reporting verified_refs/total_refs.
+                let refs: Vec<serde_json::Value> = serde_json::from_str(&r.linked_refs).unwrap_or_default();
+                let total_refs = refs.len();
+                let mut verified_refs = 0usize;
+                for rf in &refs {
+                    let did = rf.get("id").and_then(|v| v.as_str())
+                        .or_else(|| rf.as_str()).unwrap_or("");
+                    if !did.is_empty() && store.ingested_exists(did).await.unwrap_or(false) {
+                        verified_refs += 1;
+                    }
+                }
+                out.push(serde_json::json!({
                     "id": r.id, "kind": r.kind, "subject": r.subject, "title": r.title,
                     "status": r.status, "body": r.body, "operator": r.operator,
                     "created_ms": r.created_ms, "verified": verified,
-                })
-            }).collect();
+                    "linked_refs": refs, "verified_refs": verified_refs, "total_refs": total_refs,
+                }));
+            }
             Json(serde_json::json!({"records": out})).into_response()
         }
         Err(e) => Json(serde_json::json!({"records": [], "error": e})).into_response(),
@@ -1127,6 +1142,11 @@ async fn grc_create(State(st): State<Arc<AppState>>, headers: HeaderMap, Json(bo
         Some(v) => serde_json::to_string(v).unwrap_or_default(),
         None => String::new(),
     };
+    // A2: optional advisory list of linked decision ids. Not part of the signed doc.
+    let linked_refs = match body.get("linked_refs") {
+        Some(v @ serde_json::Value::Array(_)) => serde_json::to_string(v).unwrap_or_else(|_| "[]".to_string()),
+        _ => "[]".to_string(),
+    };
     let id = format!("grc-{}", rand_hex(6));
     let now = now_ms();
     let doc = grc_doc(&id, &kind, &subject, &title, &status, &doc_body);
@@ -1134,7 +1154,7 @@ async fn grc_create(State(st): State<Arc<AppState>>, headers: HeaderMap, Json(bo
     let sig = acp_core::sign::Signer::sign(&signer, &acp_core::canonical::canonical_bytes(&doc));
     let pubkey_hex = hex::encode(acp_core::sign::Signer::public_key(&signer));
     let sig_hex = hex::encode(sig);
-    match store.add_grc(&id, &kind, &subject, &title, &status, &doc_body, &operator, now as i64, &pubkey_hex, &sig_hex).await {
+    match store.add_grc(&id, &kind, &subject, &title, &status, &doc_body, &operator, now as i64, &pubkey_hex, &sig_hex, &linked_refs).await {
         Ok(()) => Json(serde_json::json!({"ok": true, "id": id, "kind": kind})).into_response(),
         Err(e) => Json(serde_json::json!({"ok": false, "error": e})).into_response(),
     }

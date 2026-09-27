@@ -3,6 +3,17 @@
 version = 4
 
 [[package]]
+name = "acp-agent"
+version = "0.0.0"
+dependencies = [
+ "acp-guard",
+ "acp-intercept",
+ "acp-obs",
+ "acp-proxy",
+ "tokio",
+]
+
+[[package]]
 name = "acp-approvals"
 version = "0.0.0"
 dependencies = [

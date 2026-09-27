@@ -98,6 +98,7 @@ pub struct GrcRecord {
     pub created_ms: i64,
     pub pubkey_hex: String,
     pub sig_hex: String,
+    pub linked_refs: String,
 }
 
 pub struct ControlStore {
@@ -146,7 +147,7 @@ impl ControlStore {
             "CREATE TABLE IF NOT EXISTS apps (id VARCHAR(255) PRIMARY KEY, name TEXT NOT NULL, owner TEXT NOT NULL, created_ms BIGINT NOT NULL)",
             "CREATE TABLE IF NOT EXISTS agents (id VARCHAR(255) PRIMARY KEY, app_id TEXT NOT NULL, name TEXT NOT NULL, token_sha256 TEXT NOT NULL, active INTEGER NOT NULL, created_ms BIGINT NOT NULL)",
             "CREATE TABLE IF NOT EXISTS endpoints (endpoint VARCHAR(255) PRIMARY KEY, kind TEXT NOT NULL, provider TEXT NOT NULL, disposition TEXT NOT NULL, operator TEXT NOT NULL, reason TEXT NOT NULL, decided_ms BIGINT NOT NULL, expires_ms BIGINT NOT NULL, pubkey_hex TEXT NOT NULL, sig_hex TEXT NOT NULL)",
-            "CREATE TABLE IF NOT EXISTS grc_records (id VARCHAR(255) PRIMARY KEY, kind TEXT NOT NULL, subject TEXT NOT NULL, title TEXT NOT NULL, status TEXT NOT NULL, body TEXT NOT NULL, operator TEXT NOT NULL, created_ms BIGINT NOT NULL, pubkey_hex TEXT NOT NULL, sig_hex TEXT NOT NULL)",
+            "CREATE TABLE IF NOT EXISTS grc_records (id VARCHAR(255) PRIMARY KEY, kind TEXT NOT NULL, subject TEXT NOT NULL, title TEXT NOT NULL, status TEXT NOT NULL, body TEXT NOT NULL, operator TEXT NOT NULL, created_ms BIGINT NOT NULL, pubkey_hex TEXT NOT NULL, sig_hex TEXT NOT NULL, linked_refs TEXT NOT NULL DEFAULT '[]')",
             "CREATE TABLE IF NOT EXISTS ingested_evidence (decision_id VARCHAR(255) PRIMARY KEY, pep TEXT NOT NULL, kind TEXT NOT NULL, verdict TEXT NOT NULL, record TEXT NOT NULL, operator TEXT NOT NULL, created_ms BIGINT NOT NULL, pubkey_hex TEXT NOT NULL, sig_hex TEXT NOT NULL)",
             "CREATE TABLE IF NOT EXISTS firewall_config (id INTEGER PRIMARY KEY, enabled INTEGER NOT NULL, block_secrets INTEGER NOT NULL, deny_topics TEXT NOT NULL, model TEXT NOT NULL, updated_ms BIGINT NOT NULL)",
             "CREATE TABLE IF NOT EXISTS firewall_rules (id VARCHAR(255) PRIMARY KEY, match_json TEXT NOT NULL, classify TEXT NOT NULL, action TEXT NOT NULL, created_ms BIGINT NOT NULL)",
@@ -311,11 +312,12 @@ impl ControlStore {
         created_ms: i64,
         pubkey_hex: &str,
         sig_hex: &str,
+        linked_refs: &str,
     ) -> Result<(), String> {
-        let sql = self.ph("INSERT INTO grc_records (id, kind, subject, title, status, body, operator, created_ms, pubkey_hex, sig_hex) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)");
+        let sql = self.ph("INSERT INTO grc_records (id, kind, subject, title, status, body, operator, created_ms, pubkey_hex, sig_hex, linked_refs) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)");
         sqlx::query(&sql)
             .bind(id).bind(kind).bind(subject).bind(title).bind(status).bind(body)
-            .bind(operator).bind(created_ms).bind(pubkey_hex).bind(sig_hex)
+            .bind(operator).bind(created_ms).bind(pubkey_hex).bind(sig_hex).bind(linked_refs)
             .execute(&self.pool).await.map_err(|e| e.to_string())?;
         Ok(())
     }
@@ -402,6 +404,13 @@ impl ControlStore {
         Ok(r.rows_affected() == 1)
     }
 
+    /// A2: does a decision id exist in the central ingested-evidence store (for GRC linked-ref checks)?
+    pub async fn ingested_exists(&self, decision_id: &str) -> Result<bool, String> {
+        let sql = self.ph("SELECT 1 FROM ingested_evidence WHERE decision_id = ?");
+        let row = sqlx::query(&sql).bind(decision_id).fetch_optional(&self.pool).await.map_err(|e| e.to_string())?;
+        Ok(row.is_some())
+    }
+
     /// E2: most recent ingested decisions, newest first, for the console Fleet evidence view.
     pub async fn list_ingested(&self, limit: i64) -> Result<Vec<IngestedRecord>, String> {
         let sql = self.ph("SELECT decision_id,pep,kind,verdict,record,operator,created_ms,pubkey_hex,sig_hex FROM ingested_evidence ORDER BY created_ms DESC LIMIT ?");
@@ -415,12 +424,13 @@ impl ControlStore {
 
     /// Fetch a single GRC record by id (for re-signing on a status change).
     pub async fn get_grc(&self, id: &str) -> Result<Option<GrcRecord>, String> {
-        let sql = self.ph("SELECT id, kind, subject, title, status, body, operator, created_ms, pubkey_hex, sig_hex FROM grc_records WHERE id = ?");
+        let sql = self.ph("SELECT id, kind, subject, title, status, body, operator, created_ms, pubkey_hex, sig_hex, linked_refs FROM grc_records WHERE id = ?");
         let row = sqlx::query(&sql).bind(id).fetch_optional(&self.pool).await.map_err(|e| e.to_string())?;
         Ok(row.map(|r| GrcRecord {
             id: r.get("id"), kind: r.get("kind"), subject: r.get("subject"), title: r.get("title"),
             status: r.get("status"), body: r.get("body"), operator: r.get("operator"),
             created_ms: r.get("created_ms"), pubkey_hex: r.get("pubkey_hex"), sig_hex: r.get("sig_hex"),
+            linked_refs: r.get("linked_refs"),
         }))
     }
 
@@ -434,9 +444,9 @@ impl ControlStore {
 
     pub async fn list_grc(&self, kind: Option<&str>) -> Result<Vec<GrcRecord>, String> {
         let rows = match kind {
-            Some(k) => sqlx::query(&self.ph("SELECT id, kind, subject, title, status, body, operator, created_ms, pubkey_hex, sig_hex FROM grc_records WHERE kind = ? ORDER BY created_ms"))
+            Some(k) => sqlx::query(&self.ph("SELECT id, kind, subject, title, status, body, operator, created_ms, pubkey_hex, sig_hex, linked_refs FROM grc_records WHERE kind = ? ORDER BY created_ms"))
                 .bind(k).fetch_all(&self.pool).await,
-            None => sqlx::query("SELECT id, kind, subject, title, status, body, operator, created_ms, pubkey_hex, sig_hex FROM grc_records ORDER BY created_ms")
+            None => sqlx::query("SELECT id, kind, subject, title, status, body, operator, created_ms, pubkey_hex, sig_hex, linked_refs FROM grc_records ORDER BY created_ms")
                 .fetch_all(&self.pool).await,
         }
         .map_err(|e| e.to_string())?;
@@ -446,6 +456,7 @@ impl ControlStore {
                 id: r.get("id"), kind: r.get("kind"), subject: r.get("subject"), title: r.get("title"),
                 status: r.get("status"), body: r.get("body"), operator: r.get("operator"),
                 created_ms: r.get("created_ms"), pubkey_hex: r.get("pubkey_hex"), sig_hex: r.get("sig_hex"),
+                linked_refs: r.get("linked_refs"),
             })
             .collect())
     }
@@ -469,8 +480,8 @@ mod tests {
         let eps = s.list_endpoints().await.unwrap();
         assert_eq!(eps.len(), 1, "upsert keeps one row per endpoint");
         assert_eq!(eps[0].disposition, "block", "latest disposition wins");
-        s.add_grc("grc-1", "risk", "checkout-agent", "PII exfiltration", "open", "{\"likelihood\":3,\"impact\":3}", "console", 4000, "aa", "bb").await.unwrap();
-        s.add_grc("grc-2", "assessment", "checkout-agent", "EU AI Act tiering", "high", "{}", "console", 4001, "aa", "cc").await.unwrap();
+        s.add_grc("grc-1", "risk", "checkout-agent", "PII exfiltration", "open", "{\"likelihood\":3,\"impact\":3}", "console", 4000, "aa", "bb", "[]").await.unwrap();
+        s.add_grc("grc-2", "assessment", "checkout-agent", "EU AI Act tiering", "high", "{}", "console", 4001, "aa", "cc", "[]").await.unwrap();
         assert_eq!(s.list_grc(None).await.unwrap().len(), 2);
         assert_eq!(s.list_grc(Some("risk")).await.unwrap().len(), 1);
         // A4: get_grc + update_grc_signed round-trip (status + signature updated together).

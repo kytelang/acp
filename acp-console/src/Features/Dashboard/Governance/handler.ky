@@ -18,7 +18,21 @@ pub struct CreateGrcHandler impl RouteHandler {
         let title = json.stringField(ctx.request.body, "grcTitle");
         let status = json.stringField(ctx.request.body, "grcStatus");
         let body = json.stringField(ctx.request.body, "grcBody");
-        let res = self.acp.createGrc(kind, subject, title, status, body, auth);
+        // grcLinks is an operator-friendly comma-separated list of decision ids. We turn it into an
+        // advisory JSON array; the server reconciles each id against the ledger and never trusts it.
+        let links = json.stringField(ctx.request.body, "grcLinks");
+        let refs = "[";
+        let parts = string.split(links, ",");
+        let n = 0;
+        for (p in 0..parts.size()) {
+            let id = string.trim(parts.get(p) ?? "");
+            if (string.eql(id, "")) { continue; }
+            if (n > 0) { refs = refs + ","; }
+            refs = refs + "{\"type\":\"decision\",\"id\":\"" + id + "\"}";
+            n = n + 1;
+        }
+        refs = refs + "]";
+        let res = self.acp.createGrc(kind, subject, title, status, body, refs, auth);
         return await ds_response.patch(grcCreateResult(res));
     }
 }

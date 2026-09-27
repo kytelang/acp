@@ -192,8 +192,11 @@ pub struct GrcRow {
     pub title: string,
     pub status: string,
     pub verified: bool,
-    init(id: string, kind: string, subject: string, title: string, status: string, verified: bool) {
+    pub verifiedRefs: long,
+    pub totalRefs: long,
+    init(id: string, kind: string, subject: string, title: string, status: string, verified: bool, verifiedRefs: long, totalRefs: long) {
         self.id = id; self.kind = kind; self.subject = subject; self.title = title; self.status = status; self.verified = verified;
+        self.verifiedRefs = verifiedRefs; self.totalRefs = totalRefs;
     }
 }
 
@@ -781,15 +784,20 @@ pub struct AcpClient {
                 json.asString(json.get(item, "subject")) ?? "",
                 json.asString(json.get(item, "title")) ?? "",
                 json.asString(json.get(item, "status")) ?? "",
-                json.asBool(json.get(item, "verified")) ?? false));
+                json.asBool(json.get(item, "verified")) ?? false,
+                json.asNumber(json.get(item, "verified_refs")) ?? 0,
+                json.asNumber(json.get(item, "total_refs")) ?? 0));
             i = i + 1;
         }
         return rows;
     }
 
     // Create a signed governance record. Returns the new id in the message.
-    pub fn createGrc(self: AcpClient, kind: string, subject: string, title: string, status: string, body: string, userAuth: string): DeployResult {
-        let jbody = "{\"kind\":" + self.jstr(kind) + ",\"subject\":" + self.jstr(subject) + ",\"title\":" + self.jstr(title) + ",\"status\":" + self.jstr(status) + ",\"body\":" + self.jstr(body) + "}";
+    pub fn createGrc(self: AcpClient, kind: string, subject: string, title: string, status: string, body: string, linkedRefs: string, userAuth: string): DeployResult {
+        // linkedRefs is a raw JSON array string, e.g. [{"type":"decision","id":"d-1"}]. Advisory only; the
+        // server reconciles each id against the ledger and never trusts the payload. Default to [].
+        let refs = string.eql(linkedRefs, "") ? "[]" : linkedRefs;
+        let jbody = "{\"kind\":" + self.jstr(kind) + ",\"subject\":" + self.jstr(subject) + ",\"title\":" + self.jstr(title) + ",\"status\":" + self.jstr(status) + ",\"body\":" + self.jstr(body) + ",\"linked_refs\":" + refs + "}";
         let hdrs = client.Http.emptyHeaders();
         hdrs.set("Content-Type", "application/json");
         if (!string.eql(userAuth, "")) { hdrs.set("Authorization", userAuth); }

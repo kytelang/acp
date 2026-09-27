@@ -49,7 +49,7 @@ Acceptance:
 - End-to-end run captured: create assessment -> tier + checklist rendered -> assign -> advance stage
   -> `/grc` shows the record verified.
 
-### A2. Linked-evidence reconciliation (P1, S) - refines P1-7
+### A2. Linked-evidence reconciliation (P1, S) - refines P1-7  [DONE 2026-09-27]
 Gap: GRC "evidence" and "linked-decision" references are free-text, never checked against the ledger.
 Design: a structured `linked_refs: [{type: decision|evidence|coverage, id}]`; on create/update
 `acp-server` verifies each id against the evidence ledger / ingested store and stores `verified_refs`
@@ -60,6 +60,11 @@ Acceptance:
 - The console record row shows "1/2 linked decisions verified".
 - A record with zero linked refs is allowed and shows "0/0" (no regression).
 - The reconciliation never mutates or trusts the ref payload; it only checks existence in the ledger.
+Status (2026-09-27): SHIPPED. `grc_records.linked_refs` column (advisory, unsigned, not part of the
+signed doc); `POST /grc` accepts `linked_refs`; `GET /grc` reconciles each id via
+`store.ingested_exists()` and returns `verified_refs`/`total_refs`. Console GRC create popup collects a
+comma-separated decision-id list; the record row shows "k/n linked decisions verified". Verified by
+live curl: one real + one fake id -> 1/2; zero refs -> 0/0; signature still verifies.
 
 ### A3. Model + use-case + vendor registry richness (P2, M)
 Gap: Credo/OneTrust have model registries with lineage, dependency graphs, agent cards, vendor risk.

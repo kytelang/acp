@@ -127,7 +127,7 @@
     .modal input[type=file]{display:none}
   </style>
 </head>
-<body data-signals="{view: 'overview', endpoint: '', disposition: 'govern', appName: '', appOwner: '', agentAppId: '', agentName: '', grcKind: 'assessment', grcSubject: '', grcTitle: '', grcStatus: 'open', grcBody: '{}', modal: '', policyTab: 'deployed', fwEnabled: 'false', fwBlockSecrets: 'false', fwDenyTopics: '', fwModel: '', frMatchKind: 'host_contains', frMatchValue: '', frPath: '', frAction: 'block', frClassify: '', author: 'operator', epReason: 'sanctioned', mode: 'lockdown_all', scope: 'global', killReason: 'incident', ttl_ms: '3600000', reason: ''}">
+<body data-signals="{view: 'overview', endpoint: '', disposition: 'govern', appName: '', appOwner: '', agentAppId: '', agentName: '', grcKind: 'assessment', grcSubject: '', grcTitle: '', grcStatus: 'open', grcBody: '{}', grcLinks: '', modal: '', policyTab: 'deployed', fwEnabled: 'false', fwBlockSecrets: 'false', fwDenyTopics: '', fwModel: '', frMatchKind: 'host_contains', frMatchValue: '', frPath: '', frAction: 'block', frClassify: '', author: 'operator', epReason: 'sanctioned', mode: 'lockdown_all', scope: 'global', killReason: 'incident', ttl_ms: '3600000', reason: ''}">
   <div class="navbar">
     <div class="brand">
       <img class="logo" src="/varman-logo.svg" alt="Varman" />
@@ -397,6 +397,7 @@ rules:
       <label class="fld">Details (JSON or text)
         <textarea data-bind="grcBody" spellcheck="false" style="min-height:120px">{}</textarea>
       </label>
+      <label class="fld">Linked decision ids <input type="text" data-bind="grcLinks" placeholder="d-8f2a, d-91bc (comma separated, optional)" /><small class="hint">Advisory only. The server checks each id against the ledger and shows how many are verified. It never trusts the values.</small></label>
       <div class="row">
         <button class="btn primary" data-on:click="@post('/grc/create')">Create record</button>
         <button class="btn" data-on:click="$modal = ''">Close</button>
