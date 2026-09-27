@@ -292,6 +292,8 @@ rules:
             <label class="fld">External scanner URL (optional) <input type="text" data-bind="fwScanUrl" placeholder="https://scanner.internal/scan (leave blank for built-in only)" /><small class="hint">A first-class detection hook. Each enforcement point POSTs {text, direction, context} and honours {block, redactions}. Directions: prompt, response, tool_args, tool_result.</small></label>
             <label class="fld">On scanner error <select data-bind="fwBlockOnScannerError"><option value="false">fail open (built-in still runs)</option><option value="true">fail closed (block)</option></select></label>
             <button class="btn primary" data-on:click="@post('/firewall/save')">Save firewall config</button>
+            <button class="btn card-cta" data-on:click="@post('/firewall/threat-load')">Load threat feed</button>
+            <small class="hint">Loads the signed built-in threat pack; its signatures are added to the firewall and picked up by every acp-agent on its next fetch. A tampered pack is rejected.</small>
           </div></div>
           <div class="card"><div class="card-h"><span class="ic">&#128272;</span> Firewall rules<span class="sub">match a destination, choose an action; served to every acp-agent, operator rules win first-match</span></div>
           <div class="card-b">

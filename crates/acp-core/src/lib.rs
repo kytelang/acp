@@ -23,6 +23,7 @@ pub mod content;
 pub mod databoundary;
 pub mod controls;
 pub mod pack;
+pub mod threatfeed;
 pub mod discovery;
 pub mod drift;
 pub mod dualcontrol;

@@ -209,3 +209,14 @@ pub struct FrameworkCsvHandler impl RouteHandler {
             .setHeader("content-disposition", "attachment; filename=\"framework-report.csv\"");
     }
 }
+
+// B5: load the built-in signed threat pack (verified server-side), then patch the firewall status.
+pub struct LoadThreatPackHandler impl RouteHandler {
+    acp: AcpClient,
+    init(acp: AcpClient) { self.acp = acp; }
+    async fn serve(self: LoadThreatPackHandler, ctx: Context): Response {
+        let auth = ctx.request.headers.get("authorization") ?? "";
+        let _ = self.acp.loadThreatPack(auth);
+        return await ds_response.patch(firewallStatusPanel(self.acp.firewallStatus()));
+    }
+}

@@ -169,9 +169,11 @@ pub struct FirewallCfg {
     pub hasModel: bool,
     pub scanUrl: string,
     pub blockOnScannerError: bool,
-    init(enabled: bool, blockSecrets: bool, denyTopics: string, hasModel: bool, scanUrl: string, blockOnScannerError: bool) {
+    pub feedVersion: long,
+    pub threatCount: long,
+    init(enabled: bool, blockSecrets: bool, denyTopics: string, hasModel: bool, scanUrl: string, blockOnScannerError: bool, feedVersion: long, threatCount: long) {
         self.enabled = enabled; self.blockSecrets = blockSecrets; self.denyTopics = denyTopics; self.hasModel = hasModel;
-        self.scanUrl = scanUrl; self.blockOnScannerError = blockOnScannerError;
+        self.scanUrl = scanUrl; self.blockOnScannerError = blockOnScannerError; self.feedVersion = feedVersion; self.threatCount = threatCount;
     }
 }
 
@@ -494,6 +496,21 @@ pub struct AcpClient {
         return DeployResult(true, `loaded ${loaded} framework pack(s)`);
     }
 
+    // B5: fetch the built-in signed threat pack and load it (verified server-side before storing).
+    pub fn loadThreatPack(self: AcpClient, userAuth: string): DeployResult {
+        let av = client.Http.get(self.base + "/firewall/threat-pack/available");
+        if (av.status.toCode() != 200) { return DeployResult(false, "acp-server unreachable"); }
+        let hdrs = client.Http.emptyHeaders();
+        hdrs.set("Content-Type", "application/json");
+        if (!string.eql(userAuth, "")) { hdrs.set("Authorization", userAuth); }
+        else { let tok = self.authToken("FirewallAdmin"); if (!string.eql(tok, "")) { hdrs.set("Authorization", "Bearer " + tok); } }
+        let resp = client.Http.request("POST", self.base + "/firewall/threat-pack", hdrs, av.body);
+        if (resp.status.toCode() != 200) { return DeployResult(false, "acp-server unreachable"); }
+        let v = json.parse(resp.body);
+        if (!(json.asBool(json.get(v, "ok")) ?? false)) { return DeployResult(false, json.asString(json.get(v, "error")) ?? "rejected"); }
+        return DeployResult(true, `threat feed loaded (version ${json.asNumber(json.get(v, "feed_version")) ?? 0})`);
+    }
+
     // A6: fetch the regulator-facing framework report for rendering + print.
     pub fn frameworkReport(self: AcpClient, name: string): FrameworkReport {
         let controls = list.List<ControlStatus>();
@@ -659,7 +676,7 @@ pub struct AcpClient {
     // Central content-firewall config (kept in the control-plane DB; PEPs fetch it).
     pub fn firewallStatus(self: AcpClient): FirewallCfg {
         let resp = client.Http.get(self.base + "/firewall/config");
-        if (resp.status.toCode() != 200) { return FirewallCfg(false, false, "", false, "", false); }
+        if (resp.status.toCode() != 200) { return FirewallCfg(false, false, "", false, "", false, 0, 0); }
         let v = json.parse(resp.body);
         let en = json.asBool(json.get(v, "enabled")) ?? false;
         let bs = json.asBool(json.get(v, "block_secrets")) ?? false;
@@ -677,7 +694,11 @@ pub struct AcpClient {
         }
         let scanUrl = json.asString(json.get(v, "scan_url")) ?? "";
         let boe = json.asBool(json.get(v, "block_on_scanner_error")) ?? false;
-        return FirewallCfg(en, bs, topics, !string.eql(model, ""), scanUrl, boe);
+        let feedVer = json.asNumber(json.get(v, "feed_version")) ?? 0;
+        let tsv = json.get(v, "threat_signatures");
+        let tsArr = json.asArray(tsv);
+        let tsCount = tsArr?.size() ?? 0;
+        return FirewallCfg(en, bs, topics, !string.eql(model, ""), scanUrl, boe, feedVer, tsCount);
     }
 
     pub fn setFirewall(self: AcpClient, enabled: bool, blockSecrets: bool, denyCsv: string, model: string, scanUrl: string, blockOnScannerError: bool, userAuth: string): DeployResult {

@@ -644,6 +644,8 @@ async fn main() {
         .route("/endpoints/register", post(endpoints_register))
         .route("/intercept/rules", get(intercept_rules))
         .route("/firewall/config", get(firewall_config_get).post(firewall_config_set))
+        .route("/firewall/threat-pack", post(threat_pack_load))
+        .route("/firewall/threat-pack/available", get(threat_pack_available))
         .route("/firewall/rules", get(firewall_rules_list).post(firewall_rules_add))
         .route("/firewall/rules/:id/delete", post(firewall_rules_delete))
         .route("/apps", post(app_register))
@@ -1130,6 +1132,35 @@ async fn endpoints_list(State(st): State<Arc<AppState>>) -> impl IntoResponse {
     Json(serde_json::json!({"configured": true, "endpoints": out})).into_response()
 }
 
+/// B5: the built-in sample threat pack, signed with the control-plane key so an operator can load it.
+async fn threat_pack_available(State(st): State<Arc<AppState>>) -> impl IntoResponse {
+    let signer = enroll_signer(&st.cp_key);
+    let pack = acp_core::threatfeed::builtin_threat_pack(now_ms(), now_ms());
+    Json(serde_json::to_value(pack.sign(&signer)).unwrap_or_default())
+}
+
+/// B5: load a signed threat pack. The signature is verified before storing; a tampered pack is
+/// rejected. On success the firewall_config feed version is bumped and the signatures stored, so every
+/// acp-agent applies them on its next firewall fetch.
+async fn threat_pack_load(State(st): State<Arc<AppState>>, headers: HeaderMap, Json(body): Json<serde_json::Value>) -> Response {
+    if let Err(r) = authorize(&st.auth, &headers, acp_auth::Capability::EditFirewall) { return r; }
+    let store = match &st.store { Some(s) => s, None => return Json(serde_json::json!({"ok": false, "error": "no --store configured"})).into_response() };
+    let signed: acp_core::threatfeed::SignedThreatPack = match serde_json::from_value(body.clone()) {
+        Ok(s) => s,
+        Err(e) => return Json(serde_json::json!({"ok": false, "error": format!("not a signed threat pack: {e}")})).into_response(),
+    };
+    if !acp_core::threatfeed::verify(&signed) {
+        return Json(serde_json::json!({"ok": false, "error": "threat pack signature verification FAILED (tampered or wrong key); rejected"})).into_response();
+    }
+    let version = signed.pack.get("version").and_then(|v| v.as_i64()).unwrap_or(0);
+    let sigs = signed.pack.get("signatures").cloned().unwrap_or_else(|| serde_json::json!([]));
+    let sigs_json = sigs.to_string();
+    match store.set_firewall_threat(version, &sigs_json, now_ms() as i64).await {
+        Ok(()) => Json(serde_json::json!({"ok": true, "feed_version": version, "signatures": sigs.as_array().map(|a| a.len()).unwrap_or(0)})).into_response(),
+        Err(e) => Json(serde_json::json!({"ok": false, "error": e})).into_response(),
+    }
+}
+
 /// GET /firewall/config: the central content-firewall configuration (toggles, denied topics, and the
 /// ML model content), so a workstation PEP fetches everything from the control plane instead of
 /// carrying local files. Ungated (same trust as the governed rule set). Returns a safe default when
@@ -1139,8 +1170,12 @@ async fn firewall_config_get(State(st): State<Arc<AppState>>) -> Response {
     let store = match &st.store { Some(s) => s, None => return Json(default).into_response() };
     match store.get_firewall_config().await {
         Ok(Some(c)) => {
-            let topics: serde_json::Value = serde_json::from_str(&c.deny_topics).unwrap_or_else(|_| serde_json::json!([]));
-            Json(serde_json::json!({"enabled": c.enabled, "block_secrets": c.block_secrets, "deny_topics": topics, "model": c.model, "scan_url": c.scan_url, "block_on_scanner_error": c.block_on_scanner_error, "updated_ms": c.updated_ms})).into_response()
+            let mut topics: Vec<serde_json::Value> = serde_json::from_str::<Vec<serde_json::Value>>(&c.deny_topics).unwrap_or_default();
+            let threat: Vec<serde_json::Value> = serde_json::from_str::<Vec<serde_json::Value>>(&c.threat_signatures).unwrap_or_default();
+            // B5: merge threat-feed signatures into the served deny_topics so every PEP applies them on
+            // its next fetch, without any PEP change. threat_signatures is also returned for display.
+            topics.extend(threat.iter().cloned());
+            Json(serde_json::json!({"enabled": c.enabled, "block_secrets": c.block_secrets, "deny_topics": topics, "model": c.model, "scan_url": c.scan_url, "block_on_scanner_error": c.block_on_scanner_error, "feed_version": c.feed_version, "threat_signatures": threat, "updated_ms": c.updated_ms})).into_response()
         }
         Ok(None) => Json(default).into_response(),
         Err(e) => Json(serde_json::json!({"error": e})).into_response(),

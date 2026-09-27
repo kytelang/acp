@@ -213,7 +213,7 @@ Acceptance:
 - Reports shows red-team results as a time series (at least last-N runs).
 - A failing red-team run (below `--min-catch`) is visibly flagged.
 
-### B5. Threat-intelligence feed for the firewall (P3, M)
+### B5. Threat-intelligence feed for the firewall (P3, M)  [DONE 2026-09-27]
 Gap: signatures/denied-topics are static.
 Design: a signed threat-pack ingested into `firewall_config` (feed version + `signatures_json`), served
 to every acp-agent via the existing firewall fetch. Org points the control plane at a feed URL or
@@ -223,7 +223,14 @@ Acceptance:
 - A tampered pack is rejected.
 - An acp-agent picks up the new signatures on its next refresh (verified: a payload matching a new
   signature is blocked after refresh, not before).
-
+Status (2026-09-27): SHIPPED. `acp_core::threatfeed` (SignedThreatPack + verify + builtin sample);
+cpstore firewall_config gains `feed_version` + `threat_signatures`; server `POST /firewall/threat-pack`
+(verify-before-store, tampered rejected, bumps feed_version), `GET /firewall/threat-pack/available`
+(built-in, cp-key signed). `GET /firewall/config` merges the signatures into the served `deny_topics`,
+so every PEP applies them on its next fetch with no PEP change. Console Content firewall page shows the
+feed version and a "Load threat feed" button. Verified e2e: a tool call with "exfiltrate credentials"
+passes before the pack and is blocked (denied-topic) by a freshly-fetched acp-proxy after; feed_version
+bumps; a tampered pack is rejected.
 ### B6. Agent / MCP discovery breadth (P3, L)
 Gap: Varman's discovery is narrower than Zenity/Noma.
 Design: extend `acp discover` + enrollment with connectors (egress-log importers, CASB/proxy log
