@@ -272,9 +272,14 @@ killing the leader fails over with a strictly larger token and reporting keeps w
 spike alert state survive a restart; a backed-up ledger restored to a new path passes `acp verify`.
 cpstore lease test added; guide chapter 14 documents the HA topology and the DR runbook.
 
-### C2. Enterprise trust: certifications, SLA, support (P2, process)
+### C2. Enterprise trust: certifications, SLA, support (P2, process)  [DONE 2026-09-27]
 Not code. Acceptance: a written plan exists (SOC 2 / ISO 27001 path, support/SLA model, security-review
 cadence), and the verifiable-evidence architecture is documented as an audit asset.
+Status (2026-09-27): SHIPPED. `docs/enterprise-trust-plan.md` covers the certification path (SOC 2 Type
+I/II, ISO 27001 + 42001, EU AI Act), the tiered support + availability SLA model (backed by the C1 HA
+topology), the security-review cadence (continuous CI gate + red-teaming, per-release, quarterly,
+annual pen-test + crypto review), and a section documenting the verifiable-evidence architecture as an
+audit asset, with an honest status of what exists today versus what is planned.
 
 ### C3. Detection corpus + CI efficacy gates (P2, M) - refines A24  [DONE 2026-09-27]
 Design: a larger labelled corpus with CI precision/recall/FPR gates for both injection and PII.
