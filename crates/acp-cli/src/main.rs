@@ -1009,7 +1009,7 @@ fn cmd_discover(rest: &[String]) -> ExitCode {
     use acp_core::discovery::{find_shadow_ai, parse_access_log, AiKind};
     let positionals: Vec<&String> = rest.iter().filter(|a| !a.starts_with("--")).collect();
     let Some(obs_file) = positionals.first().copied() else {
-        return usage("acp discover <observed-or-log-file> [governed.txt] [--from squid|csv|jsonl|hosts]");
+        return usage("acp discover <observed-or-log-file> [governed.txt] [--from squid|csv|jsonl|purview|zscaler|netskope|hosts]");
     };
     // B6: a connector reads a real-world egress/proxy/audit log format into observed hosts.
     let from_fmt: Option<String> = rest.iter().position(|a| a == "--from").and_then(|i| rest.get(i + 1)).cloned();
@@ -1272,13 +1272,13 @@ fn cmd_aibom(rest: &[String]) -> ExitCode {
         let scan = it.get("scan").map(parse_scan).unwrap_or(ScanVerdict::Unscanned);
         let high = it.get("high_impact").and_then(|v| v.as_bool()).unwrap_or(false);
         let admission = admit(&artifact, &scan, require_scan, high);
-        entries.push(BomEntry {
+        entries.push(BomEntry::new(
             artifact,
             scan,
             admission,
-            integrity_pin: it.get("pin").and_then(|v| v.as_str()).map(String::from),
-            policy_in_force: it.get("policy").and_then(|v| v.as_str()).map(String::from),
-        });
+            it.get("pin").and_then(|v| v.as_str()).map(String::from),
+            it.get("policy").and_then(|v| v.as_str()).map(String::from),
+        ));
     }
     let bom = AiBom { generated_ms: now_ms, entries };
     let denied = bom.denied().len();

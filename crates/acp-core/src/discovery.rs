@@ -112,6 +112,11 @@ pub fn find_shadow_ai(observed: &[String], governed: &[String]) -> Vec<AiEndpoin
 ///   - "squid": Squid/typical proxy access log (the URL is the 7th whitespace field).
 ///   - "csv": comma-separated; picks the first cell that looks like a URL or host (skips a header).
 ///   - "jsonl": one JSON object per line; reads `url` / `host` / `destination` / `dest`.
+///   - "purview": Microsoft Purview endpoint-DLP / audit export (JSON lines or array); reads the
+///     destination-domain fields Purview emits (TargetDomain / RemoteURL / Url / DestinationDomain).
+///   - "zscaler": Zscaler NSS web-log export; CSV with a url/host/hostname/server column, or a
+///     key=value line carrying url=/host=/hostname=/server=.
+///   - "netskope": Netskope CASB event export (JSON lines or array); reads url/domain/dsthost/hostname.
 ///   - anything else / "hosts": one host or URL per line (the original behaviour).
 /// Each extracted value is reduced to its host and de-duplicated, preserving first-seen order.
 pub fn parse_access_log(content: &str, format: &str) -> Vec<String> {
@@ -152,6 +157,44 @@ pub fn parse_access_log(content: &str, format: &str) -> Vec<String> {
                     if let Some(u) = val { push(host_of(u), &mut out, &mut seen); }
                 }
             }
+            "purview" | "netskope" => {
+                // Both vendors export endpoint/CASB events as JSON (lines or a single array element per
+                // line). Read the first present destination field from a vendor-specific candidate set.
+                if let Ok(v) = serde_json::from_str::<serde_json::Value>(line) {
+                    let keys: &[&str] = if format == "purview" {
+                        &["TargetDomain", "RemoteURL", "Url", "URL", "DestinationDomain", "DestinationUrl", "url", "domain"]
+                    } else {
+                        &["url", "URL", "domain", "dsthost", "dst_host", "dsthost", "hostname", "host", "destination"]
+                    };
+                    let val = keys.iter().find_map(|k| v.get(*k).and_then(|x| x.as_str()));
+                    if let Some(u) = val { push(host_of(u), &mut out, &mut seen); }
+                }
+            }
+            "zscaler" => {
+                // NSS web logs come either as CSV (with a header naming the url/host column) or as
+                // key=value pairs. Handle both: prefer an explicit key, else the first URL-ish cell.
+                let low = line.to_ascii_lowercase();
+                if low.starts_with("url,") || low.starts_with("host,") || low.starts_with("hostname,") || low.starts_with("time,") || low.starts_with("datetime,") {
+                    continue; // header row
+                }
+                if line.contains('=') {
+                    // key=value: find url=/host=/hostname=/server=.
+                    let mut found: Option<String> = None;
+                    for tok in line.split(|c| c == ' ' || c == '\t' || c == ',') {
+                        let mut kv = tok.splitn(2, '=');
+                        let k = kv.next().unwrap_or("").trim().to_ascii_lowercase();
+                        let val = kv.next().unwrap_or("").trim();
+                        if (k == "url" || k == "host" || k == "hostname" || k == "server" || k == "serverip" || k == "reqhost") && !val.is_empty() {
+                            if let Some(h) = host_of(val) { found = Some(h); break; }
+                        }
+                    }
+                    push(found, &mut out, &mut seen);
+                } else {
+                    // CSV/whitespace row: first cell that reduces to a host.
+                    let cell = line.split(|c| c == ',' || c == '\t').find_map(|c| host_of(c));
+                    push(cell, &mut out, &mut seen);
+                }
+            }
             _ => { push(host_of(line), &mut out, &mut seen); }
         }
     }
@@ -173,6 +216,20 @@ mod tests {
         assert!(parse_access_log(csv, "csv").contains(&"api.anthropic.com".to_string()));
         let jsonl = "{\"url\":\"https://generativelanguage.googleapis.com/v1\"}\n{\"host\":\"plain.example.com\"}";
         assert!(parse_access_log(jsonl, "jsonl").contains(&"generativelanguage.googleapis.com".to_string()));
+
+        // R5: endpoint / CASB connector formats.
+        let purview = "{\"TargetDomain\":\"api.openai.com\",\"User\":\"a@x\"}\n{\"RemoteURL\":\"https://intranet.example.com/ok\"}";
+        let ph = parse_access_log(purview, "purview");
+        assert!(ph.contains(&"api.openai.com".to_string()), "purview reads TargetDomain");
+        assert!(ph.iter().any(|h| classify_ai(h).is_some()), "purview export surfaces shadow AI");
+
+        let zs_csv = "datetime,url,action\n2026,https://api.anthropic.com/v1/messages,ALLOW\n2026,https://ok.example.com/x,ALLOW";
+        assert!(parse_access_log(zs_csv, "zscaler").contains(&"api.anthropic.com".to_string()), "zscaler CSV reads url column");
+        let zs_kv = "time=2026 url=https://api.cohere.ai/generate action=allow host=ignored.example.com";
+        assert!(parse_access_log(zs_kv, "zscaler").contains(&"api.cohere.ai".to_string()), "zscaler key=value reads url=");
+
+        let ns = "{\"url\":\"https://api.mistral.ai/v1\",\"app\":\"Mistral\"}\n{\"dsthost\":\"plain.example.com\"}";
+        assert!(parse_access_log(ns, "netskope").contains(&"api.mistral.ai".to_string()), "netskope reads url");
     }
 
     #[test]
