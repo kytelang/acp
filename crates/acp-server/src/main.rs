@@ -51,6 +51,9 @@ struct AppState {
     // G4: optional outbound event webhook (HMAC-signed) for stakeholder notifications.
     webhook_url: Option<String>,
     webhook_secret: Option<String>,
+    // G5: optional feed URLs the control plane polls for signed control packs / threat packs.
+    packs_feed_url: Option<String>,
+    threat_feed_url: Option<String>,
     lease: std::sync::Mutex<(bool, String, i64)>,
 }
 
@@ -406,6 +409,8 @@ async fn main() {
     let mut model_scan_block = false;
     let mut webhook_url: Option<String> = None;
     let mut webhook_secret: Option<String> = None;
+    let mut packs_feed_url: Option<String> = None;
+    let mut threat_feed_url: Option<String> = None;
     let mut node_id: Option<String> = None;
     let mut lease_ttl_ms: i64 = 15_000;
     let mut it = args.iter().skip(1);
@@ -426,6 +431,8 @@ async fn main() {
             "--model-scan-block" => model_scan_block = true,
             "--webhook-url" => webhook_url = it.next().cloned(),
             "--webhook-secret" => webhook_secret = it.next().cloned(),
+            "--packs-feed-url" => packs_feed_url = it.next().cloned(),
+            "--threat-feed-url" => threat_feed_url = it.next().cloned(),
             "--node-id" => node_id = it.next().cloned(),
             "--lease-ttl-ms" => lease_ttl_ms = it.next().and_then(|v| v.parse().ok()).unwrap_or(15_000),
             "--cp-key" => { if let Some(v) = it.next() { cp_key = v.clone(); } }
@@ -608,6 +615,8 @@ async fn main() {
         model_scan_block,
         webhook_url,
         webhook_secret,
+        packs_feed_url,
+        threat_feed_url,
         lease: std::sync::Mutex::new((false, String::new(), 0)),
     });
     // C1 (HA): restore persisted liveness/spike state so the dead-man's-switch and alert state survive
@@ -635,6 +644,56 @@ async fn main() {
                     }
                 }
                 tokio::time::sleep(period).await;
+            }
+        });
+    }
+    // G5: poll optional signed-pack / threat-pack feeds and load verified content on an interval.
+    if let (Some(store), Some(feed)) = (state.store.clone(), state.packs_feed_url.clone()) {
+        tokio::spawn(async move {
+            let client = reqwest::Client::new();
+            loop {
+                if let Ok(resp) = client.get(&feed).send().await {
+                    if let Ok(v) = resp.json::<serde_json::Value>().await {
+                        if let Some(arr) = v.get("packs").and_then(|p| p.as_array()) {
+                            for one in arr {
+                                if let Ok(signed) = serde_json::from_value::<acp_core::pack::SignedPack>(one.clone()) {
+                                    if acp_core::pack::verify(&signed) {
+                                        let p = &signed.pack;
+                                        let id = p.get("id").and_then(|x| x.as_str()).unwrap_or("").to_string();
+                                        let version = p.get("version").and_then(|x| x.as_str()).unwrap_or("").to_string();
+                                        if !id.is_empty() {
+                                            let _ = store.add_pack(&id, &version, &p.to_string(), &signed.pubkey_hex, &signed.sig_hex, now_ms() as i64).await;
+                                        }
+                                    } else {
+                                        tracing::warn!("packs feed: rejected a pack (signature verification failed)");
+                                    }
+                                }
+                            }
+                        }
+                    }
+                }
+                tokio::time::sleep(std::time::Duration::from_secs(60)).await;
+            }
+        });
+    }
+    if let (Some(store), Some(feed)) = (state.store.clone(), state.threat_feed_url.clone()) {
+        tokio::spawn(async move {
+            let client = reqwest::Client::new();
+            loop {
+                if let Ok(resp) = client.get(&feed).send().await {
+                    if let Ok(v) = resp.json::<serde_json::Value>().await {
+                        if let Ok(signed) = serde_json::from_value::<acp_core::threatfeed::SignedThreatPack>(v.clone()) {
+                            if acp_core::threatfeed::verify(&signed) {
+                                let version = signed.pack.get("version").and_then(|x| x.as_i64()).unwrap_or(0);
+                                let sigs = signed.pack.get("signatures").cloned().unwrap_or_else(|| serde_json::json!([])).to_string();
+                                let _ = store.set_firewall_threat(version, &sigs, now_ms() as i64).await;
+                            } else {
+                                tracing::warn!("threat feed: rejected a pack (signature verification failed)");
+                            }
+                        }
+                    }
+                }
+                tokio::time::sleep(std::time::Duration::from_secs(60)).await;
             }
         });
     }

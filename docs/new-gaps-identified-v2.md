@@ -74,7 +74,7 @@ builds `{type, ts_ms, event}`, signs it with `acp_core::webhook::sign_webhook` (
 and violation. Verified against a mock receiver: all three event types delivered, each signature
 verifies, and crafted markup in a title/tool name appears only as a JSON value.
 
-## G5. Pack + threat-feed breadth and an update channel (P2)
+## G5. Pack + threat-feed breadth and an update channel (P2)  [DONE 2026-09-27]
 Gap: only 3 built-in framework packs and a manual threat-pack load; Credo ships many jurisdictions with
 continuously-updated policy intelligence.
 Design: `--packs-feed-url` and `--threat-feed-url` the server polls on an interval; it fetches signed
@@ -85,6 +85,11 @@ Acceptance:
   and `/packs` shows it `verified: true`; a tampered feed pack is rejected.
 - `GET /packs/available` returns at least 5 built-in framework packs (3 original + 2 new).
 - The new packs' controls appear via `/controls?framework=...`.
+Status (2026-09-27): SHIPPED. Two new built-in framework packs (SOC 2, GDPR) in `controls`/`pack` (5
+total). Server `--packs-feed-url` and `--threat-feed-url` poll on a 60s interval, verifying each signed
+pack before loading. Verified: `/packs/available` returns 5 packs; SOC 2 controls surface via
+`/controls?framework=soc2`; a feed serving 5 packs (one tampered) loads the 4 valid ones (verified:true)
+and rejects the tampered one with a WARN.
 
 ## F1. Streaming (SSE) response gating (P1)  [DONE 2026-09-27]
 Gap: the gateway gates only non-streaming responses; streamed chat responses relay ungated.

@@ -44,6 +44,16 @@ pub fn library() -> Vec<Control> {
         c("iso-42001", "8.1", "Operational planning and control", "Plan, implement and control the processes for AI.", "signed policy, enforcement in path"),
         c("iso-42001", "9.1", "Monitoring, measurement, analysis, evaluation", "Evaluate AI performance and the AIMS.", "coverage, SIEM export, evidence reports"),
         c("iso-42001", "10.1", "Continual improvement", "Continually improve the AIMS.", "tuning/shadow-eval, posture progression"),
+        // SOC 2 (Trust Services Criteria, the security-relevant subset).
+        c("soc2", "cc6.1", "Logical access controls", "Restrict logical access to systems and data.", "RBAC/SCIM, per-route capability gating"),
+        c("soc2", "cc7.2", "Security monitoring", "Detect and respond to security events.", "violation events, SIEM export, spike alerts"),
+        c("soc2", "cc7.3", "Incident response", "Evaluate and act on detected security incidents.", "break-glass, kill-switch, approvals"),
+        c("soc2", "a1.2", "Availability and recovery", "Recover systems and data to meet availability commitments.", "HA leader lease, DR restore + acp verify"),
+        // GDPR (data-protection obligations relevant to AI processing).
+        c("gdpr", "art-5", "Principles of processing", "Lawful, fair, minimised and accurate processing.", "data-boundary lineage, PII redaction"),
+        c("gdpr", "art-25", "Data protection by design and by default", "Embed data protection into processing.", "content firewall, resource-boundary authz"),
+        c("gdpr", "art-30", "Records of processing", "Maintain records of processing activities.", "tamper-evident decision ledger"),
+        c("gdpr", "art-32", "Security of processing", "Appropriate technical and organisational security.", "encryption at rest, mTLS, signed evidence"),
     ]
 }
 
