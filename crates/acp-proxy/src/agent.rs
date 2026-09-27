@@ -56,6 +56,8 @@ struct Opts {
     approvals_url: Option<String>,
     evidence_url: Option<String>,
     firewall_url: Option<String>,
+    scan_url: Option<String>,
+    block_on_scanner_error: bool,
 }
 
 fn parse_opts(items: &[String]) -> Result<(Opts, Vec<String>), String> {
@@ -100,6 +102,8 @@ fn parse_opts(items: &[String]) -> Result<(Opts, Vec<String>), String> {
             "--block-secrets" => { o.content_firewall = true; o.block_secrets = true; }
             "--deny-topic" => { o.content_firewall = true; if let Some(v) = it.next() { o.deny_topics.push(v.clone()); } }
             "--content-ml" => { o.content_firewall = true; o.content_ml = it.next().cloned(); }
+            "--scan-url" => o.scan_url = it.next().cloned(),
+            "--block-on-scanner-error" => o.block_on_scanner_error = true,
             "--pin-pg" => o.pin_pg = it.next().cloned(),
             "--trajectory" => o.trajectory = it.next().cloned(),
             "--data-boundary" => o.data_boundary = it.next().cloned(),
@@ -285,6 +289,12 @@ async fn build_controller(o: &Opts) -> Result<Arc<Controller>, String> {
             None => return Err(format!("cannot load --content-ml model {mlp}")),
         }
     }
+    // B1: an external content-scan hook set by local flag (offline). The control-plane config below
+    // overrides this when a firewall_url is configured.
+    if let Some(url) = o.scan_url.clone() {
+        controller.set_external_scanner(Some(url), o.block_on_scanner_error);
+        tracing::info!("external content-scan hook enabled (offline flag)");
+    }
     if let Some(conn) = o.pin_pg.as_ref() {
         match acp_pgstate::PgState::connect(conn).await {
             Ok(pg) => { controller.set_pin_pg(pg).await; tracing::info!("shared tool pins via Postgres ({conn})"); }
@@ -445,7 +455,7 @@ pub async fn run(args: Vec<String>) -> ExitCode {
     // this workstation proxy needs no local model file. Fetched at startup and refreshed at runtime.
     if let Some(base) = opts.firewall_url.clone() {
         let base = base.trim_end_matches('/').to_string();
-        async fn fetch_fw(client: &reqwest::Client, base: &str) -> Option<(acp_core::content::ContentPolicy, Option<std::sync::Arc<acp_core::content::LinearScorer>>)> {
+        async fn fetch_fw(client: &reqwest::Client, base: &str) -> Option<(acp_core::content::ContentPolicy, Option<std::sync::Arc<acp_core::content::LinearScorer>>, Option<String>, bool)> {
             let v: serde_json::Value = client.get(format!("{base}/firewall/config")).send().await.ok()?.json().await.ok()?;
             let enabled = v.get("enabled").and_then(|x| x.as_bool()).unwrap_or(false);
             let block_secrets = enabled && v.get("block_secrets").and_then(|x| x.as_bool()).unwrap_or(false);
@@ -453,12 +463,16 @@ pub async fn run(args: Vec<String>) -> ExitCode {
             let pol = acp_core::content::ContentPolicy { block_injection: enabled, block_secrets, redact_pii: enabled, denied_topics };
             let model = v.get("model").and_then(|x| x.as_str()).unwrap_or("");
             let ml = if enabled && !model.is_empty() { acp_core::content::LinearScorer::from_json(model).ok().map(std::sync::Arc::new) } else { None };
-            Some((pol, ml))
+            // B1: central external content-scan hook config.
+            let scan_url = v.get("scan_url").and_then(|x| x.as_str()).map(|s| s.to_string()).filter(|s| !s.is_empty());
+            let block_on_scanner_error = v.get("block_on_scanner_error").and_then(|x| x.as_bool()).unwrap_or(false);
+            Some((pol, ml, scan_url, block_on_scanner_error))
         }
         let client = reqwest::Client::new();
-        if let Some((pol, ml)) = fetch_fw(&client, &base).await {
+        if let Some((pol, ml, scan_url, boe)) = fetch_fw(&client, &base).await {
             controller.set_content_policy(pol);
             if let Some(m) = ml { controller.set_content_ml(m); }
+            controller.set_external_scanner(scan_url, boe);
             tracing::info!("content firewall config fetched from {base}");
         } else {
             tracing::warn!("content firewall fetch from {base} failed; using local flags");
@@ -468,9 +482,10 @@ pub async fn run(args: Vec<String>) -> ExitCode {
             let client = reqwest::Client::new();
             loop {
                 tokio::time::sleep(std::time::Duration::from_secs(30)).await;
-                if let Some((pol, ml)) = fetch_fw(&client, &base).await {
+                if let Some((pol, ml, scan_url, boe)) = fetch_fw(&client, &base).await {
                     c2.set_content_policy(pol);
                     if let Some(m) = ml { c2.set_content_ml(m); }
+                    c2.set_external_scanner(scan_url, boe);
                 }
             }
         });

@@ -99,6 +99,23 @@ pub struct Controller {
     oidc: Mutex<Option<Oidc>>,
     // F1: reports field-raised step-up holds to the control plane so the console inbox sees them.
     approvals_reporter: Mutex<Option<crate::events::ApprovalReporter>>,
+    // B1: optional first-class external content-scan hook. When a URL is set, the transport POSTs
+    // {text, direction, context} to it and honours {block, redactions}; empty = built-in only.
+    external_scan_url: Mutex<Option<String>>,
+    external_scan_fail_closed: Mutex<bool>,
+    http: reqwest::Client,
+}
+
+/// B1: the outcome of an external content-scan call.
+pub struct ExternalScanOutcome {
+    pub block: bool,
+    pub redacted: Option<String>,
+    pub scanner_error: bool,
+}
+
+impl ExternalScanOutcome {
+    fn pass() -> Self { ExternalScanOutcome { block: false, redacted: None, scanner_error: false } }
+    fn on_error(fail_closed: bool) -> Self { ExternalScanOutcome { block: fail_closed, redacted: None, scanner_error: true } }
 }
 
 struct Oidc {
@@ -152,6 +169,9 @@ impl Controller {
             data_boundary: Mutex::new(None),
             oidc: Mutex::new(None),
             approvals_reporter: Mutex::new(None),
+            external_scan_url: Mutex::new(None),
+            external_scan_fail_closed: Mutex::new(false),
+            http: reqwest::Client::new(),
         }
     }
 
@@ -310,6 +330,63 @@ impl Controller {
         let policy = policy_guard.as_ref()?;
         let ml = self.content_ml.lock().unwrap().clone();
         screen_response_frame(policy, ml.as_deref(), raw)
+    }
+
+    /// B1: configure the external content-scan hook. url None/empty disables it (built-in only).
+    pub fn set_external_scanner(&self, url: Option<String>, fail_closed: bool) {
+        *self.external_scan_url.lock().unwrap() = url.filter(|u| !u.is_empty());
+        *self.external_scan_fail_closed.lock().unwrap() = fail_closed;
+    }
+
+    pub fn has_external_scanner(&self) -> bool {
+        self.external_scan_url.lock().unwrap().is_some()
+    }
+
+    /// B1: call the external content scanner over one piece of text in a given direction. Returns a
+    /// pass outcome when no scanner is configured. On a scanner error, fails closed only when
+    /// block_on_scanner_error was set; otherwise the caller falls back to the built-in engine.
+    pub async fn external_scan(&self, text: &str, direction: &str, context: serde_json::Value) -> ExternalScanOutcome {
+        let url = self.external_scan_url.lock().unwrap().clone();
+        let url = match url { Some(u) => u, None => return ExternalScanOutcome::pass() };
+        if text.is_empty() { return ExternalScanOutcome::pass(); }
+        let fail_closed = *self.external_scan_fail_closed.lock().unwrap();
+        let body = serde_json::json!({"text": text, "direction": direction, "context": context});
+        match self.http.post(&url).json(&body).send().await {
+            Ok(resp) => match resp.json::<serde_json::Value>().await {
+                Ok(v) => {
+                    let block = v.get("block").and_then(|b| b.as_bool()).unwrap_or(false);
+                    let redacted = v.get("redactions").and_then(|r| r.as_str()).map(|s| s.to_string());
+                    ExternalScanOutcome { block, redacted, scanner_error: false }
+                }
+                Err(_) => ExternalScanOutcome::on_error(fail_closed),
+            },
+            Err(_) => ExternalScanOutcome::on_error(fail_closed),
+        }
+    }
+
+    /// B1: extract (scannable text, direction) from a client->server request frame. tools/call frames
+    /// carry tool_args; other requests are treated as prompt text. Returns None for non-request frames.
+    pub fn request_scan_text(&self, raw: &[u8]) -> Option<(String, String)> {
+        let v: Value = serde_json::from_slice(raw).ok()?;
+        if v.get("method").is_none() { return None; }
+        let method = v.get("method").and_then(|m| m.as_str()).unwrap_or("");
+        let direction = if method == "tools/call" { "tool_args" } else { "prompt" };
+        let mut leaves: Vec<String> = Vec::new();
+        if let Some(params) = v.get("params") { collect_arg_strings(params, &mut leaves); }
+        if leaves.is_empty() { return None; }
+        Some((leaves.join("\n"), direction.to_string()))
+    }
+
+    /// B1: extract (scannable text, direction) from a server->client frame. A tool result carries
+    /// tool_result; other results are treated as a response. Returns None when there is no text.
+    pub fn response_scan_text(&self, raw: &[u8]) -> Option<(String, String)> {
+        let v: Value = serde_json::from_slice(raw).ok()?;
+        let result = v.get("result")?;
+        let direction = if result.get("content").is_some() { "tool_result" } else { "response" };
+        let mut leaves: Vec<String> = Vec::new();
+        collect_arg_strings(result, &mut leaves);
+        if leaves.is_empty() { return None; }
+        Some((leaves.join("\n"), direction.to_string()))
     }
 
     pub fn inspect_response(&self, raw: &[u8]) {

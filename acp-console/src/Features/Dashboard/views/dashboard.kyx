@@ -293,6 +293,8 @@ pub fn firewallStatusPanel(cfg: FirewallCfg): Html {
             {if (cfg.enabled) { <span class="badge ok">enabled</span> } else { <span class="badge bad">disabled</span> }}
             {if (cfg.blockSecrets) { <span class="badge ver">block secrets</span> } else { <span class="dim">secrets: allow</span> }}
             {if (cfg.hasModel) { <span class="badge ver">ML model loaded</span> } else { <span class="dim">signatures only</span> }}
+            {if (string.eql(cfg.scanUrl, "")) { <span class="dim">external scanner: off</span> } else { <span class="badge ver">external scanner</span> }}
+            {if (cfg.blockOnScannerError) { <span class="badge warn">fail closed</span> } else { <span class="dim">scanner error: fail open</span> }}
             <span class="dim">denied topics: {string.eql(cfg.denyTopics, "") ? "none" : cfg.denyTopics}</span>
         </div>
     </div>;

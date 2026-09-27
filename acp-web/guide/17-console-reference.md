@@ -300,7 +300,17 @@ two cards: the config form and the firewall rules list.
 ### Firewall config
 
 The card first shows a read-only status line (enabled/disabled, block-secrets on/off, whether an ML
-model is loaded, and the denied topics) from `GET /firewall/config`.
+model is loaded, the denied topics, whether an external scanner is set and its fail mode) from
+`GET /firewall/config`.
+
+**External scanner hook (contract).** When an **External scanner URL** is set, each enforcement point
+POSTs `{"text", "direction", "context"}` to it and honours the reply `{"block", "findings",
+"redactions"}`. The `direction` is one of `prompt`, `response`, `tool_args` or `tool_result`, so a
+scanner can treat inbound and outbound content differently. When `block` is true the enforcement point
+blocks the call (a tool call is refused with an error; a tool result is replaced with a safe message);
+`redactions`, when present, replaces the offending text. If the scanner errors, **On scanner error**
+decides the outcome: fail open runs the built-in engine and proceeds, fail closed blocks. With no URL
+set the built-in engine runs exactly as before (offline default).
 
 | Field | Required | What it does | Allowed values |
 | --- | --- | --- | --- |
@@ -308,6 +318,8 @@ model is loaded, and the denied topics) from `GET /firewall/config`.
 | **Block secrets** | optional (defaults `no`) | block content that looks like secrets or credentials | `no` (`false`), `yes` (`true`) |
 | **Denied topics** | optional | topics to deny, comma-separated (split and trimmed into a list) | free text (for example `weapons, malware`) |
 | **ML model JSON** | optional | paste `model.json` content; leave blank to use signatures only | JSON text, or empty |
+| **External scanner URL** | optional | a first-class external detection hook; blank uses the built-in engine only | URL, or empty |
+| **On scanner error** | optional (defaults fail open) | what to do when the external scanner errors or is unreachable | `fail open (built-in still runs)` (`false`), `fail closed (block)` (`true`) |
 
 **Button:**
 

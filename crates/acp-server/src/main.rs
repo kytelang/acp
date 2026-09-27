@@ -811,12 +811,12 @@ async fn endpoints_list(State(st): State<Arc<AppState>>) -> impl IntoResponse {
 /// carrying local files. Ungated (same trust as the governed rule set). Returns a safe default when
 /// no config has been set yet.
 async fn firewall_config_get(State(st): State<Arc<AppState>>) -> Response {
-    let default = serde_json::json!({"enabled": false, "block_secrets": false, "deny_topics": [], "model": "", "updated_ms": 0});
+    let default = serde_json::json!({"enabled": false, "block_secrets": false, "deny_topics": [], "model": "", "scan_url": "", "block_on_scanner_error": false, "updated_ms": 0});
     let store = match &st.store { Some(s) => s, None => return Json(default).into_response() };
     match store.get_firewall_config().await {
         Ok(Some(c)) => {
             let topics: serde_json::Value = serde_json::from_str(&c.deny_topics).unwrap_or_else(|_| serde_json::json!([]));
-            Json(serde_json::json!({"enabled": c.enabled, "block_secrets": c.block_secrets, "deny_topics": topics, "model": c.model, "updated_ms": c.updated_ms})).into_response()
+            Json(serde_json::json!({"enabled": c.enabled, "block_secrets": c.block_secrets, "deny_topics": topics, "model": c.model, "scan_url": c.scan_url, "block_on_scanner_error": c.block_on_scanner_error, "updated_ms": c.updated_ms})).into_response()
         }
         Ok(None) => Json(default).into_response(),
         Err(e) => Json(serde_json::json!({"error": e})).into_response(),
@@ -840,7 +840,9 @@ async fn firewall_config_set(State(st): State<Arc<AppState>>, headers: HeaderMap
         Some(v) => v.to_string(),
         None => String::new(),
     };
-    match store.set_firewall_config(enabled, block_secrets, &deny_topics_json, &model, now_ms() as i64).await {
+    let scan_url = body.get("scan_url").and_then(|v| v.as_str()).unwrap_or("").trim().to_string();
+    let block_on_scanner_error = body.get("block_on_scanner_error").and_then(|v| v.as_bool()).unwrap_or(false);
+    match store.set_firewall_config(enabled, block_secrets, &deny_topics_json, &model, &scan_url, block_on_scanner_error, now_ms() as i64).await {
         Ok(()) => Json(serde_json::json!({"ok": true})).into_response(),
         Err(e) => Json(serde_json::json!({"ok": false, "error": e})).into_response(),
     }

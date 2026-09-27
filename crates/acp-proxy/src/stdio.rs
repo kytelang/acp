@@ -60,10 +60,21 @@ pub async fn run(cmd: &str, args: &[String], controller: Arc<Controller>) -> any
             // results for injected content (indirect injection); relay verbatim unless blocked.
             s2c_ctl.inspect_response(line.as_bytes());
             s2c_ctl.inspect_response_shared(line.as_bytes()).await;
-            let outline = match s2c_ctl.screen_response(line.as_bytes()) {
+            let mut outline = match s2c_ctl.screen_response(line.as_bytes()) {
                 Some(replacement) => replacement,
-                None => line,
+                None => line.clone(),
             };
+            // B1: first-class external content-scan hook on the response side (tool_result/response).
+            if s2c_ctl.has_external_scanner() {
+                if let Some((text, direction)) = s2c_ctl.response_scan_text(line.as_bytes()) {
+                    let outcome = s2c_ctl.external_scan(&text, &direction, serde_json::json!({"transport": "stdio"})).await;
+                    if outcome.block {
+                        outline = blocked_response_frame(&line, &direction);
+                    } else if let Some(red) = outcome.redacted {
+                        outline = redacted_response_frame(&line, &red).unwrap_or(outline);
+                    }
+                }
+            }
             if s2c_out.send(outline).await.is_err() {
                 break;
             }
@@ -76,11 +87,21 @@ pub async fn run(cmd: &str, args: &[String], controller: Arc<Controller>) -> any
         while let Ok(Some(line)) = lines.next_line().await {
             match controller.decide_frame(line.as_bytes()) {
                 FrameAction::Forward => {
+                    // B1: external content-scan hook on the request side (prompt/tool_args). A block
+                    // replies to the client with an error and never forwards to the tool server.
+                    if let Some(reply) = external_block_request(&controller, line.as_bytes()).await {
+                        let _ = c2s_out.send(reply).await;
+                        continue;
+                    }
                     if to_child.send(line).await.is_err() {
                         break;
                     }
                 }
                 FrameAction::ForwardRewritten(rewritten) => {
+                    if let Some(reply) = external_block_request(&controller, rewritten.as_bytes()).await {
+                        let _ = c2s_out.send(reply).await;
+                        continue;
+                    }
                     if to_child.send(rewritten).await.is_err() {
                         break;
                     }
@@ -99,4 +120,51 @@ pub async fn run(cmd: &str, args: &[String], controller: Arc<Controller>) -> any
     let _ = child_writer.await;
     let _ = client_writer.await;
     Ok(status.code().unwrap_or(0))
+}
+
+/// B1: if an external scanner is configured and blocks this request frame, return the client-facing
+/// JSON-RPC error reply to send instead of forwarding; otherwise None (forward as normal).
+async fn external_block_request(controller: &Arc<Controller>, raw: &[u8]) -> Option<String> {
+    if !controller.has_external_scanner() { return None; }
+    let (text, direction) = controller.request_scan_text(raw)?;
+    let outcome = controller.external_scan(&text, &direction, serde_json::json!({"transport": "stdio"})).await;
+    if !outcome.block { return None; }
+    let id = serde_json::from_slice::<serde_json::Value>(raw).ok()
+        .and_then(|v| v.get("id").cloned())
+        .unwrap_or(serde_json::Value::Null);
+    Some(serde_json::json!({
+        "jsonrpc": "2.0", "id": id,
+        "error": {"code": -32001, "message": format!("blocked by content firewall (external scan, {direction})")}
+    }).to_string())
+}
+
+/// B1: a safe replacement for a server->client frame the external scanner blocked.
+fn blocked_response_frame(raw: &str, direction: &str) -> String {
+    let id = serde_json::from_str::<serde_json::Value>(raw).ok()
+        .and_then(|v| v.get("id").cloned())
+        .unwrap_or(serde_json::Value::Null);
+    serde_json::json!({
+        "jsonrpc": "2.0", "id": id,
+        "result": {
+            "isError": true,
+            "content": [{"type": "text", "text": format!("blocked by content firewall (external scan, {direction})")}],
+            "structuredContent": {"blocked": true, "reason": "content-firewall-external", "direction": direction}
+        }
+    }).to_string()
+}
+
+/// B1: apply an external scanner's redaction to a tool-result frame's text content, preserving the
+/// frame shape. Returns None when the frame has no result content to redact.
+fn redacted_response_frame(raw: &str, redacted: &str) -> Option<String> {
+    let mut v: serde_json::Value = serde_json::from_str(raw).ok()?;
+    let arr = v.get_mut("result")?.get_mut("content")?.as_array_mut()?;
+    let mut applied = false;
+    for item in arr.iter_mut() {
+        if item.get("text").is_some() {
+            item["text"] = serde_json::Value::String(redacted.to_string());
+            applied = true;
+            break;
+        }
+    }
+    if applied { Some(v.to_string()) } else { None }
 }

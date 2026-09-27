@@ -124,7 +124,7 @@ Acceptance:
 
 ## B. Firewall / detection depth (vs Aegis / Lakera) - mostly INTEGRATE
 
-### B1. Best-in-class detection via a first-class external hook (P1, M)
+### B1. Best-in-class detection via a first-class external hook (P1, M)  [DONE 2026-09-27]
 Gap: the built-in content firewall is deliberately lightweight.
 Design (integrate): a stable content-scan hook contract: PEP POSTs
 `{text, direction: prompt|response|tool_args|tool_result, context}` to a configured `scan_url` and gets
@@ -139,6 +139,14 @@ Acceptance:
 - With the scanner unreachable and `block_on_scanner_error:true`, the call fails closed (blocked); with
   it false, the built-in engine still runs and the call proceeds.
 - With no `scan_url`, behaviour is unchanged (offline default).
+Status (2026-09-27): SHIPPED. `firewall_config` gained `scan_url` + `block_on_scanner_error`
+(cpstore + server GET/POST /firewall/config + console Content firewall page). The MCP PEP fetches
+them via `--firewall-url` (or `--scan-url`/`--block-on-scanner-error` offline) and, in the async
+stdio transport, POSTs `{text, direction, context}` to the hook and honours `{block, redactions}`.
+Verified live against a mock scanner: block:true blocks / block:false passes; all four directions
+(prompt via initialize, response via tools/list, tool_args via tools/call, tool_result via a leaking
+result) appear in the scanner's received requests; scanner-down + fail-closed blocks, fail-open runs
+the built-in engine and proceeds; no URL = unchanged. 18 proxy tests pass.
 
 ### B2. Output-safety breadth (P2, M)
 Gap: gateway scans the prompt path only; limited toxicity/groundedness/PII breadth.

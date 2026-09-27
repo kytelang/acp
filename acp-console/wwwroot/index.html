@@ -127,7 +127,7 @@
     .modal input[type=file]{display:none}
   </style>
 </head>
-<body data-signals="{view: 'overview', endpoint: '', disposition: 'govern', appName: '', appOwner: '', agentAppId: '', agentName: '', grcKind: 'assessment', grcSubject: '', grcTitle: '', grcStatus: 'open', grcBody: '{}', grcLinks: '', asSubject: '', asTitle: '', asAssignee: '', as_prohibited_practice: 'false', as_safety_component: 'false', as_biometric_identification: 'false', as_critical_infrastructure: 'false', as_employment_or_education: 'false', as_essential_services: 'false', as_law_enforcement: 'false', as_interacts_with_humans: 'false', as_generates_content: 'false', modal: '', policyTab: 'deployed', fwEnabled: 'false', fwBlockSecrets: 'false', fwDenyTopics: '', fwModel: '', frMatchKind: 'host_contains', frMatchValue: '', frPath: '', frAction: 'block', frClassify: '', author: 'operator', epReason: 'sanctioned', mode: 'lockdown_all', scope: 'global', killReason: 'incident', ttl_ms: '3600000', reason: ''}">
+<body data-signals="{view: 'overview', endpoint: '', disposition: 'govern', appName: '', appOwner: '', agentAppId: '', agentName: '', grcKind: 'assessment', grcSubject: '', grcTitle: '', grcStatus: 'open', grcBody: '{}', grcLinks: '', asSubject: '', asTitle: '', asAssignee: '', as_prohibited_practice: 'false', as_safety_component: 'false', as_biometric_identification: 'false', as_critical_infrastructure: 'false', as_employment_or_education: 'false', as_essential_services: 'false', as_law_enforcement: 'false', as_interacts_with_humans: 'false', as_generates_content: 'false', modal: '', policyTab: 'deployed', fwEnabled: 'false', fwBlockSecrets: 'false', fwDenyTopics: '', fwModel: '', fwScanUrl: '', fwBlockOnScannerError: 'false', frMatchKind: 'host_contains', frMatchValue: '', frPath: '', frAction: 'block', frClassify: '', author: 'operator', epReason: 'sanctioned', mode: 'lockdown_all', scope: 'global', killReason: 'incident', ttl_ms: '3600000', reason: ''}">
   <div class="navbar">
     <div class="brand">
       <img class="logo" src="/varman-logo.svg" alt="Varman" />
@@ -270,6 +270,8 @@ rules:
             </div>
             <label class="fld">Denied topics (comma-separated) <input type="text" data-bind="fwDenyTopics" placeholder="weapons, malware" /></label>
             <label class="fld">ML model JSON (optional) <textarea data-bind="fwModel" placeholder="paste model.json content, or leave blank for signatures only"></textarea></label>
+            <label class="fld">External scanner URL (optional) <input type="text" data-bind="fwScanUrl" placeholder="https://scanner.internal/scan (leave blank for built-in only)" /><small class="hint">A first-class detection hook. Each enforcement point POSTs {text, direction, context} and honours {block, redactions}. Directions: prompt, response, tool_args, tool_result.</small></label>
+            <label class="fld">On scanner error <select data-bind="fwBlockOnScannerError"><option value="false">fail open (built-in still runs)</option><option value="true">fail closed (block)</option></select></label>
             <button class="btn primary" data-on:click="@post('/firewall/save')">Save firewall config</button>
           </div></div>
           <div class="card"><div class="card-h"><span class="ic">&#128272;</span> Firewall rules<span class="sub">match a destination, choose an action; served to every acp-agent, operator rules win first-match</span></div>
