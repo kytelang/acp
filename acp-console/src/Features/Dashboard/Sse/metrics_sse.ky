@@ -2,6 +2,8 @@ import web.app;
 import web.request;
 import net.aio;
 import datastar;
+import serde.json;
+import string;
 import Features.Dashboard.Shared.acp_client;
 import Features.Dashboard.views.dashboard;
 
@@ -14,65 +16,70 @@ pub class MetricsSse impl SseHandler {
     async fn stream(self: MetricsSse, req: request.Request, io: aio.AsyncIO): void {
         let ds = datastar.Sse.overStreamIO(io);
         let _h = await ds.writeHeaders();
+        // R1: scope this stream to the tenant the browser selected (datastar sends signals in the
+        // `datastar` query param on the @get); fall back to the client's default tenant.
+        let dsq = req.query.get("datastar") ?? "";
+        let selTenant = string.eql(dsq, "") ? self.acp.tenant : (json.asString(json.get(json.parse(dsq), "tenant")) ?? self.acp.tenant);
+        let sc = self.acp.withTenant(selTenant);
         let alive = true;
         while (alive) {
             // Interleave fetch+write so the first paint lands after a single upstream call. The
             // health panel makes several blocking calls, so it is deferred to the end of the tick.
-            let rep = self.acp.report();
+            let rep = sc.report();
             let w = await ds.patchElementsSimple(metricsPanel(rep));
             if (w < 0) { alive = false; }
-            let w2 = await ds.patchElementsSimple(appsPanel(self.acp.appsRows()));
+            let w2 = await ds.patchElementsSimple(appsPanel(sc.appsRows()));
             if (w2 < 0) { alive = false; }
-            let w3 = await ds.patchElementsSimple(agentsPanel(self.acp.agentsRows()));
+            let w3 = await ds.patchElementsSimple(agentsPanel(sc.agentsRows()));
             if (w3 < 0) { alive = false; }
-            let w4 = await ds.patchElementsSimple(policyPanel(self.acp.policyVersion(), self.acp.policyAuthor()));
+            let w4 = await ds.patchElementsSimple(policyPanel(sc.policyVersion(), sc.policyAuthor()));
             if (w4 < 0) { alive = false; }
-            let w5 = await ds.patchElementsSimple(approvalsPanel(self.acp.pendingApprovals()));
+            let w5 = await ds.patchElementsSimple(approvalsPanel(sc.pendingApprovals()));
             if (w5 < 0) { alive = false; }
-            let ev = self.acp.evidenceRows();
+            let ev = sc.evidenceRows();
             let w6 = await ds.patchElementsSimple(evidencePanel(ev));
             if (w6 < 0) { alive = false; }
-            let w7 = await ds.patchElementsSimple(policyRulesPanel(self.acp.policyRules()));
+            let w7 = await ds.patchElementsSimple(policyRulesPanel(sc.policyRules()));
             if (w7 < 0) { alive = false; }
-            let w8 = await ds.patchElementsSimple(killStatusPanel(self.acp.killStatus()));
+            let w8 = await ds.patchElementsSimple(killStatusPanel(sc.killStatus()));
             if (w8 < 0) { alive = false; }
             // Control-plane integrity (several calls) and the consolidated report, last.
-            let health = self.acp.health();
+            let health = sc.health();
             let w9 = await ds.patchElementsSimple(healthPanel(health));
             if (w9 < 0) { alive = false; }
             let w10 = await ds.patchElementsSimple(reportsPanel(rep, health, ev.size()));
             if (w10 < 0) { alive = false; }
-            let w11 = await ds.patchElementsSimple(endpointsPanel(self.acp.endpointsRows()));
+            let w11 = await ds.patchElementsSimple(endpointsPanel(sc.endpointsRows()));
             if (w11 < 0) { alive = false; }
-            let w12 = await ds.patchElementsSimple(grcPanel(self.acp.grcRows()));
+            let w12 = await ds.patchElementsSimple(grcPanel(sc.grcRows()));
             if (w12 < 0) { alive = false; }
-            let w13 = await ds.patchElementsSimple(violationsPanel(self.acp.eventRows()));
+            let w13 = await ds.patchElementsSimple(violationsPanel(sc.eventRows()));
             if (w13 < 0) { alive = false; }
-            let w14 = await ds.patchElementsSimple(fleetEvidencePanel(self.acp.ingestedRows()));
+            let w14 = await ds.patchElementsSimple(fleetEvidencePanel(sc.ingestedRows()));
             if (w14 < 0) { alive = false; }
-            let w15 = await ds.patchElementsSimple(firewallStatusPanel(self.acp.firewallStatus()));
+            let w15 = await ds.patchElementsSimple(firewallStatusPanel(sc.firewallStatus()));
             if (w15 < 0) { alive = false; }
-            let w16 = await ds.patchElementsSimple(firewallRulesPanel(self.acp.firewallRules()));
+            let w16 = await ds.patchElementsSimple(firewallRulesPanel(sc.firewallRules()));
             if (w16 < 0) { alive = false; }
-            let w17 = await ds.patchElementsSimple(violationReportPanel(self.acp.violationReport()));
+            let w17 = await ds.patchElementsSimple(violationReportPanel(sc.violationReport()));
             if (w17 < 0) { alive = false; }
-            let w18 = await ds.patchElementsSimple(modelsPanel(self.acp.modelRows()));
+            let w18 = await ds.patchElementsSimple(modelsPanel(sc.modelRows()));
             if (w18 < 0) { alive = false; }
-            let w19 = await ds.patchElementsSimple(vendorsPanel(self.acp.vendorRows()));
+            let w19 = await ds.patchElementsSimple(vendorsPanel(sc.vendorRows()));
             if (w19 < 0) { alive = false; }
-            let w20 = await ds.patchElementsSimple(packsPanel(self.acp.packRows()));
+            let w20 = await ds.patchElementsSimple(packsPanel(sc.packRows()));
             if (w20 < 0) { alive = false; }
-            let w21 = await ds.patchElementsSimple(redteamPanel(self.acp.redteamRuns()));
+            let w21 = await ds.patchElementsSimple(redteamPanel(sc.redteamRuns()));
             if (w21 < 0) { alive = false; }
-            let w22 = await ds.patchElementsSimple(riskPanel(self.acp.riskRows()));
+            let w22 = await ds.patchElementsSimple(riskPanel(sc.riskRows()));
             if (w22 < 0) { alive = false; }
-            let w23 = await ds.patchElementsSimple(modelCardsPanel(self.acp.modelCardRows()));
+            let w23 = await ds.patchElementsSimple(modelCardsPanel(sc.modelCardRows()));
             if (w23 < 0) { alive = false; }
-            let w24 = await ds.patchElementsSimple(driftPanel(self.acp.driftRows()));
+            let w24 = await ds.patchElementsSimple(driftPanel(sc.driftRows()));
             if (w24 < 0) { alive = false; }
-            let w25 = await ds.patchElementsSimple(lineagePanel(self.acp.lineageRows()));
+            let w25 = await ds.patchElementsSimple(lineagePanel(sc.lineageRows()));
             if (w25 < 0) { alive = false; }
-            let w26 = await ds.patchElementsSimple(tenantBadge(self.acp.tenant));
+            let w26 = await ds.patchElementsSimple(tenantSwitcher(sc.tenantsList(), sc.tenant));
             if (w26 < 0) { alive = false; }
             if (alive) { await aio.delay(2000); }
         }

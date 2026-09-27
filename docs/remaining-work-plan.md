@@ -13,7 +13,7 @@ Each item has a design, an effort estimate, risks, and acceptance criteria.
 
 ---
 
-## R1. Console live tenant switcher (CODE, P1)
+## R1. Console live tenant switcher (CODE, P1)  [DONE 2026-09-27]
 
 **Why it remains.** M1 made the server fully multi-tenant and gave the console a per-instance tenant via
 `ACP_TENANT`. A live in-browser switcher (change tenant without restarting the console) was deferred
@@ -41,6 +41,13 @@ early with a spike. Per-stream client lifecycle (one client per SSE connection).
   tenant within one refresh cycle.
 - A create/transition performed while a tenant is selected lands in that tenant (verified by switching
   and re-listing).
+Status (2026-09-27): SHIPPED. `AcpClient.withTenant` + `tenantsList`; the SSE handler reads the tenant
+from the datastar `datastar` query param and scopes every panel via a per-stream client; write handlers
+rebind `acp` per request from the `tenant` signal; a `tenantSwitcher` <select> (options from /tenants,
+`data-on:change="@get('/sse/metrics')"`) replaces the static badge. Verified e2e: the console SSE with
+tenant=acme streams only ACME data, tenant=globex only GLOBEX data, and the switcher renders both
+options. Note: the browser-side reconnect-on-change (datastar closing the old stream) needs a visual
+smoke-test; the loop's disconnect check (w<0) is the server-side backstop.
 
 ---
 

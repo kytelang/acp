@@ -13,6 +13,7 @@ pub struct CreateGrcHandler impl RouteHandler {
     acp: AcpClient,
     init(acp: AcpClient) { self.acp = acp; }
     async fn serve(self: CreateGrcHandler, ctx: Context): Response {
+        let acp = self.acp.withTenant(json.stringField(ctx.request.body, "tenant"));
         let auth = ctx.request.headers.get("authorization") ?? "";
         let kind = json.stringField(ctx.request.body, "grcKind");
         let subject = json.stringField(ctx.request.body, "grcSubject");
@@ -33,7 +34,7 @@ pub struct CreateGrcHandler impl RouteHandler {
             n = n + 1;
         }
         refs = refs + "]";
-        let res = self.acp.createGrc(kind, subject, title, status, body, refs, auth);
+        let res = acp.createGrc(kind, subject, title, status, body, refs, auth);
         return await ds_response.patch(grcCreateResult(res));
     }
 }
@@ -45,11 +46,12 @@ pub struct GrcStatusHandler impl RouteHandler {
     acp: AcpClient,
     init(acp: AcpClient) { self.acp = acp; }
     async fn serve(self: GrcStatusHandler, ctx: Context): Response {
+        let acp = self.acp.withTenant(json.stringField(ctx.request.body, "tenant"));
         let auth = ctx.request.headers.get("authorization") ?? "";
         let id = ctx.param("id");
         let status = ctx.param("status");
-        let _ = self.acp.updateGrcStatus(id, status, auth);
-        return await ds_response.patch(grcPanel(self.acp.grcRows()));
+        let _ = acp.updateGrcStatus(id, status, auth);
+        return await ds_response.patch(grcPanel(acp.grcRows()));
     }
 }
 
@@ -60,6 +62,7 @@ pub struct CreateAssessmentHandler impl RouteHandler {
     acp: AcpClient,
     init(acp: AcpClient) { self.acp = acp; }
     async fn serve(self: CreateAssessmentHandler, ctx: Context): Response {
+        let acp = self.acp.withTenant(json.stringField(ctx.request.body, "tenant"));
         let auth = ctx.request.headers.get("authorization") ?? "";
         let subject = json.stringField(ctx.request.body, "asSubject");
         let title = json.stringField(ctx.request.body, "asTitle");
@@ -83,7 +86,7 @@ pub struct CreateAssessmentHandler impl RouteHandler {
             n = n + 1;
         }
         answers = answers + "}";
-        let res = self.acp.assessGrc(subject, title, answers, assignee, "", auth);
+        let res = acp.assessGrc(subject, title, answers, assignee, "", auth);
         return await ds_response.patch(grcCreateResult(res));
     }
 }
@@ -93,11 +96,12 @@ pub struct AssignGrcHandler impl RouteHandler {
     acp: AcpClient,
     init(acp: AcpClient) { self.acp = acp; }
     async fn serve(self: AssignGrcHandler, ctx: Context): Response {
+        let acp = self.acp.withTenant(json.stringField(ctx.request.body, "tenant"));
         let auth = ctx.request.headers.get("authorization") ?? "";
         let id = ctx.param("id");
         let assignee = json.stringField(ctx.request.body, "assignTo");
-        let _ = self.acp.assignGrc(id, assignee, "", auth);
-        return await ds_response.patch(grcPanel(self.acp.grcRows()));
+        let _ = acp.assignGrc(id, assignee, "", auth);
+        return await ds_response.patch(grcPanel(acp.grcRows()));
     }
 }
 
@@ -107,12 +111,13 @@ pub struct ControlToggleHandler impl RouteHandler {
     acp: AcpClient,
     init(acp: AcpClient) { self.acp = acp; }
     async fn serve(self: ControlToggleHandler, ctx: Context): Response {
+        let acp = self.acp.withTenant(json.stringField(ctx.request.body, "tenant"));
         let auth = ctx.request.headers.get("authorization") ?? "";
         let id = ctx.param("id");
         let cid = ctx.param("cid");
         let done = string.eql(ctx.param("done"), "done");
-        let _ = self.acp.toggleControl(id, cid, done, auth);
-        return await ds_response.patch(grcPanel(self.acp.grcRows()));
+        let _ = acp.toggleControl(id, cid, done, auth);
+        return await ds_response.patch(grcPanel(acp.grcRows()));
     }
 }
 
@@ -123,6 +128,7 @@ pub struct FirewallSaveHandler impl RouteHandler {
     acp: AcpClient,
     init(acp: AcpClient) { self.acp = acp; }
     async fn serve(self: FirewallSaveHandler, ctx: Context): Response {
+        let acp = self.acp.withTenant(json.stringField(ctx.request.body, "tenant"));
         let auth = ctx.request.headers.get("authorization") ?? "";
         let en = json.stringField(ctx.request.body, "fwEnabled");
         let bs = json.stringField(ctx.request.body, "fwBlockSecrets");
@@ -131,8 +137,8 @@ pub struct FirewallSaveHandler impl RouteHandler {
         let scanUrl = json.stringField(ctx.request.body, "fwScanUrl");
         let boe = json.stringField(ctx.request.body, "fwBlockOnScannerError");
         let tox = json.stringField(ctx.request.body, "fwBlockToxicity");
-        let _ = self.acp.setFirewall(string.eql(en, "true"), string.eql(bs, "true"), topics, model, scanUrl, string.eql(boe, "true"), string.eql(tox, "true"), auth);
-        return await ds_response.patch(firewallStatusPanel(self.acp.firewallStatus()));
+        let _ = acp.setFirewall(string.eql(en, "true"), string.eql(bs, "true"), topics, model, scanUrl, string.eql(boe, "true"), string.eql(tox, "true"), auth);
+        return await ds_response.patch(firewallStatusPanel(acp.firewallStatus()));
     }
 }
 
@@ -142,14 +148,15 @@ pub struct FirewallRuleAddHandler impl RouteHandler {
     acp: AcpClient,
     init(acp: AcpClient) { self.acp = acp; }
     async fn serve(self: FirewallRuleAddHandler, ctx: Context): Response {
+        let acp = self.acp.withTenant(json.stringField(ctx.request.body, "tenant"));
         let auth = ctx.request.headers.get("authorization") ?? "";
         let kind = json.stringField(ctx.request.body, "frMatchKind");
         let value = json.stringField(ctx.request.body, "frMatchValue");
         let path = json.stringField(ctx.request.body, "frPath");
         let action = json.stringField(ctx.request.body, "frAction");
         let classify = json.stringField(ctx.request.body, "frClassify");
-        let _ = self.acp.addFirewallRule(kind, value, path, action, classify, auth);
-        return await ds_response.patch(firewallRulesPanel(self.acp.firewallRules()));
+        let _ = acp.addFirewallRule(kind, value, path, action, classify, auth);
+        return await ds_response.patch(firewallRulesPanel(acp.firewallRules()));
     }
 }
 
@@ -157,10 +164,11 @@ pub struct FirewallRuleDeleteHandler impl RouteHandler {
     acp: AcpClient,
     init(acp: AcpClient) { self.acp = acp; }
     async fn serve(self: FirewallRuleDeleteHandler, ctx: Context): Response {
+        let acp = self.acp.withTenant(json.stringField(ctx.request.body, "tenant"));
         let auth = ctx.request.headers.get("authorization") ?? "";
         let id = ctx.param("id");
-        let _ = self.acp.deleteFirewallRule(id, auth);
-        return await ds_response.patch(firewallRulesPanel(self.acp.firewallRules()));
+        let _ = acp.deleteFirewallRule(id, auth);
+        return await ds_response.patch(firewallRulesPanel(acp.firewallRules()));
     }
 }
 
@@ -170,7 +178,8 @@ pub struct ReportCsvHandler impl RouteHandler {
     acp: AcpClient,
     init(acp: AcpClient) { self.acp = acp; }
     async fn serve(self: ReportCsvHandler, ctx: Context): Response {
-        let csv = self.acp.violationCsv();
+        let acp = self.acp.withTenant(json.stringField(ctx.request.body, "tenant"));
+        let csv = acp.violationCsv();
         return response.Response.ok(csv)
             .setHeader("content-type", "text/csv")
             .setHeader("content-disposition", "attachment; filename=\"violations.csv\"");
@@ -182,9 +191,10 @@ pub struct LoadPacksHandler impl RouteHandler {
     acp: AcpClient,
     init(acp: AcpClient) { self.acp = acp; }
     async fn serve(self: LoadPacksHandler, ctx: Context): Response {
+        let acp = self.acp.withTenant(json.stringField(ctx.request.body, "tenant"));
         let auth = ctx.request.headers.get("authorization") ?? "";
-        let _ = self.acp.loadBuiltinPacks(auth);
-        return await ds_response.patch(packsPanel(self.acp.packRows()));
+        let _ = acp.loadBuiltinPacks(auth);
+        return await ds_response.patch(packsPanel(acp.packRows()));
     }
 }
 
@@ -193,8 +203,9 @@ pub struct FrameworkReportHandler impl RouteHandler {
     acp: AcpClient,
     init(acp: AcpClient) { self.acp = acp; }
     async fn serve(self: FrameworkReportHandler, ctx: Context): Response {
+        let acp = self.acp.withTenant(json.stringField(ctx.request.body, "tenant"));
         let name = ctx.param("name");
-        return await ds_response.patch(frameworkReportPanel(self.acp.frameworkReport(name)));
+        return await ds_response.patch(frameworkReportPanel(acp.frameworkReport(name)));
     }
 }
 
@@ -203,8 +214,9 @@ pub struct FrameworkCsvHandler impl RouteHandler {
     acp: AcpClient,
     init(acp: AcpClient) { self.acp = acp; }
     async fn serve(self: FrameworkCsvHandler, ctx: Context): Response {
+        let acp = self.acp.withTenant(json.stringField(ctx.request.body, "tenant"));
         let name = ctx.param("name");
-        let csv = self.acp.frameworkCsv(name);
+        let csv = acp.frameworkCsv(name);
         return response.Response.ok(csv)
             .setHeader("content-type", "text/csv")
             .setHeader("content-disposition", "attachment; filename=\"framework-report.csv\"");
@@ -216,9 +228,10 @@ pub struct LoadThreatPackHandler impl RouteHandler {
     acp: AcpClient,
     init(acp: AcpClient) { self.acp = acp; }
     async fn serve(self: LoadThreatPackHandler, ctx: Context): Response {
+        let acp = self.acp.withTenant(json.stringField(ctx.request.body, "tenant"));
         let auth = ctx.request.headers.get("authorization") ?? "";
-        let _ = self.acp.loadThreatPack(auth);
-        return await ds_response.patch(firewallStatusPanel(self.acp.firewallStatus()));
+        let _ = acp.loadThreatPack(auth);
+        return await ds_response.patch(firewallStatusPanel(acp.firewallStatus()));
     }
 }
 
@@ -227,9 +240,10 @@ pub struct RunRedteamHandler impl RouteHandler {
     acp: AcpClient,
     init(acp: AcpClient) { self.acp = acp; }
     async fn serve(self: RunRedteamHandler, ctx: Context): Response {
+        let acp = self.acp.withTenant(json.stringField(ctx.request.body, "tenant"));
         let auth = ctx.request.headers.get("authorization") ?? "";
-        let _ = self.acp.runRedteam(auth);
-        return await ds_response.patch(redteamPanel(self.acp.redteamRuns()));
+        let _ = acp.runRedteam(auth);
+        return await ds_response.patch(redteamPanel(acp.redteamRuns()));
     }
 }
 
@@ -238,11 +252,12 @@ pub struct UsecaseTransitionHandler impl RouteHandler {
     acp: AcpClient,
     init(acp: AcpClient) { self.acp = acp; }
     async fn serve(self: UsecaseTransitionHandler, ctx: Context): Response {
+        let acp = self.acp.withTenant(json.stringField(ctx.request.body, "tenant"));
         let auth = ctx.request.headers.get("authorization") ?? "";
         let id = ctx.param("id");
         let stage = ctx.param("stage");
-        let _ = self.acp.usecaseTransition(id, stage, auth);
-        return await ds_response.patch(grcPanel(self.acp.grcRows()));
+        let _ = acp.usecaseTransition(id, stage, auth);
+        return await ds_response.patch(grcPanel(acp.grcRows()));
     }
 }
 
@@ -251,14 +266,15 @@ pub struct CreateRiskHandler impl RouteHandler {
     acp: AcpClient,
     init(acp: AcpClient) { self.acp = acp; }
     async fn serve(self: CreateRiskHandler, ctx: Context): Response {
+        let acp = self.acp.withTenant(json.stringField(ctx.request.body, "tenant"));
         let auth = ctx.request.headers.get("authorization") ?? "";
         let subject = json.stringField(ctx.request.body, "riskSubject");
         let title = json.stringField(ctx.request.body, "riskTitle");
         let likelihood = json.stringField(ctx.request.body, "riskLikelihood");
         let impact = json.stringField(ctx.request.body, "riskImpact");
         let treatment = json.stringField(ctx.request.body, "riskTreatment");
-        let _ = self.acp.createRisk(subject, title, likelihood, impact, treatment, auth);
-        return await ds_response.patch(riskPanel(self.acp.riskRows()));
+        let _ = acp.createRisk(subject, title, likelihood, impact, treatment, auth);
+        return await ds_response.patch(riskPanel(acp.riskRows()));
     }
 }
 
@@ -267,13 +283,14 @@ pub struct CreateModelCardHandler impl RouteHandler {
     acp: AcpClient,
     init(acp: AcpClient) { self.acp = acp; }
     async fn serve(self: CreateModelCardHandler, ctx: Context): Response {
+        let acp = self.acp.withTenant(json.stringField(ctx.request.body, "tenant"));
         let auth = ctx.request.headers.get("authorization") ?? "";
         let subject = json.stringField(ctx.request.body, "mcSubject");
         let title = json.stringField(ctx.request.body, "mcTitle");
         let modelId = json.stringField(ctx.request.body, "mcModelId");
         let useCaseId = json.stringField(ctx.request.body, "mcUseCaseId");
         let riskId = json.stringField(ctx.request.body, "mcRiskId");
-        let _ = self.acp.createModelCard(subject, title, modelId, useCaseId, riskId, auth);
-        return await ds_response.patch(modelCardsPanel(self.acp.modelCardRows()));
+        let _ = acp.createModelCard(subject, title, modelId, useCaseId, riskId, auth);
+        return await ds_response.patch(modelCardsPanel(acp.modelCardRows()));
     }
 }

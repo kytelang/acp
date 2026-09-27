@@ -357,6 +357,25 @@ pub struct AcpClient {
         return client.Http.request("GET", url, hdrs, "");
     }
 
+    // R1: a copy of this client scoped to a different tenant (for the live console tenant switcher).
+    pub fn withTenant(self: AcpClient, tenant: string): AcpClient {
+        return AcpClient(self.base, string.eql(tenant, "") ? "default" : tenant);
+    }
+
+    // R1: the tenants that have data, for the switcher options.
+    pub fn tenantsList(self: AcpClient): list.List<string> {
+        let out = list.List<string>();
+        let resp = self.tget(self.base + "/tenants");
+        if (resp.status.toCode() != 200) { out.push("default"); return out; }
+        let tv = json.get(json.parse(resp.body), "tenants");
+        let arr = json.asArray(tv);
+        if (arr == undefined) { out.push("default"); return out; }
+        let i = 0;
+        while (i < arr.size()) { out.push(json.asString(json.at(tv, i)) ?? ""); i = i + 1; }
+        if (out.size() == 0) { out.push("default"); }
+        return out;
+    }
+
     pub fn report(self: AcpClient): AcpReport {
         let r = AcpReport();
         let resp = self.tget(self.base + "/report");
