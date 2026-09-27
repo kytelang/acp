@@ -79,7 +79,7 @@ install -d -m 0750 -o "$SVCUSER" -g "$SVCUSER" "$DATA"
 
 # ---- binaries -------------------------------------------------------------
 for b in "$SRC"/bin/*; do install -m 0755 "$b" "$PREFIX/bin/"; done
-for b in acp acp-server acp-gateway acp-guard acp-verify; do
+for b in acp acp-server acp-gateway acp-agent acp-verify; do
   [ -f "$PREFIX/bin/$b" ] && ln -sf "$PREFIX/bin/$b" "/usr/local/bin/$b"
 done
 [ -f "$SRC/models/injection-lr.json" ] && install -m 0644 "$SRC/models/injection-lr.json" "$ETC/injection-lr.json"

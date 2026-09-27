@@ -3,11 +3,11 @@ name: release
 # Build and publish the Varman (ACP) release bundles. Per the console-first / split-packaging design
 # (docs/design/console-first-consolidation.md) each tag ships THREE kinds of archive:
 #
-#   1. acp-user-<tag>-<os>-<arch>     workstation service acp-agent (+ acp-proxy/acp-intercept wrappers,
-#                                     acp-verify, and a demo
-#                                     mock MCP server). Built for macOS, Linux and Windows.
-#   2. acp-server-<tag>-linux-<arch>  server services: acp-server, acp-gateway, acp-guard, the content
-#                                     model and the systemd units. Linux only (the services target Linux).
+#   1. acp-user-<tag>-<os>-<arch>     workstation service acp-agent (plus acp-verify and a demo mock MCP
+#                                     server). Built for macOS, Linux and Windows.
+#   2. acp-server-<tag>-linux-<arch>  server services: acp-server, acp-gateway, acp-agent, acp (admin
+#                                     CLI), acp-verify, the content model and the systemd units. Linux
+#                                     only (the services target Linux).
 #   3. acp-console-<tag>-linux-<arch> the Kyte-built web console (binary + wwwroot + app.yaml).
 #
 # Each archive has a .sha256 sidecar. install.sh fetches (1), install-server.sh fetches (2) and (3).
