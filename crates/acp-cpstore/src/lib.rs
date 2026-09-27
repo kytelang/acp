@@ -199,6 +199,8 @@ impl ControlStore {
             "CREATE TABLE IF NOT EXISTS violation_events (id VARCHAR(255) PRIMARY KEY, kind TEXT NOT NULL, pep TEXT NOT NULL, agent TEXT NOT NULL, tool TEXT NOT NULL, verdict TEXT NOT NULL, rule_id TEXT NOT NULL, impact TEXT NOT NULL, outcome TEXT NOT NULL, ts_ms BIGINT NOT NULL)",
             "CREATE TABLE IF NOT EXISTS control_leader (id INTEGER PRIMARY KEY, holder TEXT NOT NULL, token BIGINT NOT NULL, expires_ms BIGINT NOT NULL)",
             "CREATE TABLE IF NOT EXISTS control_state (k VARCHAR(255) PRIMARY KEY, v TEXT NOT NULL, updated_ms BIGINT NOT NULL)",
+            "CREATE TABLE IF NOT EXISTS drift_counts (class VARCHAR(255) PRIMARY KEY, hits BIGINT NOT NULL, total BIGINT NOT NULL, baseline DOUBLE PRECISION NOT NULL, updated_ms BIGINT NOT NULL)",
+            "CREATE TABLE IF NOT EXISTS lineage_edges (id VARCHAR(255) PRIMARY KEY, data_class TEXT NOT NULL, tool TEXT NOT NULL, count BIGINT NOT NULL, updated_ms BIGINT NOT NULL)",
         ] {
             sqlx::query(ddl).execute(&self.pool).await.map_err(|e| e.to_string())?;
         }
@@ -608,6 +610,53 @@ impl ControlStore {
         let sql = self.ph("DELETE FROM control_state WHERE k=?");
         sqlx::query(&sql).bind(key).execute(&self.pool).await.map_err(|e| e.to_string())?;
         Ok(())
+    }
+
+    // F3: classifier-drift counts (per class) and data-class -> tool lineage edges. Counts only.
+    pub async fn report_drift(&self, class: &str, hits: i64, total: i64, now_ms: i64) -> Result<(), String> {
+        let row = sqlx::query(&self.ph("SELECT hits, total FROM drift_counts WHERE class = ?")).bind(class)
+            .fetch_optional(&self.pool).await.map_err(|e| e.to_string())?;
+        match row {
+            Some(r) => {
+                let (h, t): (i64, i64) = (r.get::<i64,_>("hits") + hits, r.get::<i64,_>("total") + total);
+                sqlx::query(&self.ph("UPDATE drift_counts SET hits = ?, total = ?, updated_ms = ? WHERE class = ?"))
+                    .bind(h).bind(t).bind(now_ms).bind(class).execute(&self.pool).await.map_err(|e| e.to_string())?;
+            }
+            None => {
+                // First report sets the baseline rate for this class.
+                let baseline = if total > 0 { hits as f64 / total as f64 } else { 0.0 };
+                sqlx::query(&self.ph("INSERT INTO drift_counts(class,hits,total,baseline,updated_ms) VALUES(?,?,?,?,?)"))
+                    .bind(class).bind(hits).bind(total).bind(baseline).bind(now_ms).execute(&self.pool).await.map_err(|e| e.to_string())?;
+            }
+        }
+        Ok(())
+    }
+    pub async fn list_drift(&self) -> Result<Vec<(String, i64, i64, f64)>, String> {
+        let rows = sqlx::query("SELECT class, hits, total, baseline FROM drift_counts ORDER BY class")
+            .fetch_all(&self.pool).await.map_err(|e| e.to_string())?;
+        Ok(rows.iter().map(|r| (r.get::<String,_>("class"), r.get::<i64,_>("hits"), r.get::<i64,_>("total"), r.get::<f64,_>("baseline"))).collect())
+    }
+    pub async fn report_lineage(&self, data_class: &str, tool: &str, count: i64, now_ms: i64) -> Result<(), String> {
+        let id = format!("{data_class}:{tool}");
+        let row = sqlx::query(&self.ph("SELECT count FROM lineage_edges WHERE id = ?")).bind(&id)
+            .fetch_optional(&self.pool).await.map_err(|e| e.to_string())?;
+        match row {
+            Some(r) => {
+                let c = r.get::<i64,_>("count") + count;
+                sqlx::query(&self.ph("UPDATE lineage_edges SET count = ?, updated_ms = ? WHERE id = ?"))
+                    .bind(c).bind(now_ms).bind(&id).execute(&self.pool).await.map_err(|e| e.to_string())?;
+            }
+            None => {
+                sqlx::query(&self.ph("INSERT INTO lineage_edges(id,data_class,tool,count,updated_ms) VALUES(?,?,?,?,?)"))
+                    .bind(&id).bind(data_class).bind(tool).bind(count).bind(now_ms).execute(&self.pool).await.map_err(|e| e.to_string())?;
+            }
+        }
+        Ok(())
+    }
+    pub async fn list_lineage(&self) -> Result<Vec<(String, String, i64)>, String> {
+        let rows = sqlx::query("SELECT data_class, tool, count FROM lineage_edges ORDER BY data_class, tool")
+            .fetch_all(&self.pool).await.map_err(|e| e.to_string())?;
+        Ok(rows.iter().map(|r| (r.get::<String,_>("data_class"), r.get::<String,_>("tool"), r.get::<i64,_>("count"))).collect())
     }
 
     /// E2: most recent ingested decisions, newest first, for the console Fleet evidence view.

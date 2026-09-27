@@ -748,3 +748,46 @@ pub fn modelCardsPanel(rows: list.List<ModelCardRow>): Html {
         }}
     </div>;
 }
+
+// F3: classifier drift (per-class live rate vs baseline; drifted flagged).
+pub fn driftPanel(rows: list.List<DriftRow>): Html {
+    return <div id="drift">
+        {if (rows.size() == 0) {
+            <p class="empty">No drift telemetry yet. Enforcement points report per-class hit-rates.</p>
+        } else {
+            <table class="tbl">
+                <thead><tr><th>Class</th><th>Live rate</th><th>Baseline</th><th>Status</th></tr></thead>
+                <tbody>
+                    {for (i in 0..rows.size()) {
+                        let d = rows.get(i) ?? DriftRow("", 0.0, 0.0, false);
+                        <tr>
+                            <td class="strong">{d.cls}</td>
+                            <td>{d.rate}</td>
+                            <td>{d.baseline}</td>
+                            <td>{if (d.drifted) { <span class="badge bad">drifted</span> } else { <span class="badge ok">stable</span> }}</td>
+                        </tr>
+                    }}
+                </tbody>
+            </table>
+        }}
+    </div>;
+}
+
+// F3: data-class -> tool lineage (counts only, no raw values).
+pub fn lineagePanel(rows: list.List<LineageRow>): Html {
+    return <div id="lineage">
+        {if (rows.size() == 0) {
+            <p class="empty">No lineage telemetry yet.</p>
+        } else {
+            <table class="tbl">
+                <thead><tr><th>Data class</th><th>Reached tool</th><th>Count</th></tr></thead>
+                <tbody>
+                    {for (i in 0..rows.size()) {
+                        let e = rows.get(i) ?? LineageRow("", "", 0);
+                        <tr><td><span class="badge ver">{e.dataClass}</span></td><td class="mono">{e.tool}</td><td>{e.count}</td></tr>
+                    }}
+                </tbody>
+            </table>
+        }}
+    </div>;
+}

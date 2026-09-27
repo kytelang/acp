@@ -68,6 +68,10 @@ pub class MetricsSse impl SseHandler {
             if (w22 < 0) { alive = false; }
             let w23 = await ds.patchElementsSimple(modelCardsPanel(self.acp.modelCardRows()));
             if (w23 < 0) { alive = false; }
+            let w24 = await ds.patchElementsSimple(driftPanel(self.acp.driftRows()));
+            if (w24 < 0) { alive = false; }
+            let w25 = await ds.patchElementsSimple(lineagePanel(self.acp.lineageRows()));
+            if (w25 < 0) { alive = false; }
             if (alive) { await aio.delay(2000); }
         }
     }

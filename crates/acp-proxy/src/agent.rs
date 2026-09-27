@@ -424,6 +424,10 @@ pub async fn run(args: Vec<String>) -> ExitCode {
     // F1: field step-up approvals. Register new holds with the control plane (console inbox sees
     // them) and reconcile the operator's decision back into the local store so the agent's re-issue
     // is released or blocked. The sync decide path is untouched.
+    // F3: report classifier drift + data-class lineage to the control plane (reuses the report URL).
+    if let Some(base) = opts.report_url.clone() {
+        controller.set_monitor(Some(base.trim_end_matches('/').to_string()), opts.report_token.clone());
+    }
     if let Some(aurl) = opts.approvals_url.clone() {
         let base = aurl.trim_end_matches('/').to_string();
         controller.set_approvals_reporter(events::ApprovalReporter::new(base.clone(), opts.report_token.clone()));

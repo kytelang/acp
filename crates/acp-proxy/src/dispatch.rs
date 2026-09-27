@@ -104,6 +104,9 @@ pub struct Controller {
     external_scan_url: Mutex<Option<String>>,
     external_scan_fail_closed: Mutex<bool>,
     http: reqwest::Client,
+    // F3: optional control-plane base for reporting classifier-drift + data-class lineage (counts only).
+    monitor_url: Mutex<Option<String>>,
+    monitor_token: Mutex<Option<String>>,
 }
 
 /// B1: the outcome of an external content-scan call.
@@ -172,6 +175,8 @@ impl Controller {
             external_scan_url: Mutex::new(None),
             external_scan_fail_closed: Mutex::new(false),
             http: reqwest::Client::new(),
+            monitor_url: Mutex::new(None),
+            monitor_token: Mutex::new(None),
         }
     }
 
@@ -340,6 +345,39 @@ impl Controller {
 
     pub fn has_external_scanner(&self) -> bool {
         self.external_scan_url.lock().unwrap().is_some()
+    }
+
+    /// F3: configure drift/lineage reporting to the control plane (counts only, never raw values).
+    pub fn set_monitor(&self, url: Option<String>, token: Option<String>) {
+        *self.monitor_url.lock().unwrap() = url.filter(|u| !u.is_empty());
+        *self.monitor_token.lock().unwrap() = token;
+    }
+
+    /// F3: report one content-scan's per-class outcome as a drift observation, plus a lineage edge for
+    /// each detected data class -> tool. Best-effort, non-blocking; sends counts, never argument text.
+    pub fn report_scan(&self, kinds: &[String], tool: &str) {
+        let url = match self.monitor_url.lock().unwrap().clone() { Some(u) => u, None => return };
+        let token = self.monitor_token.lock().unwrap().clone();
+        let http = self.http.clone();
+        let tool = tool.to_string();
+        let set: std::collections::HashSet<String> = kinds.iter().cloned().collect();
+        tokio::spawn(async move {
+            for class in ["pii", "secret", "prompt-injection"] {
+                let hit = set.contains(class);
+                let body = serde_json::json!({"class": class, "hits": if hit {1} else {0}, "total": 1});
+                let mut req = http.post(format!("{url}/monitor/drift")).json(&body);
+                if let Some(t) = &token { req = req.bearer_auth(t); }
+                let _ = req.send().await;
+            }
+            for class in ["pii", "secret"] {
+                if set.contains(class) {
+                    let body = serde_json::json!({"data_class": class, "tool": tool, "count": 1});
+                    let mut req = http.post(format!("{url}/monitor/lineage")).json(&body);
+                    if let Some(t) = &token { req = req.bearer_auth(t); }
+                    let _ = req.send().await;
+                }
+            }
+        });
     }
 
     /// B1: call the external content scanner over one piece of text in a given direction. Returns a
@@ -600,6 +638,9 @@ impl Controller {
                     if !argtext.is_empty() {
                         let ml = self.content_ml.lock().unwrap().clone();
                         let cv = acp_core::content::scan_with_ml(cp, &argtext, ml.as_deref());
+                        // F3: report per-class drift + data-class lineage (counts only).
+                        let scan_kinds: Vec<String> = cv.findings.iter().map(|f| f.kind.clone()).collect();
+                        self.report_scan(&scan_kinds, &tc.name);
                         if cv.block {
                             let kinds: Vec<String> = cv.findings.iter().map(|f| f.kind.clone()).collect();
                             a.outcome.verdict = Verdict::Deny;

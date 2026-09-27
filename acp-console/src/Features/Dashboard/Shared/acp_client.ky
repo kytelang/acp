@@ -322,6 +322,21 @@ pub struct ModelCardRow {
     }
 }
 
+pub struct DriftRow {
+    pub cls: string,
+    pub rate: double,
+    pub baseline: double,
+    pub drifted: bool,
+    init(cls: string, rate: double, baseline: double, drifted: bool) { self.cls = cls; self.rate = rate; self.baseline = baseline; self.drifted = drifted; }
+}
+
+pub struct LineageRow {
+    pub dataClass: string,
+    pub tool: string,
+    pub count: long,
+    init(dataClass: string, tool: string, count: long) { self.dataClass = dataClass; self.tool = tool; self.count = count; }
+}
+
 pub struct AcpClient {
     base: string,
     init(base: string) { self.base = base; }
@@ -724,6 +739,46 @@ pub struct AcpClient {
         let v = json.parse(resp.body);
         if (!(json.asBool(json.get(v, "ok")) ?? false)) { return DeployResult(false, json.asString(json.get(v, "error")) ?? "rejected"); }
         return DeployResult(true, "model card created");
+    }
+
+    // F3: classifier-drift rows.
+    pub fn driftRows(self: AcpClient): list.List<DriftRow> {
+        let rows = list.List<DriftRow>();
+        let resp = client.Http.get(self.base + "/monitor/drift");
+        if (resp.status.toCode() != 200) { return rows; }
+        let cv = json.get(json.parse(resp.body), "classes");
+        let arr = json.asArray(cv);
+        if (arr == undefined) { return rows; }
+        let i = 0;
+        while (i < arr.size()) {
+            let c = json.at(cv, i);
+            rows.push(DriftRow(
+                json.asString(json.get(c, "class")) ?? "",
+                json.asFloat(json.get(c, "rate")) ?? 0.0,
+                json.asFloat(json.get(c, "baseline")) ?? 0.0,
+                json.asBool(json.get(c, "drifted")) ?? false));
+            i = i + 1;
+        }
+        return rows;
+    }
+    // F3: data-class -> tool lineage edges.
+    pub fn lineageRows(self: AcpClient): list.List<LineageRow> {
+        let rows = list.List<LineageRow>();
+        let resp = client.Http.get(self.base + "/monitor/lineage");
+        if (resp.status.toCode() != 200) { return rows; }
+        let ev = json.get(json.parse(resp.body), "edges");
+        let arr = json.asArray(ev);
+        if (arr == undefined) { return rows; }
+        let i = 0;
+        while (i < arr.size()) {
+            let e = json.at(ev, i);
+            rows.push(LineageRow(
+                json.asString(json.get(e, "data_class")) ?? "",
+                json.asString(json.get(e, "tool")) ?? "",
+                json.asNumber(json.get(e, "count")) ?? 0));
+            i = i + 1;
+        }
+        return rows;
     }
 
     pub fn policyVersion(self: AcpClient): string {

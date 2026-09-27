@@ -123,7 +123,7 @@ firewall_config (cpstore column + server GET/POST + PEP fetch) and the console C
 Verified: unit test flags toxic only when enabled and leaves benign alone; config round-trips
 block_toxicity. The external hook remains the path to a stronger ML classifier.
 
-## F3. Surface runtime monitors in the console (P2) - `drift.rs`, `lineage.rs`
+## F3. Surface runtime monitors in the console (P2) - `drift.rs`, `lineage.rs`  [DONE 2026-09-27]
 Gap: classifier-drift and data-class lineage exist as libraries but are not surfaced.
 Design: PEPs report per-class hit-rate counts (drift) and per-decision data-class lineage to the control
 plane; the server aggregates and the console shows a drift panel (per-class live vs baseline) and a
@@ -132,6 +132,12 @@ Acceptance:
 - A PEP reporting class hit-rate counts causes the console drift panel to show a per-class rate and flag
   any class beyond tolerance.
 - The lineage view shows data-class-to-tool edges from reported counts, with no raw argument values.
+Status (2026-09-27): SHIPPED. cpstore `drift_counts` + `lineage_edges`; server `POST/GET /monitor/drift`
+(per-class live rate vs baseline, drifted flag via `acp_core::drift::DriftMonitor`) and
+`POST/GET /monitor/lineage` (report-token gated ingest). The acp-proxy reports per-class drift + data-
+class->tool lineage after each content scan (counts only, best-effort, reusing the report URL). Console
+Monitors view shows the drift table (stable/drifted) and the lineage table. Verified via curl: secret
+rate 0.30 vs baseline 0.90 -> drifted; pii holds; lineage edges accumulate.
 
 ## F4. Detection corpus scale + firewall latency benchmark (P2)  [DONE 2026-09-27]
 Gap: the C3 corpus is a 45-example seed; there is no published firewall-path latency figure.

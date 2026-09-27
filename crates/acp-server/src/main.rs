@@ -733,6 +733,8 @@ async fn main() {
         .route("/heartbeat/:proxy", post(heartbeat))
         .route("/liveness", get(liveness))
         .route("/event/:kind", post(record_event))
+        .route("/monitor/drift", get(monitor_drift_get).post(monitor_drift_post))
+        .route("/monitor/lineage", get(monitor_lineage_get).post(monitor_lineage_post))
         .route("/alerts", get(alerts))
         .route("/events/recent", get(events_recent))
         .route("/report/violations", get(report_violations))
@@ -2344,6 +2346,57 @@ async fn heartbeat(State(st): State<Arc<AppState>>, headers: HeaderMap, Path(pro
         let _ = store.put_state(&format!("liveness:{proxy}"), &ts.to_string(), ts as i64).await;
     }
     Json(serde_json::json!({"ok": true, "proxy": proxy})).into_response()
+}
+
+/// F3: a PEP reports classifier hit-rate counts per class (counts only, never raw values).
+async fn monitor_drift_post(State(st): State<Arc<AppState>>, headers: HeaderMap, Json(body): Json<serde_json::Value>) -> Response {
+    if let Err(r) = authorize_report(&st, &headers) { return r; }
+    let store = match &st.store { Some(s) => s, None => return Json(serde_json::json!({"ok": false, "error": "no --store configured"})).into_response() };
+    let class = body.get("class").and_then(|v| v.as_str()).unwrap_or("").trim().to_string();
+    if class.is_empty() { return Json(serde_json::json!({"ok": false, "error": "class is required"})).into_response(); }
+    let hits = body.get("hits").and_then(|v| v.as_i64()).unwrap_or(0);
+    let total = body.get("total").and_then(|v| v.as_i64()).unwrap_or(0);
+    match store.report_drift(&class, hits, total, now_ms() as i64).await {
+        Ok(()) => Json(serde_json::json!({"ok": true})).into_response(),
+        Err(e) => Json(serde_json::json!({"ok": false, "error": e})).into_response(),
+    }
+}
+/// F3: per-class live hit-rate + baseline, with a drifted flag from `acp_core::drift`.
+async fn monitor_drift_get(State(st): State<Arc<AppState>>) -> Response {
+    let store = match &st.store { Some(s) => s, None => return Json(serde_json::json!({"classes": []})).into_response() };
+    let rows = match store.list_drift().await { Ok(r) => r, Err(e) => return Json(serde_json::json!({"classes": [], "error": e})).into_response() };
+    let mut mon = acp_core::drift::DriftMonitor::new(0.15);
+    for (class, _h, _t, base) in &rows { mon.set_baseline(class, *base); }
+    // Feed the accumulated counts back in as observations so drifts() can judge live vs baseline.
+    for (class, h, t, _b) in &rows {
+        for i in 0..*t { mon.observe(class, i < *h); }
+    }
+    let drifted: std::collections::HashSet<String> = mon.drifts(5).into_iter().map(|d| d.class).collect();
+    let out: Vec<serde_json::Value> = rows.iter().map(|(class, h, t, base)| {
+        let rate = if *t > 0 { *h as f64 / *t as f64 } else { 0.0 };
+        serde_json::json!({"class": class, "hits": h, "total": t, "rate": rate, "baseline": base, "drifted": drifted.contains(class)})
+    }).collect();
+    Json(serde_json::json!({"classes": out})).into_response()
+}
+/// F3: a PEP reports a data-class -> tool lineage edge (counts only).
+async fn monitor_lineage_post(State(st): State<Arc<AppState>>, headers: HeaderMap, Json(body): Json<serde_json::Value>) -> Response {
+    if let Err(r) = authorize_report(&st, &headers) { return r; }
+    let store = match &st.store { Some(s) => s, None => return Json(serde_json::json!({"ok": false, "error": "no --store configured"})).into_response() };
+    let dc = body.get("data_class").and_then(|v| v.as_str()).unwrap_or("").trim().to_string();
+    let tool = body.get("tool").and_then(|v| v.as_str()).unwrap_or("").trim().to_string();
+    if dc.is_empty() || tool.is_empty() { return Json(serde_json::json!({"ok": false, "error": "data_class and tool are required"})).into_response(); }
+    let count = body.get("count").and_then(|v| v.as_i64()).unwrap_or(1);
+    match store.report_lineage(&dc, &tool, count, now_ms() as i64).await {
+        Ok(()) => Json(serde_json::json!({"ok": true})).into_response(),
+        Err(e) => Json(serde_json::json!({"ok": false, "error": e})).into_response(),
+    }
+}
+async fn monitor_lineage_get(State(st): State<Arc<AppState>>) -> Response {
+    let store = match &st.store { Some(s) => s, None => return Json(serde_json::json!({"edges": []})).into_response() };
+    match store.list_lineage().await {
+        Ok(edges) => Json(serde_json::json!({"edges": edges.iter().map(|(d,t,c)| serde_json::json!({"data_class": d, "tool": t, "count": c})).collect::<Vec<_>>()})).into_response(),
+        Err(e) => Json(serde_json::json!({"edges": [], "error": e})).into_response(),
+    }
 }
 
 /// B3/E1: a PEP reports a governance event (deny, step_up, fail_open, ...) for spike detection and
