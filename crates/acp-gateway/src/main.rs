@@ -57,6 +57,9 @@ struct GwState {
     sem: std::sync::Arc<tokio::sync::Semaphore>,
     budget_state: Option<String>,
     metrics: Metrics,
+    // B2: when set, the gateway checks each model response for groundedness against the request
+    // context and blocks/flags below this threshold.
+    groundedness_threshold: Option<f32>,
 }
 
 #[tokio::main]
@@ -69,6 +72,7 @@ async fn main() -> std::process::ExitCode {
     let mut bg_file: Option<String> = None;
     let mut bg_key_hex: Option<String> = None;
     let mut content_scan: Option<String> = None;
+    let mut groundedness_threshold: Option<f32> = None;
     let mut content_fw = false;
     let mut fw_block_secrets = false;
     let mut fw_deny_topics: Vec<String> = Vec::new();
@@ -90,6 +94,7 @@ async fn main() -> std::process::ExitCode {
             "--break-glass-file" => bg_file = it.next().cloned(),
             "--break-glass-key" => bg_key_hex = it.next().cloned(),
             "--content-scan" => content_scan = it.next().cloned(),
+            "--groundedness-threshold" => groundedness_threshold = it.next().and_then(|v| v.parse().ok()),
             "--content-firewall" => content_fw = true,
             "--block-secrets" => { content_fw = true; fw_block_secrets = true; }
             "--deny-topic" => { content_fw = true; if let Some(v) = it.next() { fw_deny_topics.push(v.clone()); } }
@@ -200,6 +205,7 @@ async fn main() -> std::process::ExitCode {
         budget_pg,
         budget_state,
         metrics: Metrics::default(),
+        groundedness_threshold,
     });
     let upstream_log = st.upstream.clone();
     let app = Router::new()
@@ -589,10 +595,77 @@ fn resolve_principal(st: &GwState, headers: &HeaderMap) -> Option<String> {
     }
 }
 
+/// B2: extract the assistant/answer text from a model response (OpenAI/Anthropic-style shapes).
+fn gather_response_text(v: &serde_json::Value) -> String {
+    let mut out = String::new();
+    // OpenAI chat: choices[].message.content
+    if let Some(cs) = v.get("choices").and_then(|c| c.as_array()) {
+        for c in cs {
+            if let Some(t) = c.pointer("/message/content").and_then(|x| x.as_str()) { out.push_str(t); out.push('\n'); }
+            if let Some(t) = c.get("text").and_then(|x| x.as_str()) { out.push_str(t); out.push('\n'); }
+        }
+    }
+    // Anthropic messages: content[].text
+    if let Some(cs) = v.get("content").and_then(|c| c.as_array()) {
+        for c in cs {
+            if let Some(t) = c.get("text").and_then(|x| x.as_str()) { out.push_str(t); out.push('\n'); }
+        }
+    }
+    // Fallbacks.
+    if out.is_empty() {
+        if let Some(t) = v.get("output_text").and_then(|x| x.as_str()) { out.push_str(t); }
+    }
+    out
+}
+
+/// B2: scan a model response with the content engine (+ external hook), then check groundedness
+/// against the request context. Returns Some(block_reason) to block, or None to pass. Also returns an
+/// optional groundedness score to surface as a header.
+async fn response_gate(st: &GwState, req_body: &serde_json::Value, resp: &serde_json::Value) -> (Option<String>, Option<f32>) {
+    let answer = gather_response_text(resp);
+    // 1. content engine over the response.
+    if let Some(policy) = st.content_fw.as_ref() {
+        if !answer.is_empty() {
+            let v = acp_core::content::scan_with_ml(policy, &answer, st.content_ml.as_deref());
+            if v.block {
+                let kinds: Vec<String> = v.findings.iter().map(|f| f.kind.clone()).collect();
+                return (Some(format!("response blocked by content firewall: {}", kinds.join(", "))), None);
+            }
+        }
+    }
+    // 2. external content-scan hook over the response (direction=response).
+    if let Some(url) = st.content_scan.as_ref() {
+        if !answer.is_empty() {
+            match st.client.post(url).json(&serde_json::json!({"text": answer, "direction": "response"})).send().await {
+                Ok(r) => {
+                    let v: serde_json::Value = r.json().await.unwrap_or(serde_json::json!({}));
+                    if v.get("block").and_then(|b| b.as_bool()).unwrap_or(false) {
+                        return (Some(v.get("reason").and_then(|x| x.as_str()).unwrap_or("response content policy").to_string()), None);
+                    }
+                }
+                Err(e) => return (Some(format!("response content scanner unreachable (fail-closed): {e}")), None),
+            }
+        }
+    }
+    // 3. groundedness against the request context (obligation, config-driven).
+    if let Some(thr) = st.groundedness_threshold {
+        let context = gather_prompt_text(req_body);
+        if !answer.is_empty() && !context.is_empty() {
+            let report = acp_core::groundedness::groundedness(&answer, &context, 0.5);
+            if report.score < thr {
+                return (Some(format!("response not grounded ({:.2} < {:.2})", report.score, thr)), Some(report.score));
+            }
+            return (None, Some(report.score));
+        }
+    }
+    (None, None)
+}
+
 /// Forward the (allowed) call to the model provider, attaching the gateway's upstream credential so
 /// the caller never holds it. Credential brokering: the gateway is the only path to the model.
 async fn forward(st: &GwState, path: &str, body: Bytes) -> Response {
     let url = format!("{}/{}", st.upstream.trim_end_matches('/'), path);
+    let req_body_for_gate = body.clone();
     let mut req = st.client.post(&url).header("content-type", "application/json").body(body);
     if let Some(key) = &st.upstream_key {
         req = req.header("authorization", format!("Bearer {key}"));
@@ -617,6 +690,18 @@ async fn forward(st: &GwState, path: &str, body: Bytes) -> Response {
                 (status, [("content-type", "text/event-stream")], axum::body::Body::from_stream(s)).into_response()
             } else {
                 let bytes = resp.bytes().await.unwrap_or_default();
+                // B2: gate the model response (content firewall + external hook + groundedness).
+                if let Ok(rv) = serde_json::from_slice::<serde_json::Value>(&bytes) {
+                    let reqv: serde_json::Value = serde_json::from_slice(&req_body_for_gate).unwrap_or_else(|_| serde_json::json!({}));
+                    let (block, score) = response_gate(st, &reqv, &rv).await;
+                    if let Some(reason) = block {
+                        return (StatusCode::FORBIDDEN, [("content-type", "application/json")],
+                            serde_json::json!({"error": {"message": reason, "type": "acp_response_blocked"}}).to_string()).into_response();
+                    }
+                    if let Some(sc) = score {
+                        return (status, [("content-type", ctype.as_str()), ("x-acp-groundedness", Box::leak(format!("{sc:.3}").into_boxed_str()))], bytes).into_response();
+                    }
+                }
                 (status, [("content-type", ctype)], bytes).into_response()
             }
         }

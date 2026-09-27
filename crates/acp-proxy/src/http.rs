@@ -121,10 +121,29 @@ async fn handle(State(st): State<Arc<HttpState>>, headers: HeaderMap, body: Byte
                     // the shared pin check, and indirect-injection screening of the tool result.
                     st.controller.inspect_response(&bytes);
                     st.controller.inspect_response_shared(&bytes).await;
-                    let out: Vec<u8> = match st.controller.screen_response(&bytes) {
+                    let mut out: Vec<u8> = match st.controller.screen_response(&bytes) {
                         Some(replacement) => replacement.into_bytes(),
                         None => bytes.to_vec(),
                     };
+                    // B2: also run the B1 external content-scan hook on the HTTP response path
+                    // (parity with the stdio transport), for tool_result/response directions.
+                    if st.controller.has_external_scanner() {
+                        if let Some((text, direction)) = st.controller.response_scan_text(&bytes) {
+                            let outcome = st.controller.external_scan(&text, &direction, serde_json::json!({"transport": "http"})).await;
+                            if outcome.block {
+                                let id = serde_json::from_slice::<serde_json::Value>(&bytes).ok()
+                                    .and_then(|v| v.get("id").cloned()).unwrap_or(serde_json::Value::Null);
+                                let blocked = serde_json::json!({
+                                    "jsonrpc": "2.0", "id": id,
+                                    "result": {"isError": true, "content": [{"type": "text", "text": format!("blocked by content firewall (external scan, {direction})")}],
+                                        "structuredContent": {"blocked": true, "reason": "content-firewall-external", "direction": direction}}
+                                });
+                                out = blocked.to_string().into_bytes();
+                            } else if let Some(red) = outcome.redacted {
+                                out = red.into_bytes();
+                            }
+                        }
+                    }
                     (status, [("content-type", "application/json")], out).into_response()
                 }
             }

@@ -171,7 +171,7 @@ Verified live against a mock scanner: block:true blocks / block:false passes; al
 result) appear in the scanner's received requests; scanner-down + fail-closed blocks, fail-open runs
 the built-in engine and proceeds; no URL = unchanged. 18 proxy tests pass.
 
-### B2. Output-safety breadth (P2, M)
+### B2. Output-safety breadth (P2, M)  [DONE 2026-09-27]
 Gap: gateway scans the prompt path only; limited toxicity/groundedness/PII breadth.
 Design: run the content engine + B1 hook on the gateway response path and the proxy tool-result path;
 groundedness as an inline obligation on model responses (reuse `acp groundedness`).
@@ -180,7 +180,14 @@ Acceptance:
 - A tool result containing injected content is screened on both stdio and HTTP transports.
 - A groundedness obligation on a rule causes an ungrounded response to be flagged/blocked per the
   configured threshold.
-
+Status (2026-09-27): SHIPPED. The gateway now gates the model RESPONSE, not just the prompt: a
+`response_gate` runs the content engine + the external content-scan hook (direction=response) over the
+assistant text and blocks/redacts; `--groundedness-threshold` checks the response against the request
+context via `acp_core::groundedness` and blocks below threshold (surfacing `x-acp-groundedness`). The
+proxy screens tool results on both transports: stdio (built-in + B1 hook, already) and now HTTP (B1
+external hook added alongside the existing built-in screen). Verified e2e: an injected model response
+-> 403 "content firewall: prompt-injection"; an ungrounded response -> 403 "not grounded (0.00 <
+0.60)". Note: streaming (SSE) responses are relayed unbuffered and not yet gated.
 ### B3. Model / artifact scanning admission (P2, M) - integrate + enforce  [DONE 2026-09-27]
 Gap: Varman has only a supply-chain seam.
 Design: an admission gate on model/agent registration that calls a configured `scanner_url`, stores the
