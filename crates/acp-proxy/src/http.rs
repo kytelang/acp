@@ -77,6 +77,22 @@ async fn handle(State(st): State<Arc<HttpState>>, headers: HeaderMap, body: Byte
             .and_then(|s| s.strip_prefix("Bearer "));
         st.controller.resolve_principal_from_token(tok)
     };
+    // R3: scan non-text (image/audio) tool-argument parts before forwarding; a block replies with a
+    // JSON-RPC error and never reaches the tool server.
+    if st.controller.has_external_scanner() {
+        for part in st.controller.request_scan_media(&body) {
+            let outcome = st.controller.external_scan_media(&part, "tool_args", serde_json::json!({"transport": "http", "modality": part.modality})).await;
+            if outcome.block {
+                let id = serde_json::from_slice::<serde_json::Value>(&body).ok()
+                    .and_then(|v| v.get("id").cloned()).unwrap_or(serde_json::Value::Null);
+                let blocked = serde_json::json!({
+                    "jsonrpc": "2.0", "id": id,
+                    "error": {"code": -32001, "message": format!("blocked by content firewall (external scan, tool_args:{})", part.modality)}
+                });
+                return ([("content-type", "application/json")], blocked.to_string()).into_response();
+            }
+        }
+    }
     let forward_body: reqwest::Body = match st.controller.decide_frame_with_principal(&body, principal) {
         FrameAction::Reply(json) => {
             return ([("content-type", "application/json")], json).into_response()
@@ -141,6 +157,21 @@ async fn handle(State(st): State<Arc<HttpState>>, headers: HeaderMap, body: Byte
                                 out = blocked.to_string().into_bytes();
                             } else if let Some(red) = outcome.redacted {
                                 out = red.into_bytes();
+                            }
+                        }
+                        // R3: scan any non-text result parts (parity with stdio); a block replaces the frame.
+                        for part in st.controller.response_scan_media(&bytes) {
+                            let outcome = st.controller.external_scan_media(&part, "tool_result", serde_json::json!({"transport": "http", "modality": part.modality})).await;
+                            if outcome.block {
+                                let id = serde_json::from_slice::<serde_json::Value>(&bytes).ok()
+                                    .and_then(|v| v.get("id").cloned()).unwrap_or(serde_json::Value::Null);
+                                let blocked = serde_json::json!({
+                                    "jsonrpc": "2.0", "id": id,
+                                    "result": {"isError": true, "content": [{"type": "text", "text": format!("blocked by content firewall (external scan, tool_result:{})", part.modality)}],
+                                        "structuredContent": {"blocked": true, "reason": "content-firewall-external", "direction": format!("tool_result:{}", part.modality)}}
+                                });
+                                out = blocked.to_string().into_bytes();
+                                break;
                             }
                         }
                     }

@@ -74,6 +74,14 @@ pub async fn run(cmd: &str, args: &[String], controller: Arc<Controller>) -> any
                         outline = redacted_response_frame(&line, &red).unwrap_or(outline);
                     }
                 }
+                // R3: scan any non-text (image/audio) result parts; a block replaces the frame.
+                for part in s2c_ctl.response_scan_media(line.as_bytes()) {
+                    let outcome = s2c_ctl.external_scan_media(&part, "tool_result", serde_json::json!({"transport": "stdio", "modality": part.modality})).await;
+                    if outcome.block {
+                        outline = blocked_response_frame(&line, &format!("tool_result:{}", part.modality));
+                        break;
+                    }
+                }
             }
             if s2c_out.send(outline).await.is_err() {
                 break;
@@ -126,9 +134,20 @@ pub async fn run(cmd: &str, args: &[String], controller: Arc<Controller>) -> any
 /// JSON-RPC error reply to send instead of forwarding; otherwise None (forward as normal).
 async fn external_block_request(controller: &Arc<Controller>, raw: &[u8]) -> Option<String> {
     if !controller.has_external_scanner() { return None; }
-    let (text, direction) = controller.request_scan_text(raw)?;
-    let outcome = controller.external_scan(&text, &direction, serde_json::json!({"transport": "stdio"})).await;
-    if !outcome.block { return None; }
+    let mut blocked_direction: Option<String> = None;
+    // Text parts (prompt / tool_args).
+    if let Some((text, direction)) = controller.request_scan_text(raw) {
+        let outcome = controller.external_scan(&text, &direction, serde_json::json!({"transport": "stdio"})).await;
+        if outcome.block { blocked_direction = Some(direction); }
+    }
+    // R3: non-text (image/audio) parts of tool arguments.
+    if blocked_direction.is_none() {
+        for part in controller.request_scan_media(raw) {
+            let outcome = controller.external_scan_media(&part, "tool_args", serde_json::json!({"transport": "stdio", "modality": part.modality})).await;
+            if outcome.block { blocked_direction = Some(format!("tool_args:{}", part.modality)); break; }
+        }
+    }
+    let direction = blocked_direction?;
     let id = serde_json::from_slice::<serde_json::Value>(raw).ok()
         .and_then(|v| v.get("id").cloned())
         .unwrap_or(serde_json::Value::Null);

@@ -41,6 +41,43 @@ struct State {
 /// Collect every string leaf in a JSON value, recursing into objects and arrays, so argument
 /// scanning (content firewall, data boundary) cannot be evaded by nesting a payload inside a
 /// sub-object or array (gap A7). Top-level-only scanning missed anything but flat string args.
+/// R3: one non-text content part forwarded to the external multimodal scanner.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct MediaPart {
+    /// "image" or "audio".
+    pub modality: String,
+    /// A base64 blob (from a `data`/`blob` field) or a URL the scanner can fetch (`url`/`uri`).
+    pub content_ref: String,
+    /// The declared mime type, if any (for example "image/png").
+    pub mime: String,
+}
+
+/// R3: recursively collect image/audio content parts. An MCP content part is an object with
+/// `"type":"image"` or `"type":"audio"` and a `data`/`blob` (base64) or `url`/`uri` reference.
+fn collect_media_parts(v: &serde_json::Value, out: &mut Vec<MediaPart>) {
+    match v {
+        serde_json::Value::Array(a) => { for x in a { collect_media_parts(x, out); } }
+        serde_json::Value::Object(o) => {
+            let ty = o.get("type").and_then(|t| t.as_str()).unwrap_or("");
+            if ty == "image" || ty == "audio" {
+                let content_ref = o.get("data").and_then(|x| x.as_str())
+                    .or_else(|| o.get("blob").and_then(|x| x.as_str()))
+                    .or_else(|| o.get("url").and_then(|x| x.as_str()))
+                    .or_else(|| o.get("uri").and_then(|x| x.as_str()))
+                    .unwrap_or("").to_string();
+                if !content_ref.is_empty() {
+                    let mime = o.get("mimeType").and_then(|x| x.as_str())
+                        .or_else(|| o.get("mime").and_then(|x| x.as_str()))
+                        .unwrap_or("").to_string();
+                    out.push(MediaPart { modality: ty.to_string(), content_ref, mime });
+                }
+            }
+            for x in o.values() { collect_media_parts(x, out); }
+        }
+        _ => {}
+    }
+}
+
 fn collect_arg_strings(v: &serde_json::Value, out: &mut Vec<String>) {
     match v {
         serde_json::Value::String(s) => out.push(s.clone()),
@@ -388,7 +425,7 @@ impl Controller {
         let url = match url { Some(u) => u, None => return ExternalScanOutcome::pass() };
         if text.is_empty() { return ExternalScanOutcome::pass(); }
         let fail_closed = *self.external_scan_fail_closed.lock().unwrap();
-        let body = serde_json::json!({"text": text, "direction": direction, "context": context});
+        let body = serde_json::json!({"modality": "text", "text": text, "direction": direction, "context": context});
         match self.http.post(&url).json(&body).send().await {
             Ok(resp) => match resp.json::<serde_json::Value>().await {
                 Ok(v) => {
@@ -400,6 +437,50 @@ impl Controller {
             },
             Err(_) => ExternalScanOutcome::on_error(fail_closed),
         }
+    }
+
+    /// R3: call the external scanner over one non-text part (image/audio). The scanner receives the
+    /// modality, a content_ref (a base64 blob or a URL it can fetch) and its mime type, and returns the
+    /// same {block, redactions} verdict as the text path. ACP runs no image/audio model itself; it
+    /// forwards the part unchanged and enforces the verdict. Fails closed only when configured to.
+    pub async fn external_scan_media(&self, part: &MediaPart, direction: &str, context: serde_json::Value) -> ExternalScanOutcome {
+        let url = self.external_scan_url.lock().unwrap().clone();
+        let url = match url { Some(u) => u, None => return ExternalScanOutcome::pass() };
+        if part.content_ref.is_empty() { return ExternalScanOutcome::pass(); }
+        let fail_closed = *self.external_scan_fail_closed.lock().unwrap();
+        let body = serde_json::json!({
+            "modality": part.modality, "content_ref": part.content_ref, "mime": part.mime,
+            "direction": direction, "context": context,
+        });
+        match self.http.post(&url).json(&body).send().await {
+            Ok(resp) => match resp.json::<serde_json::Value>().await {
+                Ok(v) => {
+                    let block = v.get("block").and_then(|b| b.as_bool()).unwrap_or(false);
+                    let redacted = v.get("redactions").and_then(|r| r.as_str()).map(|s| s.to_string());
+                    ExternalScanOutcome { block, redacted, scanner_error: false }
+                }
+                Err(_) => ExternalScanOutcome::on_error(fail_closed),
+            },
+            Err(_) => ExternalScanOutcome::on_error(fail_closed),
+        }
+    }
+
+    /// R3: extract non-text (image/audio) parts from a client->server request frame's params.
+    pub fn request_scan_media(&self, raw: &[u8]) -> Vec<MediaPart> {
+        let v: Value = match serde_json::from_slice(raw) { Ok(v) => v, Err(_) => return Vec::new() };
+        if v.get("method").is_none() { return Vec::new(); }
+        let mut out = Vec::new();
+        if let Some(params) = v.get("params") { collect_media_parts(params, &mut out); }
+        out
+    }
+
+    /// R3: extract non-text (image/audio) parts from a server->client result frame.
+    pub fn response_scan_media(&self, raw: &[u8]) -> Vec<MediaPart> {
+        let v: Value = match serde_json::from_slice(raw) { Ok(v) => v, Err(_) => return Vec::new() };
+        let result = match v.get("result") { Some(r) => r, None => return Vec::new() };
+        let mut out = Vec::new();
+        collect_media_parts(result, &mut out);
+        out
     }
 
     /// B1: extract (scannable text, direction) from a client->server request frame. tools/call frames
@@ -1256,5 +1337,38 @@ mod oidc_tests {
             .to_string().into_bytes();
         // A per-request principal override still flows through to a normal forward under default-allow.
         assert!(matches!(c.decide_frame_with_principal(&frame, Some("alice@corp".to_string())), FrameAction::Forward));
+    }
+}
+
+#[cfg(test)]
+mod media_scan_tests {
+    use super::{collect_media_parts, MediaPart};
+
+    #[test]
+    fn extracts_image_and_audio_parts_from_tool_args() {
+        // A tools/call frame carrying an image argument (base64) and an audio argument (url).
+        let frame = serde_json::json!({
+            "params": {"arguments": {"parts": [
+                {"type": "text", "text": "describe this"},
+                {"type": "image", "data": "AAAAB", "mimeType": "image/png"},
+                {"type": "audio", "url": "https://x/clip.wav", "mime": "audio/wav"}
+            ]}}
+        });
+        let mut out: Vec<MediaPart> = Vec::new();
+        collect_media_parts(&frame, &mut out);
+        assert_eq!(out.len(), 2);
+        assert_eq!(out[0].modality, "image");
+        assert_eq!(out[0].content_ref, "AAAAB");
+        assert_eq!(out[0].mime, "image/png");
+        assert_eq!(out[1].modality, "audio");
+        assert_eq!(out[1].content_ref, "https://x/clip.wav");
+    }
+
+    #[test]
+    fn text_only_frame_yields_no_media_parts() {
+        let frame = serde_json::json!({"params": {"arguments": {"q": "plain text only"}}});
+        let mut out: Vec<MediaPart> = Vec::new();
+        collect_media_parts(&frame, &mut out);
+        assert!(out.is_empty());
     }
 }
