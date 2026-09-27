@@ -414,13 +414,10 @@ signed grant; the console holds no key. On success the outcome shows the engaged
 ## Caveats and things to know
 
 - **Approvals and RBAC:** when RBAC is enabled, `acp-server`'s approve and deny endpoints require the
-  `Approve` capability (role `Approver`). The console's approve/deny handler currently forwards these
-  two calls to `acp-server` without attaching a bearer token (unlike the policy, identity, firewall,
-  GRC and kill-switch actions, which fetch a `PolicyAdmin` or `BreakGlassOperator` dev token when no
-  header is present). So on a control plane with authentication enabled, Approve and Deny from the
-  console will be rejected unless an identity-aware proxy in front of the console injects an
-  `Authorization` header carrying the `Approver` role. In the default local (RBAC-off) setup this is a
-  non-issue.
+  `Approve` capability (role `Approver`). The console's approve/deny handler carries the operator's
+  bearer token when one is present, and otherwise falls back to an `Approver` dev token, consistent
+  with the policy, identity, firewall, GRC and kill-switch actions. In the default local (RBAC-off)
+  setup no token is needed.
 - **Only three capabilities are enforced today:** `EditPolicy`, `Approve` and `BreakGlass`. The
   `Export` and `SeeArgs` capabilities exist in `acp-auth` but no console-facing endpoint checks them.
 - **Dev tokens are for local use only:** the `GET /auth/dev-token` fallback issues a mock token and is

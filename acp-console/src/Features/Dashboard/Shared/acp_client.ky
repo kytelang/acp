@@ -303,6 +303,18 @@ pub struct AcpClient {
     }
 
     // Pending approvals (holds awaiting a human decision).
+    // Resolve a step-up hold, carrying the Approver token (dev-token fallback) so it works with RBAC on.
+    pub fn resolveApproval(self: AcpClient, id: string, approve: bool, userAuth: string): DeployResult {
+        let verb = approve ? "approve" : "deny";
+        let hdrs = client.Http.emptyHeaders();
+        hdrs.set("Content-Type", "application/json");
+        if (!string.eql(userAuth, "")) { hdrs.set("Authorization", userAuth); }
+        else { let tok = self.authToken("Approver"); if (!string.eql(tok, "")) { hdrs.set("Authorization", "Bearer " + tok); } }
+        let resp = client.Http.request("POST", self.base + "/approvals/" + id + "/" + verb, hdrs, "");
+        if (resp.status.toCode() != 200) { return DeployResult(false, "acp-server unreachable"); }
+        return DeployResult(true, verb + " " + id);
+    }
+
     pub fn pendingApprovals(self: AcpClient): list.List<ApprovalRow> {
         let rows = list.List<ApprovalRow>();
         let resp = client.Http.get(self.base + "/approvals/pending");

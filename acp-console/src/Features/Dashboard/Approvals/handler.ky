@@ -14,9 +14,9 @@ pub struct ResolveHandler impl RouteHandler {
     init(acp: AcpClient, base: string, approve: bool) { self.acp = acp; self.base = base; self.approve = approve; }
 
     async fn serve(self: ResolveHandler, ctx: Context): Response {
+        let auth = ctx.request.headers.get("authorization") ?? "";
         let id = ctx.param("id");
-        let verb = self.approve ? "approve" : "deny";
-        let _ = client.Http.post(self.base + "/approvals/" + id + "/" + verb, "");
+        let _ = self.acp.resolveApproval(id, self.approve, auth);
         let frag = approvalsPanel(self.acp.pendingApprovals());
         return await ds_response.patch(frag);
     }
