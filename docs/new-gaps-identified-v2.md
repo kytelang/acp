@@ -146,13 +146,18 @@ the `corpus_gate` thresholds still hold (injection 1.00/1.00/0.00, PII precision
 `content_scan_latency_is_reported` test measures ~70 us/scan over the corpus (CI ceiling 2 ms); the
 numbers and method are published in guide chapter 15.
 
-## G6. Vendor risk questionnaire (P3)
+## G6. Vendor risk questionnaire (P3)  [DONE 2026-09-27]
 Gap: the vendor registry stores only a score; Credo runs vendor questionnaires/continuous monitoring.
 Design: a vendor record carries a small structured questionnaire (data residency, sub-processors,
 certifications, incident history) that computes into the risk score; console form + display.
 Acceptance:
 - A vendor created with questionnaire answers stores them and a computed risk score/band.
 - The console vendor view shows the questionnaire and the computed band.
+Status (2026-09-27): SHIPPED. `POST /vendors` accepts a `questionnaire` (data_residency, sub_processors,
+certifications[], incidents) and computes a deterministic score + band (low/medium/high/critical),
+storing both in the vendor's risk_json. Console vendor modal collects the questionnaire; the Vendors
+table shows the risk band. Verified via curl: EU/2 subs/2 certs/0 incidents -> score 0 low; offshore/8
+subs/no certs/2 incidents -> score 13 critical.
 
 ---
 

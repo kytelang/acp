@@ -82,7 +82,8 @@ pub struct VendorRow {
     pub id: string,
     pub name: string,
     pub risk: string,
-    init(id: string, name: string, risk: string) { self.id = id; self.name = name; self.risk = risk; }
+    pub band: string,
+    init(id: string, name: string, risk: string, band: string) { self.id = id; self.name = name; self.risk = risk; self.band = band; }
 }
 
 pub struct PackRow {
@@ -460,17 +461,32 @@ pub struct AcpClient {
         let i = 0;
         while (i < arr.size()) {
             let x = json.at(vv, i);
+            let rj = json.asString(json.get(x, "risk_json")) ?? "{}";
+            let band = json.asString(json.get(json.parse(rj), "band")) ?? "";
             rows.push(VendorRow(
                 json.asString(json.get(x, "id")) ?? "",
                 json.asString(json.get(x, "name")) ?? "",
-                json.asString(json.get(x, "risk_json")) ?? "{}"));
+                rj, band));
             i = i + 1;
         }
         return rows;
     }
-    pub fn registerVendor(self: AcpClient, name: string, risk: string, userAuth: string): DeployResult {
-        let r = string.eql(risk, "") ? "{}" : risk;
-        let body = "{\"name\":" + self.jstr(name) + ",\"risk\":" + r + "}";
+    pub fn registerVendor(self: AcpClient, name: string, residency: string, subProcessors: string, certifications: string, incidents: string, userAuth: string): DeployResult {
+        let subs = string.eql(subProcessors, "") ? "0" : subProcessors;
+        let inc = string.eql(incidents, "") ? "0" : incidents;
+        // certifications is a comma-separated list -> JSON array.
+        let certs = "[";
+        let parts = string.split(certifications, ",");
+        let n = 0;
+        for (p in 0..parts.size()) {
+            let c = string.trim(parts.get(p) ?? "");
+            if (string.eql(c, "")) { continue; }
+            if (n > 0) { certs = certs + ","; }
+            certs = certs + self.jstr(c);
+            n = n + 1;
+        }
+        certs = certs + "]";
+        let body = "{\"name\":" + self.jstr(name) + ",\"questionnaire\":{\"data_residency\":" + self.jstr(residency) + ",\"sub_processors\":" + subs + ",\"certifications\":" + certs + ",\"incidents\":" + inc + "}}";
         let hdrs = client.Http.emptyHeaders();
         hdrs.set("Content-Type", "application/json");
         if (!string.eql(userAuth, "")) { hdrs.set("Authorization", userAuth); }

@@ -590,11 +590,11 @@ pub fn vendorsPanel(rows: list.List<VendorRow>): Html {
             <p class="empty">No vendors recorded.</p>
         } else {
             <table class="tbl">
-                <thead><tr><th>Vendor</th><th>Risk</th><th>ID</th></tr></thead>
+                <thead><tr><th>Vendor</th><th>Risk band</th><th>ID</th></tr></thead>
                 <tbody>
                     {for (i in 0..rows.size()) {
-                        let v = rows.get(i) ?? VendorRow("", "", "{}");
-                        <tr><td class="strong">{v.name}</td><td class="mono dim">{v.risk}</td><td class="mono dim">{v.id}</td></tr>
+                        let v = rows.get(i) ?? VendorRow("", "", "{}", "");
+                        <tr><td class="strong">{v.name}</td><td>{if (string.eql(v.band, "critical") || string.eql(v.band, "high")) { <span class="badge bad">{v.band}</span> } else { if (string.eql(v.band, "medium")) { <span class="badge warn">{v.band}</span> } else { if (string.eql(v.band, "")) { <span class="dim">-</span> } else { <span class="badge ok">{v.band}</span> } } }}</td><td class="mono dim">{v.id}</td></tr>
                     }}
                 </tbody>
             </table>

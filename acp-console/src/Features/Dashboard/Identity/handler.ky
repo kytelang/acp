@@ -81,8 +81,11 @@ pub struct RegisterVendorHandler impl RouteHandler {
     async fn serve(self: RegisterVendorHandler, ctx: Context): Response {
         let auth = ctx.request.headers.get("authorization") ?? "";
         let name = json.stringField(ctx.request.body, "vendorName");
-        let risk = json.stringField(ctx.request.body, "vendorRisk");
-        let res = self.acp.registerVendor(name, risk, auth);
+        let residency = json.stringField(ctx.request.body, "vendorResidency");
+        let subs = json.stringField(ctx.request.body, "vendorSubs");
+        let certs = json.stringField(ctx.request.body, "vendorCerts");
+        let incidents = json.stringField(ctx.request.body, "vendorIncidents");
+        let res = self.acp.registerVendor(name, residency, subs, certs, incidents, auth);
         return await ds_response.patch(modelCreateResult(res));
     }
 }

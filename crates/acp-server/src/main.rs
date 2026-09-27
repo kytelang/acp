@@ -242,10 +242,31 @@ async fn vendor_register(State(st): State<Arc<AppState>>, headers: HeaderMap, Js
     let store = match &st.store { Some(s) => s, None => return Json(serde_json::json!({"ok": false, "error": "no --store configured"})).into_response() };
     let name = body.get("name").and_then(|v| v.as_str()).unwrap_or("").trim().to_string();
     if name.is_empty() { return Json(serde_json::json!({"ok": false, "error": "name is required"})).into_response(); }
-    let risk = body.get("risk").map(|v| v.to_string()).unwrap_or_else(|| "{}".to_string());
+    // G6: if a structured questionnaire is supplied, compute a deterministic risk score + band and store
+    // both alongside the answers. Otherwise fall back to a free-form risk object.
+    let (risk_json, score, band) = if let Some(q) = body.get("questionnaire") {
+        let data_residency = q.get("data_residency").and_then(|v| v.as_str()).unwrap_or("");
+        let sub_processors = q.get("sub_processors").and_then(|v| v.as_u64()).unwrap_or(0);
+        let certifications = q.get("certifications").and_then(|v| v.as_array()).map(|a| a.len()).unwrap_or(0);
+        let incidents = q.get("incidents").and_then(|v| v.as_u64()).unwrap_or(0);
+        let mut score: u64 = 0;
+        // Residency outside a trusted region adds risk.
+        if !matches!(data_residency, "eu" | "us" | "uk") { score += 2; }
+        // More than three sub-processors adds one point each.
+        if sub_processors > 3 { score += sub_processors - 3; }
+        // No certifications is a red flag.
+        if certifications == 0 { score += 2; }
+        // Each past incident adds two points.
+        score += incidents * 2;
+        let band = match score { 0..=1 => "low", 2..=3 => "medium", 4..=6 => "high", _ => "critical" };
+        let rj = serde_json::json!({"questionnaire": q, "score": score, "band": band}).to_string();
+        (rj, score, band.to_string())
+    } else {
+        (body.get("risk").map(|v| v.to_string()).unwrap_or_else(|| "{}".to_string()), 0, "n/a".to_string())
+    };
     let id = format!("vnd-{}", rand_hex(6));
-    match store.add_vendor(&id, &name, &risk, now_ms() as i64).await {
-        Ok(()) => Json(serde_json::json!({"ok": true, "id": id, "name": name})).into_response(),
+    match store.add_vendor(&id, &name, &risk_json, now_ms() as i64).await {
+        Ok(()) => Json(serde_json::json!({"ok": true, "id": id, "name": name, "score": score, "band": band})).into_response(),
         Err(e) => Json(serde_json::json!({"ok": false, "error": e})).into_response(),
     }
 }

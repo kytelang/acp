@@ -127,7 +127,7 @@
     .modal input[type=file]{display:none}
   </style>
 </head>
-<body data-signals="{view: 'overview', endpoint: '', disposition: 'govern', appName: '', appOwner: '', agentAppId: '', agentName: '', agentOwner: '', agentDeps: '', modelName: '', modelProvider: '', modelVersion: '', vendorName: '', vendorRisk: '', grcKind: 'assessment', grcSubject: '', grcTitle: '', grcStatus: 'open', grcBody: '{}', grcLinks: '', riskSubject: '', riskTitle: '', riskLikelihood: 'high', riskImpact: 'high', riskTreatment: 'mitigate', mcSubject: '', mcTitle: '', mcModelId: '', mcUseCaseId: '', mcRiskId: '', asSubject: '', asTitle: '', asAssignee: '', as_prohibited_practice: 'false', as_safety_component: 'false', as_biometric_identification: 'false', as_critical_infrastructure: 'false', as_employment_or_education: 'false', as_essential_services: 'false', as_law_enforcement: 'false', as_interacts_with_humans: 'false', as_generates_content: 'false', modal: '', policyTab: 'deployed', fwEnabled: 'false', fwBlockSecrets: 'false', fwDenyTopics: '', fwModel: '', fwScanUrl: '', fwBlockOnScannerError: 'false', fwBlockToxicity: 'false', frMatchKind: 'host_contains', frMatchValue: '', frPath: '', frAction: 'block', frClassify: '', author: 'operator', epReason: 'sanctioned', mode: 'lockdown_all', scope: 'global', killReason: 'incident', ttl_ms: '3600000', reason: ''}">
+<body data-signals="{view: 'overview', endpoint: '', disposition: 'govern', appName: '', appOwner: '', agentAppId: '', agentName: '', agentOwner: '', agentDeps: '', modelName: '', modelProvider: '', modelVersion: '', vendorName: '', vendorResidency: 'eu', vendorSubs: '0', vendorCerts: '', vendorIncidents: '0', grcKind: 'assessment', grcSubject: '', grcTitle: '', grcStatus: 'open', grcBody: '{}', grcLinks: '', riskSubject: '', riskTitle: '', riskLikelihood: 'high', riskImpact: 'high', riskTreatment: 'mitigate', mcSubject: '', mcTitle: '', mcModelId: '', mcUseCaseId: '', mcRiskId: '', asSubject: '', asTitle: '', asAssignee: '', as_prohibited_practice: 'false', as_safety_component: 'false', as_biometric_identification: 'false', as_critical_infrastructure: 'false', as_employment_or_education: 'false', as_essential_services: 'false', as_law_enforcement: 'false', as_interacts_with_humans: 'false', as_generates_content: 'false', modal: '', policyTab: 'deployed', fwEnabled: 'false', fwBlockSecrets: 'false', fwDenyTopics: '', fwModel: '', fwScanUrl: '', fwBlockOnScannerError: 'false', fwBlockToxicity: 'false', frMatchKind: 'host_contains', frMatchValue: '', frPath: '', frAction: 'block', frClassify: '', author: 'operator', epReason: 'sanctioned', mode: 'lockdown_all', scope: 'global', killReason: 'incident', ttl_ms: '3600000', reason: ''}">
   <div class="navbar">
     <div class="brand">
       <img class="logo" src="/varman-logo.svg" alt="Varman" />
@@ -405,8 +405,14 @@ rules:
   <div class="modal" data-show="$modal === 'vendor'">
     <div class="modal-h"><span>&#10133; Add a vendor</span><button class="modal-close" data-on:click="$modal = ''">&times;</button></div>
     <div class="modal-b">
+      <p class="hint">The questionnaire computes a deterministic risk band (data residency, sub-processor count, certifications and past incidents).</p>
       <label class="fld">Name<span class="req">*</span> <input type="text" data-bind="vendorName" placeholder="OpenAI" /></label>
-      <label class="fld">Risk (JSON) <input type="text" data-bind="vendorRisk" placeholder='{"score":7,"tier":"high"}' /></label>
+      <div class="row">
+        <label class="fld">Data residency <select data-bind="vendorResidency"><option value="eu">EU</option><option value="us">US</option><option value="uk">UK</option><option value="offshore">other</option></select></label>
+        <label class="fld">Sub-processors <input type="text" data-bind="vendorSubs" placeholder="0" /></label>
+        <label class="fld">Past incidents <input type="text" data-bind="vendorIncidents" placeholder="0" /></label>
+      </div>
+      <label class="fld">Certifications (comma separated) <input type="text" data-bind="vendorCerts" placeholder="soc2, iso27001" /></label>
       <div class="row">
         <button class="btn primary" data-on:click="@post('/vendors/create')">Add vendor</button>
         <button class="btn" data-on:click="$modal = ''">Close</button>
