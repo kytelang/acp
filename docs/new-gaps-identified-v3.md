@@ -6,7 +6,7 @@ criteria. Priority: P1 first.
 
 ---
 
-## T1. Multi-tenancy for the governance + registry data plane (P1)
+## T1. Multi-tenancy for the governance + registry data plane (P1)  [DONE 2026-09-27]
 Gap: the control plane is single-tenant; a large org governing several business units cannot isolate
 their data. Scope for this slice: the multi-record tables (grc_records, apps, agents, models, vendors).
 Design: add a `tenant_id` column (default `default`) to those tables; the server resolves the tenant
@@ -19,6 +19,12 @@ Acceptance:
 - A get/transition on a `B`-owned record while acting as `A` is not found / refused.
 - With no tenant header and no principal tenant, everything lands in `default` (no regression to the
   existing single-tenant behaviour and tests).
+Status (2026-09-27): SHIPPED. `tenant_id` on grc_records/apps/agents/models/vendors; `tenant_of` resolves
+the `x-acp-tenant` header, else the principal's Entra tenant, else `default`. Every create stamps it,
+every list/get is scoped, and by-id transitions verify tenant ownership (cross-tenant -> no such record).
+Verified via curl: acme sees only its GRC + apps, globex only its own, an acme transition on a globex
+record is refused, and no-header lands in default. cpstore tests pass. (Console operates in the default
+tenant until a tenant switcher is added; firewall_config + control singletons remain global by design.)
 
 ## T2. Load and throughput benchmark (P1)
 Gap: only a single-scan micro-latency (~70 us) is published; no concurrency / p99 figure.

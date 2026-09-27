@@ -217,23 +217,26 @@ async fn model_register(State(st): State<Arc<AppState>>, headers: HeaderMap, Jso
     if refused {
         return Json(serde_json::json!({"ok": false, "error": format!("model refused by admission scan: {scan_status}"), "scan_status": scan_status})).into_response();
     }
-    match store.add_model(&id, &name, &provider, &version, &card, &scan_status, &aibom, now_ms() as i64).await {
+    let tenant = tenant_of(&headers, &None);
+    match store.add_model(&id, &name, &provider, &version, &card, &scan_status, &aibom, &tenant, now_ms() as i64).await {
         Ok(()) => Json(serde_json::json!({"ok": true, "id": id, "name": name, "scan_status": scan_status})).into_response(),
         Err(e) => Json(serde_json::json!({"ok": false, "error": e})).into_response(),
     }
 }
-async fn models_list(State(st): State<Arc<AppState>>) -> Response {
+async fn models_list(State(st): State<Arc<AppState>>, headers: HeaderMap) -> Response {
+    let tenant = tenant_of(&headers, &None);
     let store = match &st.store { Some(s) => s, None => return Json(serde_json::json!({"models": []})).into_response() };
-    match store.list_models().await {
+    match store.list_models(&tenant).await {
         Ok(ms) => Json(serde_json::json!({"models": ms})).into_response(),
         Err(e) => Json(serde_json::json!({"models": [], "error": e})).into_response(),
     }
 }
-async fn model_get(State(st): State<Arc<AppState>>, Path(id): Path<String>) -> Response {
+async fn model_get(State(st): State<Arc<AppState>>, headers: HeaderMap, Path(id): Path<String>) -> Response {
+    let tenant = tenant_of(&headers, &None);
     let store = match &st.store { Some(s) => s, None => return Json(serde_json::json!({"error": "no --store configured"})).into_response() };
     match store.get_model(&id).await {
-        Ok(Some(m)) => Json(serde_json::json!(m)).into_response(),
-        Ok(None) => (StatusCode::NOT_FOUND, Json(serde_json::json!({"error": "no such model"}))).into_response(),
+        Ok(Some(m)) if m.tenant == tenant => Json(serde_json::json!(m)).into_response(),
+        Ok(_) => (StatusCode::NOT_FOUND, Json(serde_json::json!({"error": "no such model"}))).into_response(),
         Err(e) => Json(serde_json::json!({"error": e})).into_response(),
     }
 }
@@ -265,14 +268,16 @@ async fn vendor_register(State(st): State<Arc<AppState>>, headers: HeaderMap, Js
         (body.get("risk").map(|v| v.to_string()).unwrap_or_else(|| "{}".to_string()), 0, "n/a".to_string())
     };
     let id = format!("vnd-{}", rand_hex(6));
-    match store.add_vendor(&id, &name, &risk_json, now_ms() as i64).await {
+    let tenant = tenant_of(&headers, &None);
+    match store.add_vendor(&id, &name, &risk_json, &tenant, now_ms() as i64).await {
         Ok(()) => Json(serde_json::json!({"ok": true, "id": id, "name": name, "score": score, "band": band})).into_response(),
         Err(e) => Json(serde_json::json!({"ok": false, "error": e})).into_response(),
     }
 }
-async fn vendors_list(State(st): State<Arc<AppState>>) -> Response {
+async fn vendors_list(State(st): State<Arc<AppState>>, headers: HeaderMap) -> Response {
+    let tenant = tenant_of(&headers, &None);
     let store = match &st.store { Some(s) => s, None => return Json(serde_json::json!({"vendors": []})).into_response() };
-    match store.list_vendors().await {
+    match store.list_vendors(&tenant).await {
         Ok(vs) => Json(serde_json::json!({"vendors": vs})).into_response(),
         Err(e) => Json(serde_json::json!({"vendors": [], "error": e})).into_response(),
     }
@@ -393,6 +398,19 @@ fn authorize(auth: &Option<Auth>, headers: &HeaderMap, cap: acp_auth::Capability
 /// The actor string to attribute a change to: the verified principal's username (or oid), else
 /// "console" when RBAC is off (local/dev). Threaded into evidence and control-plane records so a
 /// change is attributable to the authenticated admin, not a hardcoded literal (gap A9).
+/// T1: resolve the tenant for a request: the `x-acp-tenant` header if present, else the authenticated
+/// principal's Entra tenant (when it is a real tenant, not the dev "common"), else "default".
+fn tenant_of(headers: &HeaderMap, principal: &Option<acp_auth::Principal>) -> String {
+    if let Some(h) = headers.get("x-acp-tenant").and_then(|v| v.to_str().ok()) {
+        let t = h.trim();
+        if !t.is_empty() { return t.to_string(); }
+    }
+    if let Some(p) = principal {
+        if !p.tenant.is_empty() && p.tenant != "common" { return p.tenant.clone(); }
+    }
+    "default".to_string()
+}
+
 fn actor_of(p: &Option<acp_auth::Principal>) -> String {
     match p {
         Some(pr) if !pr.username.is_empty() => pr.username.clone(),
@@ -1108,9 +1126,10 @@ async fn approvals_pending(State(st): State<Arc<AppState>>) -> impl IntoResponse
 }
 
 /// Registered apps (read-only view for the console).
-async fn apps(State(st): State<Arc<AppState>>) -> impl IntoResponse {
+async fn apps(State(st): State<Arc<AppState>>, headers: HeaderMap) -> impl IntoResponse {
+    let tenant = tenant_of(&headers, &None);
     if let Some(store) = &st.store {
-        match store.list_apps().await {
+        match store.list_apps(&tenant).await {
             Ok(apps) => return Json(serde_json::json!({"apps": apps})).into_response(),
             Err(e) => return Json(serde_json::json!({"apps": [], "error": e})).into_response(),
         }
@@ -1125,9 +1144,10 @@ async fn apps(State(st): State<Arc<AppState>>) -> impl IntoResponse {
 }
 
 /// Registered agents (read-only).
-async fn agents(State(st): State<Arc<AppState>>) -> impl IntoResponse {
+async fn agents(State(st): State<Arc<AppState>>, headers: HeaderMap) -> impl IntoResponse {
+    let tenant = tenant_of(&headers, &None);
     if let Some(store) = &st.store {
-        match store.list_agents().await {
+        match store.list_agents(&tenant).await {
             Ok(agents) => return Json(serde_json::json!({"agents": agents})).into_response(),
             Err(e) => return Json(serde_json::json!({"agents": [], "error": e})).into_response(),
         }
@@ -1531,7 +1551,8 @@ async fn app_register(State(st): State<Arc<AppState>>, headers: HeaderMap, Json(
     let owner = body.get("owner").and_then(|v| v.as_str()).unwrap_or("").to_string();
     let metadata = body.get("metadata").map(|v| v.to_string()).unwrap_or_else(|| "{}".to_string());
     let id = format!("app-{}", rand_hex(6));
-    match store.add_app(&id, &name, &owner, &metadata, now_ms() as i64).await {
+    let tenant = tenant_of(&headers, &None);
+    match store.add_app(&id, &name, &owner, &metadata, &tenant, now_ms() as i64).await {
         Ok(()) => Json(serde_json::json!({"ok": true, "id": id, "name": name})).into_response(),
         Err(e) => Json(serde_json::json!({"ok": false, "error": e})).into_response(),
     }
@@ -1549,7 +1570,8 @@ async fn agent_register(State(st): State<Arc<AppState>>, headers: HeaderMap, Jso
     let id = format!("agt-{}", rand_hex(6));
     let token = rand_hex(24);
     let token_sha = acp_core::canonical::sha256_hex_bytes(token.as_bytes());
-    match store.add_agent(&id, &app_id, &name, &token_sha, &owner, &metadata, now_ms() as i64).await {
+    let tenant = tenant_of(&headers, &None);
+    match store.add_agent(&id, &app_id, &name, &token_sha, &owner, &metadata, &tenant, now_ms() as i64).await {
         Ok(()) => Json(serde_json::json!({"ok": true, "id": id, "token": token, "note": "store this token now; it is not shown again"})).into_response(),
         Err(e) => Json(serde_json::json!({"ok": false, "error": e})).into_response(),
     }
@@ -1573,9 +1595,10 @@ fn grc_doc(id: &str, kind: &str, subject: &str, title: &str, status: &str, body:
 
 /// GET /grc: list all governance records (the console groups them by kind). Each is re-verified
 /// against its embedded public key, so the "signed" state shown is checked, not asserted.
-async fn grc_list(State(st): State<Arc<AppState>>) -> impl IntoResponse {
+async fn grc_list(State(st): State<Arc<AppState>>, headers: HeaderMap) -> impl IntoResponse {
+    let tenant = tenant_of(&headers, &None);
     let store = match &st.store { Some(s) => s, None => return Json(serde_json::json!({"records": []})).into_response() };
-    match store.list_grc(None).await {
+    match store.list_grc(&tenant, None).await {
         Ok(recs) => {
             let mut out: Vec<serde_json::Value> = Vec::with_capacity(recs.len());
             for r in &recs {
@@ -1605,9 +1628,9 @@ async fn grc_list(State(st): State<Arc<AppState>>) -> impl IntoResponse {
                     let mid = parsed.get("model_id").and_then(|v| v.as_str()).unwrap_or("");
                     let ucid = parsed.get("use_case_id").and_then(|v| v.as_str()).unwrap_or("");
                     let rid = parsed.get("risk_id").and_then(|v| v.as_str()).unwrap_or("");
-                    let model_ok = !mid.is_empty() && store.get_model(mid).await.ok().flatten().is_some();
-                    let uc_ok = !ucid.is_empty() && store.get_grc(ucid).await.ok().flatten().map(|g| g.kind == "use-case").unwrap_or(false);
-                    let risk_ok = !rid.is_empty() && store.get_grc(rid).await.ok().flatten().map(|g| g.kind == "risk").unwrap_or(false);
+                    let model_ok = !mid.is_empty() && store.get_model(mid).await.ok().flatten().map(|m| m.tenant == r.tenant).unwrap_or(false);
+                    let uc_ok = !ucid.is_empty() && store.get_grc(ucid).await.ok().flatten().map(|g| g.kind == "use-case" && g.tenant == r.tenant).unwrap_or(false);
+                    let risk_ok = !rid.is_empty() && store.get_grc(rid).await.ok().flatten().map(|g| g.kind == "risk" && g.tenant == r.tenant).unwrap_or(false);
                     links = serde_json::json!({"model": model_ok, "use_case": uc_ok, "risk": risk_ok, "model_id": mid, "use_case_id": ucid, "risk_id": rid});
                 }
                 let checklist = parsed.get("checklist").and_then(|v| v.as_array());
@@ -1661,7 +1684,8 @@ async fn grc_create(State(st): State<Arc<AppState>>, headers: HeaderMap, Json(bo
     let sig = acp_core::sign::Signer::sign(&signer, &acp_core::canonical::canonical_bytes(&doc));
     let pubkey_hex = hex::encode(acp_core::sign::Signer::public_key(&signer));
     let sig_hex = hex::encode(sig);
-    match store.add_grc(&id, &kind, &subject, &title, &status, &doc_body, &operator, now as i64, &pubkey_hex, &sig_hex, &linked_refs, "{}", "", 0, &status).await {
+    let tenant = tenant_of(&headers, &principal);
+    match store.add_grc(&id, &kind, &subject, &title, &status, &doc_body, &operator, now as i64, &pubkey_hex, &sig_hex, &linked_refs, "{}", "", 0, &status, &tenant).await {
         Ok(()) => {
             fire_webhook(&st, "grc.created", serde_json::json!({"id": id, "kind": kind, "subject": subject, "title": title}));
             Json(serde_json::json!({"ok": true, "id": id, "kind": kind})).into_response()
@@ -1678,8 +1702,10 @@ async fn grc_status(State(st): State<Arc<AppState>>, headers: HeaderMap, Path(id
     if status.is_empty() { return Json(serde_json::json!({"ok": false, "error": "status is required"})).into_response(); }
     // A4: re-sign the record with the new status so the stored signature stays valid; otherwise the
     // record would read as tampered on the next verify-on-read in grc_list.
+    let tenant = tenant_of(&headers, &None);
     let rec = match store.get_grc(&id).await {
-        Ok(Some(r)) => r,
+        Ok(Some(r)) if r.tenant == tenant => r,
+        Ok(Some(_)) => return Json(serde_json::json!({"ok": false, "error": "no such record"})).into_response(),
         Ok(None) => return Json(serde_json::json!({"ok": false, "error": "no such record"})).into_response(),
         Err(e) => return Json(serde_json::json!({"ok": false, "error": e})).into_response(),
     };
@@ -1738,7 +1764,8 @@ async fn redteam_run(State(st): State<Arc<AppState>>, headers: HeaderMap, Json(b
     let sig = acp_core::sign::Signer::sign(&signer, &acp_core::canonical::canonical_bytes(&doc));
     let pubkey_hex = hex::encode(acp_core::sign::Signer::public_key(&signer));
     let sig_hex = hex::encode(sig);
-    match store.add_grc(&id, "attestation", "content-firewall", "Red-team run", status, &doc_body, &operator, now as i64, &pubkey_hex, &sig_hex, "[]", "{}", "", 0, status).await {
+    let tenant = tenant_of(&headers, &principal);
+    match store.add_grc(&id, "attestation", "content-firewall", "Red-team run", status, &doc_body, &operator, now as i64, &pubkey_hex, &sig_hex, "[]", "{}", "", 0, status, &tenant).await {
         Ok(()) => Json(serde_json::json!({"ok": true, "id": id, "status": status, "catch_rate": report.catch_rate, "attacks": report.attacks, "caught": report.caught, "fpr": report.fpr, "passed": passed})).into_response(),
         Err(e) => Json(serde_json::json!({"ok": false, "error": e})).into_response(),
     }
@@ -1746,9 +1773,10 @@ async fn redteam_run(State(st): State<Arc<AppState>>, headers: HeaderMap, Json(b
 
 /// B4: the recent red-team runs (attestation GRC records for content-firewall), newest first, with
 /// their metrics parsed out and each record's signature re-verified.
-async fn redteam_runs(State(st): State<Arc<AppState>>) -> Response {
+async fn redteam_runs(State(st): State<Arc<AppState>>, headers: HeaderMap) -> Response {
+    let tenant = tenant_of(&headers, &None);
     let store = match &st.store { Some(s) => s, None => return Json(serde_json::json!({"runs": []})).into_response() };
-    match store.list_grc(Some("attestation")).await {
+    match store.list_grc(&tenant, Some("attestation")).await {
         Ok(recs) => {
             let mut out: Vec<serde_json::Value> = Vec::new();
             for r in recs.iter().rev() {
@@ -1819,7 +1847,8 @@ async fn grc_model_card(State(st): State<Arc<AppState>>, headers: HeaderMap, Jso
     let sig = acp_core::sign::Signer::sign(&signer, &acp_core::canonical::canonical_bytes(&doc));
     let pubkey_hex = hex::encode(acp_core::sign::Signer::public_key(&signer));
     let sig_hex = hex::encode(sig);
-    match store.add_grc(&id, "model-card", &subject, &title, &status, &doc_body, &operator, now as i64, &pubkey_hex, &sig_hex, "[]", "{}", "", 0, &status).await {
+    let tenant = tenant_of(&headers, &principal);
+    match store.add_grc(&id, "model-card", &subject, &title, &status, &doc_body, &operator, now as i64, &pubkey_hex, &sig_hex, "[]", "{}", "", 0, &status, &tenant).await {
         Ok(()) => Json(serde_json::json!({"ok": true, "id": id})).into_response(),
         Err(e) => Json(serde_json::json!({"ok": false, "error": e})).into_response(),
     }
@@ -1863,7 +1892,8 @@ async fn grc_risk(State(st): State<Arc<AppState>>, headers: HeaderMap, Json(body
     let sig = acp_core::sign::Signer::sign(&signer, &acp_core::canonical::canonical_bytes(&doc));
     let pubkey_hex = hex::encode(acp_core::sign::Signer::public_key(&signer));
     let sig_hex = hex::encode(sig);
-    match store.add_grc(&id, "risk", &subject, &title, &status, &doc_body, &operator, now as i64, &pubkey_hex, &sig_hex, "[]", "{}", "", 0, &status).await {
+    let tenant = tenant_of(&headers, &principal);
+    match store.add_grc(&id, "risk", &subject, &title, &status, &doc_body, &operator, now as i64, &pubkey_hex, &sig_hex, "[]", "{}", "", 0, &status, &tenant).await {
         Ok(()) => Json(serde_json::json!({"ok": true, "id": id, "score": score, "band": band})).into_response(),
         Err(e) => Json(serde_json::json!({"ok": false, "error": e})).into_response(),
     }
@@ -1914,7 +1944,8 @@ async fn grc_assess(State(st): State<Arc<AppState>>, headers: HeaderMap, Json(bo
     let sig = acp_core::sign::Signer::sign(&signer, &acp_core::canonical::canonical_bytes(&doc));
     let pubkey_hex = hex::encode(acp_core::sign::Signer::public_key(&signer));
     let sig_hex = hex::encode(sig);
-    match store.add_grc(&id, "assessment", &subject, &title, &status, &doc_body, &operator, now as i64, &pubkey_hex, &sig_hex, "[]", &answers_json, &assignee, due_ms, &stage).await {
+    let tenant = tenant_of(&headers, &principal);
+    match store.add_grc(&id, "assessment", &subject, &title, &status, &doc_body, &operator, now as i64, &pubkey_hex, &sig_hex, "[]", &answers_json, &assignee, due_ms, &stage, &tenant).await {
         Ok(()) => Json(serde_json::json!({"ok": true, "id": id, "tier": assessment.tier.as_str(), "controls": assessment.obligations.len()})).into_response(),
         Err(e) => Json(serde_json::json!({"ok": false, "error": e})).into_response(),
     }
@@ -1926,6 +1957,12 @@ async fn grc_assign(State(st): State<Arc<AppState>>, headers: HeaderMap, Path(id
     let store = match &st.store { Some(s) => s, None => return Json(serde_json::json!({"ok": false, "error": "no --store configured"})).into_response() };
     let assignee = body.get("assignee").and_then(|v| v.as_str()).unwrap_or("").to_string();
     let due_ms = body.get("due_ms").and_then(|v| v.as_i64()).unwrap_or(0);
+    // T1: only assign within the caller's tenant.
+    let tenant = tenant_of(&headers, &None);
+    match store.get_grc(&id).await {
+        Ok(Some(r)) if r.tenant == tenant => {}
+        _ => return Json(serde_json::json!({"ok": false, "error": "no such record"})).into_response(),
+    }
     match store.set_grc_assignment(&id, &assignee, due_ms).await {
         Ok(()) => {
             fire_webhook(&st, "grc.assigned", serde_json::json!({"id": id, "assignee": assignee, "due_ms": due_ms}));
@@ -1943,8 +1980,10 @@ async fn grc_link(State(st): State<Arc<AppState>>, headers: HeaderMap, Path(id):
     let link_id = body.get("id").and_then(|v| v.as_str()).unwrap_or("").trim().to_string();
     if link_id.is_empty() { return Json(serde_json::json!({"ok": false, "error": "id is required"})).into_response(); }
     let link_type = body.get("type").and_then(|v| v.as_str()).unwrap_or("ref").to_string();
+    let tenant = tenant_of(&headers, &None);
     let rec = match store.get_grc(&id).await {
-        Ok(Some(r)) => r,
+        Ok(Some(r)) if r.tenant == tenant => r,
+        Ok(Some(_)) => return Json(serde_json::json!({"ok": false, "error": "no such record"})).into_response(),
         Ok(None) => return Json(serde_json::json!({"ok": false, "error": "no such record"})).into_response(),
         Err(e) => return Json(serde_json::json!({"ok": false, "error": e})).into_response(),
     };
@@ -1962,8 +2001,10 @@ async fn grc_link(State(st): State<Arc<AppState>>, headers: HeaderMap, Path(id):
 async fn grc_control_toggle(State(st): State<Arc<AppState>>, headers: HeaderMap, Path((id, control_id)): Path<(String, String)>, Json(body): Json<serde_json::Value>) -> Response {
     if let Err(r) = authorize(&st.auth, &headers, acp_auth::Capability::EditGrc) { return r; }
     let store = match &st.store { Some(s) => s, None => return Json(serde_json::json!({"ok": false, "error": "no --store configured"})).into_response() };
+    let tenant = tenant_of(&headers, &None);
     let rec = match store.get_grc(&id).await {
-        Ok(Some(r)) => r,
+        Ok(Some(r)) if r.tenant == tenant => r,
+        Ok(Some(_)) => return Json(serde_json::json!({"ok": false, "error": "no such record"})).into_response(),
         Ok(None) => return Json(serde_json::json!({"ok": false, "error": "no such record"})).into_response(),
         Err(e) => return Json(serde_json::json!({"ok": false, "error": e})).into_response(),
     };
@@ -2003,8 +2044,10 @@ async fn grc_usecase_transition(State(st): State<Arc<AppState>>, headers: Header
         Some(s) => s,
         None => return Json(serde_json::json!({"ok": false, "error": format!("unknown stage '{stage}'")})).into_response(),
     };
+    let tenant = tenant_of(&headers, &None);
     let rec = match store.get_grc(&id).await {
-        Ok(Some(r)) => r,
+        Ok(Some(r)) if r.tenant == tenant => r,
+        Ok(Some(_)) => return Json(serde_json::json!({"ok": false, "error": "no such record"})).into_response(),
         Ok(None) => return Json(serde_json::json!({"ok": false, "error": "no such record"})).into_response(),
         Err(e) => return Json(serde_json::json!({"ok": false, "error": e})).into_response(),
     };
@@ -2455,7 +2498,7 @@ fn tally(map: &std::collections::HashMap<String, usize>) -> Vec<serde_json::Valu
 /// A6: build the framework-level report for a regulator: for each control in the framework, its
 /// status derived from GRC checklists, the linked-evidence verification counts, the breach summary,
 /// and a coverage figure. Returns structured JSON.
-async fn framework_report_value(st: &Arc<AppState>, name: &str) -> serde_json::Value {
+async fn framework_report_value(st: &Arc<AppState>, tenant: &str, name: &str) -> serde_json::Value {
     let store = match &st.store { Some(s) => s, None => return serde_json::json!({"error": "no --store configured"}) };
     // 1. Controls for the framework (loaded packs, else built-in).
     let mut controls: Vec<serde_json::Value> = Vec::new();
@@ -2474,7 +2517,7 @@ async fn framework_report_value(st: &Arc<AppState>, name: &str) -> serde_json::V
     let mut satisfied: std::collections::HashSet<String> = std::collections::HashSet::new();
     let mut addressed: std::collections::HashSet<String> = std::collections::HashSet::new();
     let (mut ev_verified, mut ev_total) = (0usize, 0usize);
-    if let Ok(recs) = store.list_grc(None).await {
+    if let Ok(recs) = store.list_grc(tenant, None).await {
         for r in &recs {
             if let Ok(body) = serde_json::from_str::<serde_json::Value>(&r.body) {
                 if let Some(list) = body.get("checklist").and_then(|c| c.as_array()) {
@@ -2520,12 +2563,14 @@ async fn framework_report_value(st: &Arc<AppState>, name: &str) -> serde_json::V
         "coverage": coverage,
     })
 }
-async fn report_framework(State(st): State<Arc<AppState>>, Path(name): Path<String>) -> Response {
-    Json(framework_report_value(&st, &name).await).into_response()
+async fn report_framework(State(st): State<Arc<AppState>>, headers: HeaderMap, Path(name): Path<String>) -> Response {
+    let tenant = tenant_of(&headers, &None);
+    Json(framework_report_value(&st, &tenant, &name).await).into_response()
 }
 /// A6: the framework report as CSV (control_id, status) plus summary rows, for a same-origin download.
-async fn report_framework_csv(State(st): State<Arc<AppState>>, Path(name): Path<String>) -> Response {
-    let v = framework_report_value(&st, &name).await;
+async fn report_framework_csv(State(st): State<Arc<AppState>>, headers: HeaderMap, Path(name): Path<String>) -> Response {
+    let tenant = tenant_of(&headers, &None);
+    let v = framework_report_value(&st, &tenant, &name).await;
     let mut out = String::from("section,key,value
 ");
     if let Some(cs) = v.get("controls").and_then(|c| c.as_array()) {
