@@ -237,14 +237,20 @@ so every PEP applies them on its next fetch with no PEP change. Console Content 
 feed version and a "Load threat feed" button. Verified e2e: a tool call with "exfiltrate credentials"
 passes before the pack and is blocked (denied-topic) by a freshly-fetched acp-proxy after; feed_version
 bumps; a tampered pack is rejected.
-### B6. Agent / MCP discovery breadth (P3, L)
+### B6. Agent / MCP discovery breadth (P3, L)  [DONE 2026-09-27]
 Gap: Varman's discovery is narrower than Zenity/Noma.
 Design: extend `acp discover` + enrollment with connectors (egress-log importers, CASB/proxy log
 formats, cloud audit logs) ending in signed dispositions feeding coverage.
 Acceptance:
 - At least one new connector imports a real-world log format into classified endpoints.
 - Imported endpoints become signed dispositions that appear in `/intercept/rules` and the coverage report.
-
+Status (2026-09-27): SHIPPED. `acp_core::discovery::parse_access_log` connector reads real-world log
+formats (Squid/proxy access logs, CSV egress exports, JSONL cloud-audit lines) into observed hosts;
+`acp discover <log> --from squid|csv|jsonl` classifies them into AI endpoints. Registering a discovered
+endpoint via `POST /endpoints/register` produces a signed disposition that appears in `/intercept/rules`
+(and the coverage set). Verified: a Squid log yields api.openai.com + api.anthropic.com (intranet host
+excluded); a CSV yields generativelanguage.googleapis.com; the registered endpoint shows in
+/intercept/rules as enroll-api.openai.com -> inspect-prompt. Connector unit tests pass.
 ---
 
 ## C. Cross-cutting maturity (both categories) - OPERATIONS

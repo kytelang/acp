@@ -107,9 +107,73 @@ pub fn find_shadow_ai(observed: &[String], governed: &[String]) -> Vec<AiEndpoin
     out.sort_by(|a, b| a.endpoint.cmp(&b.endpoint));
     out
 }
+/// B6: extract candidate endpoint hosts from a real-world egress/proxy/audit log so `acp discover`
+/// can ingest connector output, not just a hand-written host list. Supported `format` values:
+///   - "squid": Squid/typical proxy access log (the URL is the 7th whitespace field).
+///   - "csv": comma-separated; picks the first cell that looks like a URL or host (skips a header).
+///   - "jsonl": one JSON object per line; reads `url` / `host` / `destination` / `dest`.
+///   - anything else / "hosts": one host or URL per line (the original behaviour).
+/// Each extracted value is reduced to its host and de-duplicated, preserving first-seen order.
+pub fn parse_access_log(content: &str, format: &str) -> Vec<String> {
+    let host_of = |s: &str| -> Option<String> {
+        let s = s.trim().trim_matches('"');
+        if s.is_empty() { return None; }
+        // Strip scheme.
+        let no_scheme = s.split("://").last().unwrap_or(s);
+        // Take up to the first slash, then drop any userinfo and port.
+        let hostport = no_scheme.split('/').next().unwrap_or(no_scheme);
+        let host = hostport.rsplit('@').next().unwrap_or(hostport);
+        let host = host.split(':').next().unwrap_or(host);
+        if host.contains('.') && !host.contains(' ') { Some(host.to_string()) } else { None }
+    };
+    let mut out: Vec<String> = Vec::new();
+    let mut seen = std::collections::BTreeSet::new();
+    let mut push = |h: Option<String>, out: &mut Vec<String>, seen: &mut std::collections::BTreeSet<String>| {
+        if let Some(h) = h { if seen.insert(h.clone()) { out.push(h); } }
+    };
+    for line in content.lines() {
+        let line = line.trim();
+        if line.is_empty() || line.starts_with('#') { continue; }
+        match format {
+            "squid" => {
+                let fields: Vec<&str> = line.split_whitespace().collect();
+                // The URL is classically field index 6; fall back to any field with a scheme.
+                let url = fields.get(6).copied().or_else(|| fields.iter().find(|f| f.contains("://")).copied());
+                if let Some(u) = url { push(host_of(u), &mut out, &mut seen); }
+            }
+            "csv" => {
+                if line.to_ascii_lowercase().starts_with("url,") || line.to_ascii_lowercase().starts_with("host,") || line.to_ascii_lowercase().starts_with("timestamp,") { continue; }
+                let cell = line.split(',').find_map(|c| host_of(c));
+                push(cell, &mut out, &mut seen);
+            }
+            "jsonl" => {
+                if let Ok(v) = serde_json::from_str::<serde_json::Value>(line) {
+                    let val = v.get("url").or_else(|| v.get("host")).or_else(|| v.get("destination")).or_else(|| v.get("dest")).and_then(|x| x.as_str());
+                    if let Some(u) = val { push(host_of(u), &mut out, &mut seen); }
+                }
+            }
+            _ => { push(host_of(line), &mut out, &mut seen); }
+        }
+    }
+    out
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn connector_parses_squid_csv_jsonl_and_classifies_ai() {
+        let squid = "1609459200.000 123 10.0.0.1 TCP_MISS/200 512 GET https://api.openai.com/v1/chat HTTP/1.1 -\n1609459201.000 45 10.0.0.2 TCP_MISS/200 100 POST https://intranet.example.com/ok HTTP/1.1 -";
+        let hosts = parse_access_log(squid, "squid");
+        assert!(hosts.contains(&"api.openai.com".to_string()), "squid connector extracts the model host");
+        let ai: Vec<_> = hosts.iter().filter(|h| classify_ai(h).is_some()).collect();
+        assert_eq!(ai.len(), 1, "only the model API classifies as AI");
+        let csv = "timestamp,url\n2026,https://api.anthropic.com/v1/messages\n2026,https://example.com/x";
+        assert!(parse_access_log(csv, "csv").contains(&"api.anthropic.com".to_string()));
+        let jsonl = "{\"url\":\"https://generativelanguage.googleapis.com/v1\"}\n{\"host\":\"plain.example.com\"}";
+        assert!(parse_access_log(jsonl, "jsonl").contains(&"generativelanguage.googleapis.com".to_string()));
+    }
 
     #[test]
     fn ungoverned_endpoints_become_the_worklist() {

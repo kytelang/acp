@@ -1006,13 +1006,19 @@ fn cmd_grc_report(rest: &[String]) -> ExitCode {
 /// classified by provider. Optional second file lists already-governed endpoints to exclude.
 ///   acp discover <observed.txt> [governed.txt]
 fn cmd_discover(rest: &[String]) -> ExitCode {
-    use acp_core::discovery::{find_shadow_ai, AiKind};
-    let Some(obs_file) = rest.first() else {
-        return usage("acp discover <observed.txt> [governed.txt]");
+    use acp_core::discovery::{find_shadow_ai, parse_access_log, AiKind};
+    let positionals: Vec<&String> = rest.iter().filter(|a| !a.starts_with("--")).collect();
+    let Some(obs_file) = positionals.first().copied() else {
+        return usage("acp discover <observed-or-log-file> [governed.txt] [--from squid|csv|jsonl|hosts]");
     };
+    // B6: a connector reads a real-world egress/proxy/audit log format into observed hosts.
+    let from_fmt: Option<String> = rest.iter().position(|a| a == "--from").and_then(|i| rest.get(i + 1)).cloned();
     let read_lines = |f: &str| -> Vec<String> {
-        std::fs::read_to_string(f)
-            .unwrap_or_default()
+        let content = std::fs::read_to_string(f).unwrap_or_default();
+        if let Some(fmt) = &from_fmt {
+            return parse_access_log(&content, fmt);
+        }
+        content
             .lines()
             .map(|l| l.trim().to_string())
             .filter(|l| !l.is_empty() && !l.starts_with('#'))
@@ -1024,7 +1030,7 @@ fn cmd_discover(rest: &[String]) -> ExitCode {
         return discover_watch(obs_file);
     }
     let observed = read_lines(obs_file);
-    let governed = rest.get(1).map(|f| read_lines(f)).unwrap_or_default();
+    let governed = positionals.get(1).map(|f| read_lines(f)).unwrap_or_default();
     let shadow = find_shadow_ai(&observed, &governed);
     if shadow.is_empty() {
         println!("no shadow AI found in {} observed endpoint(s)", observed.len());
