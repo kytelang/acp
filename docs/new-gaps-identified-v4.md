@@ -43,7 +43,7 @@ applies each via the shared `apply_ticket_resolution` (also used by /tickets/cal
 construction (approve->approved; grc-status re-signs to the same status). Verified: the startup poll
 resolved a pre-registered hold to approved and advanced a GRC record to mitigating (still verified).
 
-## M3. Scheduler + report delivery (P2)
+## M3. Scheduler + report delivery (P2)  [DONE 2026-09-27]
 Gap: T6 stored snapshots on demand; there was no built-in scheduler or delivery.
 Design: `--snapshot-interval-ms` + `--snapshot-frameworks a,b` make the server periodically snapshot
 those framework reports and fire a `report.snapshot` webhook (reusing the G4 signed webhook) as delivery.
@@ -51,6 +51,10 @@ Acceptance:
 - With the interval + frameworks set and a webhook configured, a snapshot is stored and a signed
   `report.snapshot` event is delivered on the schedule (verified against a mock receiver).
 - History accumulates one entry per scheduled run.
+Status (2026-09-27): SHIPPED. `--snapshot-interval-ms` + `--snapshot-frameworks a,b` run a background
+task that snapshots each framework report and fires a signed `report.snapshot` webhook (reusing G4).
+Verified against a mock receiver at a 1s interval: snapshots accumulated in history and matching signed
+report.snapshot events were delivered for each framework (all signatures verified).
 
 ## M4. Approval SLA escalation (P2)
 Gap: approvals had no time-based escalation.

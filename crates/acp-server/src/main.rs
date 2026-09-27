@@ -56,6 +56,9 @@ struct AppState {
     threat_feed_url: Option<String>,
     // M2: optional ticket-resolution feed the control plane polls (pull complement to /tickets/callback).
     ticket_poll_url: Option<String>,
+    // M3: periodic framework-report snapshotting + delivery.
+    snapshot_interval_ms: i64,
+    snapshot_frameworks: Vec<String>,
     lease: std::sync::Mutex<(bool, String, i64)>,
 }
 
@@ -462,6 +465,8 @@ async fn main() {
     let mut packs_feed_url: Option<String> = None;
     let mut threat_feed_url: Option<String> = None;
     let mut ticket_poll_url: Option<String> = None;
+    let mut snapshot_interval_ms: i64 = 0;
+    let mut snapshot_frameworks: Vec<String> = Vec::new();
     let mut node_id: Option<String> = None;
     let mut lease_ttl_ms: i64 = 15_000;
     let mut it = args.iter().skip(1);
@@ -485,6 +490,8 @@ async fn main() {
             "--packs-feed-url" => packs_feed_url = it.next().cloned(),
             "--threat-feed-url" => threat_feed_url = it.next().cloned(),
             "--ticket-poll-url" => ticket_poll_url = it.next().cloned(),
+            "--snapshot-interval-ms" => snapshot_interval_ms = it.next().and_then(|v| v.parse().ok()).unwrap_or(0),
+            "--snapshot-frameworks" => snapshot_frameworks = it.next().map(|v| v.split(',').map(|x| x.trim().to_string()).filter(|x| !x.is_empty()).collect()).unwrap_or_default(),
             "--node-id" => node_id = it.next().cloned(),
             "--lease-ttl-ms" => lease_ttl_ms = it.next().and_then(|v| v.parse().ok()).unwrap_or(15_000),
             "--cp-key" => { if let Some(v) = it.next() { cp_key = v.clone(); } }
@@ -670,6 +677,8 @@ async fn main() {
         packs_feed_url,
         threat_feed_url,
         ticket_poll_url,
+        snapshot_interval_ms,
+        snapshot_frameworks,
         lease: std::sync::Mutex::new((false, String::new(), 0)),
     });
     // C1 (HA): restore persisted liveness/spike state so the dead-man's-switch and alert state survive
@@ -773,6 +782,28 @@ async fn main() {
                     }
                 }
                 tokio::time::sleep(std::time::Duration::from_secs(30)).await;
+            }
+        });
+    }
+    // M3: periodic framework-report snapshots + delivery (fires a signed report.snapshot webhook).
+    if state.snapshot_interval_ms > 0 && !state.snapshot_frameworks.is_empty() && state.store.is_some() {
+        let st2 = state.clone();
+        tokio::spawn(async move {
+            let interval = std::time::Duration::from_millis(st2.snapshot_interval_ms.max(1000) as u64);
+            loop {
+                tokio::time::sleep(interval).await;
+                if let Some(store) = &st2.store {
+                    for name in &st2.snapshot_frameworks {
+                        let report = framework_report_value(&st2, "default", name).await;
+                        let id = format!("snap-{}", rand_hex(8));
+                        if store.add_snapshot(&id, name, "default", &report.to_string(), now_ms() as i64).await.is_ok() {
+                            fire_webhook(&st2, "report.snapshot", serde_json::json!({
+                                "framework": name, "id": id,
+                                "coverage": report.get("coverage"), "controls_summary": report.get("controls_summary"),
+                            }));
+                        }
+                    }
+                }
             }
         });
     }
