@@ -81,7 +81,7 @@ EditGrc, author from the principal, tenant-scoped; body stored as a value). Cons
 expandable Comments thread per record (KYX auto-escapes the body). Verified via curl: two comments on
 record A returned with author + body; record B returns none.
 
-## T6. Scheduled report snapshots + history (P3)
+## T6. Scheduled report snapshots + history (P3)  [DONE 2026-09-27]
 Gap: reports are on-demand only; no history or scheduled capture.
 Design: a `report_snapshots(id, framework, body_json, created_ms)` table; `POST /report/framework/:name/snapshot`
 stores the current framework report; `GET /report/framework/:name/history` lists snapshots newest-first.
@@ -89,6 +89,11 @@ A cron calls the snapshot endpoint on a schedule.
 Acceptance:
 - Taking a snapshot stores the current framework report; the history endpoint lists it with a timestamp.
 - Two snapshots produce two history entries in order.
+Status (2026-09-27): SHIPPED. cpstore `report_snapshots` (tenant-scoped); server
+`POST /report/framework/:name/snapshot` (gated Export) stores the current framework report and
+`GET /report/framework/:name/history` lists snapshots newest-first with a coverage summary. A cron calls
+the snapshot endpoint. Verified via curl: two snapshots -> two history entries newest-first with
+timestamps.
 
 ---
 

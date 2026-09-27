@@ -759,6 +759,8 @@ async fn main() {
         .route("/report/violations", get(report_violations))
         .route("/report/framework/:name", get(report_framework))
         .route("/report/framework/:name/csv", get(report_framework_csv))
+        .route("/report/framework/:name/snapshot", post(report_framework_snapshot))
+        .route("/report/framework/:name/history", get(report_framework_history))
         .route("/report/violations.csv", get(report_violations_csv))
         .route("/evidence/ingest", post(evidence_ingest))
         .route("/evidence/ingested", get(evidence_ingested))
@@ -2677,6 +2679,34 @@ async fn report_framework_csv(State(st): State<Arc<AppState>>, headers: HeaderMa
     out.push_str(&format!("summary,breaches_total,{bt}
 "));
     ([(axum::http::header::CONTENT_TYPE, "text/csv"), (axum::http::header::CONTENT_DISPOSITION, "attachment; filename=\"framework-report.csv\"")], out).into_response()
+}
+
+/// T6: capture the current framework report as a signed-in-time snapshot (history). Gated on Export.
+async fn report_framework_snapshot(State(st): State<Arc<AppState>>, headers: HeaderMap, Path(name): Path<String>) -> Response {
+    if let Err(r) = authorize(&st.auth, &headers, acp_auth::Capability::Export) { return r; }
+    let store = match &st.store { Some(s) => s, None => return Json(serde_json::json!({"ok": false, "error": "no --store configured"})).into_response() };
+    let tenant = tenant_of(&headers, &None);
+    let report = framework_report_value(&st, &tenant, &name).await;
+    let id = format!("snap-{}", rand_hex(8));
+    match store.add_snapshot(&id, &name, &tenant, &report.to_string(), now_ms() as i64).await {
+        Ok(()) => Json(serde_json::json!({"ok": true, "id": id, "framework": name})).into_response(),
+        Err(e) => Json(serde_json::json!({"ok": false, "error": e})).into_response(),
+    }
+}
+/// T6: list framework-report snapshots newest-first (history), with a small summary per entry.
+async fn report_framework_history(State(st): State<Arc<AppState>>, headers: HeaderMap, Path(name): Path<String>) -> Response {
+    let store = match &st.store { Some(s) => s, None => return Json(serde_json::json!({"snapshots": []})).into_response() };
+    let tenant = tenant_of(&headers, &None);
+    match store.list_snapshots(&name, &tenant).await {
+        Ok(rows) => {
+            let out: Vec<serde_json::Value> = rows.iter().map(|(id, ts, body)| {
+                let v: serde_json::Value = serde_json::from_str(body).unwrap_or_else(|_| serde_json::json!({}));
+                serde_json::json!({"id": id, "created_ms": ts, "coverage": v.get("coverage"), "controls_summary": v.get("controls_summary")})
+            }).collect();
+            Json(serde_json::json!({"snapshots": out})).into_response()
+        }
+        Err(e) => Json(serde_json::json!({"snapshots": [], "error": e})).into_response(),
+    }
 }
 
 /// firewall blocks reported by every PEP), for the console Reports view. Persisted, so it spans more

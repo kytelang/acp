@@ -206,6 +206,7 @@ impl ControlStore {
             "CREATE TABLE IF NOT EXISTS control_leader (id INTEGER PRIMARY KEY, holder TEXT NOT NULL, token BIGINT NOT NULL, expires_ms BIGINT NOT NULL)",
             "CREATE TABLE IF NOT EXISTS control_state (k VARCHAR(255) PRIMARY KEY, v TEXT NOT NULL, updated_ms BIGINT NOT NULL)",
             "CREATE TABLE IF NOT EXISTS drift_counts (class VARCHAR(255) PRIMARY KEY, hits BIGINT NOT NULL, total BIGINT NOT NULL, baseline DOUBLE PRECISION NOT NULL, updated_ms BIGINT NOT NULL)",
+            "CREATE TABLE IF NOT EXISTS report_snapshots (id VARCHAR(255) PRIMARY KEY, framework TEXT NOT NULL, tenant_id VARCHAR(255) NOT NULL DEFAULT 'default', body_json TEXT NOT NULL, created_ms BIGINT NOT NULL)",
             "CREATE TABLE IF NOT EXISTS lineage_edges (id VARCHAR(255) PRIMARY KEY, data_class TEXT NOT NULL, tool TEXT NOT NULL, count BIGINT NOT NULL, updated_ms BIGINT NOT NULL)",
         ] {
             sqlx::query(ddl).execute(&self.pool).await.map_err(|e| e.to_string())?;
@@ -652,6 +653,19 @@ impl ControlStore {
         }
         Ok(())
     }
+    // T6: framework-report snapshots (history).
+    pub async fn add_snapshot(&self, id: &str, framework: &str, tenant: &str, body_json: &str, now_ms: i64) -> Result<(), String> {
+        let sql = self.ph("INSERT INTO report_snapshots (id, framework, tenant_id, body_json, created_ms) VALUES (?, ?, ?, ?, ?)");
+        sqlx::query(&sql).bind(id).bind(framework).bind(tenant).bind(body_json).bind(now_ms)
+            .execute(&self.pool).await.map_err(|e| e.to_string())?;
+        Ok(())
+    }
+    pub async fn list_snapshots(&self, framework: &str, tenant: &str) -> Result<Vec<(String, i64, String)>, String> {
+        let rows = sqlx::query(&self.ph("SELECT id, created_ms, body_json FROM report_snapshots WHERE framework = ? AND tenant_id = ? ORDER BY created_ms DESC"))
+            .bind(framework).bind(tenant).fetch_all(&self.pool).await.map_err(|e| e.to_string())?;
+        Ok(rows.iter().map(|r| (r.get::<String,_>("id"), r.get::<i64,_>("created_ms"), r.get::<String,_>("body_json"))).collect())
+    }
+
     pub async fn list_lineage(&self) -> Result<Vec<(String, String, i64)>, String> {
         let rows = sqlx::query("SELECT data_class, tool, count FROM lineage_edges ORDER BY data_class, tool")
             .fetch_all(&self.pool).await.map_err(|e| e.to_string())?;
