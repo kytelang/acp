@@ -62,10 +62,17 @@ stored enrolment log into a local YAML registry instead:
 
 ```sh
 acp discover egress.log                         # classify ungoverned AI endpoints
+acp discover purview-export.jsonl --from purview   # import an endpoint-DLP / CASB export instead
 # enrol endpoints from the console AI Endpoints page or POST /endpoints/register (the interceptor then
 # pulls them via --registry-url); or, for offline use, build a local file:
 acp intercept from-enrollment enroll.json > endpoints.yaml
 ```
+
+`acp discover` reads a plain host list by default, or a real-world export with `--from`:
+`squid`, `csv`, `jsonl`, and the endpoint / CASB connectors `purview`, `zscaler` and `netskope`. This
+is the partner-first path to endpoint DLP: import the exports your Purview / Zscaler / Netskope tools
+already produce, and their AI destinations flow straight into shadow-AI discovery and these interception
+rules, with no new endpoint agent to deploy.
 
 See [chapter 12](12-grc.md) for discovery and enrolment.
 

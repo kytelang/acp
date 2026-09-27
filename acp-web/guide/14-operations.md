@@ -34,7 +34,9 @@ control plane signs endpoint dispositions and GRC records with. See [chapter 16]
 `--dev-auth` (a mock issuer, itself gated behind an environment flag). If auth is requested and the
 JWKS fails to load, the server refuses to start.
 
-**High availability.** The control plane is single-tenant today. It supports running more than one
+**High availability.** The control plane is multi-tenant (records are scoped per tenant with per-tenant
+signing keys, and the console tenant switcher re-scopes the view; the per-instance default comes from
+`ACP_TENANT`). It supports running more than one
 replica behind one shared `--store`: a fenced leader lease elects a single active leader (so there is
 no split-brain), and the liveness and spike-detector state is persisted to the shared store, so the
 dead-man's-switch and alert state survive a restart or a failover. Give each replica a stable
@@ -99,7 +101,15 @@ acp-server --addr 0.0.0.0:8788 --store "$STORE" --node-id node-b --lease-ttl-ms 
 the leader is killed, the survivor acquires the lease after at most one TTL with a strictly larger
 fencing token, so a paused old leader that wakes up is fenced out. PEP heartbeats and events keep
 being accepted by whichever replica serves them, and their liveness and spike state is shared, so the
-dead-man's-switch and alerts do not reset on failover. `deploy/` ships a failover drill.
+dead-man's-switch and alerts do not reset on failover.
+
+`scripts/soak.sh` is a self-contained scale and failover drill: it drives sustained concurrent load
+through the proxy and the gateway (reporting rps and p50/p95/p99), then runs this two-replica failover
+under a write load and asserts there is no split-brain, that control and liveness state survive, and
+that recovery is bounded by the lease TTL. A measured run (a developer machine, mock upstreams) is
+published in `docs/soak-report.md`: proxy about 4,900 rps (p99 37 ms), gateway about 3,400 rps (p99
+102 ms), both zero-error, and failover in about 2.7 seconds at a 3 second TTL. Re-run it in your target
+environment for environment-specific numbers.
 
 ### Backup and restore (DR)
 
@@ -141,6 +151,22 @@ best-effort and non-blocking; it never delays enforcement.
 `--webhook-secret`). The body `{action, id, status?}` either resolves an approval hold
 (`approve`/`deny`) or advances a GRC record's status (`grc-status`), re-signing the record. A missing
 secret or a bad signature is rejected.
+
+**Named connector adapters (Slack, Jira, MLflow).** On top of these generic rails ACP ships thin,
+vendor-neutral adapters for the common enterprise tools; no vendor SDK is embedded.
+
+- **Slack:** `--slack-webhook-url <url>` delivers every control-plane event to a Slack incoming webhook
+  as an injection-safe Block Kit message, alongside (or instead of) the generic `--webhook-url` sink.
+- **Jira:** `POST /tickets/jira` accepts a Jira `issue_updated` webhook (verified with the same
+  `x-acp-signature` HMAC as `/tickets/callback`) and maps it to a resolution using an
+  `acp-approval:<id>` or `acp-grc:<id>` issue label plus the new status: a terminal Done/Approved
+  approves the hold or sets the GRC record to `approved`, Rejected denies or sets `rejected`, and an
+  intermediate transition or a non-ACP issue is a no-op.
+- **MLflow:** `--mlflow-url <base>` imports the MLflow model registry at start-up (highest version per
+  model) through the normal admission-scan and signed AI-BOM path, so imported models are governed like
+  manually registered ones. It is idempotent by (name, version).
+
+These are documented with the request/response shapes in `docs/connectors.md`.
 
 ## Logging
 
@@ -186,9 +212,12 @@ design-partner pilot, not an unattended production rollout without hardening. In
 encryption at rest, HSM signing, structured logging, secrets kept out of the deployment files, the
 full helm chart, an entropy-gated DLP classifier, the staged default-deny path, and a fail-closed
 guard against a mis-scoped database role, and control-plane high availability (a fenced leader lease,
-shared-store liveness and spike state, and a verify-on-restore DR path). Remaining before an
-unattended rollout: turning the sequence and firewall protections on by default, load testing the
-gateway, and a wider detection-efficacy CI gate.
+shared-store liveness and spike state, and a verify-on-restore DR path). Scale and failover are now
+exercised by a published soak drill (`scripts/soak.sh`, numbers in `docs/soak-report.md`), and the
+detection-efficacy CI gate runs over a labelled corpus on every build. Remaining before an unattended
+rollout: turning the sequence and firewall protections on by default, an endurance run against a real
+Postgres store in your environment, and third-party certification (a control-mapping readiness
+assessment is in `docs/soc2-iso-control-mapping.md`).
 
 ## Setting up Postgres or MySQL
 

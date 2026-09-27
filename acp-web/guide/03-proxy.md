@@ -72,6 +72,8 @@ For each tool call the proxy runs, in order:
 | `--data-boundary <policy.yaml>` | enable destination-aware DLP ([chapter 11](11-containment.md)) |
 | `--content-firewall` | enable the signature content firewall on tool arguments |
 | `--content-ml <model.json>` | also load the trained ML injection classifier |
+| `--scan-url <url>` | send each content part to an external scanner hook ([chapter 10](10-content-firewall.md)) |
+| `--block-on-scanner-error` | fail closed if the external scanner is unreachable or replies off-contract (default: fail open to the built-in engine) |
 | `--tool-pins <file>` | enable tool-integrity pinning (rug-pull detection) |
 | `--pin-pg <dsn>` | share tool-integrity pins across replicas via Postgres |
 | `--enforcement-key <hex>` | stamp the enforcement attestation the guard verifies |

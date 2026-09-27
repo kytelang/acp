@@ -29,8 +29,9 @@ path, so it can be audited in isolation.
 - **A malicious tool server (rug-pull).** Tool-integrity pinning detects a changed tool definition
   and quarantines it until re-pinned.
 - **Prompt and indirect injection.** The [content firewall](10-content-firewall.md) screens prompts,
-  arguments and tool results, hardened against obfuscation. Detection is defence in depth; the
-  authorization layer contains what gets through.
+  arguments and tool results (text and, through the external scan hook, image and audio parts),
+  hardened against obfuscation. Detection is defence in depth; the authorization layer contains what
+  gets through.
 - **A bad policy deploy.** A policy is signed and versioned; a PEP loads it only after verifying the
   signature, and a non-compiling policy is rejected, leaving the last good policy serving.
 - **A compromised key.** Custody can move to an HSM; the append-only store and separation of duty
@@ -98,7 +99,10 @@ and key-confusion; and is key custody sound for your intended deployment.
 ## Honest status
 
 Varman has no third-party security certifications (SOC 2, penetration test, independent cryptographic
-audit) yet, and no production deployments. The HSM signing path is verified against SoftHSM and
+audit) yet, and no production deployments. A readiness assessment that maps the existing technical
+controls to the SOC 2 Trust Services Criteria, ISO/IEC 27001 Annex A and ISO/IEC 42001 is in
+`docs/soc2-iso-control-mapping.md`; the remaining work for certification is documented policy plus an
+operating window and an auditor, not new features. The HSM signing path is verified against SoftHSM and
 should be validated against your specific production module. Treat the reference implementation as
 ready to evaluate and pilot; chapter 14 sets out what is in place and what remains before an
 unattended production rollout.

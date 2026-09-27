@@ -59,6 +59,21 @@ treat as it wishes (for example, denying `unattributed` access to secrets or fro
 local development, `--dev-auth` on the control plane issues mock tokens, gated behind an explicit
 environment flag so it cannot be switched on by accident.
 
+### Preflighting a real tenant
+
+Before cutting over to a real Entra tenant, verify the setup without starting the server:
+
+```sh
+# fetch and parse the tenant's JWKS (no token needed)
+acp-server --entra-preflight --entra-tenant <tenant> --entra-audience <audience>
+# with a real token: verify iss/aud/nbf/exp/signature and print the roles and effective capabilities
+acp-server --entra-preflight --entra-tenant <tenant> --entra-audience <audience> --entra-test-token "<JWT>"
+```
+
+It exits 0 on success and 1 on any failure, naming the exact check that failed. The full cutover
+procedure (JWKS preflight, token preflight, bring-up, first-window soak covering key rotation, clock
+skew, token expiry and SCIM group sync, and rollback) is in `docs/entra-cutover-runbook.md`.
+
 ## Delegation
 
 A `Delegation` binds an agent to a human for a bounded time, so the ledger records not just "agent X
@@ -101,6 +116,19 @@ capabilities it grants under `urn:acp:capabilities`), and `GET /scim/v2/Users` l
 users with their group memberships. Both are gated on `Export` (a read-only administrative view). The
 user directory comes from `--scim-users <file>` (a JSON array of `{id, email, groups}`), defaulting to
 a demo directory (one operator per role) under the mocked-IdP dev setup.
+
+## Multi-tenancy
+
+The control plane is multi-tenant. Tenant-scoped records (GRC, apps, agents, models, vendors) and the
+content-firewall config carry a `tenant_id`, and each tenant gets its own Ed25519 signing key derived
+from the control-plane key seed, so one tenant's evidence cannot be signed or read as another's. The
+tenant for a request is resolved from the `x-acp-tenant` header, else the principal's Entra tenant,
+else `default`. `GET /tenants` lists the tenants that have data.
+
+In the console, a tenant selector in the top bar (populated from `/tenants`) re-scopes every panel over
+the live SSE stream and applies to writes, so an operator can switch tenants in the browser without
+restarting. A single-tenant console instance can also pin its tenant with the `ACP_TENANT` environment
+variable.
 
 ## mutual TLS between components
 

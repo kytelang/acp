@@ -86,10 +86,13 @@ started with one.
 ## The layout
 
 The left sidebar groups the pages: **Governance** (Overview, Approvals, Evidence, Violations,
-Reports), **Identity** (Teams, Agents, AI Endpoints), **Policy** (Policy, Content firewall),
-**Compliance** (Governance), **Emergency** (Kill-switch), and **Health** (Integrity). The top-right
-carries a light/dark theme toggle and a "live" indicator that pulses while the SSE stream is
-connected. The rest of this chapter walks each page in that order.
+Reports), **Identity** (Teams, Agents, Models, AI Endpoints), **Policy** (Policy, Content firewall),
+**Compliance** (Governance), **Emergency** (Kill-switch), and **Health** (Integrity, Monitors). The top-right
+carries a light/dark theme toggle, a "live" indicator that pulses while the SSE stream is connected,
+and a **tenant selector** (populated from `GET /tenants`). Switching the tenant re-scopes every panel
+over the live stream and applies to writes, so an operator can move between tenants in the browser
+without restarting; a single-tenant instance can pin its tenant with the `ACP_TENANT` environment
+variable. The rest of this chapter walks each page in that order.
 
 ## 1. Overview
 
@@ -256,7 +259,35 @@ On success the outcome shows the registered endpoint and the detected provider. 
 also seeds firewall rules automatically (see the firewall rules card). Chapter 12 covers enrolment
 and discovery.
 
-## 9. Policy
+## 9. Models
+
+**What it is for:** the registered-model inventory, with each model's admission scan result. Register a
+model from **+ Register model** (or `POST /models`); if a model scanner is configured
+(`--model-scanner-url`), registration runs an admission scan and stores a signed CycloneDX AI-BOM.
+Models can also be imported automatically from an MLflow registry with `--mlflow-url` (see
+[chapter 14](14-operations.md)).
+
+The page shows a read-only table (Model, Provider, Version, Scan, ATLAS, AI-BOM, ID) from `GET /models`,
+refreshed over SSE. The **Scan** cell shows `clean`, `unscanned`, or the findings; the **ATLAS** cell
+lists the MITRE ATLAS technique ids mapped from any scan findings (for example `AML.T0051`,
+`AML.T0011.000`), from the `atlas` field of `GET /models`; the **AI-BOM** cell shows `signed` when a
+signed bill of materials is stored. See [chapter 12](12-grc.md) for the AI-BOM record and the ATLAS
+mapping.
+
+**Register a model popup:**
+
+| Field | Required | What it does | Allowed values |
+| --- | --- | --- | --- |
+| **Name** | required | the model name | free text (for example `acme/frontier-1`) |
+| **Provider** | optional | the model provider | free text (for example `openai`, `mlflow`) |
+| **Version** | optional | the model version | free text |
+
+| Button | Console route | Server endpoint | Capability |
+| --- | --- | --- | --- |
+| **Register model** | `POST /models` | `POST /models` | `RegisterApp` |
+| **Close** | closes the popup | none | none |
+
+## 10. Policy
 
 **What it is for:** view the deployed policy and author and deploy a new version. The page has two
 tabs.
@@ -291,7 +322,7 @@ The YAML DSL (versions, `default`, `rules` with `when`/`verdict`/`obligations`/`
 verdicts `allow`, `deny`, `step_up`, `shadow`) is documented in full in
 [chapter 2, Policy and authorization](02-policy.md).
 
-## 10. Content firewall
+## 11. Content firewall
 
 **What it is for:** configure the content firewall centrally. The config is stored in the control
 plane; the enforcement points fetch it, so there is no local model file to distribute. The page has
@@ -304,9 +335,11 @@ model is loaded, the denied topics, whether an external scanner is set and its f
 `GET /firewall/config`.
 
 **External scanner hook (contract).** When an **External scanner URL** is set, each enforcement point
-POSTs `{"text", "direction", "context"}` to it and honours the reply `{"block", "findings",
+POSTs `{"modality", "text", "direction", "context"}` to it and honours the reply `{"block",
 "redactions"}`. The `direction` is one of `prompt`, `response`, `tool_args` or `tool_result`, so a
-scanner can treat inbound and outbound content differently. When `block` is true the enforcement point
+scanner can treat inbound and outbound content differently. Non-text tool parts are forwarded with
+`modality: image|audio` and a `content_ref` (a base64 blob or a URL). The full versioned contract and
+vendor adapter mappings are in `docs/scan-hook-contract.md`. When `block` is true the enforcement point
 blocks the call (a tool call is refused with an error; a tool result is replaced with a safe message);
 `redactions`, when present, replaces the offending text. If the scanner errors, **On scanner error**
 decides the outcome: fail open runs the built-in engine and proceeds, fail closed blocks. With no URL
@@ -358,7 +391,7 @@ rules table refreshes after add or delete. The full firewall rules schema and th
 match kind and action is in [chapter 5, Forward and TLS interception](05-intercept.md); the detection
 model is in [chapter 10, The content firewall](10-content-firewall.md).
 
-## 11. Governance
+## 12. Governance
 
 **What it is for:** create and advance signed governance records (GRC). Each record is Ed25519-signed
 by the control plane, stored in the control-plane database, and re-verified on read. Open the create
@@ -394,7 +427,7 @@ The status is re-signed server-side on each transition. What a governance record
 lifecycle fits the compliance frameworks, is covered in
 [chapter 12, Discovery, enrolment and GRC](12-grc.md).
 
-## 12. Kill-switch
+## 13. Kill-switch
 
 **What it is for:** engage or clear the emergency break-glass grant. Engaging writes a signed, scoped
 grant that the proxy watches; a lockdown denies matching calls and stays locked until cleared. The

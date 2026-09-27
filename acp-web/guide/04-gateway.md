@@ -79,6 +79,8 @@ non-allow decision, so the console liveness, alerts and violation views cover mo
 | `--budget-pg <dsn>` | shared token/cost budgets via Postgres |
 | `--content-firewall` | enable the signature content firewall on prompts |
 | `--content-ml <model.json>` | also load the trained ML classifier |
+| `--scan-url <url>` | send each prompt/response part to an external scanner hook ([chapter 10](10-content-firewall.md)) |
+| `--block-on-scanner-error` | fail closed if the external scanner is unreachable or replies off-contract |
 | `--entra-tenant`, `--entra-audience` | Entra identity for the human principal |
 | `--report-url <server>` | report a heartbeat and non-allow events to the control plane |
 | `--report-token <tok>` | the shared token the control-plane reporting routes require (`ACP_REPORT_TOKEN`) |

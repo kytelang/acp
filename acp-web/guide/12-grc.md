@@ -166,6 +166,13 @@ tools you already have.
 class and two MCP tool servers) with its SHA-256 digest, its admission verdict and the policy hash in
 force, and it flags anything that was denied admission.
 
+**MITRE ATLAS enrichment:** when a model admission scan returns findings, ACP maps each finding kind to
+its MITRE ATLAS technique id (for example a malicious pickle maps to AML.T0011.000, a prompt-injection
+finding to AML.T0051) and annotates the AI-BOM entry (the CycloneDX `acp:atlas` property) and the
+console Models page with them. This puts the standard adversarial-technique language an auditor or a SOC
+already speaks on top of whatever the scanner returns. ACP does not run the scanner itself; it enriches
+its output.
+
 ### When do I use a governance record versus the evidence ledger?
 
 Use the **evidence ledger** when you want proof of what actually happened at runtime: it is the signed,

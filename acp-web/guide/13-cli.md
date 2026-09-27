@@ -39,7 +39,7 @@ line: they change no governance state, or they run in a pipeline, or they must w
 | `acp export` / `grc-report` / `siem` | produce an evidence pack, a framework report, or a SIEM feed from a ledger |
 | `acp ledger-backup` / `purge` / `replay` | evidence maintenance |
 | `acp native-compile` | compile a policy into coding-agent settings |
-| `acp discover` | classify shadow-AI endpoints from an egress log (then enrol them in the console) |
+| `acp discover` | classify shadow-AI endpoints from an egress log or an endpoint/CASB export (`--from squid\|csv\|jsonl\|purview\|zscaler\|netskope\|hosts`), then enrol them in the console |
 | `acp intercept sign` / `pac` / `from-enrollment` | build TLS-interception rule sets, PAC files and browser config |
 | `acp verify-enforcement` | check a PEP is actually enforcing, not bypassed |
 | `acp sign-artifact` / `verify-artifact` | sign and verify a build artifact |

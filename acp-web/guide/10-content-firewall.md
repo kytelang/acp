@@ -36,6 +36,42 @@ Enabled with a flag on both surfaces:
 
 If a scan is configured and errors, the enforcing component blocks (fail-closed).
 
+## External scan hook and specialist classifiers
+
+The built-in engine is the on-prem floor. When you want a specialist classifier (a transformer-grade
+injection detector, a managed content-safety service, a multi-modal scanner), point the enforcing
+component at it with `--scan-url <url>` and it becomes a policy-enforcement hook. Add
+`--block-on-scanner-error` to fail closed when the scanner is unreachable or replies with something the
+contract does not understand; without it the component fails open and falls back to the built-in engine.
+
+The hook is a small, versioned, vendor-neutral contract. ACP POSTs one JSON body per content part:
+
+```json
+{"modality": "text", "text": "the extracted text", "direction": "prompt|tool_args|tool_result|response", "context": {"transport": "stdio|http"}}
+```
+
+and honours the reply `{"block": true|false, "redactions": "optional replacement text"}`. A block on a
+request never reaches the tool server; a block on a response is replaced with a safe error frame; a
+`redactions` string replaces the scanned text. The full contract, its versioning rules, a conformance
+test you can run any adapter against, and reference request/response mappings for Azure AI Content
+Safety, Lakera Guard and Protect AI are in `docs/scan-hook-contract.md`.
+
+### Multi-modal content
+
+The hook is not text-only. When a tool call carries an image or audio part, ACP forwards it to the
+scanner unchanged with `modality: image` or `modality: audio` and a `content_ref` (a base64 blob or a
+URL the scanner can fetch), and enforces the same `{block, redactions}` verdict. Both the proxy (stdio
+and http) and the gateway forward non-text parts. ACP runs no image or audio model of its own; it routes
+to the external one. Text behaviour is unchanged when no media parts are present.
+
+### Raising the built-in floor
+
+The built-in ML injection detector is retrainable from a labelled corpus with
+`scripts/train_injection_lr.py` (pure Python, no dependencies), which emits the model file the
+`LinearScorer` loads. The featurisation is fixed and must match `acp_core::content::features`. A CI
+efficacy gate over `crates/acp-core/corpus/detection-corpus.jsonl` guards against a regression. This
+lifts the floor; it does not claim transformer parity, which is what the external hook is for.
+
 ## Testing and gating it
 
 You can run the detector directly and, importantly, gate it so a weakened model cannot ship.
@@ -70,6 +106,6 @@ through the content-scan hook; the lexical baseline remains the on-prem floor.
 The content firewall is deliberately lightweight: signatures and heuristics by default, plus an
 optional trained classifier (`--content-ml`), hardened against obfuscation and indirect injection. It is complete for most needs. If best-in-class ML
 detection against novel, evolving attacks is your single dominant risk, augment the engine with a
-specialist classifier through its hook. That is optional augmentation, not a separate product you
-must run, and it does not change the fact that the authorization layer, not the filter, is what
+specialist classifier through its hook (text or multi-modal; see the contract in
+`docs/scan-hook-contract.md`). That is optional augmentation, not a separate product you must run, and it does not change the fact that the authorization layer, not the filter, is what
 contains a breach.
