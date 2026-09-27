@@ -28,7 +28,7 @@ and both verify; `/tenants` lists acme+globex. Note: the console tenant is per-i
 console URL); a live in-browser switcher needs threading the tenant through the SSE panel pipeline and
 is the remaining follow-on.
 
-## M2. Live pull-sync from a ticket system (P2)
+## M2. Live pull-sync from a ticket system (P2)  [DONE 2026-09-27]
 Gap: T3 added an inbound callback (push); some systems require the control plane to poll (pull).
 Design: `--ticket-poll-url` the server polls on an interval; it fetches a list of resolutions
 `[{action,id,status?}]` and applies each exactly like the T3 callback (resolve a hold / advance a GRC
@@ -38,6 +38,10 @@ Acceptance:
   the next poll.
 - A grc-status resolution advances + re-signs the record.
 - Re-polling the same resolutions does not error or double-apply.
+Status (2026-09-27): SHIPPED. `--ticket-poll-url` polls a feed of `{action,id,status?,tenant?}` and
+applies each via the shared `apply_ticket_resolution` (also used by /tickets/callback), idempotent by
+construction (approve->approved; grc-status re-signs to the same status). Verified: the startup poll
+resolved a pre-registered hold to approved and advanced a GRC record to mitigating (still verified).
 
 ## M3. Scheduler + report delivery (P2)
 Gap: T6 stored snapshots on demand; there was no built-in scheduler or delivery.

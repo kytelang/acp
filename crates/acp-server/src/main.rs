@@ -54,6 +54,8 @@ struct AppState {
     // G5: optional feed URLs the control plane polls for signed control packs / threat packs.
     packs_feed_url: Option<String>,
     threat_feed_url: Option<String>,
+    // M2: optional ticket-resolution feed the control plane polls (pull complement to /tickets/callback).
+    ticket_poll_url: Option<String>,
     lease: std::sync::Mutex<(bool, String, i64)>,
 }
 
@@ -459,6 +461,7 @@ async fn main() {
     let mut webhook_secret: Option<String> = None;
     let mut packs_feed_url: Option<String> = None;
     let mut threat_feed_url: Option<String> = None;
+    let mut ticket_poll_url: Option<String> = None;
     let mut node_id: Option<String> = None;
     let mut lease_ttl_ms: i64 = 15_000;
     let mut it = args.iter().skip(1);
@@ -481,6 +484,7 @@ async fn main() {
             "--webhook-secret" => webhook_secret = it.next().cloned(),
             "--packs-feed-url" => packs_feed_url = it.next().cloned(),
             "--threat-feed-url" => threat_feed_url = it.next().cloned(),
+            "--ticket-poll-url" => ticket_poll_url = it.next().cloned(),
             "--node-id" => node_id = it.next().cloned(),
             "--lease-ttl-ms" => lease_ttl_ms = it.next().and_then(|v| v.parse().ok()).unwrap_or(15_000),
             "--cp-key" => { if let Some(v) = it.next() { cp_key = v.clone(); } }
@@ -665,6 +669,7 @@ async fn main() {
         webhook_secret,
         packs_feed_url,
         threat_feed_url,
+        ticket_poll_url,
         lease: std::sync::Mutex::new((false, String::new(), 0)),
     });
     // C1 (HA): restore persisted liveness/spike state so the dead-man's-switch and alert state survive
@@ -742,6 +747,32 @@ async fn main() {
                     }
                 }
                 tokio::time::sleep(std::time::Duration::from_secs(60)).await;
+            }
+        });
+    }
+    // M2: poll a ticket-resolution feed and apply each resolution (idempotent), the pull complement to
+    // the inbound /tickets/callback.
+    if let Some(feed) = state.ticket_poll_url.clone() {
+        let st2 = state.clone();
+        tokio::spawn(async move {
+            let client = reqwest::Client::new();
+            loop {
+                if let Ok(resp) = client.get(&feed).send().await {
+                    if let Ok(v) = resp.json::<serde_json::Value>().await {
+                        let items = v.get("resolutions").and_then(|r| r.as_array()).cloned()
+                            .or_else(|| v.as_array().cloned()).unwrap_or_default();
+                        for item in items {
+                            let action = item.get("action").and_then(|x| x.as_str()).unwrap_or("");
+                            let id = item.get("id").and_then(|x| x.as_str()).unwrap_or("");
+                            let status = item.get("status").and_then(|x| x.as_str());
+                            let tenant = item.get("tenant").and_then(|x| x.as_str()).unwrap_or("default");
+                            if !action.is_empty() && !id.is_empty() {
+                                let _ = apply_ticket_resolution(&st2, action, id, status, tenant).await;
+                            }
+                        }
+                    }
+                }
+                tokio::time::sleep(std::time::Duration::from_secs(30)).await;
             }
         });
     }
@@ -2469,34 +2500,37 @@ async fn ticket_callback(State(st): State<Arc<AppState>>, headers: HeaderMap, ra
         return (StatusCode::UNAUTHORIZED, Json(serde_json::json!({"ok": false, "error": "signature verification failed"}))).into_response();
     }
     let body: serde_json::Value = serde_json::from_slice(&raw).unwrap_or_else(|_| serde_json::json!({}));
-    let action = body.get("action").and_then(|v| v.as_str()).unwrap_or("");
+    let action = body.get("action").and_then(|v| v.as_str()).unwrap_or("").to_string();
     let id = body.get("id").and_then(|v| v.as_str()).unwrap_or("").to_string();
     if id.is_empty() { return Json(serde_json::json!({"ok": false, "error": "id is required"})).into_response(); }
+    let status = body.get("status").and_then(|v| v.as_str()).map(|s| s.to_string());
+    let tenant = tenant_of(&headers, &None);
+    match apply_ticket_resolution(&st, &action, &id, status.as_deref(), &tenant).await {
+        Ok(()) => Json(serde_json::json!({"ok": true, "id": id, "action": action})).into_response(),
+        Err(e) => Json(serde_json::json!({"ok": false, "error": e})).into_response(),
+    }
+}
+
+/// M2/T3: apply one ticket resolution (idempotent): resolve an approval hold, or advance + re-sign a GRC
+/// record's status. Shared by the inbound callback and the poll loop.
+async fn apply_ticket_resolution(st: &Arc<AppState>, action: &str, id: &str, status: Option<&str>, tenant: &str) -> Result<(), String> {
     match action {
-        "approve" | "deny" => {
-            resolve(&st, &id, action == "approve", "ticket-system");
-            Json(serde_json::json!({"ok": true, "id": id, "action": action})).into_response()
-        }
+        "approve" | "deny" => { resolve(st, id, action == "approve", "ticket-system"); Ok(()) }
         "grc-status" => {
-            let store = match &st.store { Some(s) => s, None => return Json(serde_json::json!({"ok": false, "error": "no --store configured"})).into_response() };
-            let status = body.get("status").and_then(|v| v.as_str()).unwrap_or("").trim().to_string();
-            if status.is_empty() { return Json(serde_json::json!({"ok": false, "error": "status is required"})).into_response(); }
-            let tenant = tenant_of(&headers, &None);
-            let rec = match store.get_grc(&id).await {
-                Ok(Some(r)) if r.tenant == tenant => r,
-                _ => return Json(serde_json::json!({"ok": false, "error": "no such record"})).into_response(),
+            let store = st.store.as_ref().ok_or_else(|| "no --store configured".to_string())?;
+            let status = status.map(|s| s.trim().to_string()).filter(|s| !s.is_empty()).ok_or_else(|| "status is required".to_string())?;
+            let rec = match store.get_grc(id).await? {
+                Some(r) if r.tenant == tenant => r,
+                _ => return Err("no such record".to_string()),
             };
             let doc = grc_doc(&rec.id, &rec.kind, &rec.subject, &rec.title, &status, &rec.body);
-            let signer = tenant_signer(&st.cp_key, &tenant);
+            let signer = tenant_signer(&st.cp_key, tenant);
             let sig = acp_core::sign::Signer::sign(&signer, &acp_core::canonical::canonical_bytes(&doc));
             let pubkey_hex = hex::encode(acp_core::sign::Signer::public_key(&signer));
             let sig_hex = hex::encode(sig);
-            match store.update_grc_signed(&id, &status, &rec.body, &status, &pubkey_hex, &sig_hex).await {
-                Ok(()) => Json(serde_json::json!({"ok": true, "id": id, "status": status})).into_response(),
-                Err(e) => Json(serde_json::json!({"ok": false, "error": e})).into_response(),
-            }
+            store.update_grc_signed(id, &status, &rec.body, &status, &pubkey_hex, &sig_hex).await
         }
-        _ => Json(serde_json::json!({"ok": false, "error": "unknown action (approve|deny|grc-status)"})).into_response(),
+        _ => Err("unknown action (approve|deny|grc-status)".to_string()),
     }
 }
 
