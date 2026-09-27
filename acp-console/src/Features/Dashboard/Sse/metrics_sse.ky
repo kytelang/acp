@@ -62,6 +62,8 @@ pub class MetricsSse impl SseHandler {
             if (w19 < 0) { alive = false; }
             let w20 = await ds.patchElementsSimple(packsPanel(self.acp.packRows()));
             if (w20 < 0) { alive = false; }
+            let w21 = await ds.patchElementsSimple(redteamPanel(self.acp.redteamRuns()));
+            if (w21 < 0) { alive = false; }
             if (alive) { await aio.delay(2000); }
         }
     }

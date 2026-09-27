@@ -655,3 +655,28 @@ pub fn frameworkReportPanel(rep: FrameworkReport): Html {
         }}
     </div>;
 }
+
+// B4: red-team runs over time (a signed attestation per run). Failing runs are flagged.
+pub fn redteamPanel(rows: list.List<RedteamRun>): Html {
+    return <div id="redteam">
+        {if (rows.size() == 0) {
+            <p class="empty">No red-team runs yet. Run one to start the time series.</p>
+        } else {
+            <table class="tbl">
+                <thead><tr><th>Run</th><th>Catch rate</th><th>Min catch</th><th>Result</th><th>Signature</th></tr></thead>
+                <tbody>
+                    {for (i in 0..rows.size()) {
+                        let r = rows.get(i) ?? RedteamRun("", "", 0.0, 0.0, false);
+                        <tr>
+                            <td class="mono dim">{r.id}</td>
+                            <td>{r.catchRate}</td>
+                            <td>{r.minCatch}</td>
+                            <td>{if (string.eql(r.status, "passed")) { <span class="badge ok">passed</span> } else { <span class="badge bad">FAILED</span> }}</td>
+                            <td>{if (r.verified) { <span class="badge ok">verified</span> } else { <span class="badge bad">unverified</span> }}</td>
+                        </tr>
+                    }}
+                </tbody>
+            </table>
+        }}
+    </div>;
+}

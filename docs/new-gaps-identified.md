@@ -204,7 +204,7 @@ a signed CycloneDX AI-BOM (`acp_core::aibom`) in `models.aibom_json`; a bad verd
 or flagged. Console Models page shows the scan badge; AI-BOM retrievable via `GET /models/:id`.
 Verified via curl against a mock scanner: clean -> registered + signed AI-BOM; "malicious" -> refused
 with the issues recorded.
-### B4. Continuous red-teaming (P3, M)
+### B4. Continuous red-teaming (P3, M)  [DONE 2026-09-27]
 Gap: `acp redteam` is a one-shot gate.
 Design: a scheduled runner (external cron or a control-plane job) calling `acp redteam`, storing results
 as signed GRC `attestation`/`risk` records surfaced in Reports over time.
@@ -212,7 +212,13 @@ Acceptance:
 - A red-team run produces a signed GRC record with the pass/catch metrics.
 - Reports shows red-team results as a time series (at least last-N runs).
 - A failing red-team run (below `--min-catch`) is visibly flagged.
-
+Status (2026-09-27): SHIPPED. Server `POST /redteam/run` runs `acp_core::redteam` against the current
+firewall config (deny topics + threat sigs + ML) and stores the result as a signed GRC attestation
+record (status passed/failed vs `min_catch`); `GET /redteam/runs` returns the recent runs newest-first,
+re-verified, as a time series. Console Reports view has a Continuous red-teaming card with a "Run
+red-team" button and a time-series table that flags FAILED runs. A scheduled runner is just a cron
+calling POST /redteam/run. Verified via curl: each run produces a signed, verified record; two runs
+appear in the series; a run below min_catch is status=failed.
 ### B5. Threat-intelligence feed for the firewall (P3, M)  [DONE 2026-09-27]
 Gap: signatures/denied-topics are static.
 Design: a signed threat-pack ingested into `firewall_config` (feed version + `signatures_json`), served

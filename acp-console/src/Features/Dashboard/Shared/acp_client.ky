@@ -118,6 +118,17 @@ pub struct FrameworkReport {
     }
 }
 
+pub struct RedteamRun {
+    pub id: string,
+    pub status: string,
+    pub catchRate: double,
+    pub minCatch: double,
+    pub verified: bool,
+    init(id: string, status: string, catchRate: double, minCatch: double, verified: bool) {
+        self.id = id; self.status = status; self.catchRate = catchRate; self.minCatch = minCatch; self.verified = verified;
+    }
+}
+
 pub struct EvidenceRow {
     pub seq: string,
     pub tool: string,
@@ -509,6 +520,40 @@ pub struct AcpClient {
         let v = json.parse(resp.body);
         if (!(json.asBool(json.get(v, "ok")) ?? false)) { return DeployResult(false, json.asString(json.get(v, "error")) ?? "rejected"); }
         return DeployResult(true, `threat feed loaded (version ${json.asNumber(json.get(v, "feed_version")) ?? 0})`);
+    }
+
+    // B4: recent red-team runs (time series).
+    pub fn redteamRuns(self: AcpClient): list.List<RedteamRun> {
+        let rows = list.List<RedteamRun>();
+        let resp = client.Http.get(self.base + "/redteam/runs");
+        if (resp.status.toCode() != 200) { return rows; }
+        let rv = json.get(json.parse(resp.body), "runs");
+        let arr = json.asArray(rv);
+        if (arr == undefined) { return rows; }
+        let i = 0;
+        while (i < arr.size()) {
+            let r = json.at(rv, i);
+            rows.push(RedteamRun(
+                json.asString(json.get(r, "id")) ?? "",
+                json.asString(json.get(r, "status")) ?? "",
+                json.asFloat(json.get(r, "catch_rate")) ?? 0.0,
+                json.asFloat(json.get(r, "min_catch")) ?? 0.0,
+                json.asBool(json.get(r, "verified")) ?? false));
+            i = i + 1;
+        }
+        return rows;
+    }
+    // B4: trigger a red-team run (stored as a signed attestation record).
+    pub fn runRedteam(self: AcpClient, userAuth: string): DeployResult {
+        let hdrs = client.Http.emptyHeaders();
+        hdrs.set("Content-Type", "application/json");
+        if (!string.eql(userAuth, "")) { hdrs.set("Authorization", userAuth); }
+        else { let tok = self.authToken("FirewallAdmin"); if (!string.eql(tok, "")) { hdrs.set("Authorization", "Bearer " + tok); } }
+        let resp = client.Http.request("POST", self.base + "/redteam/run", hdrs, "{\"min_catch\":0.9}");
+        if (resp.status.toCode() != 200) { return DeployResult(false, "acp-server unreachable"); }
+        let v = json.parse(resp.body);
+        if (!(json.asBool(json.get(v, "ok")) ?? false)) { return DeployResult(false, json.asString(json.get(v, "error")) ?? "rejected"); }
+        return DeployResult(true, `red-team ${json.asString(json.get(v, "status")) ?? "?"} (catch ${json.asFloat(json.get(v, "catch_rate")) ?? 0.0})`);
     }
 
     // A6: fetch the regulator-facing framework report for rendering + print.

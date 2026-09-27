@@ -220,3 +220,14 @@ pub struct LoadThreatPackHandler impl RouteHandler {
         return await ds_response.patch(firewallStatusPanel(self.acp.firewallStatus()));
     }
 }
+
+// B4: trigger a red-team run, then patch the red-team time-series panel.
+pub struct RunRedteamHandler impl RouteHandler {
+    acp: AcpClient,
+    init(acp: AcpClient) { self.acp = acp; }
+    async fn serve(self: RunRedteamHandler, ctx: Context): Response {
+        let auth = ctx.request.headers.get("authorization") ?? "";
+        let _ = self.acp.runRedteam(auth);
+        return await ds_response.patch(redteamPanel(self.acp.redteamRuns()));
+    }
+}

@@ -191,6 +191,8 @@
               </div>
               <div id="frameworkreport"><p class="empty">Choose a framework to build its report.</p></div>
             </div></div>
+          <div class="card"><div class="card-h"><span class="ic">&#128737;</span> Continuous red-teaming<span class="sub">each run is a signed attestation; failing runs (below min-catch) are flagged</span><button class="btn primary card-cta" data-on:click="@post('/redteam/run')">Run red-team</button></div>
+            <div class="card-b"><div id="redteam"><p class="empty">&#8230;</p></div></div></div>
         </section>
 
         <section class="view" data-show="$view === 'health'">

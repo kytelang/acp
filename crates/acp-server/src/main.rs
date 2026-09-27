@@ -654,6 +654,8 @@ async fn main() {
         .route("/agents/verify", post(agent_verify))
         .route("/grc", get(grc_list).post(grc_create))
         .route("/grc/templates", get(grc_templates))
+        .route("/redteam/run", post(redteam_run))
+        .route("/redteam/runs", get(redteam_runs))
         .route("/grc/assess", post(grc_assess))
         .route("/grc/:id/status", post(grc_status))
         .route("/grc/:id/assign", post(grc_assign))
@@ -1560,6 +1562,81 @@ async fn grc_status(State(st): State<Arc<AppState>>, headers: HeaderMap, Path(id
         Err(e) => Json(serde_json::json!({"ok": false, "error": e})).into_response(),
     }
 }
+/// B4: run the red-team corpus against the current content-firewall configuration, then store the
+/// result as a signed GRC attestation record (so runs accumulate as a time series). A run below
+/// --min-catch is stored with status "failed" so it is visibly flagged. A scheduled runner (cron)
+/// simply calls this endpoint on an interval.
+async fn redteam_run(State(st): State<Arc<AppState>>, headers: HeaderMap, Json(body): Json<serde_json::Value>) -> Response {
+    let principal = match authorize(&st.auth, &headers, acp_auth::Capability::EditFirewall) { Ok(p) => p, Err(r) => return r };
+    let operator = actor_of(&principal);
+    let store = match &st.store { Some(s) => s, None => return Json(serde_json::json!({"ok": false, "error": "no --store configured"})).into_response() };
+    let min_catch = body.get("min_catch").and_then(|v| v.as_f64()).unwrap_or(0.9) as f32;
+    // Build the content policy from the current firewall config (+ threat signatures + ML).
+    let cfg = store.get_firewall_config().await.ok().flatten();
+    let (policy, ml) = match &cfg {
+        Some(c) => {
+            let mut topics: Vec<String> = serde_json::from_str(&c.deny_topics).unwrap_or_default();
+            let threat: Vec<String> = serde_json::from_str(&c.threat_signatures).unwrap_or_default();
+            topics.extend(threat);
+            let pol = acp_core::content::ContentPolicy { block_injection: true, block_secrets: c.block_secrets, redact_pii: true, denied_topics: topics };
+            let ml = if !c.model.is_empty() { acp_core::content::LinearScorer::from_json(&c.model).ok() } else { None };
+            (pol, ml)
+        }
+        None => (acp_core::content::ContentPolicy::default(), None),
+    };
+    let report = acp_core::redteam::run(&policy, ml.as_ref(), &acp_core::redteam::corpus());
+    let passed = report.catch_rate >= min_catch;
+    let status = if passed { "passed" } else { "failed" };
+    let doc_body = serde_json::json!({
+        "kind": "red-team",
+        "catch_rate": report.catch_rate,
+        "attacks": report.attacks,
+        "caught": report.caught,
+        "fpr": report.fpr,
+        "false_positives": report.false_positives,
+        "min_catch": min_catch,
+        "missed": report.missed.len(),
+    }).to_string();
+    let id = format!("grc-{}", rand_hex(6));
+    let now = now_ms();
+    let doc = grc_doc(&id, "attestation", "content-firewall", "Red-team run", status, &doc_body);
+    let signer = enroll_signer(&st.cp_key);
+    let sig = acp_core::sign::Signer::sign(&signer, &acp_core::canonical::canonical_bytes(&doc));
+    let pubkey_hex = hex::encode(acp_core::sign::Signer::public_key(&signer));
+    let sig_hex = hex::encode(sig);
+    match store.add_grc(&id, "attestation", "content-firewall", "Red-team run", status, &doc_body, &operator, now as i64, &pubkey_hex, &sig_hex, "[]", "{}", "", 0, status).await {
+        Ok(()) => Json(serde_json::json!({"ok": true, "id": id, "status": status, "catch_rate": report.catch_rate, "attacks": report.attacks, "caught": report.caught, "fpr": report.fpr, "passed": passed})).into_response(),
+        Err(e) => Json(serde_json::json!({"ok": false, "error": e})).into_response(),
+    }
+}
+
+/// B4: the recent red-team runs (attestation GRC records for content-firewall), newest first, with
+/// their metrics parsed out and each record's signature re-verified.
+async fn redteam_runs(State(st): State<Arc<AppState>>) -> Response {
+    let store = match &st.store { Some(s) => s, None => return Json(serde_json::json!({"runs": []})).into_response() };
+    match store.list_grc(Some("attestation")).await {
+        Ok(recs) => {
+            let mut out: Vec<serde_json::Value> = Vec::new();
+            for r in recs.iter().rev() {
+                if r.subject != "content-firewall" { continue; }
+                let doc = grc_doc(&r.id, &r.kind, &r.subject, &r.title, &r.status, &r.body);
+                let verified = hex::decode(&r.pubkey_hex).ok().zip(hex::decode(&r.sig_hex).ok())
+                    .map(|(pk, sig)| acp_core::sign::verify_ed25519(&pk, &acp_core::canonical::canonical_bytes(&doc), &sig))
+                    .unwrap_or(false);
+                let body: serde_json::Value = serde_json::from_str(&r.body).unwrap_or_else(|_| serde_json::json!({}));
+                out.push(serde_json::json!({
+                    "id": r.id, "status": r.status, "created_ms": r.created_ms, "verified": verified,
+                    "catch_rate": body.get("catch_rate"), "attacks": body.get("attacks"), "caught": body.get("caught"),
+                    "fpr": body.get("fpr"), "min_catch": body.get("min_catch"),
+                }));
+                if out.len() >= 20 { break; }
+            }
+            Json(serde_json::json!({"runs": out})).into_response()
+        }
+        Err(e) => Json(serde_json::json!({"runs": [], "error": e})).into_response(),
+    }
+}
+
 /// A1: the built-in EU AI Act screening questionnaire. Served so the console can render a guided
 /// "New assessment" wizard. Each entry is a yes/no question mapped to an assessment flag.
 async fn grc_templates() -> impl IntoResponse {
