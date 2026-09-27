@@ -186,3 +186,26 @@ pub struct LoadPacksHandler impl RouteHandler {
         return await ds_response.patch(packsPanel(self.acp.packRows()));
     }
 }
+
+// A6: build the framework report and patch it into the Reports view.
+pub struct FrameworkReportHandler impl RouteHandler {
+    acp: AcpClient,
+    init(acp: AcpClient) { self.acp = acp; }
+    async fn serve(self: FrameworkReportHandler, ctx: Context): Response {
+        let name = ctx.param("name");
+        return await ds_response.patch(frameworkReportPanel(self.acp.frameworkReport(name)));
+    }
+}
+
+// A6: forward the framework report CSV for a same-origin download.
+pub struct FrameworkCsvHandler impl RouteHandler {
+    acp: AcpClient,
+    init(acp: AcpClient) { self.acp = acp; }
+    async fn serve(self: FrameworkCsvHandler, ctx: Context): Response {
+        let name = ctx.param("name");
+        let csv = self.acp.frameworkCsv(name);
+        return response.Response.ok(csv)
+            .setHeader("content-type", "text/csv")
+            .setHeader("content-disposition", "attachment; filename=\"framework-report.csv\"");
+    }
+}

@@ -128,7 +128,7 @@ firewall-rules, break-glass, csv-export, evidence-recent); SCIM Groups=8, Users=
 auth tests pass.
 - The console hides or disables actions the current token cannot perform.
 
-### A6. Regulator-ready report exports (P2, S)
+### A6. Regulator-ready report exports (P2, S)  [DONE 2026-09-27]
 Gap: templated, regulator-facing report exports.
 Design: `GET /report/framework/:name` returns a structured report combining GRC records + coverage +
 the breach report; console print-to-PDF layout + CSV.
@@ -137,7 +137,12 @@ Acceptance:
   counts + breach summary + coverage).
 - The console renders it and Print produces a clean, single-purpose PDF layout (no nav chrome).
 - A CSV of the framework report downloads.
-
+Status (2026-09-27): SHIPPED. Server `GET /report/framework/:name` returns structured JSON (per-control
+status derived from GRC checklists, controls_summary, linked-evidence verified/total, breach summary,
+coverage) and `GET /report/framework/:name/csv`. Console Reports view has a Regulator report card with
+per-framework buttons, a rendered control-status table + summary badges, a Print button (existing
+print CSS strips the nav chrome), and a CSV link. Verified via curl: eu-ai-act report shows art-14
+satisfied / others in-progress, 1/7, coverage 0.143, breaches, and the CSV downloads.
 ---
 
 ## B. Firewall / detection depth (vs Aegis / Lakera) - mostly INTEGRATE

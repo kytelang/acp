@@ -620,3 +620,37 @@ pub fn packsPanel(rows: list.List<PackRow>): Html {
         }}
     </div>;
 }
+
+// A6: regulator-facing framework report (print-friendly). Rendered into #frameworkreport.
+pub fn frameworkReportPanel(rep: FrameworkReport): Html {
+    return <div id="frameworkreport">
+        {if (string.eql(rep.framework, "") || rep.total == 0) {
+            <p class="empty">Choose a framework above to build its report.</p>
+        } else {
+            <div class="fwreport">
+                <div class="fwreport-h">
+                    <h2>{rep.framework} conformance report</h2>
+                    <div class="fwreport-stats">
+                        <span class="badge ver">{rep.satisfied}/{rep.total} controls satisfied</span>
+                        <span class="badge">coverage {rep.coverage}</span>
+                        <span class="badge">{rep.evVerified}/{rep.evTotal} linked evidence verified</span>
+                        <span class={rep.breaches > 0 ? "badge bad" : "badge ok"}>{rep.breaches} breaches</span>
+                    </div>
+                </div>
+                <table class="tbl">
+                    <thead><tr><th>Control</th><th>Title</th><th>Status</th></tr></thead>
+                    <tbody>
+                        {for (i in 0..rep.controls.size()) {
+                            let c = rep.controls.get(i) ?? ControlStatus("", "", "");
+                            <tr>
+                                <td class="mono">{c.controlId}</td>
+                                <td>{c.title}</td>
+                                <td>{if (string.eql(c.status, "satisfied")) { <span class="badge ok">satisfied</span> } else { if (string.eql(c.status, "in-progress")) { <span class="badge warn">in-progress</span> } else { <span class="badge bad">not addressed</span> } }}</td>
+                            </tr>
+                        }}
+                    </tbody>
+                </table>
+            </div>
+        }}
+    </div>;
+}

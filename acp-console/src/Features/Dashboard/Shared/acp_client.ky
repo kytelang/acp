@@ -96,6 +96,28 @@ pub struct PackRow {
     }
 }
 
+pub struct ControlStatus {
+    pub controlId: string,
+    pub title: string,
+    pub status: string,
+    init(controlId: string, title: string, status: string) { self.controlId = controlId; self.title = title; self.status = status; }
+}
+
+pub struct FrameworkReport {
+    pub framework: string,
+    pub satisfied: long,
+    pub total: long,
+    pub coverage: double,
+    pub evVerified: long,
+    pub evTotal: long,
+    pub breaches: long,
+    pub controls: list.List<ControlStatus>,
+    init(framework: string, satisfied: long, total: long, coverage: double, evVerified: long, evTotal: long, breaches: long, controls: list.List<ControlStatus>) {
+        self.framework = framework; self.satisfied = satisfied; self.total = total; self.coverage = coverage;
+        self.evVerified = evVerified; self.evTotal = evTotal; self.breaches = breaches; self.controls = controls;
+    }
+}
+
 pub struct EvidenceRow {
     pub seq: string,
     pub tool: string,
@@ -470,6 +492,45 @@ pub struct AcpClient {
             i = i + 1;
         }
         return DeployResult(true, `loaded ${loaded} framework pack(s)`);
+    }
+
+    // A6: fetch the regulator-facing framework report for rendering + print.
+    pub fn frameworkReport(self: AcpClient, name: string): FrameworkReport {
+        let controls = list.List<ControlStatus>();
+        let resp = client.Http.get(self.base + "/report/framework/" + name);
+        if (resp.status.toCode() != 200) { return FrameworkReport(name, 0, 0, 0.0, 0, 0, 0, controls); }
+        let v = json.parse(resp.body);
+        let cv = json.get(v, "controls");
+        let arr = json.asArray(cv);
+        if (arr != undefined) {
+            let i = 0;
+            while (i < arr.size()) {
+                let c = json.at(cv, i);
+                controls.push(ControlStatus(
+                    json.asString(json.get(c, "control_id")) ?? "",
+                    json.asString(json.get(c, "title")) ?? "",
+                    json.asString(json.get(c, "status")) ?? ""));
+                i = i + 1;
+            }
+        }
+        let cs = json.get(v, "controls_summary");
+        let le = json.get(v, "linked_evidence");
+        let br = json.get(v, "breaches");
+        return FrameworkReport(
+            json.asString(json.get(v, "framework")) ?? name,
+            json.asNumber(json.get(cs, "satisfied")) ?? 0,
+            json.asNumber(json.get(cs, "total")) ?? 0,
+            json.asFloat(json.get(v, "coverage")) ?? 0.0,
+            json.asNumber(json.get(le, "verified")) ?? 0,
+            json.asNumber(json.get(le, "total")) ?? 0,
+            json.asNumber(json.get(br, "total")) ?? 0,
+            controls);
+    }
+    // A6: forward the framework report CSV for a same-origin download.
+    pub fn frameworkCsv(self: AcpClient, name: string): string {
+        let resp = client.Http.get(self.base + "/report/framework/" + name + "/csv");
+        if (resp.status.toCode() != 200) { return "section,key,value\n"; }
+        return resp.body;
     }
 
     pub fn policyVersion(self: AcpClient): string {

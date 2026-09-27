@@ -180,6 +180,17 @@
             </div></div>
           <div class="card"><div class="card-h"><span class="ic">&#128680;</span> Breaches &amp; violations report<span class="sub">policy denials and firewall blocks reported by every enforcement point, aggregated and exportable</span></div>
             <div class="card-b"><div id="violationreport"><p class="empty">&#8230;</p></div></div></div>
+          <div class="card"><div class="card-h"><span class="ic">&#127963;</span> Regulator report<span class="sub">framework conformance, linked evidence and breach summary, ready to print or export</span></div>
+            <div class="card-b">
+              <div class="row" style="gap:.5rem;margin-bottom:.8rem">
+                <button class="btn" data-on:click="@post('/report/framework/eu-ai-act')">EU AI Act</button>
+                <button class="btn" data-on:click="@post('/report/framework/nist-ai-rmf')">NIST AI RMF</button>
+                <button class="btn" data-on:click="@post('/report/framework/iso-42001')">ISO 42001</button>
+                <button class="btn primary" data-on:click="window.print()">Print / export PDF</button>
+                <a class="btn" href="/report/framework/eu-ai-act/csv">CSV (EU AI Act)</a>
+              </div>
+              <div id="frameworkreport"><p class="empty">Choose a framework to build its report.</p></div>
+            </div></div>
         </section>
 
         <section class="view" data-show="$view === 'health'">

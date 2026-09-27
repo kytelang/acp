@@ -627,6 +627,8 @@ async fn main() {
         .route("/alerts", get(alerts))
         .route("/events/recent", get(events_recent))
         .route("/report/violations", get(report_violations))
+        .route("/report/framework/:name", get(report_framework))
+        .route("/report/framework/:name/csv", get(report_framework_csv))
         .route("/report/violations.csv", get(report_violations_csv))
         .route("/evidence/ingest", post(evidence_ingest))
         .route("/evidence/ingested", get(evidence_ingested))
@@ -1993,6 +1995,107 @@ fn tally(map: &std::collections::HashMap<String, usize>) -> Vec<serde_json::Valu
 }
 
 /// GET /report/violations: an aggregated breach-and-violation report (policy denies + step-ups and
+/// A6: build the framework-level report for a regulator: for each control in the framework, its
+/// status derived from GRC checklists, the linked-evidence verification counts, the breach summary,
+/// and a coverage figure. Returns structured JSON.
+async fn framework_report_value(st: &Arc<AppState>, name: &str) -> serde_json::Value {
+    let store = match &st.store { Some(s) => s, None => return serde_json::json!({"error": "no --store configured"}) };
+    // 1. Controls for the framework (loaded packs, else built-in).
+    let mut controls: Vec<serde_json::Value> = Vec::new();
+    if let Ok(rows) = store.list_packs().await {
+        for r in &rows {
+            if let Ok(doc) = serde_json::from_str::<serde_json::Value>(&r.doc_json) {
+                if let Some(arr) = doc.get("controls").and_then(|c| c.as_array()) { controls.extend(arr.clone()); }
+            }
+        }
+    }
+    if controls.is_empty() {
+        controls = acp_core::controls::library().iter().map(|c| serde_json::to_value(c).unwrap_or_default()).collect();
+    }
+    controls.retain(|c| c.get("framework").and_then(|v| v.as_str()) == Some(name));
+    // 2. GRC records -> which controls are satisfied, and linked-evidence counts.
+    let mut satisfied: std::collections::HashSet<String> = std::collections::HashSet::new();
+    let mut addressed: std::collections::HashSet<String> = std::collections::HashSet::new();
+    let (mut ev_verified, mut ev_total) = (0usize, 0usize);
+    if let Ok(recs) = store.list_grc(None).await {
+        for r in &recs {
+            if let Ok(body) = serde_json::from_str::<serde_json::Value>(&r.body) {
+                if let Some(list) = body.get("checklist").and_then(|c| c.as_array()) {
+                    for item in list {
+                        if let Some(cid) = item.get("control_id").and_then(|v| v.as_str()) {
+                            addressed.insert(cid.to_string());
+                            if item.get("done").and_then(|v| v.as_bool()).unwrap_or(false) { satisfied.insert(cid.to_string()); }
+                        }
+                    }
+                }
+            }
+            // linked-evidence verification for this record.
+            let refs: Vec<serde_json::Value> = serde_json::from_str(&r.linked_refs).unwrap_or_default();
+            ev_total += refs.len();
+            for rf in &refs {
+                let did = rf.get("id").and_then(|v| v.as_str()).or_else(|| rf.as_str()).unwrap_or("");
+                if !did.is_empty() && store.ingested_exists(did).await.unwrap_or(false) { ev_verified += 1; }
+            }
+        }
+    }
+    let control_rows: Vec<serde_json::Value> = controls.iter().map(|c| {
+        let cid = c.get("id").and_then(|v| v.as_str()).unwrap_or("");
+        let status = if satisfied.contains(cid) { "satisfied" } else if addressed.contains(cid) { "in-progress" } else { "not-addressed" };
+        serde_json::json!({"control_id": cid, "title": c.get("title"), "status": status})
+    }).collect();
+    let total = controls.len();
+    let sat = controls.iter().filter(|c| satisfied.contains(c.get("id").and_then(|v| v.as_str()).unwrap_or(""))).count();
+    // 3. breach summary.
+    let mut breach_total = 0usize;
+    let mut by_verdict: std::collections::HashMap<String, usize> = std::collections::HashMap::new();
+    if let Ok(rows) = store.list_violations(5000).await {
+        breach_total = rows.len();
+        for r in &rows { *by_verdict.entry(if r.verdict.is_empty() { r.kind.clone() } else { r.verdict.clone() }).or_insert(0) += 1; }
+    }
+    let coverage = if total > 0 { sat as f64 / total as f64 } else { 0.0 };
+    serde_json::json!({
+        "framework": name,
+        "generated_ms": now_ms(),
+        "controls": control_rows,
+        "controls_summary": {"satisfied": sat, "total": total},
+        "linked_evidence": {"verified": ev_verified, "total": ev_total},
+        "breaches": {"total": breach_total, "by_verdict": by_verdict},
+        "coverage": coverage,
+    })
+}
+async fn report_framework(State(st): State<Arc<AppState>>, Path(name): Path<String>) -> Response {
+    Json(framework_report_value(&st, &name).await).into_response()
+}
+/// A6: the framework report as CSV (control_id, status) plus summary rows, for a same-origin download.
+async fn report_framework_csv(State(st): State<Arc<AppState>>, Path(name): Path<String>) -> Response {
+    let v = framework_report_value(&st, &name).await;
+    let mut out = String::from("section,key,value
+");
+    if let Some(cs) = v.get("controls").and_then(|c| c.as_array()) {
+        for c in cs {
+            let cid = c.get("control_id").and_then(|x| x.as_str()).unwrap_or("");
+            let status = c.get("status").and_then(|x| x.as_str()).unwrap_or("");
+            out.push_str(&format!("control,{cid},{status}
+"));
+        }
+    }
+    let cov = v.get("coverage").and_then(|x| x.as_f64()).unwrap_or(0.0);
+    let sat = v.pointer("/controls_summary/satisfied").and_then(|x| x.as_u64()).unwrap_or(0);
+    let tot = v.pointer("/controls_summary/total").and_then(|x| x.as_u64()).unwrap_or(0);
+    let evv = v.pointer("/linked_evidence/verified").and_then(|x| x.as_u64()).unwrap_or(0);
+    let evt = v.pointer("/linked_evidence/total").and_then(|x| x.as_u64()).unwrap_or(0);
+    let bt = v.pointer("/breaches/total").and_then(|x| x.as_u64()).unwrap_or(0);
+    out.push_str(&format!("summary,controls_satisfied,{sat}/{tot}
+"));
+    out.push_str(&format!("summary,coverage,{cov:.3}
+"));
+    out.push_str(&format!("summary,linked_evidence_verified,{evv}/{evt}
+"));
+    out.push_str(&format!("summary,breaches_total,{bt}
+"));
+    ([(axum::http::header::CONTENT_TYPE, "text/csv"), (axum::http::header::CONTENT_DISPOSITION, "attachment; filename=\"framework-report.csv\"")], out).into_response()
+}
+
 /// firewall blocks reported by every PEP), for the console Reports view. Persisted, so it spans more
 /// than the live feed.
 async fn report_violations(State(st): State<Arc<AppState>>) -> Response {
