@@ -40,7 +40,7 @@ Status (2026-09-27): SHIPPED. `content_scan_throughput_and_percentiles` (ignored
 workers (40k scans) and reports scans/sec + p50/p95/p99. Measured on the dev machine: ~690k scans/sec,
 p50 6.5 us / p95 14 us / p99 25 us; published in guide chapter 15.
 
-## T3. Bi-directional ticketing callback (P2)
+## T3. Bi-directional ticketing callback (P2)  [DONE 2026-09-27]
 Gap: events go out (G4 webhooks) but nothing comes back; Credo/ServiceNow buyers expect two-way sync.
 Design: an inbound `POST /tickets/callback` (HMAC-verified with the webhook secret) that maps a ticket
 resolution to an ACP action: resolve an approval hold (approve/deny) or advance a GRC record's status.
@@ -48,6 +48,11 @@ Acceptance:
 - A signed callback that approves a held approval resolves that hold to `approved` (verified).
 - A callback with a bad signature is rejected.
 - A callback advancing a GRC record's status re-signs and the record still verifies.
+Status (2026-09-27): SHIPPED. `POST /tickets/callback` verifies an HMAC signature (x-acp-signature) over
+the raw body against `--webhook-secret` (rejects if unset or bad) and maps {action, id, status?} to an
+ACP action: approve/deny resolves the named hold, grc-status advances + re-signs the record (tenant-
+scoped). Verified via signed requests: approve resolved the hold (approver "ticket-system"); a bad
+signature returned 401; a grc-status callback set the record to mitigating and it still verifies.
 
 ## T4. Multilingual detection signatures (P2)  [DONE 2026-09-27]
 Gap: injection signatures and the toxicity lexicon are English-only.

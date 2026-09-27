@@ -136,6 +136,12 @@ verification). Attacker-influenced fields (a tool name, a record title) are carr
 never interpolated into markup, so a crafted value cannot forge the notification. Delivery is
 best-effort and non-blocking; it never delays enforcement.
 
+**Inbound ticket callbacks (two-way).** A ticket system can close the loop by POSTing to
+`/tickets/callback` with the same HMAC signature scheme (`x-acp-signature`, verified against
+`--webhook-secret`). The body `{action, id, status?}` either resolves an approval hold
+(`approve`/`deny`) or advances a GRC record's status (`grc-status`), re-signing the record. A missing
+secret or a bad signature is rejected.
+
 ## Logging
 
 All services use structured logging, and **all of them write logs to STDERR**. This is deliberate: the

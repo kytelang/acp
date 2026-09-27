@@ -751,6 +751,7 @@ async fn main() {
         .route("/heartbeat/:proxy", post(heartbeat))
         .route("/liveness", get(liveness))
         .route("/event/:kind", post(record_event))
+        .route("/tickets/callback", post(ticket_callback))
         .route("/monitor/drift", get(monitor_drift_get).post(monitor_drift_post))
         .route("/monitor/lineage", get(monitor_lineage_get).post(monitor_lineage_post))
         .route("/alerts", get(alerts))
@@ -2389,6 +2390,52 @@ async fn heartbeat(State(st): State<Arc<AppState>>, headers: HeaderMap, Path(pro
         let _ = store.put_state(&format!("liveness:{proxy}"), &ts.to_string(), ts as i64).await;
     }
     Json(serde_json::json!({"ok": true, "proxy": proxy})).into_response()
+}
+
+/// T3: inbound ticketing callback. A ticket system (Jira/ServiceNow) posts a resolution here to close
+/// the loop: resolve an approval hold, or advance a GRC record's status. HMAC-verified with the
+/// webhook secret over the raw body (x-acp-signature: t=..,v1=..); rejected if the secret is unset or
+/// the signature is bad. Body: {action: "approve"|"deny"|"grc-status", id, status?}.
+async fn ticket_callback(State(st): State<Arc<AppState>>, headers: HeaderMap, raw: axum::body::Bytes) -> Response {
+    let secret = match &st.webhook_secret {
+        Some(s) if !s.is_empty() => s.clone(),
+        _ => return (StatusCode::FORBIDDEN, Json(serde_json::json!({"ok": false, "error": "ticket callbacks require --webhook-secret"}))).into_response(),
+    };
+    let sig = headers.get("x-acp-signature").and_then(|v| v.to_str().ok()).unwrap_or("");
+    let body_str = String::from_utf8_lossy(&raw).to_string();
+    if !acp_core::webhook::verify_webhook(secret.as_bytes(), sig, &body_str, (now_ms() / 1000) as u64, 300) {
+        return (StatusCode::UNAUTHORIZED, Json(serde_json::json!({"ok": false, "error": "signature verification failed"}))).into_response();
+    }
+    let body: serde_json::Value = serde_json::from_slice(&raw).unwrap_or_else(|_| serde_json::json!({}));
+    let action = body.get("action").and_then(|v| v.as_str()).unwrap_or("");
+    let id = body.get("id").and_then(|v| v.as_str()).unwrap_or("").to_string();
+    if id.is_empty() { return Json(serde_json::json!({"ok": false, "error": "id is required"})).into_response(); }
+    match action {
+        "approve" | "deny" => {
+            resolve(&st, &id, action == "approve", "ticket-system");
+            Json(serde_json::json!({"ok": true, "id": id, "action": action})).into_response()
+        }
+        "grc-status" => {
+            let store = match &st.store { Some(s) => s, None => return Json(serde_json::json!({"ok": false, "error": "no --store configured"})).into_response() };
+            let status = body.get("status").and_then(|v| v.as_str()).unwrap_or("").trim().to_string();
+            if status.is_empty() { return Json(serde_json::json!({"ok": false, "error": "status is required"})).into_response(); }
+            let tenant = tenant_of(&headers, &None);
+            let rec = match store.get_grc(&id).await {
+                Ok(Some(r)) if r.tenant == tenant => r,
+                _ => return Json(serde_json::json!({"ok": false, "error": "no such record"})).into_response(),
+            };
+            let doc = grc_doc(&rec.id, &rec.kind, &rec.subject, &rec.title, &status, &rec.body);
+            let signer = enroll_signer(&st.cp_key);
+            let sig = acp_core::sign::Signer::sign(&signer, &acp_core::canonical::canonical_bytes(&doc));
+            let pubkey_hex = hex::encode(acp_core::sign::Signer::public_key(&signer));
+            let sig_hex = hex::encode(sig);
+            match store.update_grc_signed(&id, &status, &rec.body, &status, &pubkey_hex, &sig_hex).await {
+                Ok(()) => Json(serde_json::json!({"ok": true, "id": id, "status": status})).into_response(),
+                Err(e) => Json(serde_json::json!({"ok": false, "error": e})).into_response(),
+            }
+        }
+        _ => Json(serde_json::json!({"ok": false, "error": "unknown action (approve|deny|grc-status)"})).into_response(),
+    }
 }
 
 /// F3: a PEP reports classifier hit-rate counts per class (counts only, never raw values).
