@@ -799,13 +799,58 @@ mod toxicity_tests {
 }
 
 #[cfg(test)]
+mod load_bench {
+    //! T2: a concurrency load benchmark for the content-scan path. Ignored by default (perf, not a
+    //! correctness gate); run it with `cargo test -p acp-core --release -- --ignored --nocapture`.
+    use super::*;
+
+    #[test]
+    #[ignore]
+    fn content_scan_throughput_and_percentiles() {
+        let rows: Vec<String> = super::corpus_gate::CORPUS.lines().filter(|l| !l.trim().is_empty())
+            .map(|l| serde_json::from_str::<serde_json::Value>(l).unwrap()["text"].as_str().unwrap().to_string())
+            .collect();
+        let policy = std::sync::Arc::new(ContentPolicy { block_injection: true, block_secrets: true, redact_pii: true, denied_topics: vec![], block_toxicity: false });
+        let corpus = std::sync::Arc::new(rows);
+        let workers = 8usize;
+        let per_worker = 5000usize;
+        let start = std::time::Instant::now();
+        let mut handles = Vec::new();
+        for _ in 0..workers {
+            let policy = policy.clone();
+            let corpus = corpus.clone();
+            handles.push(std::thread::spawn(move || {
+                let mut lat: Vec<u128> = Vec::with_capacity(per_worker);
+                for i in 0..per_worker {
+                    let text = &corpus[i % corpus.len()];
+                    let t = std::time::Instant::now();
+                    let _ = scan_text(&policy, text);
+                    lat.push(t.elapsed().as_nanos());
+                }
+                lat
+            }));
+        }
+        let mut all: Vec<u128> = Vec::new();
+        for h in handles { all.extend(h.join().unwrap()); }
+        let wall = start.elapsed();
+        all.sort_unstable();
+        let n = all.len();
+        let pct = |p: f64| all[((n as f64 * p) as usize).min(n - 1)] as f64 / 1000.0; // us
+        let scans_per_sec = n as f64 / wall.as_secs_f64();
+        eprintln!("content-scan load: {n} scans, {workers} workers, {:.0} scans/sec", scans_per_sec);
+        eprintln!("  latency us  p50={:.1} p95={:.1} p99={:.1}", pct(0.50), pct(0.95), pct(0.99));
+        assert!(scans_per_sec > 10_000.0, "throughput above 10k scans/sec (got {scans_per_sec:.0})");
+    }
+}
+
+#[cfg(test)]
 mod corpus_gate {
     //! C3: efficacy gate. Runs the built-in engine over the checked-in labelled corpus and asserts
     //! injection/PII precision, recall and the benign false-positive rate stay above the published
     //! thresholds (see guide chapter 15). CI runs `cargo test`, so this is the CI gate.
     use super::*;
 
-    const CORPUS: &str = include_str!("../corpus/detection-corpus.jsonl");
+    pub(super) const CORPUS: &str = include_str!("../corpus/detection-corpus.jsonl");
 
     struct Row { label: String, text: String }
 

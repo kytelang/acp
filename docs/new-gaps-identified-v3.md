@@ -26,7 +26,7 @@ Verified via curl: acme sees only its GRC + apps, globex only its own, an acme t
 record is refused, and no-header lands in default. cpstore tests pass. (Console operates in the default
 tenant until a tenant switcher is added; firewall_config + control singletons remain global by design.)
 
-## T2. Load and throughput benchmark (P1)
+## T2. Load and throughput benchmark (P1)  [DONE 2026-09-27]
 Gap: only a single-scan micro-latency (~70 us) is published; no concurrency / p99 figure.
 Design: an offline benchmark (a test or a small harness) that drives the content-scan path (and,
 optionally, the gateway) under concurrency and reports throughput (scans/sec) and p50/p95/p99 latency.
@@ -35,6 +35,10 @@ Acceptance:
 - A benchmark runs the content-scan path across N concurrent workers and reports scans/sec plus
   p50/p95/p99 latency (a number, with the method).
 - The numbers and how to reproduce them are published in the guide.
+Status (2026-09-27): SHIPPED. `content_scan_throughput_and_percentiles` (ignored by default; run with
+`cargo test -p acp-core --release -- --ignored --nocapture`) drives the scan path across 8 concurrent
+workers (40k scans) and reports scans/sec + p50/p95/p99. Measured on the dev machine: ~690k scans/sec,
+p50 6.5 us / p95 14 us / p99 25 us; published in guide chapter 15.
 
 ## T3. Bi-directional ticketing callback (P2)
 Gap: events go out (G4 webhooks) but nothing comes back; Credo/ServiceNow buyers expect two-way sync.
