@@ -73,8 +73,9 @@ pub struct ModelRow {
     pub version: string,
     pub scanStatus: string,
     pub hasBom: bool,
-    init(id: string, name: string, provider: string, version: string, scanStatus: string, hasBom: bool) {
-        self.id = id; self.name = name; self.provider = provider; self.version = version; self.scanStatus = scanStatus; self.hasBom = hasBom;
+    pub atlas: string,
+    init(id: string, name: string, provider: string, version: string, scanStatus: string, hasBom: bool, atlas: string) {
+        self.id = id; self.name = name; self.provider = provider; self.version = version; self.scanStatus = scanStatus; self.hasBom = hasBom; self.atlas = atlas;
     }
 }
 
@@ -467,6 +468,19 @@ pub struct AcpClient {
         return rows;
     }
 
+    // R4: join a model's ATLAS technique-id array into a compact comma string for display.
+    fn joinAtlas(self: AcpClient, node: json.Value): string {
+        let arr = json.asArray(node);
+        if (arr == undefined) { return ""; }
+        let out = "";
+        let i = 0;
+        while (i < arr.size()) {
+            let id = json.asString(json.at(node, i)) ?? "";
+            if (!string.eql(id, "")) { if (string.eql(out, "")) { out = id; } else { out = out + ", " + id; } }
+            i = i + 1;
+        }
+        return out;
+    }
     // A3: registered models (with B3 scan status).
     pub fn modelRows(self: AcpClient): list.List<ModelRow> {
         let rows = list.List<ModelRow>();
@@ -484,7 +498,8 @@ pub struct AcpClient {
                 json.asString(json.get(m, "provider")) ?? "",
                 json.asString(json.get(m, "version")) ?? "",
                 json.asString(json.get(m, "scan_status")) ?? "unscanned",
-                !string.eql(json.asString(json.get(m, "aibom_json")) ?? "", "")));
+                !string.eql(json.asString(json.get(m, "aibom_json")) ?? "", ""),
+                self.joinAtlas(json.get(m, "atlas"))));
             i = i + 1;
         }
         return rows;

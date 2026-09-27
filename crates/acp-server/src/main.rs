@@ -201,7 +201,7 @@ async fn admission_scan(st: &Arc<AppState>, name: &str, provider: &str, version:
     // Store a signed AI-BOM for the registered model (clean or flagged).
     let bom = acp_core::aibom::AiBom {
         generated_ms: now_ms(),
-        entries: vec![acp_core::aibom::BomEntry { artifact, scan, admission, integrity_pin: None, policy_in_force: None }],
+        entries: vec![acp_core::aibom::BomEntry::new(artifact, scan, admission, None, None)],
     };
     let signer = enroll_signer(&st.cp_key);
     let signed = bom.sign(&signer);
@@ -235,9 +235,32 @@ async fn models_list(State(st): State<Arc<AppState>>, headers: HeaderMap) -> Res
     let tenant = tenant_of(&headers, &None);
     let store = match &st.store { Some(s) => s, None => return Json(serde_json::json!({"models": []})).into_response() };
     match store.list_models(&tenant).await {
-        Ok(ms) => Json(serde_json::json!({"models": ms})).into_response(),
+        Ok(ms) => {
+            // R4: annotate each model with the MITRE ATLAS techniques mapped from its scan findings.
+            let enriched: Vec<serde_json::Value> = ms.iter().map(|m| {
+                let mut v = serde_json::to_value(m).unwrap_or_else(|_| serde_json::json!({}));
+                let techs = atlas_from_scan_status(&m.scan_status);
+                if let Some(obj) = v.as_object_mut() {
+                    obj.insert("atlas".into(), serde_json::json!(techs.iter().map(|t| t.id.clone()).collect::<Vec<_>>()));
+                    obj.insert("atlas_detail".into(), serde_json::to_value(&techs).unwrap_or(serde_json::json!([])));
+                }
+                v
+            }).collect();
+            Json(serde_json::json!({"models": enriched})).into_response()
+        }
         Err(e) => Json(serde_json::json!({"models": [], "error": e})).into_response(),
     }
+}
+
+/// R4: derive ATLAS techniques from a stored scan_status string. The status is either "clean",
+/// "unscanned", "scanner-error", or "findings: a, b, c". Only the findings list maps to techniques.
+fn atlas_from_scan_status(scan_status: &str) -> Vec<acp_core::atlas::AtlasTechnique> {
+    let rest = match scan_status.strip_prefix("findings:") {
+        Some(r) => r.trim(),
+        None => return Vec::new(),
+    };
+    let issues: Vec<String> = rest.split(',').map(|s| s.trim().to_string()).filter(|s| !s.is_empty()).collect();
+    acp_core::atlas::techniques_for_issues(&issues)
 }
 async fn model_get(State(st): State<Arc<AppState>>, headers: HeaderMap, Path(id): Path<String>) -> Response {
     let tenant = tenant_of(&headers, &None);

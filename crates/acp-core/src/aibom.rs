@@ -21,6 +21,27 @@ pub struct BomEntry {
     pub integrity_pin: Option<String>,
     /// The policy hash in force over this artifact, if known.
     pub policy_in_force: Option<String>,
+    /// R4: MITRE ATLAS techniques mapped from this artifact's scan findings (empty when clean or
+    /// unmapped). Enrichment only; ACP does not run the scanner itself.
+    #[serde(default)]
+    pub atlas: Vec<crate::atlas::AtlasTechnique>,
+}
+
+impl BomEntry {
+    /// Build an entry, deriving ATLAS techniques from any scan findings.
+    pub fn new(
+        artifact: Artifact,
+        scan: ScanVerdict,
+        admission: Admission,
+        integrity_pin: Option<String>,
+        policy_in_force: Option<String>,
+    ) -> Self {
+        let atlas = match &scan {
+            ScanVerdict::Findings { issues } => crate::atlas::techniques_for_issues(issues),
+            _ => Vec::new(),
+        };
+        BomEntry { artifact, scan, admission, integrity_pin, policy_in_force, atlas }
+    }
 }
 
 /// The whole bill of materials at a point in time.
@@ -68,6 +89,13 @@ impl AiBom {
                 }
                 if let Some(p) = &e.policy_in_force {
                     props.push(json!({"name": "acp:policy_in_force", "value": p}));
+                }
+                if !e.atlas.is_empty() {
+                    let ids: Vec<String> = e.atlas.iter().map(|t| t.id.clone()).collect();
+                    props.push(json!({"name": "acp:atlas", "value": ids.join(",")}));
+                    for t in &e.atlas {
+                        props.push(json!({"name": format!("acp:atlas:{}", t.id), "value": format!("{} ({})", t.name, t.tactic)}));
+                    }
                 }
                 json!({
                     "type": "machine-learning-model",
@@ -134,7 +162,7 @@ mod tests {
             signature: None,
         };
         let admission = admit(&artifact, &scan, true, high);
-        BomEntry { artifact, scan, admission, integrity_pin: None, policy_in_force: Some("ph-1".into()) }
+        BomEntry::new(artifact, scan, admission, None, Some("ph-1".into()))
     }
 
     #[test]

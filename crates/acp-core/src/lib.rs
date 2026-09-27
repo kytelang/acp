@@ -7,6 +7,7 @@
 pub mod adapter;
 pub mod aibom;
 pub mod attest;
+pub mod atlas;
 pub mod attestation;
 pub mod agility;
 pub mod anchor;

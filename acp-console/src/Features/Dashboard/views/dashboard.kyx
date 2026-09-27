@@ -573,15 +573,16 @@ pub fn modelsPanel(rows: list.List<ModelRow>): Html {
             <p class="empty">No models registered yet.</p>
         } else {
             <table class="tbl">
-                <thead><tr><th>Model</th><th>Provider</th><th>Version</th><th>Scan</th><th>AI-BOM</th><th>ID</th></tr></thead>
+                <thead><tr><th>Model</th><th>Provider</th><th>Version</th><th>Scan</th><th>ATLAS</th><th>AI-BOM</th><th>ID</th></tr></thead>
                 <tbody>
                     {for (i in 0..rows.size()) {
-                        let m = rows.get(i) ?? ModelRow("", "", "", "", "unscanned", false);
+                        let m = rows.get(i) ?? ModelRow("", "", "", "", "unscanned", false, "");
                         <tr>
                             <td class="strong">{m.name}</td>
                             <td>{m.provider}</td>
                             <td>{m.version}</td>
                             <td>{if (string.eql(m.scanStatus, "clean")) { <span class="badge ok">clean</span> } else { if (string.eql(m.scanStatus, "unscanned")) { <span class="badge">unscanned</span> } else { <span class="badge bad">{m.scanStatus}</span> } }}</td>
+                            <td>{if (string.eql(m.atlas, "")) { <span class="dim">-</span> } else { <span class="badge warn mono" title="MITRE ATLAS techniques">{m.atlas}</span> }}</td>
                             <td>{if (m.hasBom) { <span class="badge ver">signed</span> } else { <span class="dim">-</span> }}</td>
                             <td class="mono dim">{m.id}</td>
                         </tr>
