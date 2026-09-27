@@ -230,6 +230,30 @@ pub fn evidencePanel(rows: list.List<EvidenceRow>): Html {
     </div>;
 }
 
+pub fn firewallRulesPanel(rows: list.List<FwRuleRow>): Html {
+    return <div id="firewallrules">
+        {if (rows.size() == 0) {
+            <p class="empty">No custom firewall rules yet. Rules also come automatically from enrolled AI endpoints.</p>
+        } else {
+            <table class="tbl">
+                <thead><tr><th>Match</th><th>Action</th><th>Classify</th><th>ID</th><th></th></tr></thead>
+                <tbody>
+                    {for (i in 0..rows.size()) {
+                        let r = rows.get(i) ?? FwRuleRow("", "", "", "");
+                        <tr>
+                            <td class="mono">{r.matchStr}</td>
+                            <td><span class="badge ver">{r.action}</span></td>
+                            <td class="dim">{string.eql(r.classify, "") ? "-" : r.classify}</td>
+                            <td class="mono dim">{r.id}</td>
+                            <td><button class="btn no" data-on:click={"@post('/firewall/rules/" + r.id + "/delete')"}>Delete</button></td>
+                        </tr>
+                    }}
+                </tbody>
+            </table>
+        }}
+    </div>;
+}
+
 pub fn firewallStatusPanel(cfg: FirewallCfg): Html {
     return <div id="firewallstatus">
         <div class="row" style="gap:.6rem;align-items:center">

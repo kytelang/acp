@@ -127,7 +127,7 @@
     .modal input[type=file]{display:none}
   </style>
 </head>
-<body data-signals="{view: 'overview', endpoint: '', disposition: 'govern', appName: '', appOwner: '', agentAppId: '', agentName: '', grcKind: 'assessment', grcSubject: '', grcTitle: '', grcStatus: 'open', grcBody: '{}', modal: '', policyTab: 'deployed', fwEnabled: 'false', fwBlockSecrets: 'false', fwDenyTopics: '', fwModel: '', author: 'operator', epReason: 'sanctioned', mode: 'lockdown_all', scope: 'global', killReason: 'incident', ttl_ms: '3600000', reason: ''}">
+<body data-signals="{view: 'overview', endpoint: '', disposition: 'govern', appName: '', appOwner: '', agentAppId: '', agentName: '', grcKind: 'assessment', grcSubject: '', grcTitle: '', grcStatus: 'open', grcBody: '{}', modal: '', policyTab: 'deployed', fwEnabled: 'false', fwBlockSecrets: 'false', fwDenyTopics: '', fwModel: '', frMatchKind: 'host_contains', frMatchValue: '', frPath: '', frAction: 'block', frClassify: '', author: 'operator', epReason: 'sanctioned', mode: 'lockdown_all', scope: 'global', killReason: 'incident', ttl_ms: '3600000', reason: ''}">
   <div class="navbar">
     <div class="brand">
       <img class="logo" src="/varman-logo.svg" alt="Varman" />
@@ -269,6 +269,36 @@ rules:
             <label class="fld">Denied topics (comma-separated) <input type="text" data-bind="fwDenyTopics" placeholder="weapons, malware" /></label>
             <label class="fld">ML model JSON (optional) <textarea data-bind="fwModel" placeholder="paste model.json content, or leave blank for signatures only"></textarea></label>
             <button class="btn primary" data-on:click="@post('/firewall/save')">Save firewall config</button>
+          </div></div>
+          <div class="card"><div class="card-h"><span class="ic">&#128272;</span> Firewall rules<span class="sub">match a destination, choose an action; served to every acp-agent, operator rules win first-match</span></div>
+          <div class="card-b">
+            <div id="firewallrules"><p class="empty">&#8230;</p></div>
+            <div class="row">
+              <label class="fld">Match
+                <select data-bind="frMatchKind">
+                  <option value="host_contains">host contains</option>
+                  <option value="host_suffix">host suffix</option>
+                  <option value="host_exact">host exact</option>
+                  <option value="sni">TLS SNI</option>
+                  <option value="path_contains">path contains</option>
+                </select>
+              </label>
+              <label class="fld">Value <input type="text" data-bind="frMatchValue" placeholder="api.openai.com" /></label>
+              <label class="fld">Path prefix (optional) <input type="text" data-bind="frPath" placeholder="/v1" /></label>
+            </div>
+            <div class="row">
+              <label class="fld">Action
+                <select data-bind="frAction">
+                  <option value="block">block</option>
+                  <option value="inspect-prompt">inspect-prompt</option>
+                  <option value="govern-tool-call">govern-tool-call</option>
+                  <option value="dlp-only">dlp-only</option>
+                  <option value="pass">pass</option>
+                </select>
+              </label>
+              <label class="fld">Classify (optional) <input type="text" data-bind="frClassify" placeholder="model-api" /></label>
+              <button class="btn primary" data-on:click="@post('/firewall/rule-add')">Add rule</button>
+            </div>
           </div></div>
         </section>
         <section class="view" data-show="$view === 'endpoints'">

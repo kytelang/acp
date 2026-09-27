@@ -54,3 +54,31 @@ pub struct FirewallSaveHandler impl RouteHandler {
         return await ds_response.patch(firewallStatusPanel(self.acp.firewallStatus()));
     }
 }
+
+
+// POST /firewall/rule-add and /firewall/rules/{id}/delete: manage operator firewall rules.
+pub struct FirewallRuleAddHandler impl RouteHandler {
+    acp: AcpClient,
+    init(acp: AcpClient) { self.acp = acp; }
+    async fn serve(self: FirewallRuleAddHandler, ctx: Context): Response {
+        let auth = ctx.request.headers.get("authorization") ?? "";
+        let kind = json.stringField(ctx.request.body, "frMatchKind");
+        let value = json.stringField(ctx.request.body, "frMatchValue");
+        let path = json.stringField(ctx.request.body, "frPath");
+        let action = json.stringField(ctx.request.body, "frAction");
+        let classify = json.stringField(ctx.request.body, "frClassify");
+        let _ = self.acp.addFirewallRule(kind, value, path, action, classify, auth);
+        return await ds_response.patch(firewallRulesPanel(self.acp.firewallRules()));
+    }
+}
+
+pub struct FirewallRuleDeleteHandler impl RouteHandler {
+    acp: AcpClient,
+    init(acp: AcpClient) { self.acp = acp; }
+    async fn serve(self: FirewallRuleDeleteHandler, ctx: Context): Response {
+        let auth = ctx.request.headers.get("authorization") ?? "";
+        let id = ctx.param("id");
+        let _ = self.acp.deleteFirewallRule(id, auth);
+        return await ds_response.patch(firewallRulesPanel(self.acp.firewallRules()));
+    }
+}

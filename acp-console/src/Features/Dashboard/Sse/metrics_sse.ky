@@ -52,6 +52,8 @@ pub class MetricsSse impl SseHandler {
             if (w14 < 0) { alive = false; }
             let w15 = await ds.patchElementsSimple(firewallStatusPanel(self.acp.firewallStatus()));
             if (w15 < 0) { alive = false; }
+            let w16 = await ds.patchElementsSimple(firewallRulesPanel(self.acp.firewallRules()));
+            if (w16 < 0) { alive = false; }
             if (alive) { await aio.delay(2000); }
         }
     }

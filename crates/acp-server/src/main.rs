@@ -330,6 +330,8 @@ async fn main() {
         .route("/endpoints/register", post(endpoints_register))
         .route("/intercept/rules", get(intercept_rules))
         .route("/firewall/config", get(firewall_config_get).post(firewall_config_set))
+        .route("/firewall/rules", get(firewall_rules_list).post(firewall_rules_add))
+        .route("/firewall/rules/:id/delete", post(firewall_rules_delete))
         .route("/apps", post(app_register))
         .route("/agents", post(agent_register))
         .route("/agents/:id/deactivate", post(agent_deactivate))
@@ -878,11 +880,80 @@ async fn intercept_rules(State(st): State<Arc<AppState>>) -> impl IntoResponse {
         _ => true,
     });
     let log = EnrollmentLog { dispositions };
-    let registry = acp_core::interception::registry_from_enrollment(
+    let mut registry = acp_core::interception::registry_from_enrollment(
         &log,
         acp_core::interception::DefaultAction::FlagAndPass,
     );
+    // Merge operator-authored rules ahead of the enrolment-derived ones (first match wins).
+    if let Some(store) = &st.store {
+        if let Ok(rules) = store.list_firewall_rules().await {
+            let mut authored: Vec<acp_core::interception::EndpointRule> = Vec::new();
+            for r in rules {
+                let match_v: serde_json::Value = serde_json::from_str(&r.match_json).unwrap_or_else(|_| serde_json::json!({}));
+                let classify_v = if r.classify.is_empty() { serde_json::Value::Null } else { serde_json::json!(r.classify) };
+                let rule_v = serde_json::json!({"id": r.id, "match": match_v, "classify": classify_v, "action": r.action});
+                if let Ok(rule) = serde_json::from_value::<acp_core::interception::EndpointRule>(rule_v) {
+                    authored.push(rule);
+                }
+            }
+            if !authored.is_empty() {
+                authored.extend(registry.endpoints);
+                registry.endpoints = authored;
+            }
+        }
+    }
     Json(registry).into_response()
+}
+
+const FW_ACTIONS: &[&str] = &["inspect-prompt", "govern-tool-call", "dlp-only", "block", "pass"];
+
+/// GET /firewall/rules: operator-authored interception rules (for the console Firewall rules screen).
+async fn firewall_rules_list(State(st): State<Arc<AppState>>) -> Response {
+    let store = match &st.store { Some(s) => s, None => return Json(serde_json::json!({"rules": []})).into_response() };
+    match store.list_firewall_rules().await {
+        Ok(rules) => {
+            let out: Vec<serde_json::Value> = rules.iter().map(|r| {
+                let m: serde_json::Value = serde_json::from_str(&r.match_json).unwrap_or_else(|_| serde_json::json!({}));
+                serde_json::json!({"id": r.id, "match": m, "classify": r.classify, "action": r.action})
+            }).collect();
+            Json(serde_json::json!({"rules": out})).into_response()
+        }
+        Err(e) => Json(serde_json::json!({"rules": [], "error": e})).into_response(),
+    }
+}
+
+/// POST /firewall/rules: add an operator rule (RBAC-gated on EditPolicy). Body: a match predicate set
+/// (host_contains|host_suffix|host_exact|sni|path_contains|path_prefix|port) + action + optional classify.
+async fn firewall_rules_add(State(st): State<Arc<AppState>>, headers: HeaderMap, Json(body): Json<serde_json::Value>) -> Response {
+    if let Err(r) = authorize(&st.auth, &headers, acp_auth::Capability::EditPolicy) { return r; }
+    let store = match &st.store { Some(s) => s, None => return Json(serde_json::json!({"ok": false, "error": "no --store configured"})).into_response() };
+    let mut m = serde_json::Map::new();
+    for k in ["host_contains", "host_suffix", "host_exact", "sni", "path_contains", "path_prefix"] {
+        if let Some(v) = body.get(k).and_then(|x| x.as_str()) { if !v.trim().is_empty() { m.insert(k.to_string(), serde_json::json!(v.trim())); } }
+    }
+    if let Some(p) = body.get("port").and_then(|x| x.as_u64()) { m.insert("port".to_string(), serde_json::json!(p)); }
+    if m.is_empty() { return Json(serde_json::json!({"ok": false, "error": "at least one match predicate is required"})).into_response(); }
+    let action = body.get("action").and_then(|x| x.as_str()).unwrap_or("").trim().to_string();
+    if !FW_ACTIONS.contains(&action.as_str()) {
+        return Json(serde_json::json!({"ok": false, "error": format!("unknown action '{action}'; expected one of {FW_ACTIONS:?}")})).into_response();
+    }
+    let classify = body.get("classify").and_then(|x| x.as_str()).unwrap_or("").trim().to_string();
+    let id = format!("fwr-{}", rand_hex(6));
+    let match_json = serde_json::Value::Object(m).to_string();
+    match store.add_firewall_rule(&id, &match_json, &classify, &action, now_ms() as i64).await {
+        Ok(()) => Json(serde_json::json!({"ok": true, "id": id})).into_response(),
+        Err(e) => Json(serde_json::json!({"ok": false, "error": e})).into_response(),
+    }
+}
+
+/// POST /firewall/rules/:id/delete: remove an operator rule (RBAC-gated on EditPolicy).
+async fn firewall_rules_delete(State(st): State<Arc<AppState>>, headers: HeaderMap, Path(id): Path<String>) -> Response {
+    if let Err(r) = authorize(&st.auth, &headers, acp_auth::Capability::EditPolicy) { return r; }
+    let store = match &st.store { Some(s) => s, None => return Json(serde_json::json!({"ok": false, "error": "no --store configured"})).into_response() };
+    match store.delete_firewall_rule(&id).await {
+        Ok(()) => Json(serde_json::json!({"ok": true, "id": id})).into_response(),
+        Err(e) => Json(serde_json::json!({"ok": false, "error": e})).into_response(),
+    }
 }
 
 /// POST /endpoints/register: record a signed disposition for an AI endpoint. Body:

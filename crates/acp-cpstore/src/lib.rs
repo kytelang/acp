@@ -55,6 +55,15 @@ pub struct IngestedRecord {
 }
 
 #[derive(Debug, Clone, Serialize)]
+pub struct FirewallRule {
+    pub id: String,
+    pub match_json: String,
+    pub classify: String,
+    pub action: String,
+    pub created_ms: i64,
+}
+
+#[derive(Debug, Clone, Serialize)]
 pub struct FirewallConfig {
     pub enabled: bool,
     pub block_secrets: bool,
@@ -126,6 +135,7 @@ impl ControlStore {
             "CREATE TABLE IF NOT EXISTS grc_records (id VARCHAR(255) PRIMARY KEY, kind TEXT NOT NULL, subject TEXT NOT NULL, title TEXT NOT NULL, status TEXT NOT NULL, body TEXT NOT NULL, operator TEXT NOT NULL, created_ms BIGINT NOT NULL, pubkey_hex TEXT NOT NULL, sig_hex TEXT NOT NULL)",
             "CREATE TABLE IF NOT EXISTS ingested_evidence (decision_id VARCHAR(255) PRIMARY KEY, pep TEXT NOT NULL, kind TEXT NOT NULL, verdict TEXT NOT NULL, record TEXT NOT NULL, operator TEXT NOT NULL, created_ms BIGINT NOT NULL, pubkey_hex TEXT NOT NULL, sig_hex TEXT NOT NULL)",
             "CREATE TABLE IF NOT EXISTS firewall_config (id INTEGER PRIMARY KEY, enabled INTEGER NOT NULL, block_secrets INTEGER NOT NULL, deny_topics TEXT NOT NULL, model TEXT NOT NULL, updated_ms BIGINT NOT NULL)",
+            "CREATE TABLE IF NOT EXISTS firewall_rules (id VARCHAR(255) PRIMARY KEY, match_json TEXT NOT NULL, classify TEXT NOT NULL, action TEXT NOT NULL, created_ms BIGINT NOT NULL)",
         ] {
             sqlx::query(ddl).execute(&self.pool).await.map_err(|e| e.to_string())?;
         }
@@ -311,6 +321,28 @@ impl ControlStore {
             .bind(if enabled {1i64} else {0}).bind(if block_secrets {1i64} else {0})
             .bind(deny_topics_json).bind(model).bind(updated_ms)
             .execute(&self.pool).await.map_err(|e| e.to_string())?;
+        Ok(())
+    }
+
+    /// Operator-authored firewall (interception) rules, merged ahead of the enrolment-derived rules
+    /// when the control plane serves GET /intercept/rules. First match wins, so these take precedence.
+    pub async fn add_firewall_rule(&self, id: &str, match_json: &str, classify: &str, action: &str, created_ms: i64) -> Result<(), String> {
+        let sql = self.ph("INSERT INTO firewall_rules(id,match_json,classify,action,created_ms) VALUES(?,?,?,?,?)");
+        sqlx::query(&sql).bind(id).bind(match_json).bind(classify).bind(action).bind(created_ms)
+            .execute(&self.pool).await.map_err(|e| e.to_string())?;
+        Ok(())
+    }
+    pub async fn list_firewall_rules(&self) -> Result<Vec<FirewallRule>, String> {
+        let rows = sqlx::query("SELECT id, match_json, classify, action, created_ms FROM firewall_rules ORDER BY created_ms")
+            .fetch_all(&self.pool).await.map_err(|e| e.to_string())?;
+        Ok(rows.iter().map(|r| FirewallRule {
+            id: r.get("id"), match_json: r.get("match_json"), classify: r.get("classify"),
+            action: r.get("action"), created_ms: r.get("created_ms"),
+        }).collect())
+    }
+    pub async fn delete_firewall_rule(&self, id: &str) -> Result<(), String> {
+        let sql = self.ph("DELETE FROM firewall_rules WHERE id = ?");
+        sqlx::query(&sql).bind(id).execute(&self.pool).await.map_err(|e| e.to_string())?;
         Ok(())
     }
 

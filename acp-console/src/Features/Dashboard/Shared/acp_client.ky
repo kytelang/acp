@@ -80,6 +80,16 @@ pub struct ApprovalRow {
     init(id: string, tool: string) { self.id = id; self.tool = tool; }
 }
 
+pub struct FwRuleRow {
+    pub id: string,
+    pub matchStr: string,
+    pub action: string,
+    pub classify: string,
+    init(id: string, matchStr: string, action: string, classify: string) {
+        self.id = id; self.matchStr = matchStr; self.action = action; self.classify = classify;
+    }
+}
+
 pub struct FirewallCfg {
     pub enabled: bool,
     pub blockSecrets: bool,
@@ -421,6 +431,72 @@ pub struct AcpClient {
         let v = json.parse(resp.body);
         if (!(json.asBool(json.get(v, "ok")) ?? false)) { return DeployResult(false, json.asString(json.get(v, "error")) ?? "rejected"); }
         return DeployResult(true, "content firewall config saved");
+    }
+
+    // Operator-authored firewall (interception) rules.
+    pub fn firewallRules(self: AcpClient): list.List<FwRuleRow> {
+        let rows = list.List<FwRuleRow>();
+        let resp = client.Http.get(self.base + "/firewall/rules");
+        if (resp.status.toCode() != 200) { return rows; }
+        let rv = json.get(json.parse(resp.body), "rules");
+        let arr = json.asArray(rv);
+        if (arr == undefined) { return rows; }
+        let i = 0;
+        while (i < arr.size()) {
+            let item = json.at(rv, i);
+            let m = json.get(item, "match");
+            let keys = list.List<string>();
+            keys.push("host_exact"); keys.push("host_suffix"); keys.push("host_contains"); keys.push("sni"); keys.push("path_prefix"); keys.push("path_contains");
+            let parts = "";
+            let k = 0;
+            while (k < keys.size()) {
+                let key = keys.get(k) ?? "";
+                let val = json.asString(json.get(m, key));
+                if (val != undefined) {
+                    parts = string.eql(parts, "") ? (key + "=" + (val ?? "")) : (parts + ", " + key + "=" + (val ?? ""));
+                }
+                k = k + 1;
+            }
+            let portN = json.asNumber(json.get(m, "port"));
+            if (portN != undefined) {
+                let ps = "port=" + `${portN ?? 0}`;
+                parts = string.eql(parts, "") ? ps : (parts + ", " + ps);
+            }
+            rows.push(FwRuleRow(
+                json.asString(json.get(item, "id")) ?? "",
+                parts,
+                json.asString(json.get(item, "action")) ?? "?",
+                json.asString(json.get(item, "classify")) ?? ""));
+            i = i + 1;
+        }
+        return rows;
+    }
+
+    pub fn addFirewallRule(self: AcpClient, matchKind: string, matchValue: string, pathPrefix: string, action: string, classify: string, userAuth: string): DeployResult {
+        let body = "{" + self.jstr(matchKind) + ":" + self.jstr(matchValue);
+        if (!string.eql(pathPrefix, "")) { body = body + ",\"path_prefix\":" + self.jstr(pathPrefix); }
+        body = body + ",\"action\":" + self.jstr(action);
+        if (!string.eql(classify, "")) { body = body + ",\"classify\":" + self.jstr(classify); }
+        body = body + "}";
+        let hdrs = client.Http.emptyHeaders();
+        hdrs.set("Content-Type", "application/json");
+        if (!string.eql(userAuth, "")) { hdrs.set("Authorization", userAuth); }
+        else { let tok = self.authToken("PolicyAdmin"); if (!string.eql(tok, "")) { hdrs.set("Authorization", "Bearer " + tok); } }
+        let resp = client.Http.request("POST", self.base + "/firewall/rules", hdrs, body);
+        if (resp.status.toCode() != 200) { return DeployResult(false, "acp-server unreachable"); }
+        let v = json.parse(resp.body);
+        if (!(json.asBool(json.get(v, "ok")) ?? false)) { return DeployResult(false, json.asString(json.get(v, "error")) ?? "rejected"); }
+        return DeployResult(true, "rule added");
+    }
+
+    pub fn deleteFirewallRule(self: AcpClient, id: string, userAuth: string): DeployResult {
+        let hdrs = client.Http.emptyHeaders();
+        hdrs.set("Content-Type", "application/json");
+        if (!string.eql(userAuth, "")) { hdrs.set("Authorization", userAuth); }
+        else { let tok = self.authToken("PolicyAdmin"); if (!string.eql(tok, "")) { hdrs.set("Authorization", "Bearer " + tok); } }
+        let resp = client.Http.request("POST", self.base + "/firewall/rules/" + id + "/delete", hdrs, "{}");
+        if (resp.status.toCode() != 200) { return DeployResult(false, "acp-server unreachable"); }
+        return DeployResult(true, "rule removed");
     }
 
     // Rules of the currently deployed policy, with app/agent resolved to registered names. Shows
