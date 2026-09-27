@@ -51,7 +51,7 @@ smoke-test; the loop's disconnect check (w<0) is the server-side backstop.
 
 ---
 
-## R2. Detection depth (INTEGRATE, P2)
+## R2. Detection depth (INTEGRATE, P2)  [DONE 2026-09-27]
 
 **Why it remains.** The built-in engine is signatures + a linear model + a lexicon + es/fr/de. Lakera-
 grade recall needs a trained transformer and a large labelled corpus, which are an ML data programme,
@@ -75,7 +75,7 @@ published C3 threshold.
 
 ---
 
-## R3. Multi-modal content (INTEGRATE, P3)
+## R3. Multi-modal content (INTEGRATE, P3)  [DONE 2026-09-27]
 
 **Design.** Extend the scan-hook request with `modality: text|image|audio` and a `content_ref` (a
 base64 blob or a URL the scanner can fetch). The PEP forwards non-text tool arguments/results to the
@@ -86,7 +86,7 @@ blocks the call; text behaviour is unchanged.
 
 ---
 
-## R4. First-party model scanner + MITRE ATLAS enrichment (INTEGRATE + ENRICH, P3)
+## R4. First-party model scanner + MITRE ATLAS enrichment (INTEGRATE + ENRICH, P3)  [DONE 2026-09-27]
 
 **Why it remains.** B3 already calls an external model scanner and stores a signed AI-BOM. Missing: a
 first-party multi-format scanner (Protect AI / HiddenLayer own this) and MITRE ATLAS mapping.
@@ -102,7 +102,7 @@ technique id, shown on the console Models page.
 
 ---
 
-## R5. Endpoint / browser DLP discovery (PARTNER-FIRST, defer build)
+## R5. Endpoint / browser DLP discovery (PARTNER-FIRST, defer build)  [DONE 2026-09-27]
 
 **Why it remains.** A Purview/Zscaler-class endpoint agent is a separate deployed product, not a
 control-plane feature.
@@ -118,7 +118,7 @@ in `/intercept/rules` and coverage.
 
 ---
 
-## R6. Certifications: SOC 2 / ISO 27001 / ISO 42001 (PROCESS)
+## R6. Certifications: SOC 2 / ISO 27001 / ISO 42001 (PROCESS)  [READINESS DONE 2026-09-27]
 
 **Plan (from `docs/enterprise-trust-plan.md`).**
 1. Readiness assessment + control mapping: map the existing technical controls (RBAC/SCIM, Ed25519
@@ -131,7 +131,7 @@ in `/intercept/rules` and coverage.
 
 ---
 
-## R7. Real-Entra production cutover (PROCESS + small CODE)
+## R7. Real-Entra production cutover (PROCESS + small CODE)  [CODE DONE 2026-09-27; live-tenant blocked on customer token]
 
 **Why it remains.** Identity is proven against the mock issuer; the RS256 + JWKS-rotation path exists but
 has not run against a real tenant.
@@ -146,7 +146,7 @@ verified end-to-end; roles map to capabilities; a rotated signing key is picked 
 
 ---
 
-## R8. Scale and soak testing (TEST PROGRAMME, P2)
+## R8. Scale and soak testing (TEST PROGRAMME, P2)  [DONE 2026-09-27]
 
 **Why it remains.** T2 measured single-node content-scan throughput; there is no end-to-end soak of the
 two-replica control plane or the gateway/proxy under sustained concurrent load.
@@ -176,3 +176,28 @@ a failover drill under load with no split-brain and bounded recovery.
 Only **R1** is a real in-repo code item still worth building for feature completeness; **R8** and **R7**
 are the operability/production gates; **R2-R5** are deliberately integration (call the specialist), and
 **R6** is process. There is no remaining "missing primitive" in the control plane.
+
+---
+
+## Delivery status (2026-09-27)
+
+All R-items are built out to the extent code and in-repo docs allow. Each was live-verified and committed
+separately.
+
+- R1 console live tenant switcher: SHIPPED (SSE + writes tenant-scoped; verified acme/globex isolation).
+- R2 detection depth: `docs/scan-hook-contract.md` (v1 contract + Azure/Lakera/Protect AI adapter
+  mappings), the `scan_hook_conformance` suite, and corpus-trained `injection-lr.json`.
+- R3 multi-modal: `external_scan_media` + media-part extraction; stdio and http PEPs enforce image/audio
+  verdicts; verified an image tool-arg is blocked before upstream.
+- R4 ATLAS: `acp_core::atlas`; AI-BOM + `/models` + console carry ATLAS technique ids; verified pickle +
+  injection map to AML.T0011.000 + AML.T0051.
+- R5 endpoint DLP connectors: Purview / Zscaler / Netskope import via `acp discover --from`; verified.
+- R6 certifications: `docs/soc2-iso-control-mapping.md` readiness (TSC / 27001 Annex A / 42001). The
+  audit itself remains process.
+- R7 real-Entra: `--entra-preflight` (JWKS + token diagnostic, verified live against Microsoft's public
+  JWKS) + `docs/entra-cutover-runbook.md`. Live-tenant soak is blocked only on a customer token.
+- R8 scale + soak: `scripts/soak.sh` + `scripts/loadtest.py` (mcp/chat, duration); `docs/soak-report.md`
+  publishes proxy ~4.9k rps, gateway ~3.4k rps, failover ~2.7s with no split-brain.
+
+Blocked-on-external (not code): the SOC 2 / ISO audit engagement (R6) and the live-tenant Entra
+verification (R7). There is no remaining in-repo code item.
