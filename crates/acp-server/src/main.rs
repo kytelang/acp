@@ -277,16 +277,39 @@ async fn vendor_register(State(st): State<Arc<AppState>>, headers: HeaderMap, Js
     };
     let id = format!("vnd-{}", rand_hex(6));
     let tenant = tenant_of(&headers, &None);
-    match store.add_vendor(&id, &name, &risk_json, &tenant, now_ms() as i64).await {
-        Ok(()) => Json(serde_json::json!({"ok": true, "id": id, "name": name, "score": score, "band": band})).into_response(),
+    let interval = body.get("review_interval_ms").and_then(|v| v.as_i64()).unwrap_or(90 * 24 * 60 * 60 * 1000);
+    let review_due = now_ms() as i64 + interval;
+    match store.add_vendor(&id, &name, &risk_json, &tenant, review_due, now_ms() as i64).await {
+        Ok(()) => Json(serde_json::json!({"ok": true, "id": id, "name": name, "score": score, "band": band, "review_due_ms": review_due})).into_response(),
         Err(e) => Json(serde_json::json!({"ok": false, "error": e})).into_response(),
     }
 }
+/// M5: mark a vendor re-reviewed, pushing its next review date out by the interval (default 90d).
+async fn vendor_review(State(st): State<Arc<AppState>>, headers: HeaderMap, Path(id): Path<String>, Json(body): Json<serde_json::Value>) -> Response {
+    if let Err(r) = authorize(&st.auth, &headers, acp_auth::Capability::RegisterApp) { return r; }
+    let store = match &st.store { Some(s) => s, None => return Json(serde_json::json!({"ok": false, "error": "no --store configured"})).into_response() };
+    let tenant = tenant_of(&headers, &None);
+    let interval = body.get("review_interval_ms").and_then(|v| v.as_i64()).unwrap_or(90 * 24 * 60 * 60 * 1000);
+    let review_due = now_ms() as i64 + interval;
+    match store.set_vendor_review(&id, &tenant, review_due).await {
+        Ok(true) => Json(serde_json::json!({"ok": true, "id": id, "review_due_ms": review_due})).into_response(),
+        Ok(false) => Json(serde_json::json!({"ok": false, "error": "no such vendor"})).into_response(),
+        Err(e) => Json(serde_json::json!({"ok": false, "error": e})).into_response(),
+    }
+}
+
 async fn vendors_list(State(st): State<Arc<AppState>>, headers: HeaderMap) -> Response {
     let tenant = tenant_of(&headers, &None);
     let store = match &st.store { Some(s) => s, None => return Json(serde_json::json!({"vendors": []})).into_response() };
     match store.list_vendors(&tenant).await {
-        Ok(vs) => Json(serde_json::json!({"vendors": vs})).into_response(),
+        Ok(vs) => {
+            let now = now_ms() as i64;
+            let out: Vec<serde_json::Value> = vs.iter().map(|v| serde_json::json!({
+                "id": v.id, "name": v.name, "risk_json": v.risk_json, "review_due_ms": v.review_due_ms,
+                "overdue": v.review_due_ms > 0 && now > v.review_due_ms,
+            })).collect();
+            Json(serde_json::json!({"vendors": out})).into_response()
+        }
         Err(e) => Json(serde_json::json!({"vendors": [], "error": e})).into_response(),
     }
 }
@@ -906,6 +929,7 @@ async fn main() {
         .route("/models", get(models_list).post(model_register))
         .route("/models/:id", get(model_get))
         .route("/vendors", get(vendors_list).post(vendor_register))
+        .route("/vendors/:id/review", post(vendor_review))
         .route("/leader", get(leader_status))
         .route("/tenants", get(tenants_list))
         .route("/scim/v2/Users", get(scim_users))

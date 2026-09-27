@@ -83,7 +83,8 @@ pub struct VendorRow {
     pub name: string,
     pub risk: string,
     pub band: string,
-    init(id: string, name: string, risk: string, band: string) { self.id = id; self.name = name; self.risk = risk; self.band = band; }
+    pub overdue: bool,
+    init(id: string, name: string, risk: string, band: string, overdue: bool) { self.id = id; self.name = name; self.risk = risk; self.band = band; self.overdue = overdue; }
 }
 
 pub struct PackRow {
@@ -496,7 +497,8 @@ pub struct AcpClient {
             rows.push(VendorRow(
                 json.asString(json.get(x, "id")) ?? "",
                 json.asString(json.get(x, "name")) ?? "",
-                rj, band));
+                rj, band,
+                json.asBool(json.get(x, "overdue")) ?? false));
             i = i + 1;
         }
         return rows;
@@ -526,6 +528,17 @@ pub struct AcpClient {
         let v = json.parse(resp.body);
         if (!(json.asBool(json.get(v, "ok")) ?? false)) { return DeployResult(false, json.asString(json.get(v, "error")) ?? "rejected"); }
         return DeployResult(true, "vendor " + name + " added");
+    }
+    pub fn reviewVendor(self: AcpClient, id: string, userAuth: string): DeployResult {
+        let hdrs = client.Http.emptyHeaders();
+        hdrs.set("Content-Type", "application/json"); hdrs.set("x-acp-tenant", self.tenant);
+        if (!string.eql(userAuth, "")) { hdrs.set("Authorization", userAuth); }
+        else { let tok = self.authToken("AppRegistrar"); if (!string.eql(tok, "")) { hdrs.set("Authorization", "Bearer " + tok); } }
+        let resp = client.Http.request("POST", self.base + "/vendors/" + id + "/review", hdrs, "{}");
+        if (resp.status.toCode() != 200) { return DeployResult(false, "acp-server unreachable"); }
+        let v = json.parse(resp.body);
+        if (!(json.asBool(json.get(v, "ok")) ?? false)) { return DeployResult(false, json.asString(json.get(v, "error")) ?? "rejected"); }
+        return DeployResult(true, "vendor re-reviewed");
     }
 
     // A4: loaded signed control packs (re-verified server-side).

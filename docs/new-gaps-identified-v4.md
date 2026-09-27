@@ -67,13 +67,17 @@ Status (2026-09-27): SHIPPED. `--approval-sla-ms`; `acp_approvals::list_overdue`
 `approval.overdue` once per overdue pending hold (tracked in an in-memory set). Verified: an unresolved
 hold produced exactly one approval.overdue event; a resolved hold produced none.
 
-## M5. Continuous vendor monitoring (P2)
+## M5. Continuous vendor monitoring (P2)  [DONE 2026-09-27]
 Gap: G6 vendor risk was point-in-time.
 Design: a `review_due_ms` on vendors (set from a review interval at creation); `GET /vendors` flags
 overdue vendors; `POST /vendors/:id/review` refreshes the review date.
 Acceptance:
 - A vendor created with a short review interval is reported `overdue: true` after its due time.
 - Re-reviewing clears the overdue flag.
+Status (2026-09-27): SHIPPED. vendors gained `review_due_ms` (set from a review interval at creation,
+default 90d); `GET /vendors` flags `overdue`; `POST /vendors/:id/review` pushes the date out. Console
+vendor table shows a review status badge + a Re-review button. Verified via curl: a short interval ->
+overdue:true; re-review -> overdue:false.
 
 ---
 

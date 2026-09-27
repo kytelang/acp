@@ -61,6 +61,7 @@ pub struct Vendor {
     pub name: String,
     pub risk_json: String,
     pub tenant: String,
+    pub review_due_ms: i64,
     pub created_ms: i64,
 }
 
@@ -194,7 +195,7 @@ impl ControlStore {
             "CREATE TABLE IF NOT EXISTS apps (id VARCHAR(255) PRIMARY KEY, name TEXT NOT NULL, owner TEXT NOT NULL, metadata_json TEXT NOT NULL DEFAULT '{}', tenant_id VARCHAR(255) NOT NULL DEFAULT 'default', created_ms BIGINT NOT NULL)",
             "CREATE TABLE IF NOT EXISTS agents (id VARCHAR(255) PRIMARY KEY, app_id TEXT NOT NULL, name TEXT NOT NULL, token_sha256 TEXT NOT NULL, active INTEGER NOT NULL, owner TEXT NOT NULL DEFAULT '', metadata_json TEXT NOT NULL DEFAULT '{}', tenant_id VARCHAR(255) NOT NULL DEFAULT 'default', created_ms BIGINT NOT NULL)",
             "CREATE TABLE IF NOT EXISTS models (id VARCHAR(255) PRIMARY KEY, name TEXT NOT NULL, provider TEXT NOT NULL, version TEXT NOT NULL, card_json TEXT NOT NULL DEFAULT '{}', scan_status TEXT NOT NULL DEFAULT 'unscanned', aibom_json TEXT NOT NULL DEFAULT '', tenant_id VARCHAR(255) NOT NULL DEFAULT 'default', created_ms BIGINT NOT NULL)",
-            "CREATE TABLE IF NOT EXISTS vendors (id VARCHAR(255) PRIMARY KEY, name TEXT NOT NULL, risk_json TEXT NOT NULL DEFAULT '{}', tenant_id VARCHAR(255) NOT NULL DEFAULT 'default', created_ms BIGINT NOT NULL)",
+            "CREATE TABLE IF NOT EXISTS vendors (id VARCHAR(255) PRIMARY KEY, name TEXT NOT NULL, risk_json TEXT NOT NULL DEFAULT '{}', tenant_id VARCHAR(255) NOT NULL DEFAULT 'default', review_due_ms BIGINT NOT NULL DEFAULT 0, created_ms BIGINT NOT NULL)",
             "CREATE TABLE IF NOT EXISTS control_packs (id VARCHAR(255) PRIMARY KEY, version TEXT NOT NULL, doc_json TEXT NOT NULL, pubkey_hex TEXT NOT NULL, sig_hex TEXT NOT NULL, created_ms BIGINT NOT NULL)",
             "CREATE TABLE IF NOT EXISTS endpoints (endpoint VARCHAR(255) PRIMARY KEY, kind TEXT NOT NULL, provider TEXT NOT NULL, disposition TEXT NOT NULL, operator TEXT NOT NULL, reason TEXT NOT NULL, decided_ms BIGINT NOT NULL, expires_ms BIGINT NOT NULL, pubkey_hex TEXT NOT NULL, sig_hex TEXT NOT NULL)",
             "CREATE TABLE IF NOT EXISTS grc_records (id VARCHAR(255) PRIMARY KEY, kind TEXT NOT NULL, subject TEXT NOT NULL, title TEXT NOT NULL, status TEXT NOT NULL, body TEXT NOT NULL, operator TEXT NOT NULL, created_ms BIGINT NOT NULL, pubkey_hex TEXT NOT NULL, sig_hex TEXT NOT NULL, linked_refs TEXT NOT NULL DEFAULT '[]', answers_json TEXT NOT NULL DEFAULT '{}', assignee TEXT NOT NULL DEFAULT '', due_ms BIGINT NOT NULL DEFAULT 0, stage TEXT NOT NULL DEFAULT '', tenant_id VARCHAR(255) NOT NULL DEFAULT 'default')",
@@ -298,18 +299,23 @@ impl ControlStore {
     }
 
     // ---- A3: vendor registry ----
-    pub async fn add_vendor(&self, id: &str, name: &str, risk_json: &str, tenant: &str, now_ms: i64) -> Result<(), String> {
-        let sql = self.ph("INSERT INTO vendors (id, name, risk_json, tenant_id, created_ms) VALUES (?, ?, ?, ?, ?)");
-        sqlx::query(&sql).bind(id).bind(name).bind(risk_json).bind(tenant).bind(now_ms)
+    pub async fn add_vendor(&self, id: &str, name: &str, risk_json: &str, tenant: &str, review_due_ms: i64, now_ms: i64) -> Result<(), String> {
+        let sql = self.ph("INSERT INTO vendors (id, name, risk_json, tenant_id, review_due_ms, created_ms) VALUES (?, ?, ?, ?, ?, ?)");
+        sqlx::query(&sql).bind(id).bind(name).bind(risk_json).bind(tenant).bind(review_due_ms).bind(now_ms)
             .execute(&self.pool).await.map_err(|e| e.to_string())?;
         Ok(())
     }
     pub async fn list_vendors(&self, tenant: &str) -> Result<Vec<Vendor>, String> {
-        let rows = sqlx::query(&self.ph("SELECT id, name, risk_json, tenant_id, created_ms FROM vendors WHERE tenant_id = ? ORDER BY created_ms"))
+        let rows = sqlx::query(&self.ph("SELECT id, name, risk_json, tenant_id, review_due_ms, created_ms FROM vendors WHERE tenant_id = ? ORDER BY created_ms"))
             .bind(tenant).fetch_all(&self.pool).await.map_err(|e| e.to_string())?;
         Ok(rows.iter().map(|r| Vendor {
-            id: r.get("id"), name: r.get("name"), risk_json: r.get("risk_json"), tenant: r.get("tenant_id"), created_ms: r.get("created_ms"),
+            id: r.get("id"), name: r.get("name"), risk_json: r.get("risk_json"), tenant: r.get("tenant_id"), review_due_ms: r.get("review_due_ms"), created_ms: r.get("created_ms"),
         }).collect())
+    }
+    pub async fn set_vendor_review(&self, id: &str, tenant: &str, review_due_ms: i64) -> Result<bool, String> {
+        let sql = self.ph("UPDATE vendors SET review_due_ms = ? WHERE id = ? AND tenant_id = ?");
+        let r = sqlx::query(&sql).bind(review_due_ms).bind(id).bind(tenant).execute(&self.pool).await.map_err(|e| e.to_string())?;
+        Ok(r.rows_affected() == 1)
     }
 
     // ---- A4: signed control packs ----

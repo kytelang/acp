@@ -50,6 +50,7 @@ fn buildApp(): App {
     app.post("/agents/{id}/deactivate", DeactivateAgentHandler(acp));
     app.post("/models/create", RegisterModelHandler(acp));
     app.post("/vendors/create", RegisterVendorHandler(acp));
+    app.post("/vendors/{id}/review", ReviewVendorHandler(acp));
     app.post("/packs/load", LoadPacksHandler(acp));
     app.post("/report/framework/{name}", FrameworkReportHandler(acp));
     app.get("/report/framework/{name}/csv", FrameworkCsvHandler(acp));

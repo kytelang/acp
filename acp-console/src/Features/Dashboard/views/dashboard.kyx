@@ -598,11 +598,11 @@ pub fn vendorsPanel(rows: list.List<VendorRow>): Html {
             <p class="empty">No vendors recorded.</p>
         } else {
             <table class="tbl">
-                <thead><tr><th>Vendor</th><th>Risk band</th><th>ID</th></tr></thead>
+                <thead><tr><th>Vendor</th><th>Risk band</th><th>Review</th><th>Action</th></tr></thead>
                 <tbody>
                     {for (i in 0..rows.size()) {
-                        let v = rows.get(i) ?? VendorRow("", "", "{}", "");
-                        <tr><td class="strong">{v.name}</td><td>{if (string.eql(v.band, "critical") || string.eql(v.band, "high")) { <span class="badge bad">{v.band}</span> } else { if (string.eql(v.band, "medium")) { <span class="badge warn">{v.band}</span> } else { if (string.eql(v.band, "")) { <span class="dim">-</span> } else { <span class="badge ok">{v.band}</span> } } }}</td><td class="mono dim">{v.id}</td></tr>
+                        let v = rows.get(i) ?? VendorRow("", "", "{}", "", false);
+                        <tr><td class="strong">{v.name}</td><td>{if (string.eql(v.band, "critical") || string.eql(v.band, "high")) { <span class="badge bad">{v.band}</span> } else { if (string.eql(v.band, "medium")) { <span class="badge warn">{v.band}</span> } else { if (string.eql(v.band, "")) { <span class="dim">-</span> } else { <span class="badge ok">{v.band}</span> } } }}</td><td>{if (v.overdue) { <span class="badge bad">review overdue</span> } else { <span class="badge ok">current</span> }}</td><td><button class="btn" data-on:click={"@post('/vendors/" + v.id + "/review')"}>Re-review</button></td></tr>
                     }}
                 </tbody>
             </table>
