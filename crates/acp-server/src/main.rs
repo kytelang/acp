@@ -316,6 +316,8 @@ async fn main() {
         .route("/event/:kind", post(record_event))
         .route("/alerts", get(alerts))
         .route("/events/recent", get(events_recent))
+        .route("/report/violations", get(report_violations))
+        .route("/report/violations.csv", get(report_violations_csv))
         .route("/evidence/ingest", post(evidence_ingest))
         .route("/evidence/ingested", get(evidence_ingested))
         .route("/admin/meta", post(record_meta))
@@ -1436,10 +1438,61 @@ async fn record_event(State(st): State<Arc<AppState>>, headers: HeaderMap, Path(
     }
     {
         let mut buf = st.events.lock().unwrap();
-        buf.push_front(ev);
+        buf.push_front(ev.clone());
         buf.truncate(500);
     }
+    // Persist for the durable breach-and-violation report (best-effort).
+    if let Some(store) = &st.store {
+        let g = |k: &str| ev.get(k).and_then(|v| v.as_str()).unwrap_or("").to_string();
+        let id = format!("vio-{}", rand_hex(8));
+        let _ = store.add_violation_event(&id, &kind, &g("proxy"), &g("agent"), &g("tool"), &g("verdict"), &g("rule_id"), &g("impact"), &g("outcome"), now_ms() as i64).await;
+    }
     Json(serde_json::json!({"ok": true, "kind": kind})).into_response()
+}
+
+fn tally(map: &std::collections::HashMap<String, usize>) -> Vec<serde_json::Value> {
+    let mut v: Vec<(String, usize)> = map.iter().map(|(k, c)| (k.clone(), *c)).collect();
+    v.sort_by(|a, b| b.1.cmp(&a.1).then(a.0.cmp(&b.0)));
+    v.into_iter().map(|(k, c)| serde_json::json!({"key": k, "count": c})).collect()
+}
+
+/// GET /report/violations: an aggregated breach-and-violation report (policy denies + step-ups and
+/// firewall blocks reported by every PEP), for the console Reports view. Persisted, so it spans more
+/// than the live feed.
+async fn report_violations(State(st): State<Arc<AppState>>) -> Response {
+    let store = match &st.store { Some(s) => s, None => return Json(serde_json::json!({"total": 0, "by_verdict": [], "by_rule": [], "by_agent": [], "by_pep": [], "recent": []})).into_response() };
+    let rows = match store.list_violations(2000).await { Ok(r) => r, Err(e) => return Json(serde_json::json!({"error": e})).into_response() };
+    let mut by_verdict = std::collections::HashMap::new();
+    let mut by_rule = std::collections::HashMap::new();
+    let mut by_agent = std::collections::HashMap::new();
+    let mut by_pep = std::collections::HashMap::new();
+    for r in &rows {
+        *by_verdict.entry(if r.verdict.is_empty() { r.kind.clone() } else { r.verdict.clone() }).or_insert(0) += 1;
+        *by_rule.entry(if r.rule_id.is_empty() { "(none)".to_string() } else { r.rule_id.clone() }).or_insert(0) += 1;
+        *by_agent.entry(if r.agent.is_empty() { "(unknown)".to_string() } else { r.agent.clone() }).or_insert(0) += 1;
+        *by_pep.entry(if r.pep.is_empty() { "(unknown)".to_string() } else { r.pep.clone() }).or_insert(0) += 1;
+    }
+    let recent: Vec<serde_json::Value> = rows.iter().take(200).map(|r| serde_json::json!({
+        "ts_ms": r.ts_ms, "pep": r.pep, "agent": r.agent, "tool": r.tool, "verdict": r.verdict,
+        "rule_id": r.rule_id, "impact": r.impact, "outcome": r.outcome,
+    })).collect();
+    Json(serde_json::json!({
+        "generated_ms": now_ms(), "total": rows.len(),
+        "by_verdict": tally(&by_verdict), "by_rule": tally(&by_rule),
+        "by_agent": tally(&by_agent), "by_pep": tally(&by_pep), "recent": recent,
+    })).into_response()
+}
+
+/// GET /report/violations.csv: the violation records as a CSV download.
+async fn report_violations_csv(State(st): State<Arc<AppState>>) -> Response {
+    let store = match &st.store { Some(s) => s, None => return (StatusCode::OK, "no store\n").into_response() };
+    let rows = match store.list_violations(10000).await { Ok(r) => r, Err(e) => return (StatusCode::INTERNAL_SERVER_ERROR, e).into_response() };
+    let esc = |x: &str| format!("\"{}\"", x.replace('"', "\"\""));
+    let mut out = String::from("ts_ms,pep,agent,tool,verdict,rule_id,impact,outcome\n");
+    for r in &rows {
+        out.push_str(&format!("{},{},{},{},{},{},{},{}\n", r.ts_ms, esc(&r.pep), esc(&r.agent), esc(&r.tool), esc(&r.verdict), esc(&r.rule_id), esc(&r.impact), esc(&r.outcome)));
+    }
+    ([(axum::http::header::CONTENT_TYPE, "text/csv"), (axum::http::header::CONTENT_DISPOSITION, "attachment; filename=\"violations.csv\"")], out).into_response()
 }
 
 /// E1/E3: the most recent governance events reported by the PEPs, newest first, for the console

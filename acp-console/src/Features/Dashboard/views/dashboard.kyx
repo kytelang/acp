@@ -230,6 +230,39 @@ pub fn evidencePanel(rows: list.List<EvidenceRow>): Html {
     </div>;
 }
 
+fn tallyTable(title: string, rows: list.List<Tally>): Html {
+    return <div style="min-width:220px">
+        <div class="dim" style="font-weight:600;margin-bottom:.4rem">{title}</div>
+        {if (rows.size() == 0) {
+            <span class="dim">none</span>
+        } else {
+            <table class="tbl">
+                <tbody>
+                    {for (i in 0..rows.size()) {
+                        let t = rows.get(i) ?? Tally("", "0");
+                        <tr><td>{t.key}</td><td class="mono strong" style="text-align:right">{t.count}</td></tr>
+                    }}
+                </tbody>
+            </table>
+        }}
+    </div>;
+}
+
+pub fn violationReportPanel(rep: ViolReport): Html {
+    return <div id="violationreport">
+        <div class="row" style="align-items:center;gap:1rem;margin-bottom:1rem">
+            <div><span class="mono strong" style="font-size:1.6rem">{rep.total}</span> <span class="dim">total policy breaches and firewall violations recorded</span></div>
+            <a class="btn" href="/report/violations.csv">Download CSV</a>
+            <button class="btn" onclick="window.print()">Print</button>
+        </div>
+        <div class="row" style="gap:2rem;align-items:flex-start;flex-wrap:wrap">
+            {tallyTable("By verdict", rep.byVerdict)}
+            {tallyTable("Top rules", rep.byRule)}
+            {tallyTable("By enforcement point", rep.byPep)}
+        </div>
+    </div>;
+}
+
 pub fn firewallRulesPanel(rows: list.List<FwRuleRow>): Html {
     return <div id="firewallrules">
         {if (rows.size() == 0) {

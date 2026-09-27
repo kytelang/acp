@@ -46,6 +46,7 @@ fn buildApp(): App {
     app.post("/firewall/save", FirewallSaveHandler(acp));
     app.post("/firewall/rule-add", FirewallRuleAddHandler(acp));
     app.post("/firewall/rules/{id}/delete", FirewallRuleDeleteHandler(acp));
+    app.get("/report/violations.csv", ReportCsvHandler(acp));
 
     // Serve static assets (wwwroot/) for any unmatched GET.
     app.useStatic("/", "./wwwroot");

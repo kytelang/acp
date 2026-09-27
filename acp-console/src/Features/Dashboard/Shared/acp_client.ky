@@ -80,6 +80,22 @@ pub struct ApprovalRow {
     init(id: string, tool: string) { self.id = id; self.tool = tool; }
 }
 
+pub struct Tally {
+    pub key: string,
+    pub count: string,
+    init(key: string, count: string) { self.key = key; self.count = count; }
+}
+
+pub struct ViolReport {
+    pub total: string,
+    pub byVerdict: list.List<Tally>,
+    pub byRule: list.List<Tally>,
+    pub byPep: list.List<Tally>,
+    init(total: string, byVerdict: list.List<Tally>, byRule: list.List<Tally>, byPep: list.List<Tally>) {
+        self.total = total; self.byVerdict = byVerdict; self.byRule = byRule; self.byPep = byPep;
+    }
+}
+
 pub struct FwRuleRow {
     pub id: string,
     pub matchStr: string,
@@ -497,6 +513,38 @@ pub struct AcpClient {
         let resp = client.Http.request("POST", self.base + "/firewall/rules/" + id + "/delete", hdrs, "{}");
         if (resp.status.toCode() != 200) { return DeployResult(false, "acp-server unreachable"); }
         return DeployResult(true, "rule removed");
+    }
+
+    fn tallyList(self: AcpClient, v: json.JsonValue, name: string): list.List<Tally> {
+        let out = list.List<Tally>();
+        let vv = json.get(v, name);
+        let arr = json.asArray(vv);
+        if (arr == undefined) { return out; }
+        let i = 0;
+        while (i < arr.size()) {
+            let item = json.at(vv, i);
+            let c = json.asNumber(json.get(item, "count")) ?? 0;
+            out.push(Tally(json.asString(json.get(item, "key")) ?? "?", `${c}`));
+            i = i + 1;
+        }
+        return out;
+    }
+
+    // Aggregated breach-and-violation report (policy denies/step-ups + firewall blocks), for Reports.
+    pub fn violationReport(self: AcpClient): ViolReport {
+        let empty = ViolReport("0", list.List<Tally>(), list.List<Tally>(), list.List<Tally>());
+        let resp = client.Http.get(self.base + "/report/violations");
+        if (resp.status.toCode() != 200) { return empty; }
+        let v = json.parse(resp.body);
+        let total = json.asNumber(json.get(v, "total")) ?? 0;
+        return ViolReport(`${total}`, self.tallyList(v, "by_verdict"), self.tallyList(v, "by_rule"), self.tallyList(v, "by_pep"));
+    }
+
+    // Raw CSV of the violation records (forwarded by the console for a same-origin download).
+    pub fn violationCsv(self: AcpClient): string {
+        let resp = client.Http.get(self.base + "/report/violations.csv");
+        if (resp.status.toCode() != 200) { return "ts_ms,pep,agent,tool,verdict,rule_id,impact,outcome\n"; }
+        return resp.body;
     }
 
     // Rules of the currently deployed policy, with app/agent resolved to registered names. Shows

@@ -55,6 +55,20 @@ pub struct IngestedRecord {
 }
 
 #[derive(Debug, Clone, Serialize)]
+pub struct ViolationEvent {
+    pub id: String,
+    pub kind: String,
+    pub pep: String,
+    pub agent: String,
+    pub tool: String,
+    pub verdict: String,
+    pub rule_id: String,
+    pub impact: String,
+    pub outcome: String,
+    pub ts_ms: i64,
+}
+
+#[derive(Debug, Clone, Serialize)]
 pub struct FirewallRule {
     pub id: String,
     pub match_json: String,
@@ -136,6 +150,7 @@ impl ControlStore {
             "CREATE TABLE IF NOT EXISTS ingested_evidence (decision_id VARCHAR(255) PRIMARY KEY, pep TEXT NOT NULL, kind TEXT NOT NULL, verdict TEXT NOT NULL, record TEXT NOT NULL, operator TEXT NOT NULL, created_ms BIGINT NOT NULL, pubkey_hex TEXT NOT NULL, sig_hex TEXT NOT NULL)",
             "CREATE TABLE IF NOT EXISTS firewall_config (id INTEGER PRIMARY KEY, enabled INTEGER NOT NULL, block_secrets INTEGER NOT NULL, deny_topics TEXT NOT NULL, model TEXT NOT NULL, updated_ms BIGINT NOT NULL)",
             "CREATE TABLE IF NOT EXISTS firewall_rules (id VARCHAR(255) PRIMARY KEY, match_json TEXT NOT NULL, classify TEXT NOT NULL, action TEXT NOT NULL, created_ms BIGINT NOT NULL)",
+            "CREATE TABLE IF NOT EXISTS violation_events (id VARCHAR(255) PRIMARY KEY, kind TEXT NOT NULL, pep TEXT NOT NULL, agent TEXT NOT NULL, tool TEXT NOT NULL, verdict TEXT NOT NULL, rule_id TEXT NOT NULL, impact TEXT NOT NULL, outcome TEXT NOT NULL, ts_ms BIGINT NOT NULL)",
         ] {
             sqlx::query(ddl).execute(&self.pool).await.map_err(|e| e.to_string())?;
         }
@@ -324,6 +339,24 @@ impl ControlStore {
         Ok(())
     }
 
+    /// Persist a reported violation event (deny/step_up/block/ssrf-block/break-glass/tool-integrity)
+    /// so the console can produce a durable breach-and-violation report, not just a live feed.
+    #[allow(clippy::too_many_arguments)]
+    pub async fn add_violation_event(&self, id: &str, kind: &str, pep: &str, agent: &str, tool: &str, verdict: &str, rule_id: &str, impact: &str, outcome: &str, ts_ms: i64) -> Result<(), String> {
+        let sql = self.ph("INSERT OR IGNORE INTO violation_events(id,kind,pep,agent,tool,verdict,rule_id,impact,outcome,ts_ms) VALUES(?,?,?,?,?,?,?,?,?,?)");
+        sqlx::query(&sql).bind(id).bind(kind).bind(pep).bind(agent).bind(tool).bind(verdict).bind(rule_id).bind(impact).bind(outcome).bind(ts_ms)
+            .execute(&self.pool).await.map_err(|e| e.to_string())?;
+        Ok(())
+    }
+    /// Recent violations, newest first, up to `limit`, for the report.
+    pub async fn list_violations(&self, limit: i64) -> Result<Vec<ViolationEvent>, String> {
+        let sql = self.ph("SELECT id,kind,pep,agent,tool,verdict,rule_id,impact,outcome,ts_ms FROM violation_events ORDER BY ts_ms DESC LIMIT ?");
+        let rows = sqlx::query(&sql).bind(limit).fetch_all(&self.pool).await.map_err(|e| e.to_string())?;
+        Ok(rows.iter().map(|r| ViolationEvent {
+            id: r.get("id"), kind: r.get("kind"), pep: r.get("pep"), agent: r.get("agent"), tool: r.get("tool"),
+            verdict: r.get("verdict"), rule_id: r.get("rule_id"), impact: r.get("impact"), outcome: r.get("outcome"), ts_ms: r.get("ts_ms"),
+        }).collect())
+    }
     /// Operator-authored firewall (interception) rules, merged ahead of the enrolment-derived rules
     /// when the control plane serves GET /intercept/rules. First match wins, so these take precedence.
     pub async fn add_firewall_rule(&self, id: &str, match_json: &str, classify: &str, action: &str, created_ms: i64) -> Result<(), String> {

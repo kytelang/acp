@@ -82,3 +82,16 @@ pub struct FirewallRuleDeleteHandler impl RouteHandler {
         return await ds_response.patch(firewallRulesPanel(self.acp.firewallRules()));
     }
 }
+
+
+// GET /report/violations.csv: forward the server's CSV so the console can offer a same-origin download.
+pub struct ReportCsvHandler impl RouteHandler {
+    acp: AcpClient,
+    init(acp: AcpClient) { self.acp = acp; }
+    async fn serve(self: ReportCsvHandler, ctx: Context): Response {
+        let csv = self.acp.violationCsv();
+        return response.Response.ok(csv)
+            .setHeader("content-type", "text/csv")
+            .setHeader("content-disposition", "attachment; filename=\"violations.csv\"");
+    }
+}
