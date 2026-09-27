@@ -72,6 +72,8 @@ pub class MetricsSse impl SseHandler {
             if (w24 < 0) { alive = false; }
             let w25 = await ds.patchElementsSimple(lineagePanel(self.acp.lineageRows()));
             if (w25 < 0) { alive = false; }
+            let w26 = await ds.patchElementsSimple(tenantBadge(self.acp.tenant));
+            if (w26 < 0) { alive = false; }
             if (alive) { await aio.delay(2000); }
         }
     }

@@ -168,6 +168,7 @@
     <div class="main">
       <div class="content" data-on-intersect="@get('/sse/metrics')">
         <h1 class="page-title" data-text="$view === 'overview' ? 'Governance overview' : $view === 'approvals' ? 'Pending approvals' : $view === 'evidence' ? 'Evidence timeline' : $view === 'violations' ? 'Violations and breaches' : $view === 'apps' ? 'Teams' : $view === 'agents' ? 'Registered agents' : $view === 'models' ? 'Model registry' : $view === 'policy' ? 'Policy' : $view === 'firewall' ? 'Content firewall' : $view === 'reports' ? 'Governance report' : $view === 'health' ? 'Control-plane integrity' : $view === 'monitors' ? 'Runtime monitors' : $view === 'endpoints' ? 'AI endpoints' : $view === 'grc' ? 'Governance records' : 'Emergency kill-switch'">Governance overview</h1>
+        <div id="tenant" style="margin:-1rem 0 1rem;font-size:.8rem;opacity:.7"></div>
         <section class="view" data-show="$view === 'overview'">
           <div class="card"><div class="card-h"><span class="ic">&#128202;</span> Posture &amp; activity</div>
             <div class="card-b"><div id="metrics" class="stats"><p class="empty">connecting to acp-server&#8230;</p></div></div></div>

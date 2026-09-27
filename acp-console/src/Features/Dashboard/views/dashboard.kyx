@@ -799,3 +799,8 @@ pub fn lineagePanel(rows: list.List<LineageRow>): Html {
         }}
     </div>;
 }
+
+// M1: show the console's active tenant (per-instance, from ACP_TENANT).
+pub fn tenantBadge(tenant: string): Html {
+    return <div id="tenant">tenant: <span class="badge ver">{tenant}</span></div>;
+}

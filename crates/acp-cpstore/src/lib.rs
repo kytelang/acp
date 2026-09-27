@@ -200,7 +200,7 @@ impl ControlStore {
             "CREATE TABLE IF NOT EXISTS grc_records (id VARCHAR(255) PRIMARY KEY, kind TEXT NOT NULL, subject TEXT NOT NULL, title TEXT NOT NULL, status TEXT NOT NULL, body TEXT NOT NULL, operator TEXT NOT NULL, created_ms BIGINT NOT NULL, pubkey_hex TEXT NOT NULL, sig_hex TEXT NOT NULL, linked_refs TEXT NOT NULL DEFAULT '[]', answers_json TEXT NOT NULL DEFAULT '{}', assignee TEXT NOT NULL DEFAULT '', due_ms BIGINT NOT NULL DEFAULT 0, stage TEXT NOT NULL DEFAULT '', tenant_id VARCHAR(255) NOT NULL DEFAULT 'default')",
             "CREATE TABLE IF NOT EXISTS grc_comments (id VARCHAR(255) PRIMARY KEY, grc_id TEXT NOT NULL, author TEXT NOT NULL, body TEXT NOT NULL, created_ms BIGINT NOT NULL)",
             "CREATE TABLE IF NOT EXISTS ingested_evidence (decision_id VARCHAR(255) PRIMARY KEY, pep TEXT NOT NULL, kind TEXT NOT NULL, verdict TEXT NOT NULL, record TEXT NOT NULL, operator TEXT NOT NULL, created_ms BIGINT NOT NULL, pubkey_hex TEXT NOT NULL, sig_hex TEXT NOT NULL)",
-            "CREATE TABLE IF NOT EXISTS firewall_config (id INTEGER PRIMARY KEY, enabled INTEGER NOT NULL, block_secrets INTEGER NOT NULL, deny_topics TEXT NOT NULL, model TEXT NOT NULL, scan_url TEXT NOT NULL DEFAULT '', block_on_scanner_error INTEGER NOT NULL DEFAULT 0, feed_version BIGINT NOT NULL DEFAULT 0, threat_signatures TEXT NOT NULL DEFAULT '[]', block_toxicity INTEGER NOT NULL DEFAULT 0, updated_ms BIGINT NOT NULL)",
+            "CREATE TABLE IF NOT EXISTS firewall_config (tenant_id VARCHAR(255) PRIMARY KEY, enabled INTEGER NOT NULL, block_secrets INTEGER NOT NULL, deny_topics TEXT NOT NULL, model TEXT NOT NULL, scan_url TEXT NOT NULL DEFAULT '', block_on_scanner_error INTEGER NOT NULL DEFAULT 0, feed_version BIGINT NOT NULL DEFAULT 0, threat_signatures TEXT NOT NULL DEFAULT '[]', block_toxicity INTEGER NOT NULL DEFAULT 0, updated_ms BIGINT NOT NULL)",
             "CREATE TABLE IF NOT EXISTS firewall_rules (id VARCHAR(255) PRIMARY KEY, match_json TEXT NOT NULL, classify TEXT NOT NULL, action TEXT NOT NULL, created_ms BIGINT NOT NULL)",
             "CREATE TABLE IF NOT EXISTS violation_events (id VARCHAR(255) PRIMARY KEY, kind TEXT NOT NULL, pep TEXT NOT NULL, agent TEXT NOT NULL, tool TEXT NOT NULL, verdict TEXT NOT NULL, rule_id TEXT NOT NULL, impact TEXT NOT NULL, outcome TEXT NOT NULL, ts_ms BIGINT NOT NULL)",
             "CREATE TABLE IF NOT EXISTS control_leader (id INTEGER PRIMARY KEY, holder TEXT NOT NULL, token BIGINT NOT NULL, expires_ms BIGINT NOT NULL)",
@@ -262,6 +262,13 @@ impl ControlStore {
                 created_ms: r.get("created_ms"),
             })
             .collect())
+    }
+
+    /// M1: distinct tenants that have data (union across records/apps), for the console switcher.
+    pub async fn list_tenants(&self) -> Result<Vec<String>, String> {
+        let rows = sqlx::query("SELECT tenant_id FROM grc_records UNION SELECT tenant_id FROM apps UNION SELECT tenant_id FROM models UNION SELECT tenant_id FROM vendors ORDER BY tenant_id")
+            .fetch_all(&self.pool).await.map_err(|e| e.to_string())?;
+        Ok(rows.iter().map(|r| r.get::<String,_>("tenant_id")).collect())
     }
 
     // ---- A3: model registry ----
@@ -449,15 +456,17 @@ impl ControlStore {
     /// ML model content itself, so a workstation PEP fetches everything from the control plane instead
     /// of carrying a local model file. Idempotent replace of the singleton.
     #[allow(clippy::too_many_arguments)]
-    pub async fn set_firewall_config(&self, enabled: bool, block_secrets: bool, deny_topics_json: &str, model: &str, scan_url: &str, block_on_scanner_error: bool, block_toxicity: bool, updated_ms: i64) -> Result<(), String> {
-        // Preserve threat-feed fields across a config save (they are set by a separate path).
-        let (fv, ts): (i64, String) = match self.get_firewall_config().await? {
+    #[allow(clippy::too_many_arguments)]
+    pub async fn set_firewall_config(&self, tenant: &str, enabled: bool, block_secrets: bool, deny_topics_json: &str, model: &str, scan_url: &str, block_on_scanner_error: bool, block_toxicity: bool, updated_ms: i64) -> Result<(), String> {
+        // Preserve threat-feed fields across a config save (set by a separate path), per tenant.
+        let (fv, ts): (i64, String) = match self.get_firewall_config(tenant).await? {
             Some(c) => (c.feed_version, c.threat_signatures),
             None => (0, "[]".to_string()),
         };
-        sqlx::query("DELETE FROM firewall_config").execute(&self.pool).await.map_err(|e| e.to_string())?;
-        let sql = self.ph("INSERT INTO firewall_config(id,enabled,block_secrets,deny_topics,model,scan_url,block_on_scanner_error,feed_version,threat_signatures,block_toxicity,updated_ms) VALUES(1,?,?,?,?,?,?,?,?,?,?)");
-        sqlx::query(&sql)
+        let del = self.ph("DELETE FROM firewall_config WHERE tenant_id = ?");
+        sqlx::query(&del).bind(tenant).execute(&self.pool).await.map_err(|e| e.to_string())?;
+        let sql = self.ph("INSERT INTO firewall_config(tenant_id,enabled,block_secrets,deny_topics,model,scan_url,block_on_scanner_error,feed_version,threat_signatures,block_toxicity,updated_ms) VALUES(?,?,?,?,?,?,?,?,?,?,?)");
+        sqlx::query(&sql).bind(tenant)
             .bind(if enabled {1i64} else {0}).bind(if block_secrets {1i64} else {0})
             .bind(deny_topics_json).bind(model).bind(scan_url).bind(if block_on_scanner_error {1i64} else {0})
             .bind(fv).bind(ts).bind(if block_toxicity {1i64} else {0}).bind(updated_ms)
@@ -467,14 +476,14 @@ impl ControlStore {
 
     /// B5: store a loaded threat pack's signatures + feed version onto the firewall_config singleton,
     /// creating the row if the operator has not saved a config yet. Leaves the other fields intact.
-    pub async fn set_firewall_threat(&self, feed_version: i64, signatures_json: &str, updated_ms: i64) -> Result<(), String> {
-        let exists = sqlx::query("SELECT 1 FROM firewall_config WHERE id = 1").fetch_optional(&self.pool).await.map_err(|e| e.to_string())?;
+    pub async fn set_firewall_threat(&self, tenant: &str, feed_version: i64, signatures_json: &str, updated_ms: i64) -> Result<(), String> {
+        let exists = sqlx::query(&self.ph("SELECT 1 FROM firewall_config WHERE tenant_id = ?")).bind(tenant).fetch_optional(&self.pool).await.map_err(|e| e.to_string())?;
         if exists.is_some() {
-            let sql = self.ph("UPDATE firewall_config SET feed_version = ?, threat_signatures = ?, updated_ms = ? WHERE id = 1");
-            sqlx::query(&sql).bind(feed_version).bind(signatures_json).bind(updated_ms).execute(&self.pool).await.map_err(|e| e.to_string())?;
+            let sql = self.ph("UPDATE firewall_config SET feed_version = ?, threat_signatures = ?, updated_ms = ? WHERE tenant_id = ?");
+            sqlx::query(&sql).bind(feed_version).bind(signatures_json).bind(updated_ms).bind(tenant).execute(&self.pool).await.map_err(|e| e.to_string())?;
         } else {
-            let sql = self.ph("INSERT INTO firewall_config(id,enabled,block_secrets,deny_topics,model,scan_url,block_on_scanner_error,feed_version,threat_signatures,updated_ms) VALUES(1,0,0,'[]','','',0,?,?,?)");
-            sqlx::query(&sql).bind(feed_version).bind(signatures_json).bind(updated_ms).execute(&self.pool).await.map_err(|e| e.to_string())?;
+            let sql = self.ph("INSERT INTO firewall_config(tenant_id,enabled,block_secrets,deny_topics,model,scan_url,block_on_scanner_error,feed_version,threat_signatures,updated_ms) VALUES(?,0,0,'[]','','',0,?,?,?)");
+            sqlx::query(&sql).bind(tenant).bind(feed_version).bind(signatures_json).bind(updated_ms).execute(&self.pool).await.map_err(|e| e.to_string())?;
         }
         Ok(())
     }
@@ -519,9 +528,9 @@ impl ControlStore {
         Ok(())
     }
 
-    pub async fn get_firewall_config(&self) -> Result<Option<FirewallConfig>, String> {
-        let row = sqlx::query("SELECT enabled, block_secrets, deny_topics, model, scan_url, block_on_scanner_error, feed_version, threat_signatures, block_toxicity, updated_ms FROM firewall_config WHERE id = 1")
-            .fetch_optional(&self.pool).await.map_err(|e| e.to_string())?;
+    pub async fn get_firewall_config(&self, tenant: &str) -> Result<Option<FirewallConfig>, String> {
+        let row = sqlx::query(&self.ph("SELECT enabled, block_secrets, deny_topics, model, scan_url, block_on_scanner_error, feed_version, threat_signatures, block_toxicity, updated_ms FROM firewall_config WHERE tenant_id = ?"))
+            .bind(tenant).fetch_optional(&self.pool).await.map_err(|e| e.to_string())?;
         Ok(row.map(|r| FirewallConfig {
             enabled: r.get::<i64,_>("enabled") != 0,
             block_secrets: r.get::<i64,_>("block_secrets") != 0,

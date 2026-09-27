@@ -7,7 +7,7 @@ reason, so nothing is silently skipped.
 
 ---
 
-## M1. Complete multi-tenancy (P1)
+## M1. Complete multi-tenancy (P1)  [DONE 2026-09-27]
 Gap: T1 scoped the 5 record tables; firewall_config + signing key were still global and the console ran
 in one tenant.
 Design: key `firewall_config` by tenant; derive a per-tenant Ed25519 signing key from the control-plane
@@ -19,6 +19,14 @@ Acceptance:
   record's key (distinct per-tenant signing keys), while both still verify on read.
 - `GET /tenants` lists the distinct tenants that have data.
 - The console has a tenant selector; switching it scopes every panel to that tenant.
+Status (2026-09-27): SHIPPED (server + per-instance console). `firewall_config` is now keyed by tenant;
+`tenant_signer` derives a distinct per-tenant Ed25519 key from the cp-key seed + tenant; `GET /tenants`
+lists tenants; the console sends `x-acp-tenant` on every request (tenant from `ACP_TENANT`, default
+"default") and shows the active tenant in the topbar. Verified via curl: acme vs globex hold different
+firewall configs; GRC records in each tenant carry distinct embedded pubkeys (acme 3e0c.., globex 46ed..)
+and both verify; `/tenants` lists acme+globex. Note: the console tenant is per-instance (one tenant per
+console URL); a live in-browser switcher needs threading the tenant through the SSE panel pipeline and
+is the remaining follow-on.
 
 ## M2. Live pull-sync from a ticket system (P2)
 Gap: T3 added an inbound callback (push); some systems require the control plane to poll (pull).

@@ -29,7 +29,8 @@ fn buildApp(): App {
     // the live metrics fragment into #metrics. No trust lives in the UI.
     let cpUrl = env.get("ACP_CONTROL_PLANE_URL");
     let base = string.eql(cpUrl, "") ? "http://127.0.0.1:8787" : cpUrl;
-    let acp = AcpClient(base);
+    let tenant = env.get("ACP_TENANT");
+    let acp = AcpClient(base, tenant);
     app.sse("/sse/metrics", MetricsSse(acp));
     let srv = base;
     app.post("/approve/{id}", ResolveHandler(acp, srv, true));

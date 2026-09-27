@@ -283,6 +283,15 @@ async fn vendors_list(State(st): State<Arc<AppState>>, headers: HeaderMap) -> Re
     }
 }
 
+/// M1: list the tenants that have data, for the console tenant switcher.
+async fn tenants_list(State(st): State<Arc<AppState>>) -> Response {
+    let store = match &st.store { Some(s) => s, None => return Json(serde_json::json!({"tenants": ["default"]})).into_response() };
+    match store.list_tenants().await {
+        Ok(mut ts) => { if ts.is_empty() { ts.push("default".to_string()); } Json(serde_json::json!({"tenants": ts})).into_response() }
+        Err(e) => Json(serde_json::json!({"tenants": ["default"], "error": e})).into_response(),
+    }
+}
+
 /// C1: report this replica's HA leadership view (is it the leader, who holds the lease, the fencing
 /// token). The console and ops can see which node is active without guessing.
 async fn leader_status(State(st): State<Arc<AppState>>) -> impl IntoResponse {
@@ -725,7 +734,7 @@ async fn main() {
                             if acp_core::threatfeed::verify(&signed) {
                                 let version = signed.pack.get("version").and_then(|x| x.as_i64()).unwrap_or(0);
                                 let sigs = signed.pack.get("signatures").cloned().unwrap_or_else(|| serde_json::json!([])).to_string();
-                                let _ = store.set_firewall_threat(version, &sigs, now_ms() as i64).await;
+                                let _ = store.set_firewall_threat("default", version, &sigs, now_ms() as i64).await;
                             } else {
                                 tracing::warn!("threat feed: rejected a pack (signature verification failed)");
                             }
@@ -809,6 +818,7 @@ async fn main() {
         .route("/models/:id", get(model_get))
         .route("/vendors", get(vendors_list).post(vendor_register))
         .route("/leader", get(leader_status))
+        .route("/tenants", get(tenants_list))
         .route("/scim/v2/Users", get(scim_users))
         .route("/scim/v2/Groups", get(scim_groups))
         .route("/auth/dev-token", get(dev_token))
@@ -1177,6 +1187,18 @@ async fn policy_store_current(State(st): State<Arc<AppState>>) -> impl IntoRespo
 /// the store so the signed manifest stays verifiable across restarts. The proxy trusts the pubkey
 /// embedded in current.json (tamper-evidence of the file against the signed hash).
 /// Sign endpoint dispositions with a key kept next to the enrollment log (created 0600 if absent).
+/// M1: derive a deterministic per-tenant Ed25519 signer from the control-plane key seed + tenant id,
+/// so each tenant's records are signed with a distinct key (still verifiable via the embedded pubkey).
+fn tenant_signer(path: &str, tenant: &str) -> acp_core::sign::Ed25519Signer {
+    if tenant == "default" { return enroll_signer(path); }
+    let base = enroll_signer(path).seed();
+    let mut seed = [0u8; 32];
+    let derived = acp_core::canonical::sha256_hex_bytes(&[&base[..], b":", tenant.as_bytes()].concat());
+    let bytes = hex::decode(&derived).unwrap_or_default();
+    seed.copy_from_slice(&bytes[..32]);
+    acp_core::sign::Ed25519Signer::from_seed(&seed)
+}
+
 fn enroll_signer(path: &str) -> acp_core::sign::Ed25519Signer {
     let key_path = format!("{path}.key");
     match std::fs::read(&key_path) {
@@ -1296,7 +1318,8 @@ async fn threat_pack_load(State(st): State<Arc<AppState>>, headers: HeaderMap, J
     let version = signed.pack.get("version").and_then(|v| v.as_i64()).unwrap_or(0);
     let sigs = signed.pack.get("signatures").cloned().unwrap_or_else(|| serde_json::json!([]));
     let sigs_json = sigs.to_string();
-    match store.set_firewall_threat(version, &sigs_json, now_ms() as i64).await {
+    let tenant = tenant_of(&headers, &None);
+    match store.set_firewall_threat(&tenant, version, &sigs_json, now_ms() as i64).await {
         Ok(()) => Json(serde_json::json!({"ok": true, "feed_version": version, "signatures": sigs.as_array().map(|a| a.len()).unwrap_or(0)})).into_response(),
         Err(e) => Json(serde_json::json!({"ok": false, "error": e})).into_response(),
     }
@@ -1306,10 +1329,11 @@ async fn threat_pack_load(State(st): State<Arc<AppState>>, headers: HeaderMap, J
 /// ML model content), so a workstation PEP fetches everything from the control plane instead of
 /// carrying local files. Ungated (same trust as the governed rule set). Returns a safe default when
 /// no config has been set yet.
-async fn firewall_config_get(State(st): State<Arc<AppState>>) -> Response {
+async fn firewall_config_get(State(st): State<Arc<AppState>>, headers: HeaderMap) -> Response {
+    let tenant = tenant_of(&headers, &None);
     let default = serde_json::json!({"enabled": false, "block_secrets": false, "deny_topics": [], "model": "", "scan_url": "", "block_on_scanner_error": false, "block_toxicity": false, "updated_ms": 0});
     let store = match &st.store { Some(s) => s, None => return Json(default).into_response() };
-    match store.get_firewall_config().await {
+    match store.get_firewall_config(&tenant).await {
         Ok(Some(c)) => {
             let mut topics: Vec<serde_json::Value> = serde_json::from_str::<Vec<serde_json::Value>>(&c.deny_topics).unwrap_or_default();
             let threat: Vec<serde_json::Value> = serde_json::from_str::<Vec<serde_json::Value>>(&c.threat_signatures).unwrap_or_default();
@@ -1343,7 +1367,8 @@ async fn firewall_config_set(State(st): State<Arc<AppState>>, headers: HeaderMap
     let scan_url = body.get("scan_url").and_then(|v| v.as_str()).unwrap_or("").trim().to_string();
     let block_on_scanner_error = body.get("block_on_scanner_error").and_then(|v| v.as_bool()).unwrap_or(false);
     let block_toxicity = body.get("block_toxicity").and_then(|v| v.as_bool()).unwrap_or(false);
-    match store.set_firewall_config(enabled, block_secrets, &deny_topics_json, &model, &scan_url, block_on_scanner_error, block_toxicity, now_ms() as i64).await {
+    let tenant = tenant_of(&headers, &None);
+    match store.set_firewall_config(&tenant, enabled, block_secrets, &deny_topics_json, &model, &scan_url, block_on_scanner_error, block_toxicity, now_ms() as i64).await {
         Ok(()) => Json(serde_json::json!({"ok": true})).into_response(),
         Err(e) => Json(serde_json::json!({"ok": false, "error": e})).into_response(),
     }
@@ -1683,12 +1708,12 @@ async fn grc_create(State(st): State<Arc<AppState>>, headers: HeaderMap, Json(bo
     };
     let id = format!("grc-{}", rand_hex(6));
     let now = now_ms();
+    let tenant = tenant_of(&headers, &principal);
     let doc = grc_doc(&id, &kind, &subject, &title, &status, &doc_body);
-    let signer = enroll_signer(&st.cp_key);
+    let signer = tenant_signer(&st.cp_key, &tenant);
     let sig = acp_core::sign::Signer::sign(&signer, &acp_core::canonical::canonical_bytes(&doc));
     let pubkey_hex = hex::encode(acp_core::sign::Signer::public_key(&signer));
     let sig_hex = hex::encode(sig);
-    let tenant = tenant_of(&headers, &principal);
     match store.add_grc(&id, &kind, &subject, &title, &status, &doc_body, &operator, now as i64, &pubkey_hex, &sig_hex, &linked_refs, "{}", "", 0, &status, &tenant).await {
         Ok(()) => {
             fire_webhook(&st, "grc.created", serde_json::json!({"id": id, "kind": kind, "subject": subject, "title": title}));
@@ -1714,7 +1739,7 @@ async fn grc_status(State(st): State<Arc<AppState>>, headers: HeaderMap, Path(id
         Err(e) => return Json(serde_json::json!({"ok": false, "error": e})).into_response(),
     };
     let doc = grc_doc(&rec.id, &rec.kind, &rec.subject, &rec.title, &status, &rec.body);
-    let signer = enroll_signer(&st.cp_key);
+    let signer = tenant_signer(&st.cp_key, &tenant);
     let sig = acp_core::sign::Signer::sign(&signer, &acp_core::canonical::canonical_bytes(&doc));
     let pubkey_hex = hex::encode(acp_core::sign::Signer::public_key(&signer));
     let sig_hex = hex::encode(sig);
@@ -1736,7 +1761,8 @@ async fn redteam_run(State(st): State<Arc<AppState>>, headers: HeaderMap, Json(b
     let store = match &st.store { Some(s) => s, None => return Json(serde_json::json!({"ok": false, "error": "no --store configured"})).into_response() };
     let min_catch = body.get("min_catch").and_then(|v| v.as_f64()).unwrap_or(0.9) as f32;
     // Build the content policy from the current firewall config (+ threat signatures + ML).
-    let cfg = store.get_firewall_config().await.ok().flatten();
+    let tenant = tenant_of(&headers, &principal);
+    let cfg = store.get_firewall_config(&tenant).await.ok().flatten();
     let (policy, ml) = match &cfg {
         Some(c) => {
             let mut topics: Vec<String> = serde_json::from_str(&c.deny_topics).unwrap_or_default();
@@ -1763,12 +1789,12 @@ async fn redteam_run(State(st): State<Arc<AppState>>, headers: HeaderMap, Json(b
     }).to_string();
     let id = format!("grc-{}", rand_hex(6));
     let now = now_ms();
+    let tenant = tenant_of(&headers, &principal);
     let doc = grc_doc(&id, "attestation", "content-firewall", "Red-team run", status, &doc_body);
-    let signer = enroll_signer(&st.cp_key);
+    let signer = tenant_signer(&st.cp_key, &tenant);
     let sig = acp_core::sign::Signer::sign(&signer, &acp_core::canonical::canonical_bytes(&doc));
     let pubkey_hex = hex::encode(acp_core::sign::Signer::public_key(&signer));
     let sig_hex = hex::encode(sig);
-    let tenant = tenant_of(&headers, &principal);
     match store.add_grc(&id, "attestation", "content-firewall", "Red-team run", status, &doc_body, &operator, now as i64, &pubkey_hex, &sig_hex, "[]", "{}", "", 0, status, &tenant).await {
         Ok(()) => Json(serde_json::json!({"ok": true, "id": id, "status": status, "catch_rate": report.catch_rate, "attacks": report.attacks, "caught": report.caught, "fpr": report.fpr, "passed": passed})).into_response(),
         Err(e) => Json(serde_json::json!({"ok": false, "error": e})).into_response(),
@@ -1846,12 +1872,12 @@ async fn grc_model_card(State(st): State<Arc<AppState>>, headers: HeaderMap, Jso
     let id = format!("grc-{}", rand_hex(6));
     let status = "open".to_string();
     let now = now_ms();
+    let tenant = tenant_of(&headers, &principal);
     let doc = grc_doc(&id, "model-card", &subject, &title, &status, &doc_body);
-    let signer = enroll_signer(&st.cp_key);
+    let signer = tenant_signer(&st.cp_key, &tenant);
     let sig = acp_core::sign::Signer::sign(&signer, &acp_core::canonical::canonical_bytes(&doc));
     let pubkey_hex = hex::encode(acp_core::sign::Signer::public_key(&signer));
     let sig_hex = hex::encode(sig);
-    let tenant = tenant_of(&headers, &principal);
     match store.add_grc(&id, "model-card", &subject, &title, &status, &doc_body, &operator, now as i64, &pubkey_hex, &sig_hex, "[]", "{}", "", 0, &status, &tenant).await {
         Ok(()) => Json(serde_json::json!({"ok": true, "id": id})).into_response(),
         Err(e) => Json(serde_json::json!({"ok": false, "error": e})).into_response(),
@@ -1891,12 +1917,12 @@ async fn grc_risk(State(st): State<Arc<AppState>>, headers: HeaderMap, Json(body
     }).to_string();
     let status = "open".to_string();
     let now = now_ms();
+    let tenant = tenant_of(&headers, &principal);
     let doc = grc_doc(&id, "risk", &subject, &title, &status, &doc_body);
-    let signer = enroll_signer(&st.cp_key);
+    let signer = tenant_signer(&st.cp_key, &tenant);
     let sig = acp_core::sign::Signer::sign(&signer, &acp_core::canonical::canonical_bytes(&doc));
     let pubkey_hex = hex::encode(acp_core::sign::Signer::public_key(&signer));
     let sig_hex = hex::encode(sig);
-    let tenant = tenant_of(&headers, &principal);
     match store.add_grc(&id, "risk", &subject, &title, &status, &doc_body, &operator, now as i64, &pubkey_hex, &sig_hex, "[]", "{}", "", 0, &status, &tenant).await {
         Ok(()) => Json(serde_json::json!({"ok": true, "id": id, "score": score, "band": band})).into_response(),
         Err(e) => Json(serde_json::json!({"ok": false, "error": e})).into_response(),
@@ -1943,12 +1969,12 @@ async fn grc_assess(State(st): State<Arc<AppState>>, headers: HeaderMap, Json(bo
     let status = "open".to_string();
     let stage = "draft".to_string();
     let id = format!("grc-{}", rand_hex(6));
+    let tenant = tenant_of(&headers, &principal);
     let doc = grc_doc(&id, "assessment", &subject, &title, &status, &doc_body);
-    let signer = enroll_signer(&st.cp_key);
+    let signer = tenant_signer(&st.cp_key, &tenant);
     let sig = acp_core::sign::Signer::sign(&signer, &acp_core::canonical::canonical_bytes(&doc));
     let pubkey_hex = hex::encode(acp_core::sign::Signer::public_key(&signer));
     let sig_hex = hex::encode(sig);
-    let tenant = tenant_of(&headers, &principal);
     match store.add_grc(&id, "assessment", &subject, &title, &status, &doc_body, &operator, now as i64, &pubkey_hex, &sig_hex, "[]", &answers_json, &assignee, due_ms, &stage, &tenant).await {
         Ok(()) => Json(serde_json::json!({"ok": true, "id": id, "tier": assessment.tier.as_str(), "controls": assessment.obligations.len()})).into_response(),
         Err(e) => Json(serde_json::json!({"ok": false, "error": e})).into_response(),
@@ -2061,7 +2087,7 @@ async fn grc_control_toggle(State(st): State<Arc<AppState>>, headers: HeaderMap,
     if !found { return Json(serde_json::json!({"ok": false, "error": format!("control '{control_id}' not in checklist")})).into_response(); }
     let new_body = doc_body.to_string();
     let doc = grc_doc(&rec.id, &rec.kind, &rec.subject, &rec.title, &rec.status, &new_body);
-    let signer = enroll_signer(&st.cp_key);
+    let signer = tenant_signer(&st.cp_key, &tenant);
     let sig = acp_core::sign::Signer::sign(&signer, &acp_core::canonical::canonical_bytes(&doc));
     let pubkey_hex = hex::encode(acp_core::sign::Signer::public_key(&signer));
     let sig_hex = hex::encode(sig);
@@ -2114,7 +2140,7 @@ async fn grc_usecase_transition(State(st): State<Arc<AppState>>, headers: Header
             // Persist the new stage (as both stage and status) and re-sign the record.
             let new_stage = stage.to_ascii_lowercase();
             let doc = grc_doc(&rec.id, &rec.kind, &rec.subject, &rec.title, &new_stage, &rec.body);
-            let signer = enroll_signer(&st.cp_key);
+            let signer = tenant_signer(&st.cp_key, &tenant);
             let sig = acp_core::sign::Signer::sign(&signer, &acp_core::canonical::canonical_bytes(&doc));
             let pubkey_hex = hex::encode(acp_core::sign::Signer::public_key(&signer));
             let sig_hex = hex::encode(sig);
@@ -2461,7 +2487,7 @@ async fn ticket_callback(State(st): State<Arc<AppState>>, headers: HeaderMap, ra
                 _ => return Json(serde_json::json!({"ok": false, "error": "no such record"})).into_response(),
             };
             let doc = grc_doc(&rec.id, &rec.kind, &rec.subject, &rec.title, &status, &rec.body);
-            let signer = enroll_signer(&st.cp_key);
+            let signer = tenant_signer(&st.cp_key, &tenant);
             let sig = acp_core::sign::Signer::sign(&signer, &acp_core::canonical::canonical_bytes(&doc));
             let pubkey_hex = hex::encode(acp_core::sign::Signer::public_key(&signer));
             let sig_hex = hex::encode(sig);

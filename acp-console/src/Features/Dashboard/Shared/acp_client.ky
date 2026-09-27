@@ -346,11 +346,19 @@ pub struct LineageRow {
 
 pub struct AcpClient {
     base: string,
-    init(base: string) { self.base = base; }
+    pub tenant: string,
+    init(base: string, tenant: string) { self.base = base; self.tenant = string.eql(tenant, "") ? "default" : tenant; }
+
+    // M1: a GET that carries the tenant header, so every read is scoped to this console's tenant.
+    fn tget(self: AcpClient, url: string): response.Response {
+        let hdrs = client.Http.emptyHeaders();
+        hdrs.set("x-acp-tenant", self.tenant);
+        return client.Http.request("GET", url, hdrs, "");
+    }
 
     pub fn report(self: AcpClient): AcpReport {
         let r = AcpReport();
-        let resp = client.Http.get(self.base + "/report");
+        let resp = self.tget(self.base + "/report");
         if (resp.status.toCode() != 200) { return r; }
         let v = json.parse(resp.body);
         r.reachable = true;
@@ -369,13 +377,13 @@ pub struct AcpClient {
     // Registered apps as rows for the table.
     pub fn appsRows(self: AcpClient): list.List<AppRow> {
         let rows = list.List<AppRow>();
-        let resp = client.Http.get(self.base + "/apps");
+        let resp = self.tget(self.base + "/apps");
         if (resp.status.toCode() != 200) { return rows; }
         let av = json.get(json.parse(resp.body), "apps");
         let arr = json.asArray(av);
         if (arr == undefined) { return rows; }
         // An app owns agents; fetch them once so each app row can show its agent count.
-        let agResp = client.Http.get(self.base + "/agents");
+        let agResp = self.tget(self.base + "/agents");
         let agVal = (agResp.status.toCode() == 200) ? json.get(json.parse(agResp.body), "agents") : undefined;
         let agArr = json.asArray(agVal);
         let i = 0;
@@ -403,13 +411,13 @@ pub struct AcpClient {
     // Registered agents as rows for the table.
     pub fn agentsRows(self: AcpClient): list.List<AgentRow> {
         let rows = list.List<AgentRow>();
-        let resp = client.Http.get(self.base + "/agents");
+        let resp = self.tget(self.base + "/agents");
         if (resp.status.toCode() != 200) { return rows; }
         let av = json.get(json.parse(resp.body), "agents");
         let arr = json.asArray(av);
         if (arr == undefined) { return rows; }
         // Resolve each agent's parent app id to the app name, so the hierarchy reads app -> agent.
-        let apResp = client.Http.get(self.base + "/apps");
+        let apResp = self.tget(self.base + "/apps");
         let apVal = (apResp.status.toCode() == 200) ? json.get(json.parse(apResp.body), "apps") : undefined;
         let apArr = json.asArray(apVal);
         let i = 0;
@@ -442,7 +450,7 @@ pub struct AcpClient {
     // A3: registered models (with B3 scan status).
     pub fn modelRows(self: AcpClient): list.List<ModelRow> {
         let rows = list.List<ModelRow>();
-        let resp = client.Http.get(self.base + "/models");
+        let resp = self.tget(self.base + "/models");
         if (resp.status.toCode() != 200) { return rows; }
         let mv = json.get(json.parse(resp.body), "models");
         let arr = json.asArray(mv);
@@ -464,7 +472,7 @@ pub struct AcpClient {
     pub fn registerModel(self: AcpClient, name: string, provider: string, version: string, userAuth: string): DeployResult {
         let body = "{\"name\":" + self.jstr(name) + ",\"provider\":" + self.jstr(provider) + ",\"version\":" + self.jstr(version) + "}";
         let hdrs = client.Http.emptyHeaders();
-        hdrs.set("Content-Type", "application/json");
+        hdrs.set("Content-Type", "application/json"); hdrs.set("x-acp-tenant", self.tenant);
         if (!string.eql(userAuth, "")) { hdrs.set("Authorization", userAuth); }
         else { let tok = self.authToken("AppRegistrar"); if (!string.eql(tok, "")) { hdrs.set("Authorization", "Bearer " + tok); } }
         let resp = client.Http.request("POST", self.base + "/models", hdrs, body);
@@ -475,7 +483,7 @@ pub struct AcpClient {
     }
     pub fn vendorRows(self: AcpClient): list.List<VendorRow> {
         let rows = list.List<VendorRow>();
-        let resp = client.Http.get(self.base + "/vendors");
+        let resp = self.tget(self.base + "/vendors");
         if (resp.status.toCode() != 200) { return rows; }
         let vv = json.get(json.parse(resp.body), "vendors");
         let arr = json.asArray(vv);
@@ -510,7 +518,7 @@ pub struct AcpClient {
         certs = certs + "]";
         let body = "{\"name\":" + self.jstr(name) + ",\"questionnaire\":{\"data_residency\":" + self.jstr(residency) + ",\"sub_processors\":" + subs + ",\"certifications\":" + certs + ",\"incidents\":" + inc + "}}";
         let hdrs = client.Http.emptyHeaders();
-        hdrs.set("Content-Type", "application/json");
+        hdrs.set("Content-Type", "application/json"); hdrs.set("x-acp-tenant", self.tenant);
         if (!string.eql(userAuth, "")) { hdrs.set("Authorization", userAuth); }
         else { let tok = self.authToken("AppRegistrar"); if (!string.eql(tok, "")) { hdrs.set("Authorization", "Bearer " + tok); } }
         let resp = client.Http.request("POST", self.base + "/vendors", hdrs, body);
@@ -523,7 +531,7 @@ pub struct AcpClient {
     // A4: loaded signed control packs (re-verified server-side).
     pub fn packRows(self: AcpClient): list.List<PackRow> {
         let rows = list.List<PackRow>();
-        let resp = client.Http.get(self.base + "/packs");
+        let resp = self.tget(self.base + "/packs");
         if (resp.status.toCode() != 200) { return rows; }
         let pv = json.get(json.parse(resp.body), "packs");
         let arr = json.asArray(pv);
@@ -554,13 +562,13 @@ pub struct AcpClient {
     }
     // A4: fetch the built-in signed packs and load each (verified server-side before storing).
     pub fn loadBuiltinPacks(self: AcpClient, userAuth: string): DeployResult {
-        let av = client.Http.get(self.base + "/packs/available");
+        let av = self.tget(self.base + "/packs/available");
         if (av.status.toCode() != 200) { return DeployResult(false, "acp-server unreachable"); }
         let pv = json.get(json.parse(av.body), "packs");
         let arr = json.asArray(pv);
         if (arr == undefined) { return DeployResult(false, "no packs available"); }
         let hdrs = client.Http.emptyHeaders();
-        hdrs.set("Content-Type", "application/json");
+        hdrs.set("Content-Type", "application/json"); hdrs.set("x-acp-tenant", self.tenant);
         if (!string.eql(userAuth, "")) { hdrs.set("Authorization", userAuth); }
         else { let tok = self.authToken("PolicyAdmin"); if (!string.eql(tok, "")) { hdrs.set("Authorization", "Bearer " + tok); } }
         let loaded = 0;
@@ -580,10 +588,10 @@ pub struct AcpClient {
 
     // B5: fetch the built-in signed threat pack and load it (verified server-side before storing).
     pub fn loadThreatPack(self: AcpClient, userAuth: string): DeployResult {
-        let av = client.Http.get(self.base + "/firewall/threat-pack/available");
+        let av = self.tget(self.base + "/firewall/threat-pack/available");
         if (av.status.toCode() != 200) { return DeployResult(false, "acp-server unreachable"); }
         let hdrs = client.Http.emptyHeaders();
-        hdrs.set("Content-Type", "application/json");
+        hdrs.set("Content-Type", "application/json"); hdrs.set("x-acp-tenant", self.tenant);
         if (!string.eql(userAuth, "")) { hdrs.set("Authorization", userAuth); }
         else { let tok = self.authToken("FirewallAdmin"); if (!string.eql(tok, "")) { hdrs.set("Authorization", "Bearer " + tok); } }
         let resp = client.Http.request("POST", self.base + "/firewall/threat-pack", hdrs, av.body);
@@ -596,7 +604,7 @@ pub struct AcpClient {
     // B4: recent red-team runs (time series).
     pub fn redteamRuns(self: AcpClient): list.List<RedteamRun> {
         let rows = list.List<RedteamRun>();
-        let resp = client.Http.get(self.base + "/redteam/runs");
+        let resp = self.tget(self.base + "/redteam/runs");
         if (resp.status.toCode() != 200) { return rows; }
         let rv = json.get(json.parse(resp.body), "runs");
         let arr = json.asArray(rv);
@@ -617,7 +625,7 @@ pub struct AcpClient {
     // B4: trigger a red-team run (stored as a signed attestation record).
     pub fn runRedteam(self: AcpClient, userAuth: string): DeployResult {
         let hdrs = client.Http.emptyHeaders();
-        hdrs.set("Content-Type", "application/json");
+        hdrs.set("Content-Type", "application/json"); hdrs.set("x-acp-tenant", self.tenant);
         if (!string.eql(userAuth, "")) { hdrs.set("Authorization", userAuth); }
         else { let tok = self.authToken("FirewallAdmin"); if (!string.eql(tok, "")) { hdrs.set("Authorization", "Bearer " + tok); } }
         let resp = client.Http.request("POST", self.base + "/redteam/run", hdrs, "{\"min_catch\":0.9}");
@@ -630,7 +638,7 @@ pub struct AcpClient {
     // A6: fetch the regulator-facing framework report for rendering + print.
     pub fn frameworkReport(self: AcpClient, name: string): FrameworkReport {
         let controls = list.List<ControlStatus>();
-        let resp = client.Http.get(self.base + "/report/framework/" + name);
+        let resp = self.tget(self.base + "/report/framework/" + name);
         if (resp.status.toCode() != 200) { return FrameworkReport(name, 0, 0, 0.0, 0, 0, 0, controls); }
         let v = json.parse(resp.body);
         let cv = json.get(v, "controls");
@@ -661,7 +669,7 @@ pub struct AcpClient {
     }
     // A6: forward the framework report CSV for a same-origin download.
     pub fn frameworkCsv(self: AcpClient, name: string): string {
-        let resp = client.Http.get(self.base + "/report/framework/" + name + "/csv");
+        let resp = self.tget(self.base + "/report/framework/" + name + "/csv");
         if (resp.status.toCode() != 200) { return "section,key,value\n"; }
         return resp.body;
     }
@@ -669,7 +677,7 @@ pub struct AcpClient {
     // G2: risk-register rows (GRC records of kind "risk" with parsed score/band).
     pub fn riskRows(self: AcpClient): list.List<RiskRow> {
         let rows = list.List<RiskRow>();
-        let resp = client.Http.get(self.base + "/grc");
+        let resp = self.tget(self.base + "/grc");
         if (resp.status.toCode() != 200) { return rows; }
         let rv = json.get(json.parse(resp.body), "records");
         let arr = json.asArray(rv);
@@ -697,7 +705,7 @@ pub struct AcpClient {
     pub fn createRisk(self: AcpClient, subject: string, title: string, likelihood: string, impact: string, treatment: string, userAuth: string): DeployResult {
         let body = "{\"subject\":" + self.jstr(subject) + ",\"title\":" + self.jstr(title) + ",\"likelihood\":" + self.jstr(likelihood) + ",\"impact\":" + self.jstr(impact) + ",\"treatment\":" + self.jstr(treatment) + "}";
         let hdrs = client.Http.emptyHeaders();
-        hdrs.set("Content-Type", "application/json");
+        hdrs.set("Content-Type", "application/json"); hdrs.set("x-acp-tenant", self.tenant);
         if (!string.eql(userAuth, "")) { hdrs.set("Authorization", userAuth); }
         else { let tok = self.authToken("GrcAuthor"); if (!string.eql(tok, "")) { hdrs.set("Authorization", "Bearer " + tok); } }
         let resp = client.Http.request("POST", self.base + "/grc/risk", hdrs, body);
@@ -710,7 +718,7 @@ pub struct AcpClient {
     // G3: model-card rows with resolved link flags.
     pub fn modelCardRows(self: AcpClient): list.List<ModelCardRow> {
         let rows = list.List<ModelCardRow>();
-        let resp = client.Http.get(self.base + "/grc");
+        let resp = self.tget(self.base + "/grc");
         if (resp.status.toCode() != 200) { return rows; }
         let rv = json.get(json.parse(resp.body), "records");
         let arr = json.asArray(rv);
@@ -738,7 +746,7 @@ pub struct AcpClient {
     pub fn createModelCard(self: AcpClient, subject: string, title: string, modelId: string, useCaseId: string, riskId: string, userAuth: string): DeployResult {
         let body = "{\"subject\":" + self.jstr(subject) + ",\"title\":" + self.jstr(title) + ",\"model_id\":" + self.jstr(modelId) + ",\"use_case_id\":" + self.jstr(useCaseId) + ",\"risk_id\":" + self.jstr(riskId) + "}";
         let hdrs = client.Http.emptyHeaders();
-        hdrs.set("Content-Type", "application/json");
+        hdrs.set("Content-Type", "application/json"); hdrs.set("x-acp-tenant", self.tenant);
         if (!string.eql(userAuth, "")) { hdrs.set("Authorization", userAuth); }
         else { let tok = self.authToken("GrcAuthor"); if (!string.eql(tok, "")) { hdrs.set("Authorization", "Bearer " + tok); } }
         let resp = client.Http.request("POST", self.base + "/grc/model-card", hdrs, body);
@@ -751,7 +759,7 @@ pub struct AcpClient {
     // F3: classifier-drift rows.
     pub fn driftRows(self: AcpClient): list.List<DriftRow> {
         let rows = list.List<DriftRow>();
-        let resp = client.Http.get(self.base + "/monitor/drift");
+        let resp = self.tget(self.base + "/monitor/drift");
         if (resp.status.toCode() != 200) { return rows; }
         let cv = json.get(json.parse(resp.body), "classes");
         let arr = json.asArray(cv);
@@ -771,7 +779,7 @@ pub struct AcpClient {
     // F3: data-class -> tool lineage edges.
     pub fn lineageRows(self: AcpClient): list.List<LineageRow> {
         let rows = list.List<LineageRow>();
-        let resp = client.Http.get(self.base + "/monitor/lineage");
+        let resp = self.tget(self.base + "/monitor/lineage");
         if (resp.status.toCode() != 200) { return rows; }
         let ev = json.get(json.parse(resp.body), "edges");
         let arr = json.asArray(ev);
@@ -789,13 +797,13 @@ pub struct AcpClient {
     }
 
     pub fn policyVersion(self: AcpClient): string {
-        let resp = client.Http.get(self.base + "/policy-store");
+        let resp = self.tget(self.base + "/policy-store");
         if (resp.status.toCode() != 200) { return "?"; }
         let ver = json.asNumber(json.get(json.parse(resp.body), "version")) ?? 0;
         return (ver == 0) ? "none" : `v${ver}`;
     }
     pub fn policyAuthor(self: AcpClient): string {
-        let resp = client.Http.get(self.base + "/policy-store");
+        let resp = self.tget(self.base + "/policy-store");
         if (resp.status.toCode() != 200) { return "unknown"; }
         return json.asString(json.get(json.parse(resp.body), "author")) ?? "unknown";
     }
@@ -805,7 +813,7 @@ pub struct AcpClient {
     pub fn resolveApproval(self: AcpClient, id: string, approve: bool, userAuth: string): DeployResult {
         let verb = approve ? "approve" : "deny";
         let hdrs = client.Http.emptyHeaders();
-        hdrs.set("Content-Type", "application/json");
+        hdrs.set("Content-Type", "application/json"); hdrs.set("x-acp-tenant", self.tenant);
         if (!string.eql(userAuth, "")) { hdrs.set("Authorization", userAuth); }
         else { let tok = self.authToken("Approver"); if (!string.eql(tok, "")) { hdrs.set("Authorization", "Bearer " + tok); } }
         let resp = client.Http.request("POST", self.base + "/approvals/" + id + "/" + verb, hdrs, "");
@@ -815,7 +823,7 @@ pub struct AcpClient {
 
     pub fn pendingApprovals(self: AcpClient): list.List<ApprovalRow> {
         let rows = list.List<ApprovalRow>();
-        let resp = client.Http.get(self.base + "/approvals/pending");
+        let resp = self.tget(self.base + "/approvals/pending");
         if (resp.status.toCode() != 200) { return rows; }
         let root = json.parse(resp.body);
         let pv = json.get(root, "pending");
@@ -838,6 +846,7 @@ pub struct AcpClient {
         let rows = list.List<EvidenceRow>();
         // A5: the raw decision detail requires the SeeArgs capability (SecurityOfficer).
         let hdrs = client.Http.emptyHeaders();
+        hdrs.set("x-acp-tenant", self.tenant);
         let tok = self.authToken("SecurityOfficer");
         if (!string.eql(tok, "")) { hdrs.set("Authorization", "Bearer " + tok); }
         let resp = client.Http.request("GET", self.base + "/evidence/recent", hdrs, "");
@@ -865,7 +874,7 @@ pub struct AcpClient {
     // the control plane, newest first. Read-only over acp-server /events/recent.
     pub fn eventRows(self: AcpClient): list.List<EventRow> {
         let rows = list.List<EventRow>();
-        let resp = client.Http.get(self.base + "/events/recent");
+        let resp = self.tget(self.base + "/events/recent");
         if (resp.status.toCode() != 200) { return rows; }
         let ev = json.get(json.parse(resp.body), "events");
         let arr = json.asArray(ev);
@@ -889,7 +898,7 @@ pub struct AcpClient {
     // E2: central fleet-evidence, PEP decision records mirrored and re-verified by the control plane.
     pub fn ingestedRows(self: AcpClient): list.List<IngestedRow> {
         let rows = list.List<IngestedRow>();
-        let resp = client.Http.get(self.base + "/evidence/ingested");
+        let resp = self.tget(self.base + "/evidence/ingested");
         if (resp.status.toCode() != 200) { return rows; }
         let ev = json.get(json.parse(resp.body), "records");
         let arr = json.asArray(ev);
@@ -913,7 +922,7 @@ pub struct AcpClient {
 
     // Central content-firewall config (kept in the control-plane DB; PEPs fetch it).
     pub fn firewallStatus(self: AcpClient): FirewallCfg {
-        let resp = client.Http.get(self.base + "/firewall/config");
+        let resp = self.tget(self.base + "/firewall/config");
         if (resp.status.toCode() != 200) { return FirewallCfg(false, false, "", false, "", false, 0, 0, false); }
         let v = json.parse(resp.body);
         let en = json.asBool(json.get(v, "enabled")) ?? false;
@@ -962,7 +971,7 @@ pub struct AcpClient {
         let toxS = blockToxicity ? "true" : "false";
         let body = "{\"enabled\":" + enS + ",\"block_secrets\":" + bsS + ",\"deny_topics\":[" + arr + "],\"model\":" + self.jstr(model) + ",\"scan_url\":" + self.jstr(scanUrl) + ",\"block_on_scanner_error\":" + boeS + ",\"block_toxicity\":" + toxS + "}";
         let hdrs = client.Http.emptyHeaders();
-        hdrs.set("Content-Type", "application/json");
+        hdrs.set("Content-Type", "application/json"); hdrs.set("x-acp-tenant", self.tenant);
         if (!string.eql(userAuth, "")) { hdrs.set("Authorization", userAuth); }
         else { let tok = self.authToken("FirewallAdmin"); if (!string.eql(tok, "")) { hdrs.set("Authorization", "Bearer " + tok); } }
         let resp = client.Http.request("POST", self.base + "/firewall/config", hdrs, body);
@@ -975,7 +984,7 @@ pub struct AcpClient {
     // Operator-authored firewall (interception) rules.
     pub fn firewallRules(self: AcpClient): list.List<FwRuleRow> {
         let rows = list.List<FwRuleRow>();
-        let resp = client.Http.get(self.base + "/firewall/rules");
+        let resp = self.tget(self.base + "/firewall/rules");
         if (resp.status.toCode() != 200) { return rows; }
         let rv = json.get(json.parse(resp.body), "rules");
         let arr = json.asArray(rv);
@@ -1018,7 +1027,7 @@ pub struct AcpClient {
         if (!string.eql(classify, "")) { body = body + ",\"classify\":" + self.jstr(classify); }
         body = body + "}";
         let hdrs = client.Http.emptyHeaders();
-        hdrs.set("Content-Type", "application/json");
+        hdrs.set("Content-Type", "application/json"); hdrs.set("x-acp-tenant", self.tenant);
         if (!string.eql(userAuth, "")) { hdrs.set("Authorization", userAuth); }
         else { let tok = self.authToken("FirewallAdmin"); if (!string.eql(tok, "")) { hdrs.set("Authorization", "Bearer " + tok); } }
         let resp = client.Http.request("POST", self.base + "/firewall/rules", hdrs, body);
@@ -1030,7 +1039,7 @@ pub struct AcpClient {
 
     pub fn deleteFirewallRule(self: AcpClient, id: string, userAuth: string): DeployResult {
         let hdrs = client.Http.emptyHeaders();
-        hdrs.set("Content-Type", "application/json");
+        hdrs.set("Content-Type", "application/json"); hdrs.set("x-acp-tenant", self.tenant);
         if (!string.eql(userAuth, "")) { hdrs.set("Authorization", userAuth); }
         else { let tok = self.authToken("FirewallAdmin"); if (!string.eql(tok, "")) { hdrs.set("Authorization", "Bearer " + tok); } }
         let resp = client.Http.request("POST", self.base + "/firewall/rules/" + id + "/delete", hdrs, "{}");
@@ -1056,7 +1065,7 @@ pub struct AcpClient {
     // Aggregated breach-and-violation report (policy denies/step-ups + firewall blocks), for Reports.
     pub fn violationReport(self: AcpClient): ViolReport {
         let empty = ViolReport("0", list.List<Tally>(), list.List<Tally>(), list.List<Tally>());
-        let resp = client.Http.get(self.base + "/report/violations");
+        let resp = self.tget(self.base + "/report/violations");
         if (resp.status.toCode() != 200) { return empty; }
         let v = json.parse(resp.body);
         let total = json.asNumber(json.get(v, "total")) ?? 0;
@@ -1067,6 +1076,7 @@ pub struct AcpClient {
     pub fn violationCsv(self: AcpClient): string {
         // A5: exporting the violation ledger requires the Export capability (Auditor).
         let hdrs = client.Http.emptyHeaders();
+        hdrs.set("x-acp-tenant", self.tenant);
         let tok = self.authToken("Auditor");
         if (!string.eql(tok, "")) { hdrs.set("Authorization", "Bearer " + tok); }
         let resp = client.Http.request("GET", self.base + "/report/violations.csv", hdrs, "");
@@ -1078,7 +1088,7 @@ pub struct AcpClient {
     // "any" where a rule is not scoped to a specific app or agent. Read-only over the signed file.
     pub fn policyRules(self: AcpClient): list.List<PolicyRuleRow> {
         let rows = list.List<PolicyRuleRow>();
-        let resp = client.Http.get(self.base + "/policy-store/rules");
+        let resp = self.tget(self.base + "/policy-store/rules");
         if (resp.status.toCode() != 200) { return rows; }
         let rv = json.get(json.parse(resp.body), "rules");
         let arr = json.asArray(rv);
@@ -1116,7 +1126,7 @@ pub struct AcpClient {
     // real deployment the console shell performs an OIDC login and this returns the user's token.
     // Empty string when auth is not enabled (the server then runs RBAC-off and accepts the call).
     fn authToken(self: AcpClient, role: string): string {
-        let resp = client.Http.get(self.base + "/auth/dev-token?role=" + role);
+        let resp = self.tget(self.base + "/auth/dev-token?role=" + role);
         if (resp.status.toCode() != 200) { return ""; }
         return json.asString(json.get(json.parse(resp.body), "token")) ?? "";
     }
@@ -1126,7 +1136,7 @@ pub struct AcpClient {
     // signs, and writes it; we return the outcome for display.
     pub fn deployRaw(self: AcpClient, body: string, userAuth: string): DeployResult {
         let hdrs = client.Http.emptyHeaders();
-        hdrs.set("Content-Type", "application/json");
+        hdrs.set("Content-Type", "application/json"); hdrs.set("x-acp-tenant", self.tenant);
         // Prefer the caller's real token (injected by an identity-aware proxy / OIDC login in front
         // of the console); fall back to a dev token only when none is present (local use).
         if (!string.eql(userAuth, "")) {
@@ -1150,7 +1160,7 @@ pub struct AcpClient {
 
     // Current break-glass / kill-switch status from acp-server.
     pub fn killStatus(self: AcpClient): KillStatus {
-        let resp = client.Http.get(self.base + "/break-glass");
+        let resp = self.tget(self.base + "/break-glass");
         if (resp.status.toCode() != 200) { return KillStatus(false, "", "", "", false); }
         let v = json.parse(resp.body);
         return KillStatus(
@@ -1165,7 +1175,7 @@ pub struct AcpClient {
     // acp-server, which writes the signed grant the proxy watches. The console holds no key.
     pub fn killEngageRaw(self: AcpClient, body: string, userAuth: string): DeployResult {
         let hdrs = client.Http.emptyHeaders();
-        hdrs.set("Content-Type", "application/json");
+        hdrs.set("Content-Type", "application/json"); hdrs.set("x-acp-tenant", self.tenant);
         if (!string.eql(userAuth, "")) {
             hdrs.set("Authorization", userAuth);
         } else {
@@ -1186,7 +1196,7 @@ pub struct AcpClient {
 
     pub fn killClear(self: AcpClient, userAuth: string): DeployResult {
         let hdrs = client.Http.emptyHeaders();
-        hdrs.set("Content-Type", "application/json");
+        hdrs.set("Content-Type", "application/json"); hdrs.set("x-acp-tenant", self.tenant);
         if (!string.eql(userAuth, "")) {
             hdrs.set("Authorization", userAuth);
         } else {
@@ -1207,7 +1217,7 @@ pub struct AcpClient {
 
     fn postJson(self: AcpClient, route: string, body: string, role: string, userAuth: string): DeployResult {
         let hdrs = client.Http.emptyHeaders();
-        hdrs.set("Content-Type", "application/json");
+        hdrs.set("Content-Type", "application/json"); hdrs.set("x-acp-tenant", self.tenant);
         if (!string.eql(userAuth, "")) {
             hdrs.set("Authorization", userAuth);
         } else {
@@ -1226,7 +1236,7 @@ pub struct AcpClient {
     pub fn registerApp(self: AcpClient, name: string, owner: string, userAuth: string): DeployResult {
         let body = "{\"name\":" + self.jstr(name) + ",\"owner\":" + self.jstr(owner) + "}";
         let hdrs = client.Http.emptyHeaders();
-        hdrs.set("Content-Type", "application/json");
+        hdrs.set("Content-Type", "application/json"); hdrs.set("x-acp-tenant", self.tenant);
         if (!string.eql(userAuth, "")) { hdrs.set("Authorization", userAuth); }
         else { let tok = self.authToken("AppRegistrar"); if (!string.eql(tok, "")) { hdrs.set("Authorization", "Bearer " + tok); } }
         let resp = client.Http.request("POST", self.base + "/apps", hdrs, body);
@@ -1241,7 +1251,7 @@ pub struct AcpClient {
         let meta = string.eql(metadata, "") ? "{}" : metadata;
         let body = "{\"app_id\":" + self.jstr(appId) + ",\"name\":" + self.jstr(name) + ",\"owner\":" + self.jstr(owner) + ",\"metadata\":" + meta + "}";
         let hdrs = client.Http.emptyHeaders();
-        hdrs.set("Content-Type", "application/json");
+        hdrs.set("Content-Type", "application/json"); hdrs.set("x-acp-tenant", self.tenant);
         if (!string.eql(userAuth, "")) { hdrs.set("Authorization", userAuth); }
         else { let tok = self.authToken("AppRegistrar"); if (!string.eql(tok, "")) { hdrs.set("Authorization", "Bearer " + tok); } }
         let resp = client.Http.request("POST", self.base + "/agents", hdrs, body);
@@ -1256,7 +1266,7 @@ pub struct AcpClient {
     // B1: deactivate (revoke) a registered agent via the control plane.
     pub fn deactivateAgent(self: AcpClient, id: string, userAuth: string): DeployResult {
         let hdrs = client.Http.emptyHeaders();
-        hdrs.set("Content-Type", "application/json");
+        hdrs.set("Content-Type", "application/json"); hdrs.set("x-acp-tenant", self.tenant);
         if (!string.eql(userAuth, "")) { hdrs.set("Authorization", userAuth); }
         else { let tok = self.authToken("AppRegistrar"); if (!string.eql(tok, "")) { hdrs.set("Authorization", "Bearer " + tok); } }
         let resp = client.Http.request("POST", self.base + "/agents/" + id + "/deactivate", hdrs, "{}");
@@ -1270,7 +1280,7 @@ pub struct AcpClient {
     pub fn updateGrcStatus(self: AcpClient, id: string, status: string, userAuth: string): DeployResult {
         let body = "{\"status\":" + self.jstr(status) + "}";
         let hdrs = client.Http.emptyHeaders();
-        hdrs.set("Content-Type", "application/json");
+        hdrs.set("Content-Type", "application/json"); hdrs.set("x-acp-tenant", self.tenant);
         if (!string.eql(userAuth, "")) { hdrs.set("Authorization", userAuth); }
         else { let tok = self.authToken("GrcAuthor"); if (!string.eql(tok, "")) { hdrs.set("Authorization", "Bearer " + tok); } }
         let resp = client.Http.request("POST", self.base + "/grc/" + id + "/status", hdrs, body);
@@ -1283,7 +1293,7 @@ pub struct AcpClient {
     // Governance records (GRC): signed operator documents, from acp-server. Read-only.
     pub fn grcRows(self: AcpClient): list.List<GrcRow> {
         let rows = list.List<GrcRow>();
-        let resp = client.Http.get(self.base + "/grc");
+        let resp = self.tget(self.base + "/grc");
         if (resp.status.toCode() != 200) { return rows; }
         let rv = json.get(json.parse(resp.body), "records");
         let arr = json.asArray(rv);
@@ -1309,7 +1319,7 @@ pub struct AcpClient {
             }
             let comments = list.List<GrcComment>();
             let gid = json.asString(json.get(item, "id")) ?? "";
-            let cResp = client.Http.get(self.base + "/grc/" + gid + "/comments");
+            let cResp = self.tget(self.base + "/grc/" + gid + "/comments");
             if (cResp.status.toCode() == 200) {
                 let cv = json.get(json.parse(cResp.body), "comments");
                 let cArr = json.asArray(cv);
@@ -1351,7 +1361,7 @@ pub struct AcpClient {
         let refs = string.eql(linkedRefs, "") ? "[]" : linkedRefs;
         let jbody = "{\"kind\":" + self.jstr(kind) + ",\"subject\":" + self.jstr(subject) + ",\"title\":" + self.jstr(title) + ",\"status\":" + self.jstr(status) + ",\"body\":" + self.jstr(body) + ",\"linked_refs\":" + refs + "}";
         let hdrs = client.Http.emptyHeaders();
-        hdrs.set("Content-Type", "application/json");
+        hdrs.set("Content-Type", "application/json"); hdrs.set("x-acp-tenant", self.tenant);
         if (!string.eql(userAuth, "")) { hdrs.set("Authorization", userAuth); }
         else { let tok = self.authToken("GrcAuthor"); if (!string.eql(tok, "")) { hdrs.set("Authorization", "Bearer " + tok); } }
         let resp = client.Http.request("POST", self.base + "/grc", hdrs, jbody);
@@ -1364,7 +1374,7 @@ pub struct AcpClient {
     // G1: advance a use-case record through its gated lifecycle (server enforces the gate).
     pub fn usecaseTransition(self: AcpClient, id: string, stage: string, userAuth: string): DeployResult {
         let hdrs = client.Http.emptyHeaders();
-        hdrs.set("Content-Type", "application/json");
+        hdrs.set("Content-Type", "application/json"); hdrs.set("x-acp-tenant", self.tenant);
         if (!string.eql(userAuth, "")) { hdrs.set("Authorization", userAuth); }
         else { let tok = self.authToken("GrcAuthor"); if (!string.eql(tok, "")) { hdrs.set("Authorization", "Bearer " + tok); } }
         let resp = client.Http.request("POST", self.base + "/grc/" + id + "/usecase/" + stage, hdrs, "{}");
@@ -1382,7 +1392,7 @@ pub struct AcpClient {
         let due = string.eql(dueMs, "") ? "0" : dueMs;
         let jbody = "{\"subject\":" + self.jstr(subject) + ",\"title\":" + self.jstr(title) + ",\"assignee\":" + self.jstr(assignee) + ",\"due_ms\":" + due + ",\"answers\":" + ans + "}";
         let hdrs = client.Http.emptyHeaders();
-        hdrs.set("Content-Type", "application/json");
+        hdrs.set("Content-Type", "application/json"); hdrs.set("x-acp-tenant", self.tenant);
         if (!string.eql(userAuth, "")) { hdrs.set("Authorization", userAuth); }
         else { let tok = self.authToken("GrcAuthor"); if (!string.eql(tok, "")) { hdrs.set("Authorization", "Bearer " + tok); } }
         let resp = client.Http.request("POST", self.base + "/grc/assess", hdrs, jbody);
@@ -1398,7 +1408,7 @@ pub struct AcpClient {
         let due = string.eql(dueMs, "") ? "0" : dueMs;
         let jbody = "{\"assignee\":" + self.jstr(assignee) + ",\"due_ms\":" + due + "}";
         let hdrs = client.Http.emptyHeaders();
-        hdrs.set("Content-Type", "application/json");
+        hdrs.set("Content-Type", "application/json"); hdrs.set("x-acp-tenant", self.tenant);
         if (!string.eql(userAuth, "")) { hdrs.set("Authorization", userAuth); }
         else { let tok = self.authToken("GrcAuthor"); if (!string.eql(tok, "")) { hdrs.set("Authorization", "Bearer " + tok); } }
         let resp = client.Http.request("POST", self.base + "/grc/" + id + "/assign", hdrs, jbody);
@@ -1412,7 +1422,7 @@ pub struct AcpClient {
     pub fn toggleControl(self: AcpClient, id: string, controlId: string, done: bool, userAuth: string): DeployResult {
         let jbody = "{\"done\":" + (done ? "true" : "false") + "}";
         let hdrs = client.Http.emptyHeaders();
-        hdrs.set("Content-Type", "application/json");
+        hdrs.set("Content-Type", "application/json"); hdrs.set("x-acp-tenant", self.tenant);
         if (!string.eql(userAuth, "")) { hdrs.set("Authorization", userAuth); }
         else { let tok = self.authToken("GrcAuthor"); if (!string.eql(tok, "")) { hdrs.set("Authorization", "Bearer " + tok); } }
         let resp = client.Http.request("POST", self.base + "/grc/" + id + "/control/" + controlId, hdrs, jbody);
@@ -1425,7 +1435,7 @@ pub struct AcpClient {
     // Registered AI endpoints (agents/providers) and their disposition, from acp-server. Read-only.
     pub fn endpointsRows(self: AcpClient): list.List<EndpointRow> {
         let rows = list.List<EndpointRow>();
-        let resp = client.Http.get(self.base + "/endpoints");
+        let resp = self.tget(self.base + "/endpoints");
         if (resp.status.toCode() != 200) { return rows; }
         let ev = json.get(json.parse(resp.body), "endpoints");
         let arr = json.asArray(ev);
@@ -1450,7 +1460,7 @@ pub struct AcpClient {
     // disposition. The console holds no signing key; acp-server is the trust store.
     pub fn registerEndpointRaw(self: AcpClient, body: string, userAuth: string): DeployResult {
         let hdrs = client.Http.emptyHeaders();
-        hdrs.set("Content-Type", "application/json");
+        hdrs.set("Content-Type", "application/json"); hdrs.set("x-acp-tenant", self.tenant);
         if (!string.eql(userAuth, "")) {
             hdrs.set("Authorization", userAuth);
         } else {
@@ -1473,7 +1483,7 @@ pub struct AcpClient {
     // served by acp-server and re-derivable from the signed evidence; the console only displays it.
     pub fn health(self: AcpClient): HealthStatus {
         let h = HealthStatus();
-        let vr = client.Http.get(self.base + "/verify");
+        let vr = self.tget(self.base + "/verify");
         if (vr.status.toCode() == 200) {
             h.reachable = true;
             let v = json.parse(vr.body);
@@ -1481,21 +1491,21 @@ pub struct AcpClient {
             let d = json.asString(json.get(v, "detail")) ?? "";
             h.ledgerDetail = string.eql(d, "") ? (h.ledgerOk ? "re-derived, signatures valid" : "verification failed") : d;
         }
-        let lv = client.Http.get(self.base + "/liveness");
+        let lv = self.tget(self.base + "/liveness");
         if (lv.status.toCode() == 200) {
             let v = json.parse(lv.body);
             h.liveHealthy = json.asBool(json.get(v, "healthy")) ?? true;
             let g = json.asArray(json.get(v, "gaps"));
             if (g != undefined) { h.gaps = g.size(); }
         }
-        let al = client.Http.get(self.base + "/alerts");
+        let al = self.tget(self.base + "/alerts");
         if (al.status.toCode() == 200) {
             let v = json.parse(al.body);
             h.alertsHealthy = json.asBool(json.get(v, "healthy")) ?? true;
             let t = json.asArray(json.get(v, "tripped"));
             if (t != undefined) { h.tripped = t.size(); }
         }
-        let ma = client.Http.get(self.base + "/meta-audit");
+        let ma = self.tget(self.base + "/meta-audit");
         if (ma.status.toCode() == 200) {
             let v = json.parse(ma.body);
             h.metaConfigured = json.asBool(json.get(v, "configured")) ?? false;
