@@ -68,7 +68,7 @@ instructions" family) to `acp_core::content::injection_res`. Verified: Spanish/F
 phrases are flagged prompt-injection; the English corpus gate still holds (injection 1.00/1.00/0.00,
 PII 0.92). Full multilingual coverage remains the external hook's job.
 
-## T5. Collaboration: GRC comments (P2)
+## T5. Collaboration: GRC comments (P2)  [DONE 2026-09-27]
 Gap: no comment threads / discussion on governance records.
 Design: a `grc_comments(id, grc_id, author, body, created_ms)` table; `POST /grc/:id/comments` and
 `GET /grc/:id/comments`; console shows a comment thread on a record. Author-controlled text is stored
@@ -76,6 +76,10 @@ and rendered as a value (escaped), never interpolated.
 Acceptance:
 - A comment posted to a record is stored and returned by the list endpoint with its author and time.
 - Comments are scoped to their record (a different record returns none).
+Status (2026-09-27): SHIPPED. cpstore `grc_comments`; server `POST/GET /grc/:id/comments` (post gated on
+EditGrc, author from the principal, tenant-scoped; body stored as a value). Console GRC table shows an
+expandable Comments thread per record (KYX auto-escapes the body). Verified via curl: two comments on
+record A returned with author + body; record B returns none.
 
 ## T6. Scheduled report snapshots + history (P3)
 Gap: reports are on-demand only; no history or scheduled capture.

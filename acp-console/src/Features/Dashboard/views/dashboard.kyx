@@ -494,10 +494,10 @@ pub fn grcPanel(rows: list.List<GrcRow>): Html {
             <p class="empty">No governance records yet. Create one below.</p>
         } else {
             <table class="tbl">
-                <thead><tr><th>Kind</th><th>Subject</th><th>Tier</th><th>Stage</th><th>Assignee</th><th>Controls</th><th>Signed</th><th>Linked evidence</th><th>Advance</th></tr></thead>
+                <thead><tr><th>Kind</th><th>Subject</th><th>Tier</th><th>Stage</th><th>Assignee</th><th>Controls</th><th>Signed</th><th>Linked evidence</th><th>Comments</th><th>Advance</th></tr></thead>
                 <tbody>
                     {for (i in 0..rows.size()) {
-                        let r = rows.get(i) ?? GrcRow("", "", "", "", "", false, 0, 0, "", "", "", 0, 0, list.List<GrcControl>());
+                        let r = rows.get(i) ?? GrcRow("", "", "", "", "", false, 0, 0, "", "", "", 0, 0, list.List<GrcControl>(), list.List<GrcComment>());
                         <tr>
                             <td><span class="badge ver">{r.kind}</span><div class="mono dim" style="font-size:.7rem">{r.id}</div></td>
                             <td class="strong">{r.subject}<div class="dim">{r.title}</div></td>
@@ -526,6 +526,14 @@ pub fn grcPanel(rows: list.List<GrcRow>): Html {
                             </td>
                             <td>{if (r.verified) { <span class="badge ok">verified</span> } else { <span class="badge bad">unverified</span> }}</td>
                             <td>{if (r.totalRefs == 0) { <span class="dim">0/0</span> } else { <span class={r.verifiedRefs == r.totalRefs ? "badge ok" : "badge warn"}>{r.verifiedRefs}/{r.totalRefs} verified</span> }}</td>
+                            <td>{if (r.comments.size() == 0) { <span class="dim">-</span> } else {
+                                <details><summary><span class="badge ver">{r.comments.size()} comments</span></summary>
+                                    {for (m in 0..r.comments.size()) {
+                                        let cm = r.comments.get(m) ?? GrcComment("", "");
+                                        <div style="margin:.15rem 0"><span class="mono dim">{cm.author}</span>: {cm.body}</div>
+                                    }}
+                                </details>
+                            }}</td>
                             <td>
                                 {if (string.eql(r.kind, "use-case")) {
                                     <span>

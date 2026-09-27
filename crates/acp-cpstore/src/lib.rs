@@ -198,6 +198,7 @@ impl ControlStore {
             "CREATE TABLE IF NOT EXISTS control_packs (id VARCHAR(255) PRIMARY KEY, version TEXT NOT NULL, doc_json TEXT NOT NULL, pubkey_hex TEXT NOT NULL, sig_hex TEXT NOT NULL, created_ms BIGINT NOT NULL)",
             "CREATE TABLE IF NOT EXISTS endpoints (endpoint VARCHAR(255) PRIMARY KEY, kind TEXT NOT NULL, provider TEXT NOT NULL, disposition TEXT NOT NULL, operator TEXT NOT NULL, reason TEXT NOT NULL, decided_ms BIGINT NOT NULL, expires_ms BIGINT NOT NULL, pubkey_hex TEXT NOT NULL, sig_hex TEXT NOT NULL)",
             "CREATE TABLE IF NOT EXISTS grc_records (id VARCHAR(255) PRIMARY KEY, kind TEXT NOT NULL, subject TEXT NOT NULL, title TEXT NOT NULL, status TEXT NOT NULL, body TEXT NOT NULL, operator TEXT NOT NULL, created_ms BIGINT NOT NULL, pubkey_hex TEXT NOT NULL, sig_hex TEXT NOT NULL, linked_refs TEXT NOT NULL DEFAULT '[]', answers_json TEXT NOT NULL DEFAULT '{}', assignee TEXT NOT NULL DEFAULT '', due_ms BIGINT NOT NULL DEFAULT 0, stage TEXT NOT NULL DEFAULT '', tenant_id VARCHAR(255) NOT NULL DEFAULT 'default')",
+            "CREATE TABLE IF NOT EXISTS grc_comments (id VARCHAR(255) PRIMARY KEY, grc_id TEXT NOT NULL, author TEXT NOT NULL, body TEXT NOT NULL, created_ms BIGINT NOT NULL)",
             "CREATE TABLE IF NOT EXISTS ingested_evidence (decision_id VARCHAR(255) PRIMARY KEY, pep TEXT NOT NULL, kind TEXT NOT NULL, verdict TEXT NOT NULL, record TEXT NOT NULL, operator TEXT NOT NULL, created_ms BIGINT NOT NULL, pubkey_hex TEXT NOT NULL, sig_hex TEXT NOT NULL)",
             "CREATE TABLE IF NOT EXISTS firewall_config (id INTEGER PRIMARY KEY, enabled INTEGER NOT NULL, block_secrets INTEGER NOT NULL, deny_topics TEXT NOT NULL, model TEXT NOT NULL, scan_url TEXT NOT NULL DEFAULT '', block_on_scanner_error INTEGER NOT NULL DEFAULT 0, feed_version BIGINT NOT NULL DEFAULT 0, threat_signatures TEXT NOT NULL DEFAULT '[]', block_toxicity INTEGER NOT NULL DEFAULT 0, updated_ms BIGINT NOT NULL)",
             "CREATE TABLE IF NOT EXISTS firewall_rules (id VARCHAR(255) PRIMARY KEY, match_json TEXT NOT NULL, classify TEXT NOT NULL, action TEXT NOT NULL, created_ms BIGINT NOT NULL)",
@@ -695,6 +696,19 @@ impl ControlStore {
         let sql = self.ph("UPDATE grc_records SET linked_refs = ? WHERE id = ?");
         sqlx::query(&sql).bind(linked_refs).bind(id).execute(&self.pool).await.map_err(|e| e.to_string())?;
         Ok(())
+    }
+
+    // T5: comment threads on GRC records.
+    pub async fn add_comment(&self, id: &str, grc_id: &str, author: &str, body: &str, now_ms: i64) -> Result<(), String> {
+        let sql = self.ph("INSERT INTO grc_comments (id, grc_id, author, body, created_ms) VALUES (?, ?, ?, ?, ?)");
+        sqlx::query(&sql).bind(id).bind(grc_id).bind(author).bind(body).bind(now_ms)
+            .execute(&self.pool).await.map_err(|e| e.to_string())?;
+        Ok(())
+    }
+    pub async fn list_comments(&self, grc_id: &str) -> Result<Vec<(String, String, String, i64)>, String> {
+        let rows = sqlx::query(&self.ph("SELECT id, author, body, created_ms FROM grc_comments WHERE grc_id = ? ORDER BY created_ms"))
+            .bind(grc_id).fetch_all(&self.pool).await.map_err(|e| e.to_string())?;
+        Ok(rows.iter().map(|r| (r.get::<String,_>("id"), r.get::<String,_>("author"), r.get::<String,_>("body"), r.get::<i64,_>("created_ms"))).collect())
     }
 
     /// A1: set the assignee and due date on a GRC record. Workflow metadata, not part of the signed

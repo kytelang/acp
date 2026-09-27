@@ -793,6 +793,7 @@ async fn main() {
         .route("/grc/:id/usecase/:stage", post(grc_usecase_transition))
         .route("/grc/:id/assign", post(grc_assign))
         .route("/grc/:id/link", post(grc_link))
+        .route("/grc/:id/comments", get(grc_comments_get).post(grc_comments_post))
         .route("/grc/:id/control/:control_id", post(grc_control_toggle))
         .route("/approvals/pending", get(approvals_pending))
         .route("/evidence/recent", get(evidence_recent))
@@ -1970,6 +1971,39 @@ async fn grc_assign(State(st): State<Arc<AppState>>, headers: HeaderMap, Path(id
             Json(serde_json::json!({"ok": true, "id": id, "assignee": assignee, "due_ms": due_ms})).into_response()
         }
         Err(e) => Json(serde_json::json!({"ok": false, "error": e})).into_response(),
+    }
+}
+
+/// T5: post a comment on a GRC record (author from the principal). Tenant-scoped: only the record's
+/// tenant may comment; body is stored as-is and rendered as a value (never interpolated).
+async fn grc_comments_post(State(st): State<Arc<AppState>>, headers: HeaderMap, Path(id): Path<String>, Json(body): Json<serde_json::Value>) -> Response {
+    let principal = match authorize(&st.auth, &headers, acp_auth::Capability::EditGrc) { Ok(p) => p, Err(r) => return r };
+    let author = actor_of(&principal);
+    let store = match &st.store { Some(s) => s, None => return Json(serde_json::json!({"ok": false, "error": "no --store configured"})).into_response() };
+    let tenant = tenant_of(&headers, &principal);
+    match store.get_grc(&id).await {
+        Ok(Some(r)) if r.tenant == tenant => {}
+        _ => return Json(serde_json::json!({"ok": false, "error": "no such record"})).into_response(),
+    }
+    let text = body.get("body").and_then(|v| v.as_str()).unwrap_or("").trim().to_string();
+    if text.is_empty() { return Json(serde_json::json!({"ok": false, "error": "body is required"})).into_response(); }
+    let cid = format!("cmt-{}", rand_hex(8));
+    match store.add_comment(&cid, &id, &author, &text, now_ms() as i64).await {
+        Ok(()) => Json(serde_json::json!({"ok": true, "id": cid})).into_response(),
+        Err(e) => Json(serde_json::json!({"ok": false, "error": e})).into_response(),
+    }
+}
+/// T5: list a GRC record's comments (tenant-scoped).
+async fn grc_comments_get(State(st): State<Arc<AppState>>, headers: HeaderMap, Path(id): Path<String>) -> Response {
+    let store = match &st.store { Some(s) => s, None => return Json(serde_json::json!({"comments": []})).into_response() };
+    let tenant = tenant_of(&headers, &None);
+    match store.get_grc(&id).await {
+        Ok(Some(r)) if r.tenant == tenant => {}
+        _ => return Json(serde_json::json!({"comments": []})).into_response(),
+    }
+    match store.list_comments(&id).await {
+        Ok(cs) => Json(serde_json::json!({"comments": cs.iter().map(|(cid,a,b,t)| serde_json::json!({"id":cid,"author":a,"body":b,"created_ms":t})).collect::<Vec<_>>()})).into_response(),
+        Err(e) => Json(serde_json::json!({"comments": [], "error": e})).into_response(),
     }
 }
 

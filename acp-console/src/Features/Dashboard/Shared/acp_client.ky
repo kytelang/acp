@@ -259,6 +259,12 @@ pub struct EndpointRow {
     }
 }
 
+pub struct GrcComment {
+    pub author: string,
+    pub body: string,
+    init(author: string, body: string) { self.author = author; self.body = body; }
+}
+
 pub struct GrcControl {
     pub controlId: string,
     pub title: string,
@@ -282,11 +288,12 @@ pub struct GrcRow {
     pub controlsDone: long,
     pub controlsTotal: long,
     pub controls: list.List<GrcControl>,
-    init(id: string, kind: string, subject: string, title: string, status: string, verified: bool, verifiedRefs: long, totalRefs: long, tier: string, stage: string, assignee: string, controlsDone: long, controlsTotal: long, controls: list.List<GrcControl>) {
+    pub comments: list.List<GrcComment>,
+    init(id: string, kind: string, subject: string, title: string, status: string, verified: bool, verifiedRefs: long, totalRefs: long, tier: string, stage: string, assignee: string, controlsDone: long, controlsTotal: long, controls: list.List<GrcControl>, comments: list.List<GrcComment>) {
         self.id = id; self.kind = kind; self.subject = subject; self.title = title; self.status = status; self.verified = verified;
         self.verifiedRefs = verifiedRefs; self.totalRefs = totalRefs;
         self.tier = tier; self.stage = stage; self.assignee = assignee;
-        self.controlsDone = controlsDone; self.controlsTotal = controlsTotal; self.controls = controls;
+        self.controlsDone = controlsDone; self.controlsTotal = controlsTotal; self.controls = controls; self.comments = comments;
     }
 }
 
@@ -1300,8 +1307,25 @@ pub struct AcpClient {
                     k = k + 1;
                 }
             }
+            let comments = list.List<GrcComment>();
+            let gid = json.asString(json.get(item, "id")) ?? "";
+            let cResp = client.Http.get(self.base + "/grc/" + gid + "/comments");
+            if (cResp.status.toCode() == 200) {
+                let cv = json.get(json.parse(cResp.body), "comments");
+                let cArr = json.asArray(cv);
+                if (cArr != undefined) {
+                    let m = 0;
+                    while (m < cArr.size()) {
+                        let cm = json.at(cv, m);
+                        comments.push(GrcComment(
+                            json.asString(json.get(cm, "author")) ?? "",
+                            json.asString(json.get(cm, "body")) ?? ""));
+                        m = m + 1;
+                    }
+                }
+            }
             rows.push(GrcRow(
-                json.asString(json.get(item, "id")) ?? "",
+                gid,
                 json.asString(json.get(item, "kind")) ?? "",
                 json.asString(json.get(item, "subject")) ?? "",
                 json.asString(json.get(item, "title")) ?? "",
@@ -1314,7 +1338,7 @@ pub struct AcpClient {
                 json.asString(json.get(item, "assignee")) ?? "",
                 json.asNumber(json.get(item, "controls_done")) ?? 0,
                 json.asNumber(json.get(item, "controls_total")) ?? 0,
-                controls));
+                controls, comments));
             i = i + 1;
         }
         return rows;
