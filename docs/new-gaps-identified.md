@@ -187,7 +187,7 @@ context via `acp_core::groundedness` and blocks below threshold (surfacing `x-ac
 proxy screens tool results on both transports: stdio (built-in + B1 hook, already) and now HTTP (B1
 external hook added alongside the existing built-in screen). Verified e2e: an injected model response
 -> 403 "content firewall: prompt-injection"; an ungrounded response -> 403 "not grounded (0.00 <
-0.60)". Note: streaming (SSE) responses are relayed unbuffered and not yet gated.
+0.60)". Note: streaming (SSE) responses were relayed unbuffered here; buffered gating landed in v2 F1.
 ### B3. Model / artifact scanning admission (P2, M) - integrate + enforce  [DONE 2026-09-27]
 Gap: Varman has only a supply-chain seam.
 Design: an admission gate on model/agent registration that calls a configured `scanner_url`, stores the

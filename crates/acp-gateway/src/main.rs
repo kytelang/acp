@@ -595,6 +595,41 @@ fn resolve_principal(st: &GwState, headers: &HeaderMap) -> Option<String> {
     }
 }
 
+/// F1: is any response gate active (content firewall, external hook or groundedness)?
+fn response_gate_active(st: &GwState) -> bool {
+    st.content_fw.is_some() || st.content_scan.is_some() || st.groundedness_threshold.is_some()
+}
+
+/// F1: gather assistant text from a buffered SSE body by parsing each `data:` event and collecting
+/// `content`/`text` string values (covers OpenAI delta chunks and Anthropic content blocks).
+fn gather_sse_text(bytes: &[u8]) -> String {
+    fn collect(v: &serde_json::Value, out: &mut String) {
+        match v {
+            serde_json::Value::Object(m) => {
+                for (k, val) in m {
+                    if (k == "content" || k == "text") {
+                        if let Some(sx) = val.as_str() { out.push_str(sx); out.push(' '); }
+                    }
+                    collect(val, out);
+                }
+            }
+            serde_json::Value::Array(a) => { for x in a { collect(x, out); } }
+            _ => {}
+        }
+    }
+    let body = String::from_utf8_lossy(bytes);
+    let mut out = String::new();
+    for line in body.lines() {
+        let line = line.trim_start();
+        if let Some(data) = line.strip_prefix("data:") {
+            let data = data.trim();
+            if data.is_empty() || data == "[DONE]" { continue; }
+            if let Ok(v) = serde_json::from_str::<serde_json::Value>(data) { collect(&v, &mut out); }
+        }
+    }
+    out
+}
+
 /// B2: extract the assistant/answer text from a model response (OpenAI/Anthropic-style shapes).
 fn gather_response_text(v: &serde_json::Value) -> String {
     let mut out = String::new();
@@ -680,7 +715,21 @@ async fn forward(st: &GwState, path: &str, body: Bytes) -> Response {
                 .unwrap_or("application/json")
                 .to_string();
             if ctype.starts_with("text/event-stream") {
-                // Model APIs stream by default; relay chunk-by-chunk without buffering.
+                // F1: when a response gate is active, buffer the stream, gate the accumulated text, then
+                // emit (or block). With no gate active, relay chunk-by-chunk without buffering.
+                if response_gate_active(st) {
+                    let bytes = resp.bytes().await.unwrap_or_default();
+                    let answer = gather_sse_text(&bytes);
+                    let reqv: serde_json::Value = serde_json::from_slice(&req_body_for_gate).unwrap_or_else(|_| serde_json::json!({}));
+                    // Reuse response_gate by wrapping the gathered answer as a synthetic response object.
+                    let synth = serde_json::json!({"choices": [{"message": {"content": answer}}]});
+                    let (block, _score) = response_gate(st, &reqv, &synth).await;
+                    if let Some(reason) = block {
+                        let ev = format!("data: {}\n\ndata: [DONE]\n\n", serde_json::json!({"error": {"message": reason, "type": "acp_response_blocked"}}));
+                        return (status, [("content-type", "text/event-stream")], ev).into_response();
+                    }
+                    return (status, [("content-type", "text/event-stream")], bytes).into_response();
+                }
                 let s = futures_util::stream::unfold(resp, |mut r| async move {
                     match r.chunk().await {
                         Ok(Some(chunk)) => Some((Ok::<_, std::io::Error>(chunk), r)),

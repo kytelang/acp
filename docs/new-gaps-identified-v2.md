@@ -86,7 +86,7 @@ Acceptance:
 - `GET /packs/available` returns at least 5 built-in framework packs (3 original + 2 new).
 - The new packs' controls appear via `/controls?framework=...`.
 
-## F1. Streaming (SSE) response gating (P1)
+## F1. Streaming (SSE) response gating (P1)  [DONE 2026-09-27]
 Gap: the gateway gates only non-streaming responses; streamed chat responses relay ungated.
 Design: when a response gate is active (content firewall, external hook or groundedness) and the upstream
 streams, the gateway buffers the stream, runs `response_gate` on the accumulated text, then emits the
@@ -96,6 +96,11 @@ Acceptance:
   category is blocked (the client never receives the unsafe content).
 - A clean streamed response is delivered when a gate is active.
 - With no response gate configured, a streamed response is relayed passthrough (unchanged behaviour).
+Status (2026-09-27): SHIPPED. When a response gate is active the gateway buffers the SSE stream,
+gathers assistant text across `data:` events (`gather_sse_text`), runs `response_gate` and either emits
+a blocked SSE event or replays the buffered stream; with no gate it stays chunk-by-chunk passthrough.
+Verified e2e: an injected streamed response -> blocked SSE event; a clean streamed response -> all
+deltas delivered; no gate -> injected stream relayed unchanged.
 
 ## F2. First-party toxicity signal (P2)
 Gap: injection/PII/secrets/groundedness are built; toxicity relies on the external hook or an ML model.
