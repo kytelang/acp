@@ -56,7 +56,7 @@ returns a `links` object with per-link booleans (never errors on a dangling ref)
 view has a Model cards table with resolved link badges + a create modal. Verified via curl: all-valid ->
 model/use_case/risk all true; a dangling model_id -> model:false, others true.
 
-## G4. Stakeholder notifications on events (P1) - wire `webhook.rs` + `notify.rs`
+## G4. Stakeholder notifications on events (P1) - wire `webhook.rs` + `notify.rs`  [DONE 2026-09-27]
 Gap: no task notifications, comment threads, or event fan-out; Credo's core loop is collaboration.
 Design: server config `--webhook-url` (+ optional `--webhook-secret`). On GRC create, GRC status/stage
 change, GRC assignment, and on violation events, the server POSTs a structured, HMAC-signed event via
@@ -68,6 +68,11 @@ Acceptance:
 - A crafted tool name (e.g. containing markup) appears only as a JSON value in the payload, never
   interpolated (verified by inspecting the received body).
 - Assigning a GRC record fires a `grc.assigned` event naming the assignee.
+Status (2026-09-27): SHIPPED. Server `--webhook-url` + `--webhook-secret`; a `fire_webhook` helper
+builds `{type, ts_ms, event}`, signs it with `acp_core::webhook::sign_webhook` (HMAC-SHA256, header
+`x-acp-signature: t=..,v1=..`) and POSTs non-blocking. Wired on grc.created, grc.status, grc.assigned
+and violation. Verified against a mock receiver: all three event types delivered, each signature
+verifies, and crafted markup in a title/tool name appears only as a JSON value.
 
 ## G5. Pack + threat-feed breadth and an update channel (P2)
 Gap: only 3 built-in framework packs and a manual threat-pack load; Credo ships many jurisdictions with

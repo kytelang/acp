@@ -48,6 +48,9 @@ struct AppState {
     // refuses (block) or flags (default) on a bad verdict, storing a signed AI-BOM on a clean pass.
     model_scanner_url: Option<String>,
     model_scan_block: bool,
+    // G4: optional outbound event webhook (HMAC-signed) for stakeholder notifications.
+    webhook_url: Option<String>,
+    webhook_secret: Option<String>,
     lease: std::sync::Mutex<(bool, String, i64)>,
 }
 
@@ -287,6 +290,26 @@ async fn restore_control_state(st: &Arc<AppState>, store: &acp_cpstore::ControlS
     tracing::info!("restored control state (liveness + spike) from shared store");
 }
 
+/// G4: fire a structured, HMAC-signed event to the configured webhook (best-effort, non-blocking).
+/// User-controlled fields (tool name, subject, ...) are placed only as JSON values, never interpolated
+/// into markup, so a crafted value cannot forge the notification.
+fn fire_webhook(st: &Arc<AppState>, event_type: &str, fields: serde_json::Value) {
+    let url = match &st.webhook_url { Some(u) => u.clone(), None => return };
+    let secret = st.webhook_secret.clone().unwrap_or_default();
+    let now = now_ms();
+    let payload = serde_json::json!({"type": event_type, "ts_ms": now, "event": fields});
+    let body = payload.to_string();
+    let header = acp_core::webhook::sign_webhook(secret.as_bytes(), (now / 1000) as u64, &body);
+    tokio::spawn(async move {
+        let client = reqwest::Client::new();
+        let _ = client.post(&url)
+            .header("content-type", "application/json")
+            .header("x-acp-signature", header)
+            .body(body)
+            .send().await;
+    });
+}
+
 /// A5: load the SCIM user directory (id, email, role groups) from a JSON file, or return a demo
 /// mapping so the SCIM endpoints are exercisable under the mocked IdP. The file is a JSON array of
 /// {id, email, groups:[role,...]}.
@@ -381,6 +404,8 @@ async fn main() {
     let mut scim_users_path: Option<String> = None;
     let mut model_scanner_url: Option<String> = None;
     let mut model_scan_block = false;
+    let mut webhook_url: Option<String> = None;
+    let mut webhook_secret: Option<String> = None;
     let mut node_id: Option<String> = None;
     let mut lease_ttl_ms: i64 = 15_000;
     let mut it = args.iter().skip(1);
@@ -399,6 +424,8 @@ async fn main() {
             "--scim-users" => scim_users_path = it.next().cloned(),
             "--model-scanner-url" => model_scanner_url = it.next().cloned(),
             "--model-scan-block" => model_scan_block = true,
+            "--webhook-url" => webhook_url = it.next().cloned(),
+            "--webhook-secret" => webhook_secret = it.next().cloned(),
             "--node-id" => node_id = it.next().cloned(),
             "--lease-ttl-ms" => lease_ttl_ms = it.next().and_then(|v| v.parse().ok()).unwrap_or(15_000),
             "--cp-key" => { if let Some(v) = it.next() { cp_key = v.clone(); } }
@@ -579,6 +606,8 @@ async fn main() {
         lease_ttl_ms,
         model_scanner_url,
         model_scan_block,
+        webhook_url,
+        webhook_secret,
         lease: std::sync::Mutex::new((false, String::new(), 0)),
     });
     // C1 (HA): restore persisted liveness/spike state so the dead-man's-switch and alert state survive
@@ -1550,7 +1579,10 @@ async fn grc_create(State(st): State<Arc<AppState>>, headers: HeaderMap, Json(bo
     let pubkey_hex = hex::encode(acp_core::sign::Signer::public_key(&signer));
     let sig_hex = hex::encode(sig);
     match store.add_grc(&id, &kind, &subject, &title, &status, &doc_body, &operator, now as i64, &pubkey_hex, &sig_hex, &linked_refs, "{}", "", 0, &status).await {
-        Ok(()) => Json(serde_json::json!({"ok": true, "id": id, "kind": kind})).into_response(),
+        Ok(()) => {
+            fire_webhook(&st, "grc.created", serde_json::json!({"id": id, "kind": kind, "subject": subject, "title": title}));
+            Json(serde_json::json!({"ok": true, "id": id, "kind": kind})).into_response()
+        }
         Err(e) => Json(serde_json::json!({"ok": false, "error": e})).into_response(),
     }
 }
@@ -1574,7 +1606,10 @@ async fn grc_status(State(st): State<Arc<AppState>>, headers: HeaderMap, Path(id
     let pubkey_hex = hex::encode(acp_core::sign::Signer::public_key(&signer));
     let sig_hex = hex::encode(sig);
     match store.update_grc_signed(&id, &status, &rec.body, &status, &pubkey_hex, &sig_hex).await {
-        Ok(()) => Json(serde_json::json!({"ok": true, "id": id, "status": status})).into_response(),
+        Ok(()) => {
+            fire_webhook(&st, "grc.status", serde_json::json!({"id": id, "kind": rec.kind, "subject": rec.subject, "status": status}));
+            Json(serde_json::json!({"ok": true, "id": id, "status": status})).into_response()
+        }
         Err(e) => Json(serde_json::json!({"ok": false, "error": e})).into_response(),
     }
 }
@@ -1809,7 +1844,10 @@ async fn grc_assign(State(st): State<Arc<AppState>>, headers: HeaderMap, Path(id
     let assignee = body.get("assignee").and_then(|v| v.as_str()).unwrap_or("").to_string();
     let due_ms = body.get("due_ms").and_then(|v| v.as_i64()).unwrap_or(0);
     match store.set_grc_assignment(&id, &assignee, due_ms).await {
-        Ok(()) => Json(serde_json::json!({"ok": true, "id": id, "assignee": assignee, "due_ms": due_ms})).into_response(),
+        Ok(()) => {
+            fire_webhook(&st, "grc.assigned", serde_json::json!({"id": id, "assignee": assignee, "due_ms": due_ms}));
+            Json(serde_json::json!({"ok": true, "id": id, "assignee": assignee, "due_ms": due_ms})).into_response()
+        }
         Err(e) => Json(serde_json::json!({"ok": false, "error": e})).into_response(),
     }
 }
@@ -2262,6 +2300,14 @@ async fn record_event(State(st): State<Arc<AppState>>, headers: HeaderMap, Path(
         let id = format!("vio-{}", rand_hex(8));
         let _ = store.add_violation_event(&id, &kind, &g("proxy"), &g("agent"), &g("tool"), &g("verdict"), &g("rule_id"), &g("impact"), &g("outcome"), now_ms() as i64).await;
     }
+    // G4: notify stakeholders of the violation (fields are JSON values, never interpolated).
+    fire_webhook(&st, "violation", serde_json::json!({
+        "kind": kind,
+        "pep": ev.get("proxy").and_then(|v| v.as_str()).unwrap_or(""),
+        "agent": ev.get("agent").and_then(|v| v.as_str()).unwrap_or(""),
+        "tool": ev.get("tool").and_then(|v| v.as_str()).unwrap_or(""),
+        "verdict": ev.get("verdict").and_then(|v| v.as_str()).unwrap_or(""),
+    }));
     Json(serde_json::json!({"ok": true, "kind": kind})).into_response()
 }
 

@@ -120,6 +120,22 @@ signed ledger.
    The Merkle chain and every record signature are checked, so a truncated or tampered restore is
    rejected rather than silently accepted.
 
+## Event webhooks (stakeholder notifications)
+
+Point the control plane at an outbound webhook to notify stakeholders on governance and violation
+events:
+
+```sh
+acp-server ... --webhook-url https://hooks.example.com/acp --webhook-secret "$ACP_WEBHOOK_SECRET"
+```
+
+Each event is a JSON body `{type, ts_ms, event}` where `type` is `grc.created`, `grc.status`,
+`grc.assigned` or `violation`. The request carries an `x-acp-signature: t=<unix>,v1=<hmac-sha256>`
+header the receiver verifies against the shared secret (the same primitive as the inbound Slack
+verification). Attacker-influenced fields (a tool name, a record title) are carried only as JSON values,
+never interpolated into markup, so a crafted value cannot forge the notification. Delivery is
+best-effort and non-blocking; it never delays enforcement.
+
 ## Logging
 
 All services use structured logging, and **all of them write logs to STDERR**. This is deliberate: the
