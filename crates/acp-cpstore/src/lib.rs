@@ -747,7 +747,7 @@ mod tests {
         assert_eq!(eps[0].disposition, "block", "latest disposition wins");
         s.add_grc("grc-1", "risk", "checkout-agent", "PII exfiltration", "open", "{\"likelihood\":3,\"impact\":3}", "console", 4000, "aa", "bb", "[]", "{}", "", 0, "", "default").await.unwrap();
         s.add_grc("grc-2", "assessment", "checkout-agent", "EU AI Act tiering", "high", "{}", "console", 4001, "aa", "cc", "[]", "{}", "", 0, "", "default").await.unwrap();
-        assert_eq!(s.list_grc(None).await.unwrap().len(), 2);
+        assert_eq!(s.list_grc("default", None).await.unwrap().len(), 2);
         assert_eq!(s.list_grc("default", Some("risk")).await.unwrap().len(), 1);
         // A4: get_grc + update_grc_signed round-trip (status + signature updated together).
         let g = s.get_grc("grc-1").await.unwrap().expect("record present");
