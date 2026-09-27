@@ -107,7 +107,7 @@ a blocked SSE event or replays the buffered stream; with no gate it stays chunk-
 Verified e2e: an injected streamed response -> blocked SSE event; a clean streamed response -> all
 deltas delivered; no gate -> injected stream relayed unchanged.
 
-## F2. First-party toxicity signal (P2)
+## F2. First-party toxicity signal (P2)  [DONE 2026-09-27]
 Gap: injection/PII/secrets/groundedness are built; toxicity relies on the external hook or an ML model.
 Design: a lightweight, on by flag toxicity lexicon scorer behind the existing `Scorer` seam in
 `acp_core::content`, emitting a `toxicity` finding; blocks per policy. The external hook remains the path
@@ -117,6 +117,11 @@ Acceptance:
   text is not flagged.
 - With it disabled (default), behaviour is unchanged.
 - A unit test covers the lexicon precision on a small labelled set.
+Status (2026-09-27): SHIPPED. `ContentPolicy.block_toxicity` + a `ToxicityScorer` lexicon behind the
+Scorer seam (emits a `toxicity` finding, blocks per policy); off by default. Plumbed through
+firewall_config (cpstore column + server GET/POST + PEP fetch) and the console Content firewall toggle.
+Verified: unit test flags toxic only when enabled and leaves benign alone; config round-trips
+block_toxicity. The external hook remains the path to a stronger ML classifier.
 
 ## F3. Surface runtime monitors in the console (P2) - `drift.rs`, `lineage.rs`
 Gap: classifier-drift and data-class lineage exist as libraries but are not surfaced.

@@ -294,6 +294,7 @@ pub fn firewallStatusPanel(cfg: FirewallCfg): Html {
         <div class="row" style="gap:.6rem;align-items:center">
             {if (cfg.enabled) { <span class="badge ok">enabled</span> } else { <span class="badge bad">disabled</span> }}
             {if (cfg.blockSecrets) { <span class="badge ver">block secrets</span> } else { <span class="dim">secrets: allow</span> }}
+            {if (cfg.blockToxicity) { <span class="badge ver">toxicity on</span> } else { <span class="dim">toxicity off</span> }}
             {if (cfg.hasModel) { <span class="badge ver">ML model loaded</span> } else { <span class="dim">signatures only</span> }}
             {if (string.eql(cfg.scanUrl, "")) { <span class="dim">external scanner: off</span> } else { <span class="badge ver">external scanner</span> }}
             {if (cfg.blockOnScannerError) { <span class="badge warn">fail closed</span> } else { <span class="dim">scanner error: fail open</span> }}

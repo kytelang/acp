@@ -75,7 +75,8 @@ async fn fetch_firewall(client: &reqwest::Client, base: &str) -> Result<(Content
     let block_secrets = enabled && v.get("block_secrets").and_then(|x| x.as_bool()).unwrap_or(false);
     let denied_topics: Vec<String> = v.get("deny_topics").and_then(|x| x.as_array())
         .map(|a| a.iter().filter_map(|t| t.as_str().map(|s| s.to_string())).collect()).unwrap_or_default();
-    let policy = ContentPolicy { block_injection: enabled, block_secrets, redact_pii: enabled, denied_topics };
+    let block_toxicity = enabled && v.get("block_toxicity").and_then(|x| x.as_bool()).unwrap_or(false);
+    let policy = ContentPolicy { block_injection: enabled, block_secrets, redact_pii: enabled, denied_topics, block_toxicity };
     let model_s = v.get("model").and_then(|x| x.as_str()).unwrap_or("");
     let ml = if enabled && !model_s.is_empty() { LinearScorer::from_json(model_s).ok().map(std::sync::Arc::new) } else { None };
     Ok((policy, ml))
@@ -226,7 +227,7 @@ pub async fn run(args: Vec<String>) -> std::process::ExitCode {
         report_url: report_url.clone(),
         report_token: report_token.clone(),
         proxy_id: proxy_id.clone().unwrap_or_else(|| "intercept".to_string()),
-        content: RwLock::new(ContentPolicy { block_injection: true, block_secrets, redact_pii: true, denied_topics: deny_topics }),
+        content: RwLock::new(ContentPolicy { block_injection: true, block_secrets, redact_pii: true, denied_topics: deny_topics, block_toxicity: false }),
         content_ml: RwLock::new(None),
         client: http.clone(),
         ledger,

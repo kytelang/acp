@@ -30,6 +30,9 @@ pub struct ContentPolicy {
     /// Extra denied-topic keywords or regexes (case-insensitive substring or regex).
     #[serde(default)]
     pub denied_topics: Vec<String>,
+    /// F2: block on a toxicity/harmful-content lexicon match (off by default).
+    #[serde(default)]
+    pub block_toxicity: bool,
 }
 
 impl Default for ContentPolicy {
@@ -39,6 +42,7 @@ impl Default for ContentPolicy {
             block_secrets: false,
             redact_pii: true,
             denied_topics: Vec::new(),
+            block_toxicity: false,
         }
     }
 }
@@ -265,6 +269,41 @@ impl Scorer for SignatureScorer {
     }
 }
 
+/// F2: a lightweight toxicity/harmful-content lexicon scorer behind the `Scorer` seam. Signature
+/// grade, deliberately small: the external content-scan hook remains the path to a stronger ML
+/// classifier. Emits a `toxicity` signal (score 1.0) on a lexicon match.
+pub struct ToxicityScorer;
+
+impl ToxicityScorer {
+    fn lexicon() -> &'static [&'static str] {
+        // Harmful-intent phrases (not slurs; those belong to a maintained ML classifier). Case-insensitive.
+        &[
+            "kill yourself", "kys", "i will kill you", "i'll kill you", "go die",
+            "make a bomb", "build a bomb", "how to make a weapon", "how to hurt",
+            "you are worthless", "you're worthless", "i hate you and", "commit suicide",
+        ]
+    }
+}
+
+impl Scorer for ToxicityScorer {
+    fn name(&self) -> &str { "toxicity" }
+    fn score(&self, text: &str, _ctx: &ScanContext) -> Vec<Signal> {
+        let lower = text.to_ascii_lowercase();
+        for phrase in Self::lexicon() {
+            if lower.contains(phrase) {
+                return vec![Signal {
+                    detector: "toxicity".into(),
+                    label: format!("toxicity lexicon match: '{phrase}'"),
+                    score: 1.0,
+                    model_id: "lexicon".into(),
+                    model_version: "v1".into(),
+                }];
+            }
+        }
+        vec![]
+    }
+}
+
 /// A trained logistic-regression model over hashed word n-grams (ML-engine phase 2). Small,
 /// CPU-fast and fully on-prem: a real trained classifier that generalises past fixed signatures.
 /// A transformer/ONNX backend is a future drop-in behind the same `Scorer` seam (see the design doc).
@@ -467,7 +506,9 @@ pub struct ContentEngine {
 impl ContentEngine {
     /// The default engine: signature detection only (current behaviour).
     pub fn signature_only(policy: &ContentPolicy) -> Self {
-        ContentEngine { scorers: vec![Box::new(SignatureScorer::new(policy.denied_topics.clone()))] }
+        let mut scorers: Vec<Box<dyn Scorer>> = vec![Box::new(SignatureScorer::new(policy.denied_topics.clone()))];
+        if policy.block_toxicity { scorers.push(Box::new(ToxicityScorer)); }
+        ContentEngine { scorers }
     }
 
     /// Build an engine from an explicit scorer list (for example signature + ML).
@@ -508,6 +549,10 @@ pub fn verdict_from(policy: &ContentPolicy, signals: &[Signal], text: &str) -> C
                 }
             }
             "denied-topic" => {
+                findings.push(ContentFinding { kind: s.detector.clone(), detail: s.label.clone() });
+                block = true;
+            }
+            "toxicity" => {
                 findings.push(ContentFinding { kind: s.detector.clone(), detail: s.label.clone() });
                 block = true;
             }
@@ -740,6 +785,24 @@ mod tests {
 
 
 #[cfg(test)]
+mod toxicity_tests {
+    use super::*;
+    #[test]
+    fn toxicity_flags_only_when_enabled() {
+        let toxic = "please just kill yourself";
+        let on = ContentPolicy { block_toxicity: true, ..Default::default() };
+        let v = scan_text(&on, toxic);
+        assert!(v.block && v.findings.iter().any(|f| f.kind == "toxicity"), "flagged when enabled");
+        let off = ContentPolicy::default();
+        let v2 = scan_text(&off, toxic);
+        assert!(!v2.findings.iter().any(|f| f.kind == "toxicity"), "not flagged when disabled");
+        let benign = ContentPolicy { block_toxicity: true, ..Default::default() };
+        let v3 = scan_text(&benign, "the deployment finished and all checks passed");
+        assert!(!v3.findings.iter().any(|f| f.kind == "toxicity"), "benign not flagged");
+    }
+}
+
+#[cfg(test)]
 mod corpus_gate {
     //! C3: efficacy gate. Runs the built-in engine over the checked-in labelled corpus and asserts
     //! injection/PII precision, recall and the benign false-positive rate stay above the published
@@ -758,7 +821,7 @@ mod corpus_gate {
     }
 
     fn metrics(rows: &[Row], positive_label: &str, finding_kind: &str) -> (f32, f32, f32) {
-        let policy = ContentPolicy { block_injection: true, block_secrets: true, redact_pii: true, denied_topics: vec![] };
+        let policy = ContentPolicy { block_injection: true, block_secrets: true, redact_pii: true, denied_topics: vec![], block_toxicity: false };
         let (mut tp, mut fp, mut fn_, mut tn) = (0i32, 0i32, 0i32, 0i32);
         for r in rows {
             let v = scan_text(&policy, &r.text);

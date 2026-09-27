@@ -182,9 +182,10 @@ pub struct FirewallCfg {
     pub blockOnScannerError: bool,
     pub feedVersion: long,
     pub threatCount: long,
-    init(enabled: bool, blockSecrets: bool, denyTopics: string, hasModel: bool, scanUrl: string, blockOnScannerError: bool, feedVersion: long, threatCount: long) {
+    pub blockToxicity: bool,
+    init(enabled: bool, blockSecrets: bool, denyTopics: string, hasModel: bool, scanUrl: string, blockOnScannerError: bool, feedVersion: long, threatCount: long, blockToxicity: bool) {
         self.enabled = enabled; self.blockSecrets = blockSecrets; self.denyTopics = denyTopics; self.hasModel = hasModel;
-        self.scanUrl = scanUrl; self.blockOnScannerError = blockOnScannerError; self.feedVersion = feedVersion; self.threatCount = threatCount;
+        self.scanUrl = scanUrl; self.blockOnScannerError = blockOnScannerError; self.feedVersion = feedVersion; self.threatCount = threatCount; self.blockToxicity = blockToxicity;
     }
 }
 
@@ -835,7 +836,7 @@ pub struct AcpClient {
     // Central content-firewall config (kept in the control-plane DB; PEPs fetch it).
     pub fn firewallStatus(self: AcpClient): FirewallCfg {
         let resp = client.Http.get(self.base + "/firewall/config");
-        if (resp.status.toCode() != 200) { return FirewallCfg(false, false, "", false, "", false, 0, 0); }
+        if (resp.status.toCode() != 200) { return FirewallCfg(false, false, "", false, "", false, 0, 0, false); }
         let v = json.parse(resp.body);
         let en = json.asBool(json.get(v, "enabled")) ?? false;
         let bs = json.asBool(json.get(v, "block_secrets")) ?? false;
@@ -857,10 +858,11 @@ pub struct AcpClient {
         let tsv = json.get(v, "threat_signatures");
         let tsArr = json.asArray(tsv);
         let tsCount = tsArr?.size() ?? 0;
-        return FirewallCfg(en, bs, topics, !string.eql(model, ""), scanUrl, boe, feedVer, tsCount);
+        let tox = json.asBool(json.get(v, "block_toxicity")) ?? false;
+        return FirewallCfg(en, bs, topics, !string.eql(model, ""), scanUrl, boe, feedVer, tsCount, tox);
     }
 
-    pub fn setFirewall(self: AcpClient, enabled: bool, blockSecrets: bool, denyCsv: string, model: string, scanUrl: string, blockOnScannerError: bool, userAuth: string): DeployResult {
+    pub fn setFirewall(self: AcpClient, enabled: bool, blockSecrets: bool, denyCsv: string, model: string, scanUrl: string, blockOnScannerError: bool, blockToxicity: bool, userAuth: string): DeployResult {
         let topics = list.List<string>();
         let parts = string.split(denyCsv, ",");
         let i = 0;
@@ -879,7 +881,8 @@ pub struct AcpClient {
         let enS = enabled ? "true" : "false";
         let bsS = blockSecrets ? "true" : "false";
         let boeS = blockOnScannerError ? "true" : "false";
-        let body = "{\"enabled\":" + enS + ",\"block_secrets\":" + bsS + ",\"deny_topics\":[" + arr + "],\"model\":" + self.jstr(model) + ",\"scan_url\":" + self.jstr(scanUrl) + ",\"block_on_scanner_error\":" + boeS + "}";
+        let toxS = blockToxicity ? "true" : "false";
+        let body = "{\"enabled\":" + enS + ",\"block_secrets\":" + bsS + ",\"deny_topics\":[" + arr + "],\"model\":" + self.jstr(model) + ",\"scan_url\":" + self.jstr(scanUrl) + ",\"block_on_scanner_error\":" + boeS + ",\"block_toxicity\":" + toxS + "}";
         let hdrs = client.Http.emptyHeaders();
         hdrs.set("Content-Type", "application/json");
         if (!string.eql(userAuth, "")) { hdrs.set("Authorization", userAuth); }

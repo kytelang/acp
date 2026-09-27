@@ -280,6 +280,7 @@ async fn build_controller(o: &Opts) -> Result<Arc<Controller>, String> {
             block_secrets: o.block_secrets,
             redact_pii: true,
             denied_topics: o.deny_topics.clone(),
+            block_toxicity: false,
         });
         tracing::info!("first-party content firewall enabled over tool-call arguments");
     }
@@ -460,7 +461,8 @@ pub async fn run(args: Vec<String>) -> ExitCode {
             let enabled = v.get("enabled").and_then(|x| x.as_bool()).unwrap_or(false);
             let block_secrets = enabled && v.get("block_secrets").and_then(|x| x.as_bool()).unwrap_or(false);
             let denied_topics: Vec<String> = v.get("deny_topics").and_then(|x| x.as_array()).map(|a| a.iter().filter_map(|t| t.as_str().map(|s| s.to_string())).collect()).unwrap_or_default();
-            let pol = acp_core::content::ContentPolicy { block_injection: enabled, block_secrets, redact_pii: enabled, denied_topics };
+            let block_toxicity = enabled && v.get("block_toxicity").and_then(|x| x.as_bool()).unwrap_or(false);
+            let pol = acp_core::content::ContentPolicy { block_injection: enabled, block_secrets, redact_pii: enabled, denied_topics, block_toxicity };
             let model = v.get("model").and_then(|x| x.as_str()).unwrap_or("");
             let ml = if enabled && !model.is_empty() { acp_core::content::LinearScorer::from_json(model).ok().map(std::sync::Arc::new) } else { None };
             // B1: central external content-scan hook config.

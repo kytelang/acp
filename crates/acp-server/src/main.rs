@@ -1260,7 +1260,7 @@ async fn threat_pack_load(State(st): State<Arc<AppState>>, headers: HeaderMap, J
 /// carrying local files. Ungated (same trust as the governed rule set). Returns a safe default when
 /// no config has been set yet.
 async fn firewall_config_get(State(st): State<Arc<AppState>>) -> Response {
-    let default = serde_json::json!({"enabled": false, "block_secrets": false, "deny_topics": [], "model": "", "scan_url": "", "block_on_scanner_error": false, "updated_ms": 0});
+    let default = serde_json::json!({"enabled": false, "block_secrets": false, "deny_topics": [], "model": "", "scan_url": "", "block_on_scanner_error": false, "block_toxicity": false, "updated_ms": 0});
     let store = match &st.store { Some(s) => s, None => return Json(default).into_response() };
     match store.get_firewall_config().await {
         Ok(Some(c)) => {
@@ -1269,7 +1269,7 @@ async fn firewall_config_get(State(st): State<Arc<AppState>>) -> Response {
             // B5: merge threat-feed signatures into the served deny_topics so every PEP applies them on
             // its next fetch, without any PEP change. threat_signatures is also returned for display.
             topics.extend(threat.iter().cloned());
-            Json(serde_json::json!({"enabled": c.enabled, "block_secrets": c.block_secrets, "deny_topics": topics, "model": c.model, "scan_url": c.scan_url, "block_on_scanner_error": c.block_on_scanner_error, "feed_version": c.feed_version, "threat_signatures": threat, "updated_ms": c.updated_ms})).into_response()
+            Json(serde_json::json!({"enabled": c.enabled, "block_secrets": c.block_secrets, "deny_topics": topics, "model": c.model, "scan_url": c.scan_url, "block_on_scanner_error": c.block_on_scanner_error, "block_toxicity": c.block_toxicity, "feed_version": c.feed_version, "threat_signatures": threat, "updated_ms": c.updated_ms})).into_response()
         }
         Ok(None) => Json(default).into_response(),
         Err(e) => Json(serde_json::json!({"error": e})).into_response(),
@@ -1295,7 +1295,8 @@ async fn firewall_config_set(State(st): State<Arc<AppState>>, headers: HeaderMap
     };
     let scan_url = body.get("scan_url").and_then(|v| v.as_str()).unwrap_or("").trim().to_string();
     let block_on_scanner_error = body.get("block_on_scanner_error").and_then(|v| v.as_bool()).unwrap_or(false);
-    match store.set_firewall_config(enabled, block_secrets, &deny_topics_json, &model, &scan_url, block_on_scanner_error, now_ms() as i64).await {
+    let block_toxicity = body.get("block_toxicity").and_then(|v| v.as_bool()).unwrap_or(false);
+    match store.set_firewall_config(enabled, block_secrets, &deny_topics_json, &model, &scan_url, block_on_scanner_error, block_toxicity, now_ms() as i64).await {
         Ok(()) => Json(serde_json::json!({"ok": true})).into_response(),
         Err(e) => Json(serde_json::json!({"ok": false, "error": e})).into_response(),
     }
@@ -1688,7 +1689,7 @@ async fn redteam_run(State(st): State<Arc<AppState>>, headers: HeaderMap, Json(b
             let mut topics: Vec<String> = serde_json::from_str(&c.deny_topics).unwrap_or_default();
             let threat: Vec<String> = serde_json::from_str(&c.threat_signatures).unwrap_or_default();
             topics.extend(threat);
-            let pol = acp_core::content::ContentPolicy { block_injection: true, block_secrets: c.block_secrets, redact_pii: true, denied_topics: topics };
+            let pol = acp_core::content::ContentPolicy { block_injection: true, block_secrets: c.block_secrets, redact_pii: true, denied_topics: topics, block_toxicity: c.block_toxicity };
             let ml = if !c.model.is_empty() { acp_core::content::LinearScorer::from_json(&c.model).ok() } else { None };
             (pol, ml)
         }

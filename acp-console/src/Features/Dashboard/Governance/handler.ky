@@ -130,7 +130,8 @@ pub struct FirewallSaveHandler impl RouteHandler {
         let model = json.stringField(ctx.request.body, "fwModel");
         let scanUrl = json.stringField(ctx.request.body, "fwScanUrl");
         let boe = json.stringField(ctx.request.body, "fwBlockOnScannerError");
-        let _ = self.acp.setFirewall(string.eql(en, "true"), string.eql(bs, "true"), topics, model, scanUrl, string.eql(boe, "true"), auth);
+        let tox = json.stringField(ctx.request.body, "fwBlockToxicity");
+        let _ = self.acp.setFirewall(string.eql(en, "true"), string.eql(bs, "true"), topics, model, scanUrl, string.eql(boe, "true"), string.eql(tox, "true"), auth);
         return await ds_response.patch(firewallStatusPanel(self.acp.firewallStatus()));
     }
 }

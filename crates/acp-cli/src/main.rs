@@ -1578,6 +1578,7 @@ fn cmd_content_scan(rest: &[String]) -> ExitCode {
         block_injection: true,
         block_secrets: rest.iter().any(|a| a == "--block-secrets"),
         redact_pii: !rest.iter().any(|a| a == "--no-redact-pii"),
+        block_toxicity: rest.iter().any(|a| a == "--block-toxicity"),
         denied_topics: topics,
     };
     let v = scan_text(&policy, &text);

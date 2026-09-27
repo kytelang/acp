@@ -75,6 +75,7 @@ async fn main() -> std::process::ExitCode {
     let mut groundedness_threshold: Option<f32> = None;
     let mut content_fw = false;
     let mut fw_block_secrets = false;
+    let mut fw_block_toxicity = false;
     let mut fw_deny_topics: Vec<String> = Vec::new();
     let mut content_ml_path: Option<String> = None;
     let mut budget_pg_conn: Option<String> = None;
@@ -97,6 +98,7 @@ async fn main() -> std::process::ExitCode {
             "--groundedness-threshold" => groundedness_threshold = it.next().and_then(|v| v.parse().ok()),
             "--content-firewall" => content_fw = true,
             "--block-secrets" => { content_fw = true; fw_block_secrets = true; }
+            "--block-toxicity" => { content_fw = true; fw_block_toxicity = true; }
             "--deny-topic" => { content_fw = true; if let Some(v) = it.next() { fw_deny_topics.push(v.clone()); } }
             "--content-ml" => { content_fw = true; content_ml_path = it.next().cloned(); }
             "--budget-pg" => budget_pg_conn = it.next().cloned(),
@@ -159,7 +161,7 @@ async fn main() -> std::process::ExitCode {
     let upstream_key = upstream_key.map(|k| acp_core::secret::resolve(&k));
     let bg_key = bg_key_hex.as_ref().and_then(|h| hex::decode(acp_core::secret::resolve(h)).ok());
     let content_fw = if content_fw {
-        Some(acp_core::content::ContentPolicy { block_injection: true, block_secrets: fw_block_secrets, redact_pii: true, denied_topics: fw_deny_topics })
+        Some(acp_core::content::ContentPolicy { block_injection: true, block_secrets: fw_block_secrets, redact_pii: true, denied_topics: fw_deny_topics, block_toxicity: fw_block_toxicity })
     } else { None };
     let budget_pg = match budget_pg_conn.as_ref() {
         Some(conn) => match acp_pgstate::PgState::connect(conn).await {
