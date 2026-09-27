@@ -49,7 +49,7 @@ Acceptance:
 - A callback with a bad signature is rejected.
 - A callback advancing a GRC record's status re-signs and the record still verifies.
 
-## T4. Multilingual detection signatures (P2)
+## T4. Multilingual detection signatures (P2)  [DONE 2026-09-27]
 Gap: injection signatures and the toxicity lexicon are English-only.
 Design: add non-English injection signatures (at least Spanish, French, German for the common
 "ignore previous instructions" family) to `acp_core::content`; the external hook remains the path to
@@ -58,6 +58,10 @@ Acceptance:
 - A non-English injection phrase (for example the Spanish "ignora las instrucciones anteriores") is
   flagged as prompt-injection by the built-in engine.
 - English detection is unchanged (the corpus gate still holds).
+Status (2026-09-27): SHIPPED. Added es/fr/de injection signatures (the "ignore/disregard/forget previous
+instructions" family) to `acp_core::content::injection_res`. Verified: Spanish/French/German injection
+phrases are flagged prompt-injection; the English corpus gate still holds (injection 1.00/1.00/0.00,
+PII 0.92). Full multilingual coverage remains the external hook's job.
 
 ## T5. Collaboration: GRC comments (P2)
 Gap: no comment threads / discussion on governance records.
