@@ -133,7 +133,7 @@ Acceptance:
   any class beyond tolerance.
 - The lineage view shows data-class-to-tool edges from reported counts, with no raw argument values.
 
-## F4. Detection corpus scale + firewall latency benchmark (P2)
+## F4. Detection corpus scale + firewall latency benchmark (P2)  [DONE 2026-09-27]
 Gap: the C3 corpus is a 45-example seed; there is no published firewall-path latency figure.
 Design: grow the labelled corpus (target >= 200 examples across injection/PII/benign) and add a
 criterion/bench (or a timed test) measuring content-scan latency; publish both in the guide.
@@ -141,6 +141,10 @@ Acceptance:
 - The corpus has >= 200 labelled examples with stated provenance; the `corpus_gate` thresholds still hold.
 - A latency measurement for a single content scan is produced and published in the guide (a number, with
   the method).
+Status (2026-09-27): SHIPPED. Corpus grown to 213 labelled examples (86 injection / 37 PII / 90 benign);
+the `corpus_gate` thresholds still hold (injection 1.00/1.00/0.00, PII precision 1.00 recall 0.92). A
+`content_scan_latency_is_reported` test measures ~70 us/scan over the corpus (CI ceiling 2 ms); the
+numbers and method are published in guide chapter 15.
 
 ## G6. Vendor risk questionnaire (P3)
 Gap: the vendor registry stores only a score; Credo runs vendor questionnaires/continuous monitoring.

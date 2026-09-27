@@ -837,6 +837,24 @@ mod corpus_gate {
     }
 
     #[test]
+    fn content_scan_latency_is_reported() {
+        // F4: measure per-scan latency over the corpus so a number can be published (guide ch15).
+        let rows = corpus();
+        let policy = ContentPolicy { block_injection: true, block_secrets: true, redact_pii: true, denied_topics: vec![], block_toxicity: false };
+        let start = std::time::Instant::now();
+        let iters = 5u32;
+        for _ in 0..iters {
+            for r in &rows { let _ = scan_text(&policy, &r.text); }
+        }
+        let total = start.elapsed();
+        let scans = iters as u128 * rows.len() as u128;
+        let per_us = total.as_micros() / scans.max(1);
+        eprintln!("content-scan latency: {per_us} us/scan over {scans} scans ({} corpus rows)", rows.len());
+        // A loose ceiling so the number is a regression guard, not a flaky perf gate.
+        assert!(per_us < 2000, "content scan under 2ms/scan (got {per_us} us)");
+    }
+
+    #[test]
     fn injection_and_pii_efficacy_meets_thresholds() {
         let rows = corpus();
         assert!(rows.len() >= 40, "corpus has a meaningful size (got {})", rows.len());
