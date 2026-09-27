@@ -634,6 +634,13 @@ impl ControlStore {
         Ok(())
     }
 
+    /// G1/A2: replace a GRC record's advisory linked_refs (unsigned; not part of the signed doc).
+    pub async fn set_grc_linked_refs(&self, id: &str, linked_refs: &str) -> Result<(), String> {
+        let sql = self.ph("UPDATE grc_records SET linked_refs = ? WHERE id = ?");
+        sqlx::query(&sql).bind(linked_refs).bind(id).execute(&self.pool).await.map_err(|e| e.to_string())?;
+        Ok(())
+    }
+
     /// A1: set the assignee and due date on a GRC record. Workflow metadata, not part of the signed
     /// document, so it does not require a re-sign.
     pub async fn set_grc_assignment(&self, id: &str, assignee: &str, due_ms: i64) -> Result<(), String> {

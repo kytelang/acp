@@ -231,3 +231,16 @@ pub struct RunRedteamHandler impl RouteHandler {
         return await ds_response.patch(redteamPanel(self.acp.redteamRuns()));
     }
 }
+
+// G1: advance a use-case record through its gated lifecycle, then patch the refreshed GRC panel.
+pub struct UsecaseTransitionHandler impl RouteHandler {
+    acp: AcpClient,
+    init(acp: AcpClient) { self.acp = acp; }
+    async fn serve(self: UsecaseTransitionHandler, ctx: Context): Response {
+        let auth = ctx.request.headers.get("authorization") ?? "";
+        let id = ctx.param("id");
+        let stage = ctx.param("stage");
+        let _ = self.acp.usecaseTransition(id, stage, auth);
+        return await ds_response.patch(grcPanel(self.acp.grcRows()));
+    }
+}

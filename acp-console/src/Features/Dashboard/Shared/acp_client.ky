@@ -1149,6 +1149,19 @@ pub struct AcpClient {
         return DeployResult(true, "created " + (json.asString(json.get(v, "id")) ?? "") + " (" + kind + ")");
     }
 
+    // G1: advance a use-case record through its gated lifecycle (server enforces the gate).
+    pub fn usecaseTransition(self: AcpClient, id: string, stage: string, userAuth: string): DeployResult {
+        let hdrs = client.Http.emptyHeaders();
+        hdrs.set("Content-Type", "application/json");
+        if (!string.eql(userAuth, "")) { hdrs.set("Authorization", userAuth); }
+        else { let tok = self.authToken("GrcAuthor"); if (!string.eql(tok, "")) { hdrs.set("Authorization", "Bearer " + tok); } }
+        let resp = client.Http.request("POST", self.base + "/grc/" + id + "/usecase/" + stage, hdrs, "{}");
+        if (resp.status.toCode() != 200) { return DeployResult(false, "acp-server unreachable"); }
+        let v = json.parse(resp.body);
+        if (!(json.asBool(json.get(v, "ok")) ?? false)) { return DeployResult(false, json.asString(json.get(v, "error")) ?? "rejected"); }
+        return DeployResult(true, "stage -> " + stage);
+    }
+
     // A1: run the EU AI Act assessment engine over a screening questionnaire. answersJson is a raw
     // JSON object of boolean flags, e.g. {"employment_or_education":true}. The server computes the
     // risk tier and the control checklist, and persists a signed record.

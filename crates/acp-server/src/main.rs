@@ -658,7 +658,9 @@ async fn main() {
         .route("/redteam/runs", get(redteam_runs))
         .route("/grc/assess", post(grc_assess))
         .route("/grc/:id/status", post(grc_status))
+        .route("/grc/:id/usecase/:stage", post(grc_usecase_transition))
         .route("/grc/:id/assign", post(grc_assign))
+        .route("/grc/:id/link", post(grc_link))
         .route("/grc/:id/control/:control_id", post(grc_control_toggle))
         .route("/approvals/pending", get(approvals_pending))
         .route("/evidence/recent", get(evidence_recent))
@@ -1724,6 +1726,28 @@ async fn grc_assign(State(st): State<Arc<AppState>>, headers: HeaderMap, Path(id
     }
 }
 
+/// G1/A2: append an advisory linked reference (another GRC id or a decision id) to a record. Unsigned
+/// workflow metadata; used to link an assessment/attestation to a use-case for its lifecycle gates.
+async fn grc_link(State(st): State<Arc<AppState>>, headers: HeaderMap, Path(id): Path<String>, Json(body): Json<serde_json::Value>) -> Response {
+    if let Err(r) = authorize(&st.auth, &headers, acp_auth::Capability::EditGrc) { return r; }
+    let store = match &st.store { Some(s) => s, None => return Json(serde_json::json!({"ok": false, "error": "no --store configured"})).into_response() };
+    let link_id = body.get("id").and_then(|v| v.as_str()).unwrap_or("").trim().to_string();
+    if link_id.is_empty() { return Json(serde_json::json!({"ok": false, "error": "id is required"})).into_response(); }
+    let link_type = body.get("type").and_then(|v| v.as_str()).unwrap_or("ref").to_string();
+    let rec = match store.get_grc(&id).await {
+        Ok(Some(r)) => r,
+        Ok(None) => return Json(serde_json::json!({"ok": false, "error": "no such record"})).into_response(),
+        Err(e) => return Json(serde_json::json!({"ok": false, "error": e})).into_response(),
+    };
+    let mut refs: Vec<serde_json::Value> = serde_json::from_str(&rec.linked_refs).unwrap_or_default();
+    refs.push(serde_json::json!({"type": link_type, "id": link_id}));
+    let refs_json = serde_json::to_string(&refs).unwrap_or_else(|_| "[]".to_string());
+    match store.set_grc_linked_refs(&id, &refs_json).await {
+        Ok(()) => Json(serde_json::json!({"ok": true, "id": id, "linked": link_id})).into_response(),
+        Err(e) => Json(serde_json::json!({"ok": false, "error": e})).into_response(),
+    }
+}
+
 /// A1: toggle a control's done flag in a conformity/assessment checklist and re-sign the record, so
 /// the checklist progress stays tamper-evident. The control_id must already be in the checklist.
 async fn grc_control_toggle(State(st): State<Arc<AppState>>, headers: HeaderMap, Path((id, control_id)): Path<(String, String)>, Json(body): Json<serde_json::Value>) -> Response {
@@ -1757,6 +1781,59 @@ async fn grc_control_toggle(State(st): State<Arc<AppState>>, headers: HeaderMap,
     match store.update_grc_signed(&id, &rec.status, &new_body, &rec.stage, &pubkey_hex, &sig_hex).await {
         Ok(()) => Json(serde_json::json!({"ok": true, "id": id, "control_id": control_id})).into_response(),
         Err(e) => Json(serde_json::json!({"ok": false, "error": e})).into_response(),
+    }
+}
+
+/// G1: advance a use-case GRC record through its gated lifecycle. The gate is enforced by
+/// `acp_core::usecase`: `assessed` requires a linked assessment GRC record, `approved` requires a
+/// linked attestation. Linked records are the record's `linked_refs` (by GRC id). Re-signs on success.
+async fn grc_usecase_transition(State(st): State<Arc<AppState>>, headers: HeaderMap, Path((id, stage)): Path<(String, String)>, Json(_body): Json<serde_json::Value>) -> Response {
+    if let Err(r) = authorize(&st.auth, &headers, acp_auth::Capability::EditGrc) { return r; }
+    let store = match &st.store { Some(s) => s, None => return Json(serde_json::json!({"ok": false, "error": "no --store configured"})).into_response() };
+    let to = match acp_core::usecase::Stage::parse(&stage) {
+        Some(s) => s,
+        None => return Json(serde_json::json!({"ok": false, "error": format!("unknown stage '{stage}'")})).into_response(),
+    };
+    let rec = match store.get_grc(&id).await {
+        Ok(Some(r)) => r,
+        Ok(None) => return Json(serde_json::json!({"ok": false, "error": "no such record"})).into_response(),
+        Err(e) => return Json(serde_json::json!({"ok": false, "error": e})).into_response(),
+    };
+    if rec.kind != "use-case" {
+        return Json(serde_json::json!({"ok": false, "error": "not a use-case record"})).into_response();
+    }
+    // Resolve the current stage (default proposed), and gate signals from the linked GRC records.
+    let cur = acp_core::usecase::Stage::parse(if rec.stage.is_empty() { "proposed" } else { &rec.stage }).unwrap_or(acp_core::usecase::Stage::Proposed);
+    let refs: Vec<serde_json::Value> = serde_json::from_str(&rec.linked_refs).unwrap_or_default();
+    let (mut has_assessment, mut has_attestation) = (false, false);
+    for rf in &refs {
+        let rid = rf.get("id").and_then(|v| v.as_str()).or_else(|| rf.as_str()).unwrap_or("");
+        if rid.is_empty() { continue; }
+        if let Ok(Some(lr)) = store.get_grc(rid).await {
+            match lr.kind.as_str() {
+                "assessment" => has_assessment = true,
+                "attestation" => has_attestation = true,
+                _ => {}
+            }
+        }
+    }
+    let mut reg = acp_core::usecase::UseCaseRegistry::new();
+    reg.upsert(acp_core::usecase::UseCase { id: id.clone(), name: rec.title.clone(), owner: rec.operator.clone(), stage: cur, tier: None, assessment_id: None, model_classes: vec![], created_ms: rec.created_ms as u64 });
+    match reg.advance(&id, to, has_assessment, has_attestation) {
+        acp_core::usecase::Transition::Refused(why) => Json(serde_json::json!({"ok": false, "error": why})).into_response(),
+        acp_core::usecase::Transition::Ok => {
+            // Persist the new stage (as both stage and status) and re-sign the record.
+            let new_stage = stage.to_ascii_lowercase();
+            let doc = grc_doc(&rec.id, &rec.kind, &rec.subject, &rec.title, &new_stage, &rec.body);
+            let signer = enroll_signer(&st.cp_key);
+            let sig = acp_core::sign::Signer::sign(&signer, &acp_core::canonical::canonical_bytes(&doc));
+            let pubkey_hex = hex::encode(acp_core::sign::Signer::public_key(&signer));
+            let sig_hex = hex::encode(sig);
+            match store.update_grc_signed(&id, &new_stage, &rec.body, &new_stage, &pubkey_hex, &sig_hex).await {
+                Ok(()) => Json(serde_json::json!({"ok": true, "id": id, "stage": new_stage})).into_response(),
+                Err(e) => Json(serde_json::json!({"ok": false, "error": e})).into_response(),
+            }
+        }
     }
 }
 

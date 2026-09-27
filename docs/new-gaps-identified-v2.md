@@ -11,7 +11,7 @@ console; they collapse into free-form GRC records. Surfacing them is the highest
 
 ---
 
-## G1. Enforced use-case lifecycle gates (P1) - surface `usecase.rs`
+## G1. Enforced use-case lifecycle gates (P1) - surface `usecase.rs`  [DONE 2026-09-27]
 Gap: Credo enforces multi-state, gated use-case workflows; ACP has the gate logic but does not enforce it.
 Design: a GRC record of kind `use-case` carries a `stage` (proposed|assessed|approved|deployed|retired).
 A new `POST /grc/:id/usecase/:stage` drives the transition through `acp_core::usecase`, refusing it

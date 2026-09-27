@@ -526,9 +526,20 @@ pub fn grcPanel(rows: list.List<GrcRow>): Html {
                             <td>{if (r.verified) { <span class="badge ok">verified</span> } else { <span class="badge bad">unverified</span> }}</td>
                             <td>{if (r.totalRefs == 0) { <span class="dim">0/0</span> } else { <span class={r.verifiedRefs == r.totalRefs ? "badge ok" : "badge warn"}>{r.verifiedRefs}/{r.totalRefs} verified</span> }}</td>
                             <td>
-                                <button class="btn" data-on:click={"@post('/grc/" + r.id + "/to/in-review')"}>Review</button>
-                                <button class="btn ok" data-on:click={"@post('/grc/" + r.id + "/to/approved')"}>Approve</button>
-                                <button class="btn no" data-on:click={"@post('/grc/" + r.id + "/to/closed')"}>Close</button>
+                                {if (string.eql(r.kind, "use-case")) {
+                                    <span>
+                                        {if (string.eql(r.status, "proposed") || string.eql(r.status, "open")) { <button class="btn" data-on:click={"@post('/grc/" + r.id + "/usecase/assessed')"}>Assess</button> } else { <span></span> }}
+                                        {if (string.eql(r.status, "assessed")) { <button class="btn ok" data-on:click={"@post('/grc/" + r.id + "/usecase/approved')"}>Approve</button> } else { <span></span> }}
+                                        {if (string.eql(r.status, "approved")) { <button class="btn ok" data-on:click={"@post('/grc/" + r.id + "/usecase/deployed')"}>Deploy</button> } else { <span></span> }}
+                                        {if (string.eql(r.status, "retired")) { <span class="dim">retired</span> } else { <button class="btn no" data-on:click={"@post('/grc/" + r.id + "/usecase/retired')"}>Retire</button> }}
+                                    </span>
+                                } else {
+                                    <span>
+                                        <button class="btn" data-on:click={"@post('/grc/" + r.id + "/to/in-review')"}>Review</button>
+                                        <button class="btn ok" data-on:click={"@post('/grc/" + r.id + "/to/approved')"}>Approve</button>
+                                        <button class="btn no" data-on:click={"@post('/grc/" + r.id + "/to/closed')"}>Close</button>
+                                    </span>
+                                }}
                             </td>
                         </tr>
                     }}
