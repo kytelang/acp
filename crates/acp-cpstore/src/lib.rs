@@ -43,6 +43,16 @@ pub struct Model {
 }
 
 #[derive(Debug, Clone, Serialize)]
+pub struct ControlPackRow {
+    pub id: String,
+    pub version: String,
+    pub doc_json: String,   // the exact signed pack document (for re-verification)
+    pub pubkey_hex: String,
+    pub sig_hex: String,
+    pub created_ms: i64,
+}
+
+#[derive(Debug, Clone, Serialize)]
 pub struct Vendor {
     pub id: String,
     pub name: String,
@@ -177,6 +187,7 @@ impl ControlStore {
             "CREATE TABLE IF NOT EXISTS agents (id VARCHAR(255) PRIMARY KEY, app_id TEXT NOT NULL, name TEXT NOT NULL, token_sha256 TEXT NOT NULL, active INTEGER NOT NULL, owner TEXT NOT NULL DEFAULT '', metadata_json TEXT NOT NULL DEFAULT '{}', created_ms BIGINT NOT NULL)",
             "CREATE TABLE IF NOT EXISTS models (id VARCHAR(255) PRIMARY KEY, name TEXT NOT NULL, provider TEXT NOT NULL, version TEXT NOT NULL, card_json TEXT NOT NULL DEFAULT '{}', scan_status TEXT NOT NULL DEFAULT 'unscanned', aibom_json TEXT NOT NULL DEFAULT '', created_ms BIGINT NOT NULL)",
             "CREATE TABLE IF NOT EXISTS vendors (id VARCHAR(255) PRIMARY KEY, name TEXT NOT NULL, risk_json TEXT NOT NULL DEFAULT '{}', created_ms BIGINT NOT NULL)",
+            "CREATE TABLE IF NOT EXISTS control_packs (id VARCHAR(255) PRIMARY KEY, version TEXT NOT NULL, doc_json TEXT NOT NULL, pubkey_hex TEXT NOT NULL, sig_hex TEXT NOT NULL, created_ms BIGINT NOT NULL)",
             "CREATE TABLE IF NOT EXISTS endpoints (endpoint VARCHAR(255) PRIMARY KEY, kind TEXT NOT NULL, provider TEXT NOT NULL, disposition TEXT NOT NULL, operator TEXT NOT NULL, reason TEXT NOT NULL, decided_ms BIGINT NOT NULL, expires_ms BIGINT NOT NULL, pubkey_hex TEXT NOT NULL, sig_hex TEXT NOT NULL)",
             "CREATE TABLE IF NOT EXISTS grc_records (id VARCHAR(255) PRIMARY KEY, kind TEXT NOT NULL, subject TEXT NOT NULL, title TEXT NOT NULL, status TEXT NOT NULL, body TEXT NOT NULL, operator TEXT NOT NULL, created_ms BIGINT NOT NULL, pubkey_hex TEXT NOT NULL, sig_hex TEXT NOT NULL, linked_refs TEXT NOT NULL DEFAULT '[]', answers_json TEXT NOT NULL DEFAULT '{}', assignee TEXT NOT NULL DEFAULT '', due_ms BIGINT NOT NULL DEFAULT 0, stage TEXT NOT NULL DEFAULT '')",
             "CREATE TABLE IF NOT EXISTS ingested_evidence (decision_id VARCHAR(255) PRIMARY KEY, pep TEXT NOT NULL, kind TEXT NOT NULL, verdict TEXT NOT NULL, record TEXT NOT NULL, operator TEXT NOT NULL, created_ms BIGINT NOT NULL, pubkey_hex TEXT NOT NULL, sig_hex TEXT NOT NULL)",
@@ -287,6 +298,25 @@ impl ControlStore {
             .fetch_all(&self.pool).await.map_err(|e| e.to_string())?;
         Ok(rows.iter().map(|r| Vendor {
             id: r.get("id"), name: r.get("name"), risk_json: r.get("risk_json"), created_ms: r.get("created_ms"),
+        }).collect())
+    }
+
+    // ---- A4: signed control packs ----
+    pub async fn add_pack(&self, id: &str, version: &str, doc_json: &str, pubkey_hex: &str, sig_hex: &str, now_ms: i64) -> Result<(), String> {
+        // Idempotent replace by id: reloading a pack of the same id updates it in place.
+        let del = self.ph("DELETE FROM control_packs WHERE id = ?");
+        sqlx::query(&del).bind(id).execute(&self.pool).await.map_err(|e| e.to_string())?;
+        let sql = self.ph("INSERT INTO control_packs (id, version, doc_json, pubkey_hex, sig_hex, created_ms) VALUES (?, ?, ?, ?, ?, ?)");
+        sqlx::query(&sql).bind(id).bind(version).bind(doc_json).bind(pubkey_hex).bind(sig_hex).bind(now_ms)
+            .execute(&self.pool).await.map_err(|e| e.to_string())?;
+        Ok(())
+    }
+    pub async fn list_packs(&self) -> Result<Vec<ControlPackRow>, String> {
+        let rows = sqlx::query("SELECT id, version, doc_json, pubkey_hex, sig_hex, created_ms FROM control_packs ORDER BY created_ms")
+            .fetch_all(&self.pool).await.map_err(|e| e.to_string())?;
+        Ok(rows.iter().map(|r| ControlPackRow {
+            id: r.get("id"), version: r.get("version"), doc_json: r.get("doc_json"),
+            pubkey_hex: r.get("pubkey_hex"), sig_hex: r.get("sig_hex"), created_ms: r.get("created_ms"),
         }).collect())
     }
 

@@ -175,3 +175,14 @@ pub struct ReportCsvHandler impl RouteHandler {
             .setHeader("content-disposition", "attachment; filename=\"violations.csv\"");
     }
 }
+
+// A4: load the built-in signed control packs (each verified server-side), then patch the packs panel.
+pub struct LoadPacksHandler impl RouteHandler {
+    acp: AcpClient,
+    init(acp: AcpClient) { self.acp = acp; }
+    async fn serve(self: LoadPacksHandler, ctx: Context): Response {
+        let auth = ctx.request.headers.get("authorization") ?? "";
+        let _ = self.acp.loadBuiltinPacks(auth);
+        return await ds_response.patch(packsPanel(self.acp.packRows()));
+    }
+}

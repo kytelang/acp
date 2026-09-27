@@ -85,6 +85,17 @@ pub struct VendorRow {
     init(id: string, name: string, risk: string) { self.id = id; self.name = name; self.risk = risk; }
 }
 
+pub struct PackRow {
+    pub id: string,
+    pub version: string,
+    pub frameworks: string,
+    pub controls: long,
+    pub verified: bool,
+    init(id: string, version: string, frameworks: string, controls: long, verified: bool) {
+        self.id = id; self.version = version; self.frameworks = frameworks; self.controls = controls; self.verified = verified;
+    }
+}
+
 pub struct EvidenceRow {
     pub seq: string,
     pub tool: string,
@@ -401,6 +412,64 @@ pub struct AcpClient {
         let v = json.parse(resp.body);
         if (!(json.asBool(json.get(v, "ok")) ?? false)) { return DeployResult(false, json.asString(json.get(v, "error")) ?? "rejected"); }
         return DeployResult(true, "vendor " + name + " added");
+    }
+
+    // A4: loaded signed control packs (re-verified server-side).
+    pub fn packRows(self: AcpClient): list.List<PackRow> {
+        let rows = list.List<PackRow>();
+        let resp = client.Http.get(self.base + "/packs");
+        if (resp.status.toCode() != 200) { return rows; }
+        let pv = json.get(json.parse(resp.body), "packs");
+        let arr = json.asArray(pv);
+        if (arr == undefined) { return rows; }
+        let i = 0;
+        while (i < arr.size()) {
+            let p = json.at(pv, i);
+            let fwv = json.get(p, "frameworks");
+            let fwArr = json.asArray(fwv);
+            let fws = "";
+            if (fwArr != undefined) {
+                let k = 0;
+                while (k < fwArr.size()) {
+                    let one = json.asString(json.at(fwv, k)) ?? "";
+                    fws = string.eql(fws, "") ? one : fws + ", " + one;
+                    k = k + 1;
+                }
+            }
+            rows.push(PackRow(
+                json.asString(json.get(p, "id")) ?? "",
+                json.asString(json.get(p, "version")) ?? "",
+                fws,
+                json.asNumber(json.get(p, "controls")) ?? 0,
+                json.asBool(json.get(p, "verified")) ?? false));
+            i = i + 1;
+        }
+        return rows;
+    }
+    // A4: fetch the built-in signed packs and load each (verified server-side before storing).
+    pub fn loadBuiltinPacks(self: AcpClient, userAuth: string): DeployResult {
+        let av = client.Http.get(self.base + "/packs/available");
+        if (av.status.toCode() != 200) { return DeployResult(false, "acp-server unreachable"); }
+        let pv = json.get(json.parse(av.body), "packs");
+        let arr = json.asArray(pv);
+        if (arr == undefined) { return DeployResult(false, "no packs available"); }
+        let hdrs = client.Http.emptyHeaders();
+        hdrs.set("Content-Type", "application/json");
+        if (!string.eql(userAuth, "")) { hdrs.set("Authorization", userAuth); }
+        else { let tok = self.authToken("PolicyAdmin"); if (!string.eql(tok, "")) { hdrs.set("Authorization", "Bearer " + tok); } }
+        let loaded = 0;
+        let i = 0;
+        while (i < arr.size()) {
+            let one = json.at(pv, i);
+            let body = json.stringify(one);
+            let resp = client.Http.request("POST", self.base + "/packs", hdrs, body);
+            if (resp.status.toCode() == 200) {
+                let v = json.parse(resp.body);
+                if (json.asBool(json.get(v, "ok")) ?? false) { loaded = loaded + 1; }
+            }
+            i = i + 1;
+        }
+        return DeployResult(true, `loaded ${loaded} framework pack(s)`);
     }
 
     pub fn policyVersion(self: AcpClient): string {

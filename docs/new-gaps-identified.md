@@ -89,7 +89,7 @@ apps/agents; server `GET/POST /models`, `GET /models/:id`, `GET/POST /vendors`; 
 accept owner+metadata. Console Models page (list + scan badge + create), Vendors card, and agent
 Owner/Dependencies columns. Verified via curl: model create/list, vendor persist+list, agent owner+
 metadata round-trip.
-### A4. Framework breadth + signed policy packs (P2, M) - part build, part content
+### A4. Framework breadth + signed policy packs (P2, M) - part build, part content  [DONE 2026-09-27]
 Gap: Credo ships continuously-updated policy packs across many frameworks/jurisdictions.
 Design: a signed pack format in `acp-core` (control library + framework mappings + policy templates),
 versioned, loaded into `acp-cpstore` (`control_packs`) and served to the console. Ship EU AI Act /
@@ -100,7 +100,12 @@ Acceptance:
 - The three framework packs (EU AI Act, NIST AI RMF, ISO 42001) load and their controls appear in the
   control library used by A1.
 - Re-verify-on-read: `GET /packs` reports each pack `verified: true`.
-
+Status (2026-09-27): SHIPPED. `acp_core::pack` (SignedPack + verify + `builtin_packs()` for EU AI Act
+/ NIST AI RMF / ISO 42001 derived from `controls::library()`); cpstore `control_packs` stores the exact
+signed document; server `GET /packs/available` (signed with cp-key), `POST /packs` (verify-before-store,
+tampered rejected), `GET /packs` (re-verify -> verified:true), `GET /controls` (merged pack library, the
+one A1 uses). Console Governance view shows a Control packs card with a "Load built-in packs" button.
+Verified via curl: 3 packs load, all verified:true, a tampered pack rejected, eu-ai-act controls art-9..art-15 surface.
 ### A5. RBAC depth + SCIM (P2, M)  [DONE 2026-09-27]
 Gap: coarse RBAC (5 capabilities, 3 enforced), no SCIM, no separation of duty.
 Design: `acp-auth` adds `RegisterAgent`, `EditGrc`, `EditFirewall`; enforce `Export`/`SeeArgs`;

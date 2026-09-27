@@ -322,6 +322,8 @@ rules:
         <section class="view" data-show="$view === 'grc'">
           <div class="card"><div class="card-h"><span class="ic">&#128209;</span> Governance records<span class="sub">signed operator documents, re-verified on read</span><button class="btn primary card-cta" data-on:click="$modal = 'assess'">+ New assessment</button><button class="btn card-cta" data-on:click="$modal = 'grc'">+ Record</button></div>
             <div class="card-b"><div id="grc"><p class="empty">&#8230;</p></div></div></div>
+          <div class="card"><div class="card-h"><span class="ic">&#128230;</span> Control packs<span class="sub">signed, versioned framework content (EU AI Act, NIST AI RMF, ISO 42001)</span><button class="btn primary card-cta" data-on:click="@post('/packs/load')">Load built-in packs</button></div>
+            <div class="card-b"><div id="packs"><p class="empty">&#8230;</p></div></div></div>
 
           </section>
 

@@ -22,6 +22,7 @@ pub mod conformity;
 pub mod content;
 pub mod databoundary;
 pub mod controls;
+pub mod pack;
 pub mod discovery;
 pub mod drift;
 pub mod dualcontrol;

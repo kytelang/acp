@@ -595,3 +595,28 @@ pub fn modelCreateResult(res: DeployResult): Html {
         <span class="dim">{res.message}</span>
     </div>;
 }
+
+// A4: loaded signed control packs (version + frameworks + re-verified state).
+pub fn packsPanel(rows: list.List<PackRow>): Html {
+    return <div id="packs">
+        {if (rows.size() == 0) {
+            <p class="empty">No control packs loaded. Load the built-in framework packs to seed the control library.</p>
+        } else {
+            <table class="tbl">
+                <thead><tr><th>Pack</th><th>Version</th><th>Frameworks</th><th>Controls</th><th>Signature</th></tr></thead>
+                <tbody>
+                    {for (i in 0..rows.size()) {
+                        let p = rows.get(i) ?? PackRow("", "", "", 0, false);
+                        <tr>
+                            <td class="mono">{p.id}</td>
+                            <td>{p.version}</td>
+                            <td><span class="badge ver">{p.frameworks}</span></td>
+                            <td>{p.controls}</td>
+                            <td>{if (p.verified) { <span class="badge ok">verified</span> } else { <span class="badge bad">unverified</span> }}</td>
+                        </tr>
+                    }}
+                </tbody>
+            </table>
+        }}
+    </div>;
+}
