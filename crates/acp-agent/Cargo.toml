@@ -12,5 +12,4 @@ path = "src/main.rs"
 acp-proxy = { path = "../acp-proxy" }
 acp-intercept = { path = "../acp-intercept" }
 acp-guard = { path = "../acp-guard" }
-acp-obs = { path = "../acp-obs" }
 tokio = { workspace = true }
