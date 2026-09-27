@@ -56,6 +56,126 @@ paths, computes a coverage percentage, and signs the report. `--require-full` ma
 `acp canary-egress` actively probes for direct model or tool access and fails if any host is reachable
 without going through ACP.
 
+## What is a governance record
+
+If you are new to GRC (governance, risk and compliance), start here. A **governance record** is a
+signed operator document that captures a compliance decision or artefact about an AI system. It is
+paperwork, the kind an auditor asks for, written by a person and attested by the control plane. It is
+**not** a runtime enforcement decision. When the proxy allows, denies or steps up an actual tool call,
+that goes into the tamper-evident decision ledger ([chapter 9](09-evidence.md)). A governance record is
+the human-authored document that sits above those decisions: "we assessed this system as high-risk",
+"here is the model card", "here is our risk register entry". Think of the ledger as the flight recorder
+and governance records as the logbook the crew signs.
+
+Every governance record is Ed25519-signed by the control plane when you create it, stored in the
+control-plane database, and re-verified whenever it is read, so the console shows a checked "signed"
+state rather than an asserted one. The signature proves the document was not altered after signing. It
+does not prove that any "evidence" or "linked-decision" reference written inside the record points at a
+real ledger record: those references are author-supplied text today.
+
+There are seven kinds. Choose the kind for what you are actually recording.
+
+### assessment
+
+**What it is for:** tiering a system under the EU AI Act (unacceptable, high, limited or minimal) and
+listing the controls that tier must satisfy.
+
+**When you create one:** at the start of governing a new AI system, to decide how much oversight it
+needs.
+
+**Worked example:** you are launching `hiring-screener`, an agent that ranks CVs. Because it makes
+employment decisions, the screening flags it as an Annex III use, so the assessment tiers it **high**
+and pulls the full EU AI Act high-risk obligation set (Articles 9 to 15: risk management, data
+governance, technical documentation, record-keeping, transparency, human oversight, accuracy and
+robustness). A plain spellchecker, by contrast, would come out **minimal** with no mandated controls.
+
+### conformity
+
+**What it is for:** turning the obligations from an assessment into a worked checklist you drive to
+done, control by control, with an owner and evidence links on each.
+
+**When you create one:** right after a high-risk assessment, to actually close the obligations.
+
+**Worked example:** the `hiring-screener` assessment produced seven high-risk obligations. The
+conformity record seeds all seven as `gap`. As your team completes each one you move it to `satisfied`,
+name the owner (say `carol`, compliance) and attach the evidence. The record reports completeness
+(for example 5 of 7, 71 percent), and it counts as conformant only when every control is `satisfied`.
+
+### risk
+
+**What it is for:** an AI risk register entry: a named risk scored likelihood by impact, with an owner,
+a treatment and a lifecycle status.
+
+**When you create one:** whenever you identify a specific risk you want to track to closure.
+
+**Worked example:** "the screener may leak candidate PII into a model prompt". You set likelihood
+`medium` and impact `high`, which gives an inherent score of 2 by 3 = 6 (a **high** band). You assign
+the owner, choose a treatment (`mitigate`), set the status (`open`, then `mitigating`, `accepted` or
+`closed`), and optionally link the controls and ledger decisions that bear on it.
+
+### model-card
+
+**What it is for:** the documented properties of a model or system: intended use, limitations, training
+data, evaluation summary, owner, and the risk tier and use case it is bound to.
+
+**When you create one:** for every model you put into service, so an auditor can read what it is and how
+it was evaluated.
+
+**Worked example:** a model card for the screener records provider `acme`, version `1.0`, intended use
+"screen CVs", limitation "no protected-attribute use", evaluation summary "bias tested", owner
+`hr-lead`, risk tier `high`, and a link to use case `uc-hire`. A completeness check flags a card that
+is missing intended use, limitations, evaluation summary or owner.
+
+### use-case
+
+**What it is for:** a use-case lifecycle record that moves through gated stages: proposed, assessed,
+approved, deployed, retired.
+
+**When you create one:** to govern a use case end to end and enforce sign-off gates between stages.
+
+**Worked example:** `uc-hire` starts `proposed`. It cannot move to `assessed` until an assessment is
+linked, and it cannot move to `approved` until a valid approval attestation exists. Stages cannot be
+skipped forward (proposed straight to deployed is refused), but a use case can be retired at any time.
+Advance the status from the console or with `POST /grc/:id/status`, and the control plane re-signs the
+record on the change, so the lifecycle move is itself signed evidence.
+
+### attestation
+
+**What it is for:** a named person attesting something about a subject, non-repudiably. It binds an
+attestor and a role to a subject with a signature.
+
+**When you create one:** whenever a human sign-off is required, for example the approval gate above.
+
+**Worked example:** `carol`, in the role `compliance`, attests that the "conformity assessment approved"
+for subject `assess-hiring`. The record binds her name and role to that statement and signature, so it
+is a durable, verifiable sign-off rather than an email. This is the artefact the use-case approval gate
+looks for. It is distinct from a break-glass approval, which gates a live action; an attestation is a
+sign-off on the record.
+
+### aibom
+
+**What it is for:** an AI bill of materials over your supplied inventory: every agent, MCP server, tool
+and model class in the estate, each with its provenance, admission verdict, integrity pin and the
+policy in force over it.
+
+**When you create one:** to answer "what AI is in our estate, where did each piece come from, and is it
+governed" with a signed document rather than a spreadsheet. It is emitted as CycloneDX so it drops into
+tools you already have.
+
+**Worked example:** you feed in the inventory and the record lists each component (say a frontier model
+class and two MCP tool servers) with its SHA-256 digest, its admission verdict and the policy hash in
+force, and it flags anything that was denied admission.
+
+### When do I use a governance record versus the evidence ledger?
+
+Use the **evidence ledger** when you want proof of what actually happened at runtime: it is the signed,
+tamper-evident, hash-chained record of every allow, deny and step-up the proxy made, and you cannot
+edit it. Use a **governance record** when you want to document a human governance decision or artefact
+about a system: a risk tier, a checklist, a risk item, a model card, a lifecycle stage, a sign-off or a
+bill of materials. The ledger is machine-generated proof; governance records are author-attested
+paperwork. Both are signed and useful, but do not present a governance record as if it were ledger
+proof: an auditor gets runtime evidence from the ledger and documented governance from these records.
+
 ## The GRC surface
 
 Varman produces two honestly different kinds of compliance artifact. Know which is which.
@@ -77,17 +197,9 @@ carries a **Kind** selector) or the control-plane API (`POST /grc`). Each record
 the control plane, stored in the control-plane database, and re-verified on read. The signature proves
 the document was not altered after signing; it does **not** prove that the "evidence" or
 "linked-decision" references inside it correspond to real ledger records, because those are free-text
-today. Choose the record **kind** for what you are recording:
-
-- **assessment** tiers a system under the EU AI Act (unacceptable / high / limited / minimal) and
-  lists the controls it must satisfy.
-- **conformity** turns those obligations into a worked checklist you drive to conformant.
-- **risk** is an AI risk register scored likelihood by impact, with treatment and lifecycle.
-- **model-card** is a model-card registry.
-- **use-case** is a use-case lifecycle registry (proposed to assessed to approved to deployed to
-  retired); advance its status from the console or with `POST /grc/:id/status`.
-- **attestation** binds a named attestor and role to a subject, non-repudiably.
-- **aibom** records a CycloneDX AI bill of materials over your supplied inventory.
+today. The seven record **kinds** (assessment, conformity, risk, model-card, use-case, attestation and
+aibom) and when to use each are explained with worked examples under
+[What is a governance record](#what-is-a-governance-record) above.
 
 The static control library across the three frameworks is served by the control plane and shown on the
 console Governance page. (These record kinds were previously separate `acp` subcommands; management now

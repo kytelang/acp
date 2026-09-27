@@ -133,3 +133,135 @@ With `--key` it prints a signed registry (the same signed form as `acp intercept
 tamper-evident distribution; without a key it prints reviewable YAML. This closes discover to enrol from
 real traffic: run `acp discover` to see what is ungoverned, then `acp intercept suggest` to turn it into
 rules. See [chapter 12](12-grc.md) for discovery and enrolment.
+
+## Firewall rules schema
+
+This is the interception rule registry the acp-agent firewall consults for every destination. It is
+the same signed, versioned structure the interceptor uses, taken from
+`crates/acp-core/src/interception.rs`. The matcher is pure and first-match: given a destination it
+returns exactly one decision.
+
+### A complete annotated example
+
+```yaml
+version: 1                         # registry schema version (integer)
+default: flag-and-pass             # action for destinations that match no rule
+endpoints:
+  - id: anthropic                  # optional, for readability and reporting
+    match:                         # all present predicates must hold (AND); absent are ignored
+      host_contains: claude.ai
+    classify: model-api            # optional label carried into the decision
+    action: inspect-prompt
+
+  - id: openai
+    match:
+      host_exact: api.openai.com
+    classify: model-api
+    action: inspect-prompt
+
+  - id: internal-mcp
+    match:
+      host_suffix: internal        # host ends with "internal"
+      path_contains: /mcp          # a path predicate can only be decided after TLS is terminated
+    classify: mcp
+    action: govern-tool-call
+
+  - id: risky-provider
+    match:
+      host_contains: deepseek.com
+    action: block
+
+  - id: analytics-egress
+    match:
+      host_suffix: telemetry.example.com
+      port: 443
+    action: dlp-only
+```
+
+### Registry fields
+
+| Field | Type | Notes |
+|---|---|---|
+| `version` | integer | Schema version of the registry. |
+| `default` | default-action | Action taken when a destination matches no rule (see below). |
+| `endpoints` | list | Ordered list of rules. First match wins, so put specific rules ahead of broad ones. |
+
+### Rule fields
+
+| Field | Type | Required | Notes |
+|---|---|---|---|
+| `id` | string | no | Identifier, echoed back in the decision and useful in reports. |
+| `match` | object | yes | The predicates. All present ones must hold (AND). An empty `match` matches every destination. |
+| `classify` | string | no | A free-form label such as `model-api` or `mcp`. Defaults to `other` in the decision when absent. |
+| `action` | action | yes | What ACP does with matching traffic (see below). |
+
+### Match predicates
+
+Every predicate is optional and combined with AND. Absent predicates are ignored. Host, SNI and port
+are decidable before decryption; the path predicates can only be evaluated once TLS is terminated.
+
+| Predicate | Type | Meaning |
+|---|---|---|
+| `host_contains` | string | The host contains this substring (case-insensitive). |
+| `host_suffix` | string | The host ends with this suffix (case-insensitive). |
+| `host_exact` | string | The host equals this exactly (case-insensitive). |
+| `sni` | string | Matched against the TLS server name, the same way as `host_contains` at this layer. |
+| `path_contains` | string | The request path contains this substring (case-sensitive). |
+| `path_prefix` | string | The request path starts with this prefix (case-sensitive). |
+| `port` | integer | The destination port equals this value. |
+
+### Actions
+
+| Action | Meaning | Needs a CA (body inspection) |
+|---|---|---|
+| `inspect-prompt` | Decrypt, extract the prompt or completion body, and run the content engine and the policy engine over it. | yes |
+| `govern-tool-call` | Treat the body as a tool call and run the full MCP decision path (the same policy evaluation the MCP guard uses). | yes |
+| `dlp-only` | Scan the body for exfiltration (PII and secrets) only, with no model-call or tool-call governance. | yes |
+| `block` | Refuse the connection. | no |
+| `pass` | Allow the connection without inspection. It is still recorded as seen. | no |
+
+The three body-reading actions (`inspect-prompt`, `govern-tool-call`, `dlp-only`) can only work where
+a TLS-terminating certificate authority is configured, because the plaintext body is not otherwise
+visible. `block` and `pass` are decided at the connection layer and need no CA. A precedence-aware,
+least-inspection gate uses this: for a given host, the first rule whose host-level predicates match
+decides whether to decrypt at all. It decrypts only if that rule has a path predicate (the path is
+invisible until after termination) or its action needs the body. A `block` or `pass` rule ahead of any
+path rule short-circuits, so such a host is never decrypted needlessly.
+
+### The default action
+
+When no rule matches, `default` decides. There are four values:
+
+| `default` | Records as shadow AI | Then |
+|---|---|---|
+| `flag-and-pass` | yes | passes the connection |
+| `flag-and-block` | yes | blocks the connection |
+| `pass` | no | passes the connection |
+| `block` | no | blocks the connection |
+
+A `flag-*` default is how ungoverned, unseen destinations get surfaced as shadow AI rather than
+silently allowed or dropped.
+
+### Where the rules come from today
+
+The registry served at `GET /intercept/rules` is, at present, **derived from the enrolled endpoint
+dispositions** (see [chapter 12](12-grc.md)). Each disposition maps to an action:
+
+| Enrolment disposition | Rule action |
+|---|---|
+| govern (enroll) | `inspect-prompt`, or `govern-tool-call` when the endpoint is classified `mcp` |
+| block (quarantine) | `block` |
+| accept-risk | `pass` (a deliberate, time-boxed, recorded exception) |
+
+The acp-agent firewall fetches this registry over the control plane: you give it one
+`--control-plane <url>`, which is expanded into the per-capability URLs (including the rules URL), and
+it refreshes on an interval. For air-gapped use, a local YAML registry file is loaded instead, and a
+registry can be signed for tamper-evident distribution.
+
+Operator-authored rules sit on top of this. The console **Content firewall** page has a **Firewall
+rules** card where you author a rule (a match predicate plus an action, and an optional classify
+label); it is stored in the control plane (`POST /firewall/rules`) and served **ahead** of the
+enrolment-derived rules by `GET /intercept/rules`, so a hand-authored rule wins (first match). Every
+acp-agent fetches the merged set via `--control-plane`, so a rule you add in the console reaches the
+fleet on the next refresh. List and delete rules from the same screen (`GET`/`POST
+/firewall/rules/:id/delete`).

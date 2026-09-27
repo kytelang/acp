@@ -73,13 +73,12 @@ Obligations attach conditions to an allow.
         max: 1000
         window_ms: 60000             # a token bucket per subject
       - kind: confirm                # require an interactive confirmation
-      - kind: budget
-        tokens: 2000000              # a token / cost budget across the session
 ```
 
 `redact` masks the named fields (and anything the classifier flags as PII or a secret) while leaving
-the evidence argument-hash over the original intact. `rate_limit` and `budget` are enforced with a
-token bucket, shared across replicas when Postgres is configured (see [chapter 14](14-operations.md)).
+the evidence argument-hash over the original intact. `rate_limit` is enforced with a token bucket,
+shared across replicas when Postgres is configured (see [chapter 14](14-operations.md)). The three
+obligation kinds are `confirm`, `redact` and `rate_limit`.
 
 ## Precedence and default-deny
 
@@ -175,3 +174,141 @@ acp learn evidence.db > draft-policy.yaml          # a starting policy to review
 Review the draft before enforcing it: it is a starting point derived from what actually happened, not a
 finished policy. Pair it with `acp posture` (above) to decide when coverage is high enough to move to
 default-deny.
+
+## Policy schema reference
+
+This section is the authoritative field list for the policy YAML, taken straight from the parser
+(`crates/acp-policy/src/dsl.rs`) and the compiler (`compile.rs`). If a field is not listed here, it is
+not understood by the engine.
+
+### A complete annotated example
+
+```yaml
+version: 1                       # schema version (required, integer)
+default: deny                    # verdict when no rule matches (allow | deny | step_up | shadow)
+mode: enforce                    # optional free-form label, parsed and carried, not interpreted
+metadata:                        # optional, purely descriptive
+  name: production-guardrails
+  owner: platform-security
+
+rules:
+  # A deny that governs every database delete, whatever the tool is called.
+  - id: no-db-delete
+    when:
+      resource: database         # trusted, derived from the tool name, not from arguments
+      operation: delete
+    verdict: deny
+    reason: destructive deletes are never allowed in prod
+
+  # A step-up (human approval) for large payments, matched on an argument value.
+  - id: cap-spend
+    when:
+      tool: "payments.charge"    # exact, or a glob such as "payments.*", or "*" / absent for any
+      arg:
+        amount_cents: { gt: 50000 }
+      env: { eq: prod }          # trusted environment matcher
+    verdict: step_up
+    approvers: [finance, oncall] # groups routed to the approvals inbox
+    reason: high-value charge needs sign-off
+
+  # Unattributed callers (no verified human) may not read secrets.
+  - id: anon-cannot-read-secrets
+    when:
+      resource: secrets
+      principal: unattributed
+    verdict: deny
+
+  # Allow a database read, but with obligations attached to the allow.
+  - id: read-with-guardrails
+    when:
+      resource: database
+      operation: read
+    verdict: allow
+    obligations:
+      - kind: redact
+        fields: [ssn, card]      # mask these argument fields on the way through
+      - kind: rate_limit
+        max: 1000
+        window_ms: 60000         # at most 1000 calls per 60s window for this subject
+      - kind: confirm            # require an interactive confirmation
+```
+
+### Top-level fields
+
+| Field | Type | Required | Notes |
+|---|---|---|---|
+| `version` | integer | yes | Schema version of the policy document. |
+| `default` | verdict | no (defaults to `allow`) | Verdict applied when no rule matches. One of `allow`, `deny`, `step_up`, `shadow`. |
+| `mode` | string | no | Free-form label. It is parsed and kept, but the evaluation engine does not interpret it. |
+| `metadata` | object | no | Descriptive only. Holds `name` and `owner`, both optional strings. |
+| `rules` | list | yes | Ordered list of rules (see below). May be empty, in which case every action takes the default. |
+
+### Rule fields
+
+| Field | Type | Required | Notes |
+|---|---|---|---|
+| `id` | string | yes | Must be non-empty (an empty id is rejected at validation). Stamped into evidence as the matched rule. |
+| `when` | object | yes | The match predicates. All present predicates must hold (AND). An empty `when` matches every action. |
+| `verdict` | verdict | yes | One of `allow`, `deny`, `step_up`, `shadow`. An `allow` compiles to a Cedar `permit`, everything else to a `forbid`. |
+| `approvers` | list of strings | no | Approver groups for a `step_up`. Empty by default. |
+| `reason` | string | no | Human-readable explanation, carried into the decision and evidence. |
+| `obligations` | list | no | Conditions applied when the rule allows (see below). Empty by default. |
+
+### The `when` predicates
+
+Every predicate is optional. An absent predicate is ignored (matches anything). Fields marked
+*trusted* are injected by the proxy from the verified identity or the taxonomy, so an agent cannot
+spoof them through its arguments.
+
+| Predicate | Matches on | Form | Trusted |
+|---|---|---|---|
+| `tool` | the tool or model name | exact, glob (`db.*`), `*`, or absent | derived |
+| `app` | the registered application id | exact, glob, or absent | yes |
+| `agent` | the registered agent id | exact, glob, or absent | yes |
+| `principal` | the human the agent acts for | exact, glob, or absent. Use `unattributed` to match calls with no verified human | yes |
+| `resource` | the resource class the tool touches | a taxonomy value: `database`, `filesystem`, `source-code`, `network`, `secrets`, `payments`, `messaging`, `compute`, `identity`, `other` | yes |
+| `operation` | the operation the tool performs | a taxonomy value: `read`, `write`, `delete`, `execute`, `egress`, `admin` | yes |
+| `arg` | agent-supplied argument fields | a map of field name to a matcher (see below), evaluated against the `context.args` namespace | no (agent data) |
+| `env` | the deployment environment | a single matcher, e.g. `{ eq: prod }`, evaluated against `context.env` | yes |
+| `impact` | the proxy-derived impact level | a single matcher against `context.impact`, whose values are `low`, `medium`, `high` | yes |
+
+### Matchers
+
+A matcher is a single-key map, `{ <op>: <value> }`. These are the operators the compiler understands:
+
+| Operator | Meaning | Example |
+|---|---|---|
+| `eq` | equal to | `{ eq: prod }` |
+| `ne` | not equal to | `{ ne: test }` |
+| `gt` | greater than (numeric) | `{ gt: 50000 }` |
+| `gte` | greater than or equal (numeric) | `{ gte: 100 }` |
+| `lt` | less than (numeric) | `{ lt: 10 }` |
+| `lte` | less than or equal (numeric) | `{ lte: 9 }` |
+| `in` | value is in a list | `{ in: [prod, staging] }` |
+| `contains` | substring match | `{ contains: "@example.com" }` |
+| `exists` | the field is present at all | `{ exists: true }` |
+| `contains_class` | a data-class check against the trusted `derived` namespace, not the raw argument. Values are `pii` or `secret` | `{ contains_class: pii }` |
+
+The `regex` matcher is deliberately not supported in this version: a rule that uses it is rejected at
+validation time rather than compiled into something inert. An empty matcher (no operator) is also
+rejected.
+
+### Obligations
+
+An obligation attaches a condition to an allowing rule. It is parsed here and executed by the proxy at
+enforcement time.
+
+| `kind` | Extra fields | Meaning |
+|---|---|---|
+| `redact` | `fields`: list of strings | Strip or mask the named argument or result fields before the call proceeds. |
+| `rate_limit` | `max`: integer, `window_ms`: integer | Cap the call frequency to `max` per `window_ms` for this subject and resource. |
+| `confirm` | none | Require a human confirmation before proceeding (routed to the approvals inbox, like a step-up). |
+
+These three (`redact`, `rate_limit`, `confirm`) are the only obligation kinds the parser accepts today.
+
+### Precedence
+
+When several rules co-determine an action, the most restrictive wins:
+**deny > step_up > shadow > allow**. `shadow` records a would-block without enforcing it, which is how
+you roll a rule out safely. Evaluation is fail-closed: any error building the context or evaluating a
+rule results in a `deny`, never an accidental allow.
