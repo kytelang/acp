@@ -304,6 +304,22 @@ pub struct RiskRow {
     }
 }
 
+pub struct ModelCardRow {
+    pub id: string,
+    pub subject: string,
+    pub title: string,
+    pub modelId: string,
+    pub useCaseId: string,
+    pub riskId: string,
+    pub modelOk: bool,
+    pub ucOk: bool,
+    pub riskOk: bool,
+    init(id: string, subject: string, title: string, modelId: string, useCaseId: string, riskId: string, modelOk: bool, ucOk: bool, riskOk: bool) {
+        self.id = id; self.subject = subject; self.title = title; self.modelId = modelId; self.useCaseId = useCaseId; self.riskId = riskId;
+        self.modelOk = modelOk; self.ucOk = ucOk; self.riskOk = riskOk;
+    }
+}
+
 pub struct AcpClient {
     base: string,
     init(base: string) { self.base = base; }
@@ -650,6 +666,47 @@ pub struct AcpClient {
         let v = json.parse(resp.body);
         if (!(json.asBool(json.get(v, "ok")) ?? false)) { return DeployResult(false, json.asString(json.get(v, "error")) ?? "rejected"); }
         return DeployResult(true, `risk score ${json.asNumber(json.get(v, "score")) ?? 0} (${json.asString(json.get(v, "band")) ?? "?"})`);
+    }
+
+    // G3: model-card rows with resolved link flags.
+    pub fn modelCardRows(self: AcpClient): list.List<ModelCardRow> {
+        let rows = list.List<ModelCardRow>();
+        let resp = client.Http.get(self.base + "/grc");
+        if (resp.status.toCode() != 200) { return rows; }
+        let rv = json.get(json.parse(resp.body), "records");
+        let arr = json.asArray(rv);
+        if (arr == undefined) { return rows; }
+        let i = 0;
+        while (i < arr.size()) {
+            let r = json.at(rv, i);
+            if (string.eql(json.asString(json.get(r, "kind")) ?? "", "model-card")) {
+                let lk = json.get(r, "links");
+                rows.push(ModelCardRow(
+                    json.asString(json.get(r, "id")) ?? "",
+                    json.asString(json.get(r, "subject")) ?? "",
+                    json.asString(json.get(r, "title")) ?? "",
+                    json.asString(json.get(lk, "model_id")) ?? "",
+                    json.asString(json.get(lk, "use_case_id")) ?? "",
+                    json.asString(json.get(lk, "risk_id")) ?? "",
+                    json.asBool(json.get(lk, "model")) ?? false,
+                    json.asBool(json.get(lk, "use_case")) ?? false,
+                    json.asBool(json.get(lk, "risk")) ?? false));
+            }
+            i = i + 1;
+        }
+        return rows;
+    }
+    pub fn createModelCard(self: AcpClient, subject: string, title: string, modelId: string, useCaseId: string, riskId: string, userAuth: string): DeployResult {
+        let body = "{\"subject\":" + self.jstr(subject) + ",\"title\":" + self.jstr(title) + ",\"model_id\":" + self.jstr(modelId) + ",\"use_case_id\":" + self.jstr(useCaseId) + ",\"risk_id\":" + self.jstr(riskId) + "}";
+        let hdrs = client.Http.emptyHeaders();
+        hdrs.set("Content-Type", "application/json");
+        if (!string.eql(userAuth, "")) { hdrs.set("Authorization", userAuth); }
+        else { let tok = self.authToken("GrcAuthor"); if (!string.eql(tok, "")) { hdrs.set("Authorization", "Bearer " + tok); } }
+        let resp = client.Http.request("POST", self.base + "/grc/model-card", hdrs, body);
+        if (resp.status.toCode() != 200) { return DeployResult(false, "acp-server unreachable"); }
+        let v = json.parse(resp.body);
+        if (!(json.asBool(json.get(v, "ok")) ?? false)) { return DeployResult(false, json.asString(json.get(v, "error")) ?? "rejected"); }
+        return DeployResult(true, "model card created");
     }
 
     pub fn policyVersion(self: AcpClient): string {

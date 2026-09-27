@@ -658,6 +658,7 @@ async fn main() {
         .route("/redteam/runs", get(redteam_runs))
         .route("/grc/assess", post(grc_assess))
         .route("/grc/risk", post(grc_risk))
+        .route("/grc/model-card", post(grc_model_card))
         .route("/grc/:id/status", post(grc_status))
         .route("/grc/:id/usecase/:stage", post(grc_usecase_transition))
         .route("/grc/:id/assign", post(grc_assign))
@@ -1486,6 +1487,17 @@ async fn grc_list(State(st): State<Arc<AppState>>) -> impl IntoResponse {
                 // A1: surface checklist progress (k/m controls done) and the assessment tier if the
                 // signed body carries them, plus the workflow metadata (assignee/due/stage).
                 let parsed: serde_json::Value = serde_json::from_str(&r.body).unwrap_or_else(|_| serde_json::json!({}));
+                // G3: for a model-card, resolve its model/use-case/risk references.
+                let mut links = serde_json::Value::Null;
+                if r.kind == "model-card" {
+                    let mid = parsed.get("model_id").and_then(|v| v.as_str()).unwrap_or("");
+                    let ucid = parsed.get("use_case_id").and_then(|v| v.as_str()).unwrap_or("");
+                    let rid = parsed.get("risk_id").and_then(|v| v.as_str()).unwrap_or("");
+                    let model_ok = !mid.is_empty() && store.get_model(mid).await.ok().flatten().is_some();
+                    let uc_ok = !ucid.is_empty() && store.get_grc(ucid).await.ok().flatten().map(|g| g.kind == "use-case").unwrap_or(false);
+                    let risk_ok = !rid.is_empty() && store.get_grc(rid).await.ok().flatten().map(|g| g.kind == "risk").unwrap_or(false);
+                    links = serde_json::json!({"model": model_ok, "use_case": uc_ok, "risk": risk_ok, "model_id": mid, "use_case_id": ucid, "risk_id": rid});
+                }
                 let checklist = parsed.get("checklist").and_then(|v| v.as_array());
                 let controls_total = checklist.map(|c| c.len()).unwrap_or(0);
                 let controls_done = checklist.map(|c| c.iter().filter(|i| i.get("done").and_then(|v| v.as_bool()).unwrap_or(false)).count()).unwrap_or(0);
@@ -1497,6 +1509,7 @@ async fn grc_list(State(st): State<Arc<AppState>>) -> impl IntoResponse {
                     "assignee": r.assignee, "due_ms": r.due_ms, "stage": r.stage,
                     "tier": tier, "controls_done": controls_done, "controls_total": controls_total,
                     "linked_refs": refs, "verified_refs": verified_refs, "total_refs": total_refs,
+                    "links": links,
                 }));
             }
             Json(serde_json::json!({"records": out})).into_response()
@@ -1662,6 +1675,36 @@ async fn grc_templates() -> impl IntoResponse {
             ]
         }]
     }))
+}
+
+/// G3: create a model-card GRC record that references a model, a use-case and a risk by id. On read
+/// (`grc_list`) the server resolves each reference and reports which links resolve.
+async fn grc_model_card(State(st): State<Arc<AppState>>, headers: HeaderMap, Json(body): Json<serde_json::Value>) -> Response {
+    let principal = match authorize(&st.auth, &headers, acp_auth::Capability::EditGrc) { Ok(p) => p, Err(r) => return r };
+    let operator = actor_of(&principal);
+    let store = match &st.store { Some(s) => s, None => return Json(serde_json::json!({"ok": false, "error": "no --store configured"})).into_response() };
+    let subject = body.get("subject").and_then(|v| v.as_str()).unwrap_or("").trim().to_string();
+    if subject.is_empty() { return Json(serde_json::json!({"ok": false, "error": "subject is required"})).into_response(); }
+    let title = body.get("title").and_then(|v| v.as_str()).unwrap_or("Model card").to_string();
+    let doc_body = serde_json::json!({
+        "kind": "model-card",
+        "model_id": body.get("model_id").and_then(|v| v.as_str()).unwrap_or(""),
+        "use_case_id": body.get("use_case_id").and_then(|v| v.as_str()).unwrap_or(""),
+        "risk_id": body.get("risk_id").and_then(|v| v.as_str()).unwrap_or(""),
+        "summary": body.get("summary").and_then(|v| v.as_str()).unwrap_or(""),
+    }).to_string();
+    let id = format!("grc-{}", rand_hex(6));
+    let status = "open".to_string();
+    let now = now_ms();
+    let doc = grc_doc(&id, "model-card", &subject, &title, &status, &doc_body);
+    let signer = enroll_signer(&st.cp_key);
+    let sig = acp_core::sign::Signer::sign(&signer, &acp_core::canonical::canonical_bytes(&doc));
+    let pubkey_hex = hex::encode(acp_core::sign::Signer::public_key(&signer));
+    let sig_hex = hex::encode(sig);
+    match store.add_grc(&id, "model-card", &subject, &title, &status, &doc_body, &operator, now as i64, &pubkey_hex, &sig_hex, "[]", "{}", "", 0, &status).await {
+        Ok(()) => Json(serde_json::json!({"ok": true, "id": id})).into_response(),
+        Err(e) => Json(serde_json::json!({"ok": false, "error": e})).into_response(),
+    }
 }
 
 /// G2: create a structured risk-register record. Body carries likelihood/impact (low|medium|high),

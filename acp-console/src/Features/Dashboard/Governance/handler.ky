@@ -260,3 +260,19 @@ pub struct CreateRiskHandler impl RouteHandler {
         return await ds_response.patch(riskPanel(self.acp.riskRows()));
     }
 }
+
+// G3: create a model-card record joining a model, use-case and risk, then patch the panel.
+pub struct CreateModelCardHandler impl RouteHandler {
+    acp: AcpClient,
+    init(acp: AcpClient) { self.acp = acp; }
+    async fn serve(self: CreateModelCardHandler, ctx: Context): Response {
+        let auth = ctx.request.headers.get("authorization") ?? "";
+        let subject = json.stringField(ctx.request.body, "mcSubject");
+        let title = json.stringField(ctx.request.body, "mcTitle");
+        let modelId = json.stringField(ctx.request.body, "mcModelId");
+        let useCaseId = json.stringField(ctx.request.body, "mcUseCaseId");
+        let riskId = json.stringField(ctx.request.body, "mcRiskId");
+        let _ = self.acp.createModelCard(subject, title, modelId, useCaseId, riskId, auth);
+        return await ds_response.patch(modelCardsPanel(self.acp.modelCardRows()));
+    }
+}

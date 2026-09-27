@@ -40,7 +40,7 @@ Acceptance:
 Status (2026-09-27): SHIPPED. Verified via curl: high/high -> 9 critical, low/medium -> 2 low, bad level
 rejected, status transition re-signs and stays verified; console Risk register card + Add-risk modal.
 
-## G3. Joined model cards (P1) - surface `modelcard.rs`
+## G3. Joined model cards (P1) - surface `modelcard.rs`  [DONE 2026-09-27]
 Gap: model cards are free-form; Credo joins a card to its model, use-case and risk.
 Design: a GRC kind `model-card` whose body references `{model_id, use_case_id, risk_id}`. On read the
 server resolves each id (models row / GRC records) and reports which links resolve. Console shows the
@@ -50,6 +50,11 @@ Acceptance:
   resolved via `/grc` (a `links` object with resolved booleans).
 - A dangling reference reports `resolved:false` for that link (never errors).
 - The console model-card view shows the resolved model/use-case/risk.
+Status (2026-09-27): SHIPPED. `POST /grc/model-card` (kind model-card, body references
+model_id/use_case_id/risk_id); `grc_list` resolves each ref (models row / use-case GRC / risk GRC) and
+returns a `links` object with per-link booleans (never errors on a dangling ref). Console Governance
+view has a Model cards table with resolved link badges + a create modal. Verified via curl: all-valid ->
+model/use_case/risk all true; a dangling model_id -> model:false, others true.
 
 ## G4. Stakeholder notifications on events (P1) - wire `webhook.rs` + `notify.rs`
 Gap: no task notifications, comment threads, or event fan-out; Credo's core loop is collaboration.

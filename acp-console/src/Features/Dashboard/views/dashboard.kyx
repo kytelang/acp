@@ -722,3 +722,28 @@ pub fn riskPanel(rows: list.List<RiskRow>): Html {
         }}
     </div>;
 }
+
+// G3: model cards joined to their model, use-case and risk (resolved link badges).
+pub fn modelCardsPanel(rows: list.List<ModelCardRow>): Html {
+    return <div id="modelcards">
+        {if (rows.size() == 0) {
+            <p class="empty">No model cards yet.</p>
+        } else {
+            <table class="tbl">
+                <thead><tr><th>Subject</th><th>Card</th><th>Model</th><th>Use-case</th><th>Risk</th></tr></thead>
+                <tbody>
+                    {for (i in 0..rows.size()) {
+                        let c = rows.get(i) ?? ModelCardRow("", "", "", "", "", "", false, false, false);
+                        <tr>
+                            <td class="strong">{c.subject}</td>
+                            <td>{c.title}</td>
+                            <td>{if (c.modelOk) { <span class="badge ok" title={c.modelId}>linked</span> } else { <span class="badge bad">unresolved</span> }}</td>
+                            <td>{if (c.ucOk) { <span class="badge ok" title={c.useCaseId}>linked</span> } else { <span class="badge bad">unresolved</span> }}</td>
+                            <td>{if (c.riskOk) { <span class="badge ok" title={c.riskId}>linked</span> } else { <span class="badge bad">unresolved</span> }}</td>
+                        </tr>
+                    }}
+                </tbody>
+            </table>
+        }}
+    </div>;
+}

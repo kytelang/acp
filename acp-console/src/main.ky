@@ -43,6 +43,7 @@ fn buildApp(): App {
     app.post("/grc/create", CreateGrcHandler(acp));
     app.post("/grc/assess", CreateAssessmentHandler(acp));
     app.post("/grc/risk-create", CreateRiskHandler(acp));
+    app.post("/grc/model-card-create", CreateModelCardHandler(acp));
     app.post("/grc/{id}/assign", AssignGrcHandler(acp));
     app.post("/grc/{id}/control/{cid}/{done}", ControlToggleHandler(acp));
     app.post("/agents/{id}/deactivate", DeactivateAgentHandler(acp));
