@@ -1,6 +1,7 @@
 # 3. The MCP proxy
 
-`acp-proxy` governs an agent's **tool calls over MCP** (the Model Context Protocol). It is a
+`acp-agent mcp` governs an agent's **tool calls over MCP** (the Model Context Protocol). It is the
+`mcp` capability of the [workstation agent](01-overview.md): one binary, run here as an MCP proxy. It is a
 transparent interception proxy: it relays the JSON-RPC stream between the agent and the MCP server
 verbatim, parsing out only `tools/call` frames, and it intervenes only to deny, hold for approval,
 or rewrite arguments. Invalid or unrelated frames are relayed untouched and are never a point of
@@ -13,31 +14,33 @@ failure.
 The common case: the proxy launches the MCP server as a child process and sits on its stdio.
 
 ```sh
-acp-proxy stdio \
+acp-agent mcp stdio \
+  --control-plane http://<control-plane-host>:8787 \
   --policy policy.yaml \
   --ledger evidence.db \
   --key signing.key \
-  --registry-url http://<control-plane-host>:8787 \
   --agent-id agt-abc123 \
   --agent-token <token> \
   -- your-mcp-server --its --args
 ```
 
-Everything after `--` is the command to launch. The proxy verifies the agent identity against the
-registry, then governs every `tools/call` the agent makes to that server.
+Everything after `--` is the command to launch. `--control-plane` expands into the registry, firewall,
+reporting, evidence and approvals URLs, so you set one URL rather than five. The agent verifies its
+identity against the registry, then governs every `tools/call` the agent makes to that server.
 
 ### HTTP
 
-For a streamable-HTTP MCP server, run the proxy as a reverse proxy:
+For a streamable-HTTP MCP server, run it as a reverse proxy:
 
 ```sh
-acp-proxy http --addr 127.0.0.1:9000 --upstream http://localhost:8080 \
+acp-agent mcp http --addr 127.0.0.1:9000 --upstream http://localhost:8080 \
+  --control-plane http://<control-plane-host>:8787 \
   --policy policy.yaml --ledger evidence.db --key signing.key
 ```
 
 The HTTP transport adds a concurrency cap: a burst beyond the limit is shed with a 503 and a
-`Retry-after`, so the proxy cannot be exhausted, and it can stamp an enforcement attestation header
-for the [guard](06-guard.md) to check.
+`Retry-after`, so it cannot be exhausted, and it can stamp an enforcement attestation header for the
+[guard](06-guard.md) to check.
 
 ## The enforcement pipeline
 
@@ -61,6 +64,7 @@ For each tool call the proxy runs, in order:
 
 | Flag | Effect |
 | --- | --- |
+| `--control-plane <url>` | the one URL to set: expands into `--registry-url`, `--firewall-url`, `--report-url`, `--evidence-url` and `--approvals-url`. Any of those set explicitly overrides the expansion |
 | `--policy <file>` | the policy file to enforce |
 | `--policy-dir <dir>` | a signed policy-store directory to watch and hot-reload |
 | `--ledger <db>` | the evidence ledger to append to |
@@ -115,6 +119,6 @@ reconciles the operator's decision back to the proxy ([chapter 11](11-containmen
 [chapter 14](14-operations.md) for the monitoring surface. `--otel <endpoint>` streams OTLP traces to an
 OpenTelemetry collector.
 
-A proxy started with no `--policy` and no `--policy-dir` runs in transparent mode: it forwards every
+An MCP agent started with no `--policy` and no `--policy-dir` runs in transparent mode: it forwards every
 `tools/call` ungoverned and warns loudly that nothing is being enforced, so an accidental ungoverned run
 is visible in the logs rather than silent.

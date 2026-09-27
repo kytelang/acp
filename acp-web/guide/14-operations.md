@@ -79,7 +79,7 @@ budget and one set of tool-integrity pins, and a failover keeps limits correct.
 
 ```sh
 acp-gateway ... --budget-pg "host=pg user=acp password=... dbname=acp"
-acp-proxy   ... --pin-pg    "host=pg user=acp password=... dbname=acp"
+acp-agent mcp ... --pin-pg  "host=pg user=acp password=... dbname=acp"
 ```
 
 Token budgets refill under a row lock, and tenant isolation in the multi-tenant store is enforced by
@@ -171,13 +171,13 @@ These are documented with the request/response shapes in `docs/connectors.md`.
 ## Logging
 
 All services use structured logging, and **all of them write logs to STDERR**. This is deliberate: the
-`acp-proxy` stdio transport carries the JSON-RPC protocol on STDOUT, so keeping logs off STDOUT means
+the `acp-agent mcp` stdio transport carries the JSON-RPC protocol on STDOUT, so keeping logs off STDOUT means
 structured logging never corrupts the frame stream. Set the level with `ACP_LOG` (or `RUST_LOG`), and
 switch to one-JSON-object-per-line for a log pipeline with `ACP_LOG_FORMAT=json`.
 
 ```sh
 ACP_LOG=info ACP_LOG_FORMAT=json acp-gateway ...
-ACP_LOG=warn acp-proxy stdio ...
+ACP_LOG=warn acp-agent mcp stdio ...
 ```
 
 ## Deployment
@@ -228,7 +228,7 @@ Two different things can move off SQLite, and they take different DSNs. Do not c
   `sqlite://`, `postgres://` or `mysql://` URL. The same server code runs against any of them; schema
   migrations run automatically on connect.
 - **The shared runtime state** (gateway token budgets, proxy tool-integrity pins) uses a
-  key-value-style connection string: `acp-gateway --budget-pg` and `acp-proxy --pin-pg`. These are
+  key-value-style connection string: `acp-gateway --budget-pg` and `acp-agent mcp --pin-pg`. These are
   Postgres-only and enforce tenant isolation with row-level security.
 
 ### Create the database and a non-superuser role
@@ -263,7 +263,7 @@ acp-server --store 'mysql://acp_app:change-me@db/acp' ...
 
 # shared runtime state (Postgres only), for more than one replica
 acp-gateway --budget-pg 'host=db user=acp_app password=change-me dbname=acp' ...
-acp-proxy   --pin-pg    'host=db user=acp_app password=change-me dbname=acp' ...
+acp-agent mcp --pin-pg  'host=db user=acp_app password=change-me dbname=acp' ...
 ```
 
 The application creates and migrates its own tables on first connect, so the role needs table-creation

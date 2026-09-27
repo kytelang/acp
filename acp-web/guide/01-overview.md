@@ -27,24 +27,34 @@ same six steps.
 
 ## The components
 
-Varman is a control plane and a set of enforcement points. You deploy a PEP wherever agents act; all
-PEPs consult the same signed policy and append to the same ledger.
+Varman deploys as three binaries: a control plane, a console, and one workstation agent. The agent is a
+single binary whose enforcement role is set by the capability you run, so wherever an agent acts you run
+`acp-agent` with the right capability; all of them consult the same signed policy and append to the same
+ledger.
 
-- **`acp-proxy`** governs **MCP tool calls**. It is transparent: it relays the JSON-RPC verbatim and
-  only intervenes to deny, hold, or rewrite. Runs over stdio (wrapping a child MCP server) or as an
-  HTTP reverse proxy. See [chapter 3](03-proxy.md).
-- **`acp-gateway`** governs **direct model API calls**. It holds the upstream key, so a caller cannot
-  reach the model off-ACP (credential brokering). See [chapter 4](04-gateway.md).
-- **`acp-intercept`** governs **arbitrary HTTP/API traffic** as a forward proxy, with an optional
-  ACP certificate authority for TLS interception on managed devices. See [chapter 5](05-intercept.md).
-- **`acp-guard`** is a sidecar in front of a tool server that **refuses any call that did not come
-  through ACP**, closing the "just call the server directly" bypass. See [chapter 6](06-guard.md).
-- **`acp native-compile`** governs a coding agent's **own shell, file and network powers** by
-  compiling one policy into the vendor's managed settings. See [chapter 7](07-native-compile.md).
-- **`acp-server`** is the control plane: the approvals inbox, signed policy deploy, break-glass,
-  health and the evidence API. See [chapter 14](14-operations.md).
-- **`acp-cli`** (invoked as `acp`) is the operator's tool for policy, identity, evidence, discovery,
-  red-team and the GRC surface. See [chapter 13](13-cli.md).
+- **`acp-server`** is the control plane: identity, AI endpoints, signed policy deploy, the approvals
+  inbox, break-glass, GRC, evidence and health, and the API the console calls. See
+  [chapter 14](14-operations.md).
+- **`acp-console`** is the browser UI over the control plane.
+- **`acp-agent`** is the one workstation binary. Its role is configuration, set by the capability:
+  - **`acp-agent mcp`** governs **MCP tool calls**, transparently: it relays the JSON-RPC verbatim and
+    only intervenes to deny, hold or rewrite. Runs over stdio (wrapping a child MCP server) or as an
+    HTTP reverse proxy. See [chapter 3](03-proxy.md).
+  - **`acp-agent firewall`** governs **arbitrary HTTP/API traffic** as a forward proxy, with an optional
+    ACP certificate authority for TLS interception on managed devices, and applies the content firewall.
+    See [chapter 5](05-intercept.md).
+  - **`acp-agent guard`** is a sidecar in front of a tool server that **refuses any call that did not
+    come through ACP**, closing the "just call the server directly" bypass. See [chapter 6](06-guard.md).
+  - `acp-agent run` enables several capabilities at once from one `--control-plane` URL.
+
+Two more binaries are optional or offline, not part of the core three:
+
+- **`acp-gateway`** (optional, server-side) governs **direct model API calls**. It holds the upstream
+  key, so a caller cannot reach the model off-ACP (credential brokering). See [chapter 4](04-gateway.md).
+- **`acp-cli`** (invoked as `acp`) and **`acp-verify`** are offline tooling for policy, identity,
+  evidence, discovery, red-team and the GRC surface. See [chapter 13](13-cli.md). `acp native-compile`
+  governs a coding agent's own shell, file and network powers by compiling one policy into the vendor's
+  managed settings. See [chapter 7](07-native-compile.md).
 
 ## Deploy where
 
@@ -54,15 +64,16 @@ Two deployment surfaces, and it matters which is which.
 
 - `acp-server`, the control plane. This is the hub. Identity, AI endpoints, policy, approvals,
   break-glass and the GRC records are created and stored here, and the console talks to its API.
-- `acp-gateway`, the LLM gateway.
 - `acp-console`, the browser UI.
+- `acp-gateway`, the optional LLM gateway.
 
-**On developer machines or in CI (run on demand):**
+**On developer machines (run on demand):**
 
-- `acp-proxy`, launched per session in front of a local MCP server.
-- `acp-intercept` (also deployable as a shared egress gateway) and `acp-guard`.
-- `acp`, the CLI, for authoring and testing policy, verifying and exporting evidence, red-teaming, and
-  compiling coding-agent settings.
+- `acp-agent mcp`, launched per session in front of a local MCP server.
+- `acp-agent firewall` (also deployable as a shared egress gateway) and `acp-agent guard`, or
+  `acp-agent run` to enable several capabilities at once.
+- `acp` / `acp-verify`, the offline tooling, for authoring and testing policy, verifying and exporting
+  evidence, red-teaming, and compiling coding-agent settings.
 
 You register agents, AI endpoints, policy and governance records through the console or the
 control-plane API, and they are stored centrally; you do not hand-edit files on each machine. The CLI

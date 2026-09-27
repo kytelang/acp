@@ -1,7 +1,8 @@
 # 5. Forward and TLS interception
 
-`acp-intercept` governs **arbitrary HTTP and API traffic** from agents, IDEs and browsers. It is a
-forward proxy driven by the governed endpoint set from the control plane: for each destination it
+`acp-agent firewall` governs **arbitrary HTTP and API traffic** from agents, IDEs and browsers. It is
+the `firewall` capability of the [workstation agent](01-overview.md): a forward proxy (plus the content
+firewall) driven by the governed endpoint set from the control plane. For each destination it
 matches a rule and either tunnels, inspects, or blocks. On managed devices it can also terminate TLS
 with an ACP certificate authority to inspect body-bearing HTTPS endpoints.
 
@@ -40,9 +41,9 @@ To inspect body-bearing HTTPS, generate an ACP CA and distribute its certificate
 fleet:
 
 ```sh
-acp-intercept gen-ca            # writes the ACP CA cert and key
+acp-agent firewall gen-ca       # writes acp-ca.pem and acp-ca-key.pem (0600)
 # rules from the control plane (recommended); --rules <file> is the offline alternative
-acp-intercept --listen 127.0.0.1:8890 --ca-cert ca.pem --ca-key ca.key --registry-url http://<host>:8787
+acp-agent firewall --listen 127.0.0.1:8890 --ca-cert acp-ca.pem --ca-key acp-ca-key.pem --control-plane http://<host>:8787
 ```
 
 With a CA configured, the interceptor mints per-host leaf certificates on the fly, terminates the

@@ -9,13 +9,14 @@ the system is working.
 
 Varman has two kinds of component.
 
-- **Client tools**, run on a workstation on demand: `acp-proxy` (wraps a local MCP server),
-  `acp-intercept` (a forward proxy), and `acp-verify` (independent evidence verification). The `acp`
-  CLI and `acp-guard` ship in the server archive.
-- **Services**, run on a server: `acp-server` (the control plane) and `acp-gateway` (the LLM
-  gateway). These are the components that should run continuously, as systemd units.
+- **The workstation agent**, run on a developer machine: `acp-agent`, one binary whose capability is
+  configuration (`mcp` to wrap a local MCP server, `firewall` for a forward proxy, `guard` for a
+  tool-server sidecar). `acp-verify` (independent evidence verification) and the `acp` CLI are the
+  offline tools alongside it.
+- **Services**, run on a server: `acp-server` (the control plane) and `acp-console` (the web UI), plus
+  the optional `acp-gateway` (the LLM gateway). These run continuously, as systemd units.
 
-Install the client tools on every developer machine; install the services on one or more Linux hosts.
+Install the agent on every developer machine; install the services on one or more Linux hosts.
 
 ## 1. Install on a workstation
 
@@ -23,26 +24,27 @@ Install the client tools on every developer machine; install the services on one
 # on-demand tools only
 curl -fsSL https://acpdocs.web.app/install.sh | sh          # macOS, Linux
 
-# or point it at your control plane to also run acp-intercept as a background service
+# or point it at your control plane to also run acp-agent (firewall) as a background service
 ACP_SERVER=http://cp.internal:8787 curl -fsSL https://acpdocs.web.app/install.sh | sh
 
 # Windows (PowerShell):
 powershell -c "irm https://acpdocs.web.app/install.ps1 | iex"
 ```
 
-This installs the workstation tools into `~/.acp/bin` (or `%USERPROFILE%\.acp\bin`) and adds it to
-your PATH: `acp-proxy` (wraps a local MCP server), `acp-intercept` (a forward proxy), and `acp-verify`
-(independent evidence verification). `acp-proxy` is launched on demand by the agent host (it wraps a
-tool server over stdio). If you set **`ACP_SERVER`** (your control-plane URL), the installer also
-configures **`acp-intercept` as a background service** (a launchd LaunchAgent on macOS, a
-`systemd --user` unit on Linux) that listens on `127.0.0.1:8890` (override with `ACP_LISTEN`) and
+This installs the workstation binary into `~/.acp/bin` (or `%USERPROFILE%\.acp\bin`) and adds it to
+your PATH: `acp-agent` (the single workstation service), plus `acp-verify` (independent evidence
+verification) and the `acp` CLI. For the MCP capability, `acp-agent mcp stdio` is launched on demand by
+the agent host (it wraps a tool server over stdio). If you set **`ACP_SERVER`** (your control-plane
+URL), the installer also configures **`acp-agent firewall` as a background service** (a launchd
+LaunchAgent on macOS, a `systemd --user` unit on Linux) that listens on `127.0.0.1:8890` (override with
+`ACP_LISTEN`) and
 pulls its governed endpoint set from the control plane, refreshing it so the endpoints you enrol in
 the console take effect without touching the machine. Set `ACP_NO_SERVICE=1` to install binaries only.
 The installer refuses to run under `sudo`: it installs into your home directory.
 
 Manage the service the usual way, for example `launchctl unload ~/Library/LaunchAgents/ai.acp.intercept.plist`
-on macOS or `systemctl --user restart acp-intercept` on Linux. Point your agents' or browser's HTTP(S)
-proxy at `127.0.0.1:8890`.
+on macOS or `systemctl --user restart acp-intercept` on Linux (the service keeps its legacy name; the
+binary it runs is `acp-agent`). Point your agents' or browser's HTTP(S) proxy at `127.0.0.1:8890`.
 
 You do not register agents or author policy from the workstation: that is done centrally, from the
 console or the control-plane API on the server (below). The workstation tools enforce and verify.
@@ -146,8 +148,8 @@ ACP_BUDGET_PG=host=pg user=acp_app password=... dbname=acp
 
 Set `ACP_BUDGET_PG` in the environment **before running the server installer** so it is wired into the
 gateway unit's `ExecStart`. If you set it afterwards, add `--budget-pg ${ACP_BUDGET_PG}` to the
-`acp-gateway` `ExecStart` in `/etc/systemd/system/acp-gateway.service` and reload systemd. The proxy
-takes the same DSN via `--pin-pg` to share its tool-integrity pins.
+`acp-gateway` `ExecStart` in `/etc/systemd/system/acp-gateway.service` and reload systemd. The MCP
+agent takes the same DSN via `--pin-pg` to share its tool-integrity pins.
 
 ### Logging
 
@@ -159,9 +161,8 @@ generated env files.
 ### Govern a local MCP server (workstation)
 
 ```sh
-acp-proxy stdio \
-  --policy acp-demo/policy.yaml --ledger acp-demo/ledger.db --key acp-demo/signing.key \
-  --registry-url http://<control-plane-host>:8787 --agent-id <agt-id> --agent-token <token> \
+acp-agent mcp stdio \
+  --control-plane http://<control-plane-host>:8787 --agent-id <agt-id> --agent-token <token> \
   --content-firewall --trajectory acp-demo/trajectory.yaml \
   -- your-mcp-server --its --args
 ```
@@ -173,8 +174,10 @@ The gateway runs as a service once configured (step 2). Point your application's
 
 ### The other points
 
-`acp-guard` in front of a tool server ([chapter 6](06-guard.md)), `acp-intercept` as a forward proxy
-([chapter 5](05-intercept.md)), and `acp native-compile` for coding agents ([chapter 7](07-native-compile.md)).
+`acp-agent guard` in front of a tool server ([chapter 6](06-guard.md)), `acp-agent firewall` as a
+forward proxy ([chapter 5](05-intercept.md)), and `acp native-compile` for coding agents
+([chapter 7](07-native-compile.md)). Run several capabilities from one config with `acp-agent run
+--control-plane <url> --firewall <addr> --guard <addr> --guard-upstream <url> --mcp <addr> --mcp-upstream <url>`.
 
 ## 5. The web console
 
@@ -296,7 +299,7 @@ call that did not come through the proxy (see [chapter 6](06-guard.md)).
 
 ### Common problems
 
-- **The proxy forwards everything and warns about no policy.** You started `acp-proxy` with no
+- **The agent forwards everything and warns about no policy.** You started `acp-agent mcp` with no
   `--policy` or `--policy-dir`, so it is in transparent mode and governs nothing. Supply a policy file
   or point `--policy-dir` at the signed policy store.
 - **The gateway exits immediately.** It needs `--upstream` (set `ACP_UPSTREAM` in `gateway.env`). If a

@@ -1,20 +1,21 @@
 # 6. The enforcement guard
 
 A proxy only governs calls that go through it. The obvious bypass is to call the tool server
-directly. `acp-guard` closes that: it is a small reverse proxy sidecar you put in front of a tool
-server (bound to loopback) that **forwards only requests carrying a valid ACP enforcement
+directly. `acp-agent guard` closes that: it is the `guard` capability of the
+[workstation agent](01-overview.md), a small reverse proxy sidecar you put in front of a tool server
+(bound to loopback) that **forwards only requests carrying a valid ACP enforcement
 attestation**, and records every refused, un-proxied attempt to the ledger as bypass evidence.
 
 ## How the attestation works
 
-When you run the [proxy](03-proxy.md) with `--enforcement-key <hex>`, it stamps each forwarded
+When you run the [MCP agent](03-proxy.md) with `--enforcement-key <hex>`, it stamps each forwarded
 request with an `x-acp-enforcement` header: a short token of the form `<issued-ms>.<session>.<sig>`,
 signed with the proxy's Ed25519 key and bound to a freshness window. The guard holds the matching
 public key and verifies the token: present, fresh, and correctly signed. Anything else is refused,
 fail-closed.
 
 ```
-agent → acp-proxy (stamps x-acp-enforcement) → acp-guard (verifies) → tool server (loopback only)
+agent → acp-agent mcp (stamps x-acp-enforcement) → acp-agent guard (verifies) → tool server (loopback only)
                                                      │
                                           refused attempts → ledger
 ```
@@ -25,9 +26,10 @@ attested requests, a caller cannot reach the tool server without going through A
 ## Running it
 
 ```sh
-acp-guard \
+acp-agent guard \
   --listen 0.0.0.0:8801 \
   --upstream http://127.0.0.1:9090 \
+  --control-plane http://<control-plane-host>:8787 \
   --pubkey <hex> \
   --ledger evidence.db \
   --ledger-key <hex> \

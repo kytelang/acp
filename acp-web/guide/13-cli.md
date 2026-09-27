@@ -23,8 +23,9 @@ Exit 0 if the evidence verifies, non-zero if it was tampered with. See [chapter 
 
 ### The enforcement binaries
 
-Not "commands to manage", but the data plane you deploy: `acp-proxy`, `acp-gateway`, `acp-intercept`,
-`acp-guard`. Their flags are in chapters [3](03-proxy.md) to [6](06-guard.md).
+Not "commands to manage", but the data plane you deploy: the `acp-agent` capabilities (`mcp`,
+`firewall`, `guard`) and the optional `acp-gateway`. Their flags are in chapters [3](03-proxy.md) to
+[6](06-guard.md).
 
 ### CI and offline helpers (the `acp` tool)
 

@@ -5,8 +5,8 @@ It uses only the workstation tools, no server, so you can see the shape of the s
 up the control plane. When you are ready for the full stack (control plane, console, gateway), follow
 the [setup runbook](16-setup.md).
 
-You need the `acp` CLI and `acp-proxy` on your PATH (see [chapter 16](16-setup.md) for the installer),
-and any MCP tool server you already run.
+You need the `acp` CLI and the `acp-agent` binary on your PATH (see [chapter 16](16-setup.md) for the
+installer), and any MCP tool server you already run.
 
 ## 1. Scaffold a workspace
 
@@ -21,22 +21,27 @@ operations in `prod`. The ledger at `acp-demo/ledger.db` is created on the first
 
 ## 2. Put the proxy in front of your MCP server
 
-`acp-proxy stdio` wraps a local MCP server over stdio: the agent talks to the proxy, the proxy governs
-each `tools/call` and forwards it to the real server. Point your agent host (the IDE or agent runner)
-at this command instead of the tool server directly:
+`acp-agent mcp stdio` wraps a local MCP server over stdio: the agent talks to acp-agent, which governs
+each `tools/call` and forwards it to the real server. (`mcp` is one of the workstation agent's
+capabilities; see [chapter 3](03-proxy.md).) Point your agent host (the IDE or agent runner) at this
+command instead of the tool server directly:
 
 ```sh
-acp-proxy stdio \
+acp-agent mcp stdio \
   --policy acp-demo/policy.yaml \
   --ledger acp-demo/ledger.db \
   --key    acp-demo/signing.key \
   -- your-mcp-server --its --args
 ```
 
+This example runs standalone with local files. In a real deployment you pass `--control-plane <url>`
+instead, and the agent fetches its policy, firewall config and reporting endpoints from the control
+plane.
+
 The `--key` file is generated on first use and is the Ed25519 key the ledger signs its tree head with.
 From now on every tool call is authorised against the policy and appended to the signed ledger. If you
-start the proxy with no `--policy` or `--policy-dir`, it runs in transparent mode and warns loudly that
-nothing is being governed, so an accidental ungoverned run is visible.
+start it with no `--policy` or `--policy-dir`, it runs in transparent mode and warns loudly that nothing
+is being governed, so an accidental ungoverned run is visible.
 
 ## 3. Make a call that gets held
 
@@ -47,7 +52,7 @@ exact call. The agent re-issues the same call after a human resolves the hold. A
 structured tool error and never reaches the tool server. See [chapter 11](11-containment.md) for the
 full step-up flow and how to resolve a hold.
 
-For a self-contained proxy (no server), the hold sits in the proxy's local approval store next to the
+For a self-contained agent (no server), the hold sits in the agent's local approval store next to the
 ledger (`acp-demo/ledger.db.approvals`). When you run the full stack, holds and their resolution live
 in the control plane and appear in the console Approvals inbox.
 
@@ -80,5 +85,5 @@ This is the fastest way to confirm a build behaves before you wire in a control 
 
 - [Chapter 1](01-overview.md) for the architecture and the six-step spine.
 - [Chapter 2](02-policy.md) to write real policy, and `acp policy-test` to test it in CI.
-- [Chapter 16](16-setup.md) to stand up the control plane, console and gateway as services.
+- [Chapter 16](16-setup.md) to stand up the control plane and console as services (plus the optional gateway).
 - [Chapter 14](14-operations.md) for operations, monitoring and recovery.

@@ -167,7 +167,7 @@ blocking) and emits a compilable draft policy that gates the high- and medium-im
 a step-up, leaving the rest at default-allow:
 
 ```sh
-acp-proxy stdio --shadow ... -- your-mcp-server   # observe real traffic first
+acp-agent mcp stdio --shadow ... -- your-mcp-server   # observe real traffic first
 acp learn evidence.db > draft-policy.yaml          # a starting policy to review, not to deploy blind
 ```
 

@@ -11,24 +11,30 @@ product. This guide uses both.
 
 ## How the stack fits together
 
-Varman is one control plane and several enforcement points (PEPs). You put a PEP in the path of each
-place an agent acts, and they all consult the same signed policy and write to the same signed ledger.
+Varman deploys as **three binaries**: the control plane, the console, and one workstation agent. The
+agent is a single binary whose enforcement role is configuration, so there is nothing to install
+per-PEP. A control plane, the console, and one `acp-agent` are all a deployment needs; an optional
+server-side gateway and two offline tools round it out.
 
 | Component | Binary | Runs on | What it does |
 | --- | --- | --- | --- |
 | Control plane | `acp-server` | **server** (service) | the hub: identity, endpoints, policy, approvals, break-glass, GRC, evidence, health, and the API the console calls |
-| LLM gateway | `acp-gateway` | **server** (service) | governs direct model API calls, holding the upstream key |
 | Web console | `acp-console` | **server** (service) | the browser UI over the control plane: dashboards, approvals, policy, kill-switch, register agents and AI endpoints |
-| MCP proxy | `acp-proxy` | **workstation** (per session) | governs an agent's tool calls, wrapping a local MCP server |
-| Forward / intercept proxy | `acp-intercept` | **workstation** or an egress gateway | governs arbitrary HTTP/API traffic, with optional TLS interception |
-| Enforcement guard | `acp-guard` | **beside a tool server** | refuses un-proxied calls in front of a tool server |
-| CLI | `acp` | **workstation / CI** | an operator and CI tool: author and test policy, verify and export evidence, red-team, compile agent settings |
+| Workstation agent | `acp-agent` | **workstation** | one binary, one `--control-plane` URL; its enforcement role is set by the capability you run: `mcp` (govern an MCP tool server), `firewall` (egress + content firewall), or `guard` (tool-server sidecar). Run several at once with `acp-agent run`. |
 
-The rule of thumb: the **control plane, gateway and console are services you run on a server**; the
-**proxy, intercept, guard and CLI run on developer machines or in CI**. Registrations and governance
-records (agents, AI endpoints, policy, GRC) are made through the console or the control-plane API and
-stored centrally; the CLI is for verification, testing and offline or air-gapped work. Chapter 16 is
-the step-by-step runbook for both sides.
+Two more binaries are optional or offline, not part of the core three:
+
+| Component | Binary | Runs on | What it does |
+| --- | --- | --- | --- |
+| LLM gateway (optional) | `acp-gateway` | **server** (service) | governs direct model API calls, holding the upstream key |
+| CLI and verifier | `acp` / `acp-verify` | **workstation / CI** | offline tooling: author and test policy, verify and export evidence, red-team, compile agent settings |
+
+The rule of thumb: the **control plane and console are services you run on a server** (plus the optional
+gateway); the **agent runs on developer machines**, and the **CLI/verifier are for CI and offline work**.
+The one thing an operator sets on the agent is `--control-plane <url>`, which expands into the
+per-capability control-plane URLs, so the workstation carries no local rule or model files.
+Registrations and governance records (agents, AI endpoints, policy, GRC) are made through the console or
+the control-plane API and stored centrally. Chapter 16 is the step-by-step runbook for both sides.
 
 ## Chapters
 
@@ -37,10 +43,10 @@ the step-by-step runbook for both sides.
 | 0 | [Quickstart](00-quickstart.md) | one governed call in five minutes, then where to go next |
 | 1 | [Overview and architecture](01-overview.md) | what ACP is, the six-step spine, the components, where it fits, what is not built |
 | 2 | [Policy and authorization](02-policy.md) | the model-v2 DSL, subjects and objects, verdicts, obligations, Cedar, signing, default-deny |
-| 3 | [The MCP proxy](03-proxy.md) | `acp-proxy` stdio and HTTP, the enforcement pipeline, every flag |
+| 3 | [The MCP proxy](03-proxy.md) | `acp-agent mcp` stdio and HTTP, the enforcement pipeline, every flag |
 | 4 | [The LLM gateway](04-gateway.md) | `acp-gateway`, credential brokering, model classes, budgets, streaming |
-| 5 | [Forward and TLS interception](05-intercept.md) | `acp-intercept`, PAC files, the ACP CA, feeding rules from enrolment |
-| 6 | [The enforcement guard](06-guard.md) | `acp-guard`, the enforcement attestation, making bypass impossible |
+| 5 | [Forward and TLS interception](05-intercept.md) | `acp-agent firewall`, PAC files, the ACP CA, feeding rules from enrolment |
+| 6 | [The enforcement guard](06-guard.md) | `acp-agent guard`, the enforcement attestation, making bypass impossible |
 | 7 | [Governing coding agents](07-native-compile.md) | `acp native-compile` into managed settings, gateway pinning |
 | 8 | [Identity, registry and access](08-identity.md) | agents, human principals, OIDC / Entra, RBAC, delegation, mTLS |
 | 9 | [The evidence ledger](09-evidence.md) | the Merkle log, signing, verify and export, encryption at rest, HSM, backup |

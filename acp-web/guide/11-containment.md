@@ -11,7 +11,7 @@ Trajectory governance watches a session's history and denies the action that **c
 combination** of individually-allowed steps, or that exceeds a high-impact velocity budget.
 
 ```sh
-acp-proxy stdio --trajectory trajectory.yaml ... -- your-mcp-server
+acp-agent mcp stdio --trajectory trajectory.yaml ... -- your-mcp-server
 ```
 
 The classic combination is read-a-secret then egress: each step is fine alone, but the second one,
@@ -25,7 +25,7 @@ asks a different question: "may this class of data cross to *that* destination?"
 destination-aware.
 
 ```sh
-acp-proxy stdio --data-boundary boundary.yaml ... -- your-mcp-server
+acp-agent mcp stdio --data-boundary boundary.yaml ... -- your-mcp-server
 ```
 
 A rule keys on the data class (secret, PII) and the destination resource, and the most-restrictive
@@ -133,7 +133,7 @@ There are two approval stores, and it matters how they are wired:
 
 - **Control-plane store** (`acp-server --approvals`): the holds the console inbox and the
   `/approvals/*` routes see.
-- **Proxy-local store** (`acp-proxy --approvals`, default `<ledger>.approvals`): where a workstation
+- **Agent-local store** (`acp-agent mcp --approvals`, default `<ledger>.approvals`): where a workstation
   proxy keeps its own holds.
 
 Wiring the two together: start the proxy with `--approvals-url <control-plane>` and each new step-up hold
