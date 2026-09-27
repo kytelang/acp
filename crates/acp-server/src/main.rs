@@ -657,6 +657,7 @@ async fn main() {
         .route("/redteam/run", post(redteam_run))
         .route("/redteam/runs", get(redteam_runs))
         .route("/grc/assess", post(grc_assess))
+        .route("/grc/risk", post(grc_risk))
         .route("/grc/:id/status", post(grc_status))
         .route("/grc/:id/usecase/:stage", post(grc_usecase_transition))
         .route("/grc/:id/assign", post(grc_assign))
@@ -1661,6 +1662,50 @@ async fn grc_templates() -> impl IntoResponse {
             ]
         }]
     }))
+}
+
+/// G2: create a structured risk-register record. Body carries likelihood/impact (low|medium|high),
+/// treatment and owner; the server computes the score (likelihood x impact) and severity band via
+/// `acp_core::riskregister::RiskItem` and stores them in the signed body. Console renders a risk table.
+async fn grc_risk(State(st): State<Arc<AppState>>, headers: HeaderMap, Json(body): Json<serde_json::Value>) -> Response {
+    let principal = match authorize(&st.auth, &headers, acp_auth::Capability::EditGrc) { Ok(p) => p, Err(r) => return r };
+    let operator = actor_of(&principal);
+    let store = match &st.store { Some(s) => s, None => return Json(serde_json::json!({"ok": false, "error": "no --store configured"})).into_response() };
+    let subject = body.get("subject").and_then(|v| v.as_str()).unwrap_or("").trim().to_string();
+    if subject.is_empty() { return Json(serde_json::json!({"ok": false, "error": "subject is required"})).into_response(); }
+    let title = body.get("title").and_then(|v| v.as_str()).unwrap_or("Risk").to_string();
+    let lvl = |k: &str| body.get(k).and_then(|v| v.as_str()).and_then(acp_core::riskregister::Level::parse);
+    let likelihood = match lvl("likelihood") { Some(l) => l, None => return Json(serde_json::json!({"ok": false, "error": "likelihood must be low|medium|high"})).into_response() };
+    let impact = match lvl("impact") { Some(l) => l, None => return Json(serde_json::json!({"ok": false, "error": "impact must be low|medium|high"})).into_response() };
+    let treatment = body.get("treatment").and_then(|v| v.as_str()).and_then(acp_core::riskregister::Treatment::parse).unwrap_or(acp_core::riskregister::Treatment::Mitigate);
+    let owner = body.get("owner").and_then(|v| v.as_str()).unwrap_or(&operator).to_string();
+    let id = format!("grc-{}", rand_hex(6));
+    let item = acp_core::riskregister::RiskItem {
+        id: id.clone(), title: title.clone(), owner: owner.clone(), likelihood, impact, treatment,
+        status: acp_core::riskregister::RiskStatus::Open, linked_controls: vec![], linked_decisions: vec![], notes: String::new(),
+    };
+    let score = item.score();
+    let band = item.band();
+    let doc_body = serde_json::json!({
+        "kind": "risk",
+        "likelihood": body.get("likelihood").and_then(|v| v.as_str()).unwrap_or(""),
+        "impact": body.get("impact").and_then(|v| v.as_str()).unwrap_or(""),
+        "treatment": body.get("treatment").and_then(|v| v.as_str()).unwrap_or("mitigate"),
+        "owner": owner,
+        "score": score,
+        "band": band,
+    }).to_string();
+    let status = "open".to_string();
+    let now = now_ms();
+    let doc = grc_doc(&id, "risk", &subject, &title, &status, &doc_body);
+    let signer = enroll_signer(&st.cp_key);
+    let sig = acp_core::sign::Signer::sign(&signer, &acp_core::canonical::canonical_bytes(&doc));
+    let pubkey_hex = hex::encode(acp_core::sign::Signer::public_key(&signer));
+    let sig_hex = hex::encode(sig);
+    match store.add_grc(&id, "risk", &subject, &title, &status, &doc_body, &operator, now as i64, &pubkey_hex, &sig_hex, "[]", "{}", "", 0, &status).await {
+        Ok(()) => Json(serde_json::json!({"ok": true, "id": id, "score": score, "band": band})).into_response(),
+        Err(e) => Json(serde_json::json!({"ok": false, "error": e})).into_response(),
+    }
 }
 
 /// A1: run the assessment engine over a screening questionnaire and persist a signed assessment

@@ -244,3 +244,19 @@ pub struct UsecaseTransitionHandler impl RouteHandler {
         return await ds_response.patch(grcPanel(self.acp.grcRows()));
     }
 }
+
+// G2: create a structured risk-register record, then patch the risk panel.
+pub struct CreateRiskHandler impl RouteHandler {
+    acp: AcpClient,
+    init(acp: AcpClient) { self.acp = acp; }
+    async fn serve(self: CreateRiskHandler, ctx: Context): Response {
+        let auth = ctx.request.headers.get("authorization") ?? "";
+        let subject = json.stringField(ctx.request.body, "riskSubject");
+        let title = json.stringField(ctx.request.body, "riskTitle");
+        let likelihood = json.stringField(ctx.request.body, "riskLikelihood");
+        let impact = json.stringField(ctx.request.body, "riskImpact");
+        let treatment = json.stringField(ctx.request.body, "riskTreatment");
+        let _ = self.acp.createRisk(subject, title, likelihood, impact, treatment, auth);
+        return await ds_response.patch(riskPanel(self.acp.riskRows()));
+    }
+}

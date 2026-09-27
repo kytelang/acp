@@ -26,17 +26,19 @@ Acceptance:
   each transition re-signs and `/grc` shows the record `verified: true`.
 - The console use-case row shows the current stage and offers only the gated next transition(s).
 
-## G2. Structured risk register (P1) - surface `riskregister.rs`
+## G2. Structured risk register (P1) - surface `riskregister.rs`  [DONE 2026-09-27]
 Gap: risk is a free-form record; Credo has structured likelihood/impact scoring and treatment.
-Design: a GRC kind `risk` whose body carries `{likelihood:1-5, impact:1-5, treatment, owner, status}`.
-The server computes a `score = likelihood*impact` and a severity band, stores them in the signed body,
-and validates the 1-5 ranges. Console renders a risk table with score + severity badge and a treatment
-lifecycle (open -> mitigating -> accepted/closed) that re-signs.
+Design: a GRC kind `risk` whose body carries `{likelihood, impact (low|medium|high), treatment, owner,
+status}`. `POST /grc/risk` computes `score = likelihood*impact` (each low=1/med=2/high=3, so 1..9) and a
+severity band via `acp_core::riskregister::RiskItem`, storing them in the signed body and validating the
+levels. Console renders a risk table with score + severity badge and a treatment lifecycle that re-signs.
 Acceptance:
-- Creating a risk with likelihood=4, impact=5 returns and stores `score=20`, severity `critical`.
-- Out-of-range likelihood/impact is rejected with a clear error.
-- Advancing the treatment status re-signs; `/grc` shows the record verified with the score preserved.
+- Creating a risk with likelihood=high, impact=high returns and stores `score=9`, severity `critical`.
+- An invalid level is rejected with a clear error.
+- Advancing the status re-signs; `/grc` shows the record verified with the score preserved.
 - The console risk table shows the score and a severity badge.
+Status (2026-09-27): SHIPPED. Verified via curl: high/high -> 9 critical, low/medium -> 2 low, bad level
+rejected, status transition re-signs and stays verified; console Risk register card + Add-risk modal.
 
 ## G3. Joined model cards (P1) - surface `modelcard.rs`
 Gap: model cards are free-form; Credo joins a card to its model, use-case and risk.

@@ -691,3 +691,34 @@ pub fn redteamPanel(rows: list.List<RedteamRun>): Html {
         }}
     </div>;
 }
+
+// G2: structured risk register (score = likelihood x impact, with a severity band).
+pub fn riskPanel(rows: list.List<RiskRow>): Html {
+    return <div id="risks">
+        {if (rows.size() == 0) {
+            <p class="empty">No risks recorded.</p>
+        } else {
+            <table class="tbl">
+                <thead><tr><th>Subject</th><th>Risk</th><th>Likelihood</th><th>Impact</th><th>Score</th><th>Severity</th><th>Treatment</th><th>Status</th></tr></thead>
+                <tbody>
+                    {for (i in 0..rows.size()) {
+                        let r = rows.get(i) ?? RiskRow("", "", "", "", "", "", 0, "", "");
+                        <tr>
+                            <td class="strong">{r.subject}</td>
+                            <td>{r.title}</td>
+                            <td>{r.likelihood}</td>
+                            <td>{r.impact}</td>
+                            <td>{r.score}</td>
+                            <td>{if (string.eql(r.band, "critical") || string.eql(r.band, "high")) { <span class="badge bad">{r.band}</span> } else { if (string.eql(r.band, "medium")) { <span class="badge warn">{r.band}</span> } else { <span class="badge ok">{r.band}</span> } }}</td>
+                            <td>{r.treatment}</td>
+                            <td>
+                                <span class="badge warn">{r.status}</span>
+                                {if (string.eql(r.status, "open")) { <button class="btn" data-on:click={"@post('/grc/" + r.id + "/to/mitigating')"}>Mitigate</button> } else { <button class="btn ok" data-on:click={"@post('/grc/" + r.id + "/to/closed')"}>Close</button> }}
+                            </td>
+                        </tr>
+                    }}
+                </tbody>
+            </table>
+        }}
+    </div>;
+}

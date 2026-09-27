@@ -288,6 +288,22 @@ pub struct GrcRow {
     }
 }
 
+pub struct RiskRow {
+    pub id: string,
+    pub subject: string,
+    pub title: string,
+    pub likelihood: string,
+    pub impact: string,
+    pub treatment: string,
+    pub score: long,
+    pub band: string,
+    pub status: string,
+    init(id: string, subject: string, title: string, likelihood: string, impact: string, treatment: string, score: long, band: string, status: string) {
+        self.id = id; self.subject = subject; self.title = title; self.likelihood = likelihood; self.impact = impact;
+        self.treatment = treatment; self.score = score; self.band = band; self.status = status;
+    }
+}
+
 pub struct AcpClient {
     base: string,
     init(base: string) { self.base = base; }
@@ -593,6 +609,47 @@ pub struct AcpClient {
         let resp = client.Http.get(self.base + "/report/framework/" + name + "/csv");
         if (resp.status.toCode() != 200) { return "section,key,value\n"; }
         return resp.body;
+    }
+
+    // G2: risk-register rows (GRC records of kind "risk" with parsed score/band).
+    pub fn riskRows(self: AcpClient): list.List<RiskRow> {
+        let rows = list.List<RiskRow>();
+        let resp = client.Http.get(self.base + "/grc");
+        if (resp.status.toCode() != 200) { return rows; }
+        let rv = json.get(json.parse(resp.body), "records");
+        let arr = json.asArray(rv);
+        if (arr == undefined) { return rows; }
+        let i = 0;
+        while (i < arr.size()) {
+            let r = json.at(rv, i);
+            if (string.eql(json.asString(json.get(r, "kind")) ?? "", "risk")) {
+                let b = json.parse(json.asString(json.get(r, "body")) ?? "{}");
+                rows.push(RiskRow(
+                    json.asString(json.get(r, "id")) ?? "",
+                    json.asString(json.get(r, "subject")) ?? "",
+                    json.asString(json.get(r, "title")) ?? "",
+                    json.asString(json.get(b, "likelihood")) ?? "",
+                    json.asString(json.get(b, "impact")) ?? "",
+                    json.asString(json.get(b, "treatment")) ?? "",
+                    json.asNumber(json.get(b, "score")) ?? 0,
+                    json.asString(json.get(b, "band")) ?? "",
+                    json.asString(json.get(r, "status")) ?? ""));
+            }
+            i = i + 1;
+        }
+        return rows;
+    }
+    pub fn createRisk(self: AcpClient, subject: string, title: string, likelihood: string, impact: string, treatment: string, userAuth: string): DeployResult {
+        let body = "{\"subject\":" + self.jstr(subject) + ",\"title\":" + self.jstr(title) + ",\"likelihood\":" + self.jstr(likelihood) + ",\"impact\":" + self.jstr(impact) + ",\"treatment\":" + self.jstr(treatment) + "}";
+        let hdrs = client.Http.emptyHeaders();
+        hdrs.set("Content-Type", "application/json");
+        if (!string.eql(userAuth, "")) { hdrs.set("Authorization", userAuth); }
+        else { let tok = self.authToken("GrcAuthor"); if (!string.eql(tok, "")) { hdrs.set("Authorization", "Bearer " + tok); } }
+        let resp = client.Http.request("POST", self.base + "/grc/risk", hdrs, body);
+        if (resp.status.toCode() != 200) { return DeployResult(false, "acp-server unreachable"); }
+        let v = json.parse(resp.body);
+        if (!(json.asBool(json.get(v, "ok")) ?? false)) { return DeployResult(false, json.asString(json.get(v, "error")) ?? "rejected"); }
+        return DeployResult(true, `risk score ${json.asNumber(json.get(v, "score")) ?? 0} (${json.asString(json.get(v, "band")) ?? "?"})`);
     }
 
     pub fn policyVersion(self: AcpClient): string {
