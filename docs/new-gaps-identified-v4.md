@@ -56,13 +56,16 @@ task that snapshots each framework report and fires a signed `report.snapshot` w
 Verified against a mock receiver at a 1s interval: snapshots accumulated in history and matching signed
 report.snapshot events were delivered for each framework (all signatures verified).
 
-## M4. Approval SLA escalation (P2)
+## M4. Approval SLA escalation (P2)  [DONE 2026-09-27]
 Gap: approvals had no time-based escalation.
 Design: `--approval-sla-ms`; a background task fires an `approval.overdue` webhook for pending holds
 older than the SLA (once per hold).
 Acceptance:
 - A hold left pending past the SLA produces one `approval.overdue` webhook (verified); a resolved hold
   does not.
+Status (2026-09-27): SHIPPED. `--approval-sla-ms`; `acp_approvals::list_overdue` + a background task fire
+`approval.overdue` once per overdue pending hold (tracked in an in-memory set). Verified: an unresolved
+hold produced exactly one approval.overdue event; a resolved hold produced none.
 
 ## M5. Continuous vendor monitoring (P2)
 Gap: G6 vendor risk was point-in-time.

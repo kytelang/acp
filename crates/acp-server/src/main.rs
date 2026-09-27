@@ -59,6 +59,9 @@ struct AppState {
     // M3: periodic framework-report snapshotting + delivery.
     snapshot_interval_ms: i64,
     snapshot_frameworks: Vec<String>,
+    // M4: approval SLA escalation.
+    approval_sla_ms: i64,
+    escalated: std::sync::Mutex<std::collections::HashSet<String>>,
     lease: std::sync::Mutex<(bool, String, i64)>,
 }
 
@@ -467,6 +470,7 @@ async fn main() {
     let mut ticket_poll_url: Option<String> = None;
     let mut snapshot_interval_ms: i64 = 0;
     let mut snapshot_frameworks: Vec<String> = Vec::new();
+    let mut approval_sla_ms: i64 = 0;
     let mut node_id: Option<String> = None;
     let mut lease_ttl_ms: i64 = 15_000;
     let mut it = args.iter().skip(1);
@@ -492,6 +496,7 @@ async fn main() {
             "--ticket-poll-url" => ticket_poll_url = it.next().cloned(),
             "--snapshot-interval-ms" => snapshot_interval_ms = it.next().and_then(|v| v.parse().ok()).unwrap_or(0),
             "--snapshot-frameworks" => snapshot_frameworks = it.next().map(|v| v.split(',').map(|x| x.trim().to_string()).filter(|x| !x.is_empty()).collect()).unwrap_or_default(),
+            "--approval-sla-ms" => approval_sla_ms = it.next().and_then(|v| v.parse().ok()).unwrap_or(0),
             "--node-id" => node_id = it.next().cloned(),
             "--lease-ttl-ms" => lease_ttl_ms = it.next().and_then(|v| v.parse().ok()).unwrap_or(15_000),
             "--cp-key" => { if let Some(v) = it.next() { cp_key = v.clone(); } }
@@ -679,6 +684,8 @@ async fn main() {
         ticket_poll_url,
         snapshot_interval_ms,
         snapshot_frameworks,
+        approval_sla_ms,
+        escalated: std::sync::Mutex::new(std::collections::HashSet::new()),
         lease: std::sync::Mutex::new((false, String::new(), 0)),
     });
     // C1 (HA): restore persisted liveness/spike state so the dead-man's-switch and alert state survive
@@ -801,6 +808,26 @@ async fn main() {
                                 "framework": name, "id": id,
                                 "coverage": report.get("coverage"), "controls_summary": report.get("controls_summary"),
                             }));
+                        }
+                    }
+                }
+            }
+        });
+    }
+    // M4: escalate approval holds that sit pending past the SLA (one approval.overdue webhook per hold).
+    if state.approval_sla_ms > 0 && state.approvals.is_some() {
+        let st2 = state.clone();
+        tokio::spawn(async move {
+            loop {
+                tokio::time::sleep(std::time::Duration::from_secs(2)).await;
+                let path = match &st2.approvals { Some(p) => p.clone(), None => continue };
+                if let Ok(store) = acp_approvals::ApprovalStore::open(&path) {
+                    if let Ok(ids) = store.list_overdue(st2.approval_sla_ms as u64, now_ms()) {
+                        for id in ids {
+                            let already = { st2.escalated.lock().unwrap().contains(&id) };
+                            if already { continue; }
+                            st2.escalated.lock().unwrap().insert(id.clone());
+                            fire_webhook(&st2, "approval.overdue", serde_json::json!({"id": id, "sla_ms": st2.approval_sla_ms}));
                         }
                     }
                 }

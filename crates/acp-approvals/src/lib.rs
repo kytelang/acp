@@ -186,6 +186,16 @@ impl ApprovalStore {
         }
     }
 
+    /// M4: ids of pending holds created at or before (now - sla_ms), for SLA escalation.
+    pub fn list_overdue(&self, sla_ms: u64, now_ms: u64) -> Result<Vec<String>, String> {
+        let cutoff = now_ms.saturating_sub(sla_ms) as i64;
+        let mut stmt = self.conn.prepare("SELECT id FROM approvals WHERE state='pending' AND created_ms <= ? ORDER BY created_ms")
+            .map_err(|e| e.to_string())?;
+        let ids: Vec<String> = stmt.query_map(params![cutoff], |r| r.get::<_, String>(0)).map_err(|e| e.to_string())?
+            .filter_map(|r| r.ok()).collect();
+        Ok(ids)
+    }
+
     pub fn list_pending(&self) -> Result<Vec<ApprovalView>, String> {
         let mut stmt = self
             .conn
