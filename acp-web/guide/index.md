@@ -51,6 +51,7 @@ the step-by-step runbook for both sides.
 | 14 | [Operations and deployment](14-operations.md) | the server, the console, helm, Postgres, logging, backup, production readiness |
 | 15 | [Security and verification](15-security.md) | the trust model, the threat model, how to verify the claims yourself |
 | 16 | [Setting it all up (runbook)](16-setup.md) | the end-to-end install and configuration runbook, plus the checks that prove it works |
+| 17 | [Console reference](17-console-reference.md) | every console page, field, button, the server endpoint it calls and the RBAC capability it needs |
 
 > **Version:** tracks `acp version` (Beta 0.1.0). This is a tested reference implementation; read
 > chapter 14 for the honest maturity picture.

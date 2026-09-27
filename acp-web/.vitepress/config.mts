@@ -95,6 +95,7 @@ export default defineConfig({
             { text: '14. Operations and deployment', link: '/guide/14-operations' },
             { text: '15. Security and verification', link: '/guide/15-security' },
             { text: '16. Setting it all up (runbook)', link: '/guide/16-setup' },
+            { text: '17. Console reference', link: '/guide/17-console-reference' },
           ],
         },
       ],
