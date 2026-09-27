@@ -360,7 +360,11 @@ pub struct AcpClient {
     // Recent governed decisions for the evidence table.
     pub fn evidenceRows(self: AcpClient): list.List<EvidenceRow> {
         let rows = list.List<EvidenceRow>();
-        let resp = client.Http.get(self.base + "/evidence/recent");
+        // A5: the raw decision detail requires the SeeArgs capability (SecurityOfficer).
+        let hdrs = client.Http.emptyHeaders();
+        let tok = self.authToken("SecurityOfficer");
+        if (!string.eql(tok, "")) { hdrs.set("Authorization", "Bearer " + tok); }
+        let resp = client.Http.request("GET", self.base + "/evidence/recent", hdrs, "");
         if (resp.status.toCode() != 200) { return rows; }
         let ev = json.get(json.parse(resp.body), "evidence");
         let arr = json.asArray(ev);
@@ -478,7 +482,7 @@ pub struct AcpClient {
         let hdrs = client.Http.emptyHeaders();
         hdrs.set("Content-Type", "application/json");
         if (!string.eql(userAuth, "")) { hdrs.set("Authorization", userAuth); }
-        else { let tok = self.authToken("PolicyAdmin"); if (!string.eql(tok, "")) { hdrs.set("Authorization", "Bearer " + tok); } }
+        else { let tok = self.authToken("FirewallAdmin"); if (!string.eql(tok, "")) { hdrs.set("Authorization", "Bearer " + tok); } }
         let resp = client.Http.request("POST", self.base + "/firewall/config", hdrs, body);
         if (resp.status.toCode() != 200) { return DeployResult(false, "acp-server unreachable"); }
         let v = json.parse(resp.body);
@@ -534,7 +538,7 @@ pub struct AcpClient {
         let hdrs = client.Http.emptyHeaders();
         hdrs.set("Content-Type", "application/json");
         if (!string.eql(userAuth, "")) { hdrs.set("Authorization", userAuth); }
-        else { let tok = self.authToken("PolicyAdmin"); if (!string.eql(tok, "")) { hdrs.set("Authorization", "Bearer " + tok); } }
+        else { let tok = self.authToken("FirewallAdmin"); if (!string.eql(tok, "")) { hdrs.set("Authorization", "Bearer " + tok); } }
         let resp = client.Http.request("POST", self.base + "/firewall/rules", hdrs, body);
         if (resp.status.toCode() != 200) { return DeployResult(false, "acp-server unreachable"); }
         let v = json.parse(resp.body);
@@ -546,7 +550,7 @@ pub struct AcpClient {
         let hdrs = client.Http.emptyHeaders();
         hdrs.set("Content-Type", "application/json");
         if (!string.eql(userAuth, "")) { hdrs.set("Authorization", userAuth); }
-        else { let tok = self.authToken("PolicyAdmin"); if (!string.eql(tok, "")) { hdrs.set("Authorization", "Bearer " + tok); } }
+        else { let tok = self.authToken("FirewallAdmin"); if (!string.eql(tok, "")) { hdrs.set("Authorization", "Bearer " + tok); } }
         let resp = client.Http.request("POST", self.base + "/firewall/rules/" + id + "/delete", hdrs, "{}");
         if (resp.status.toCode() != 200) { return DeployResult(false, "acp-server unreachable"); }
         return DeployResult(true, "rule removed");
@@ -579,7 +583,11 @@ pub struct AcpClient {
 
     // Raw CSV of the violation records (forwarded by the console for a same-origin download).
     pub fn violationCsv(self: AcpClient): string {
-        let resp = client.Http.get(self.base + "/report/violations.csv");
+        // A5: exporting the violation ledger requires the Export capability (Auditor).
+        let hdrs = client.Http.emptyHeaders();
+        let tok = self.authToken("Auditor");
+        if (!string.eql(tok, "")) { hdrs.set("Authorization", "Bearer " + tok); }
+        let resp = client.Http.request("GET", self.base + "/report/violations.csv", hdrs, "");
         if (resp.status.toCode() != 200) { return "ts_ms,pep,agent,tool,verdict,rule_id,impact,outcome\n"; }
         return resp.body;
     }
@@ -738,7 +746,7 @@ pub struct AcpClient {
         let hdrs = client.Http.emptyHeaders();
         hdrs.set("Content-Type", "application/json");
         if (!string.eql(userAuth, "")) { hdrs.set("Authorization", userAuth); }
-        else { let tok = self.authToken("PolicyAdmin"); if (!string.eql(tok, "")) { hdrs.set("Authorization", "Bearer " + tok); } }
+        else { let tok = self.authToken("AppRegistrar"); if (!string.eql(tok, "")) { hdrs.set("Authorization", "Bearer " + tok); } }
         let resp = client.Http.request("POST", self.base + "/apps", hdrs, body);
         if (resp.status.toCode() != 200) { return DeployResult(false, "acp-server unreachable"); }
         let v = json.parse(resp.body);
@@ -752,7 +760,7 @@ pub struct AcpClient {
         let hdrs = client.Http.emptyHeaders();
         hdrs.set("Content-Type", "application/json");
         if (!string.eql(userAuth, "")) { hdrs.set("Authorization", userAuth); }
-        else { let tok = self.authToken("PolicyAdmin"); if (!string.eql(tok, "")) { hdrs.set("Authorization", "Bearer " + tok); } }
+        else { let tok = self.authToken("AppRegistrar"); if (!string.eql(tok, "")) { hdrs.set("Authorization", "Bearer " + tok); } }
         let resp = client.Http.request("POST", self.base + "/agents", hdrs, body);
         if (resp.status.toCode() != 200) { return DeployResult(false, "acp-server unreachable"); }
         let v = json.parse(resp.body);
@@ -767,7 +775,7 @@ pub struct AcpClient {
         let hdrs = client.Http.emptyHeaders();
         hdrs.set("Content-Type", "application/json");
         if (!string.eql(userAuth, "")) { hdrs.set("Authorization", userAuth); }
-        else { let tok = self.authToken("PolicyAdmin"); if (!string.eql(tok, "")) { hdrs.set("Authorization", "Bearer " + tok); } }
+        else { let tok = self.authToken("AppRegistrar"); if (!string.eql(tok, "")) { hdrs.set("Authorization", "Bearer " + tok); } }
         let resp = client.Http.request("POST", self.base + "/agents/" + id + "/deactivate", hdrs, "{}");
         if (resp.status.toCode() != 200) { return DeployResult(false, "acp-server unreachable"); }
         let v = json.parse(resp.body);
@@ -781,7 +789,7 @@ pub struct AcpClient {
         let hdrs = client.Http.emptyHeaders();
         hdrs.set("Content-Type", "application/json");
         if (!string.eql(userAuth, "")) { hdrs.set("Authorization", userAuth); }
-        else { let tok = self.authToken("PolicyAdmin"); if (!string.eql(tok, "")) { hdrs.set("Authorization", "Bearer " + tok); } }
+        else { let tok = self.authToken("GrcAuthor"); if (!string.eql(tok, "")) { hdrs.set("Authorization", "Bearer " + tok); } }
         let resp = client.Http.request("POST", self.base + "/grc/" + id + "/status", hdrs, body);
         if (resp.status.toCode() != 200) { return DeployResult(false, "acp-server unreachable"); }
         let v = json.parse(resp.body);
@@ -845,7 +853,7 @@ pub struct AcpClient {
         let hdrs = client.Http.emptyHeaders();
         hdrs.set("Content-Type", "application/json");
         if (!string.eql(userAuth, "")) { hdrs.set("Authorization", userAuth); }
-        else { let tok = self.authToken("PolicyAdmin"); if (!string.eql(tok, "")) { hdrs.set("Authorization", "Bearer " + tok); } }
+        else { let tok = self.authToken("GrcAuthor"); if (!string.eql(tok, "")) { hdrs.set("Authorization", "Bearer " + tok); } }
         let resp = client.Http.request("POST", self.base + "/grc", hdrs, jbody);
         if (resp.status.toCode() != 200) { return DeployResult(false, "acp-server unreachable"); }
         let v = json.parse(resp.body);
@@ -863,7 +871,7 @@ pub struct AcpClient {
         let hdrs = client.Http.emptyHeaders();
         hdrs.set("Content-Type", "application/json");
         if (!string.eql(userAuth, "")) { hdrs.set("Authorization", userAuth); }
-        else { let tok = self.authToken("PolicyAdmin"); if (!string.eql(tok, "")) { hdrs.set("Authorization", "Bearer " + tok); } }
+        else { let tok = self.authToken("GrcAuthor"); if (!string.eql(tok, "")) { hdrs.set("Authorization", "Bearer " + tok); } }
         let resp = client.Http.request("POST", self.base + "/grc/assess", hdrs, jbody);
         if (resp.status.toCode() != 200) { return DeployResult(false, "acp-server unreachable"); }
         let v = json.parse(resp.body);
@@ -879,7 +887,7 @@ pub struct AcpClient {
         let hdrs = client.Http.emptyHeaders();
         hdrs.set("Content-Type", "application/json");
         if (!string.eql(userAuth, "")) { hdrs.set("Authorization", userAuth); }
-        else { let tok = self.authToken("PolicyAdmin"); if (!string.eql(tok, "")) { hdrs.set("Authorization", "Bearer " + tok); } }
+        else { let tok = self.authToken("GrcAuthor"); if (!string.eql(tok, "")) { hdrs.set("Authorization", "Bearer " + tok); } }
         let resp = client.Http.request("POST", self.base + "/grc/" + id + "/assign", hdrs, jbody);
         if (resp.status.toCode() != 200) { return DeployResult(false, "acp-server unreachable"); }
         let v = json.parse(resp.body);
@@ -893,7 +901,7 @@ pub struct AcpClient {
         let hdrs = client.Http.emptyHeaders();
         hdrs.set("Content-Type", "application/json");
         if (!string.eql(userAuth, "")) { hdrs.set("Authorization", userAuth); }
-        else { let tok = self.authToken("PolicyAdmin"); if (!string.eql(tok, "")) { hdrs.set("Authorization", "Bearer " + tok); } }
+        else { let tok = self.authToken("GrcAuthor"); if (!string.eql(tok, "")) { hdrs.set("Authorization", "Bearer " + tok); } }
         let resp = client.Http.request("POST", self.base + "/grc/" + id + "/control/" + controlId, hdrs, jbody);
         if (resp.status.toCode() != 200) { return DeployResult(false, "acp-server unreachable"); }
         let v = json.parse(resp.body);

@@ -97,7 +97,7 @@ Acceptance:
   control library used by A1.
 - Re-verify-on-read: `GET /packs` reports each pack `verified: true`.
 
-### A5. RBAC depth + SCIM (P2, M)
+### A5. RBAC depth + SCIM (P2, M)  [DONE 2026-09-27]
 Gap: coarse RBAC (5 capabilities, 3 enforced), no SCIM, no separation of duty.
 Design: `acp-auth` adds `RegisterAgent`, `EditGrc`, `EditFirewall`; enforce `Export`/`SeeArgs`;
 distinct roles for SoD. `acp-server` gates each mutating route on its specific capability; SCIM 2.0
@@ -108,6 +108,15 @@ Acceptance:
   approvals).
 - `Export` and `SeeArgs` are enforced on the export / read-args routes (a token without them gets 403).
 - `GET /scim/v2/Users` and `/Groups` return IdP-mapped users and role groups.
+Status (2026-09-27): SHIPPED. `acp-auth` gained RegisterApp/RegisterAgent/EditGrc/EditFirewall and a
+`role_catalogue()` with eight separation-of-duty roles (PolicyAdmin, AppRegistrar, GrcAuthor,
+FirewallAdmin, Approver, Auditor, SecurityOfficer, BreakGlassOperator). Every mutating server route is
+gated on its own capability; the CSV export is gated on Export and the raw decision-detail read on
+SeeArgs; SCIM `GET /scim/v2/Users` + `/Groups` (gated on Export) serve the directory and role groups
+(`--scim-users` file, demo default otherwise). Console requests the correct role token per action.
+Verified via curl per route: wrong role -> 403, right role -> 200 (apps, agents, grc, firewall,
+firewall-rules, break-glass, csv-export, evidence-recent); SCIM Groups=8, Users=8; SCIM needs Export.
+auth tests pass.
 - The console hides or disables actions the current token cannot perform.
 
 ### A6. Regulator-ready report exports (P2, S)

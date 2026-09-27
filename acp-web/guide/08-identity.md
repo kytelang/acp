@@ -69,22 +69,38 @@ this action" with a name, not just a service identity.
 
 The control plane enforces RBAC with capabilities mapped from OIDC app roles:
 
-| Capability | Who needs it |
-| --- | --- |
-| `PolicyAdmin` (`EditPolicy`) | deploy a new policy version; register teams, agents and endpoints |
-| `Approver` (`Approve`) | resolve a step-up hold |
-| `BreakGlassOperator` (`BreakGlass`) | engage or clear the kill-switch |
-| `Auditor` (`Export`) | export evidence |
-| `SecurityOfficer` (`SeeArgs`) | read argument payloads |
+| Role | Capability | What it can do |
+| --- | --- | --- |
+| `PolicyAdmin` | `EditPolicy` | deploy a new policy version |
+| `AppRegistrar` | `RegisterApp`, `RegisterAgent` | register applications and their agents; verify or deactivate an agent |
+| `GrcAuthor` | `EditGrc` | create and advance governance records (assessments, conformity, risk, ...) |
+| `FirewallAdmin` | `EditFirewall` | change the central content-firewall config and rules |
+| `Approver` | `Approve` | resolve a step-up hold |
+| `BreakGlassOperator` | `BreakGlass` | engage or clear the kill-switch |
+| `Auditor` | `Export` | export the evidence and violation ledger |
+| `SecurityOfficer` | `SeeArgs` | read the raw decision detail |
 
-**Separation of duty** follows from this role-to-capability mapping: a `PolicyAdmin` alone cannot trip
-the kill-switch, and a `BreakGlassOperator` alone cannot deploy a policy, because those are distinct
-capabilities. Grant the roles to different people to keep the duties separate. Enforced today at the mutating
-routes: `EditPolicy` (policy deploy, registration, GRC), `Approve` (approvals), `BreakGlass` (the
-kill-switch), and the meta-audit write. `Export` and `SeeArgs` are defined but the read/evidence
-endpoints are not yet capability-gated, so treat network reach to the control plane as read access
-until that lands. When auth is on, mutating calls need a bearer token with the right capability. With no auth flags the control plane runs RBAC-off for local use; if you request auth and
-the JWKS fails to load, the server refuses to start rather than run unprotected (fail-closed).
+**Separation of duty** follows from this role-to-capability mapping: registration, policy authoring,
+GRC authoring, firewall changes, approvals, export, argument visibility and break-glass are each a
+distinct capability held by a distinct role. A `PolicyAdmin` alone cannot trip the kill-switch, onboard
+an application, author a governance record or export evidence. Grant the roles to different people to
+keep the duties separate.
+
+**Enforced today at every mutating route**, each on its own capability: policy deploy (`EditPolicy`);
+apps (`RegisterApp`); agents register/verify/deactivate (`RegisterAgent`); GRC create/assess/status/
+assign/control (`EditGrc`); firewall config and rules (`EditFirewall`); approvals (`Approve`); the
+kill-switch (`BreakGlass`); the meta-audit write (`EditPolicy`). `Export` gates the CSV export of the
+violation ledger, and `SeeArgs` gates the raw decision-detail read. When auth is on, each call needs a
+bearer token carrying the matching capability, so a token for the wrong role is rejected with 403.
+With no auth flags the control plane runs RBAC-off for local use; if you request auth and the JWKS
+fails to load, the server refuses to start rather than run unprotected (fail-closed).
+
+**SCIM 2.0 provisioning.** An IdP (or an operator) can read the role catalogue and the user-to-role
+directory over SCIM: `GET /scim/v2/Groups` lists the eight ACP roles as SCIM groups (each carrying the
+capabilities it grants under `urn:acp:capabilities`), and `GET /scim/v2/Users` lists the provisioned
+users with their group memberships. Both are gated on `Export` (a read-only administrative view). The
+user directory comes from `--scim-users <file>` (a JSON array of `{id, email, groups}`), defaulting to
+a demo directory (one operator per role) under the mocked-IdP dev setup.
 
 ## mutual TLS between components
 

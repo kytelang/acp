@@ -129,6 +129,14 @@ pub enum Capability {
     SeeArgs,
     /// Engage or clear the emergency kill-switch (break-glass).
     BreakGlass,
+    /// A5: register/deregister applications.
+    RegisterApp,
+    /// A5: register, verify or deactivate agents.
+    RegisterAgent,
+    /// A5: author or advance governance (GRC) records.
+    EditGrc,
+    /// A5: change the central content-firewall configuration and rules.
+    EditFirewall,
 }
 
 impl Principal {
@@ -139,6 +147,18 @@ impl Principal {
             match r.as_str() {
                 "PolicyAdmin" => {
                     caps.insert(Capability::EditPolicy);
+                }
+                "AppRegistrar" => {
+                    // Onboarding role: register applications and their agents (separation of duty
+                    // from policy authoring).
+                    caps.insert(Capability::RegisterApp);
+                    caps.insert(Capability::RegisterAgent);
+                }
+                "GrcAuthor" => {
+                    caps.insert(Capability::EditGrc);
+                }
+                "FirewallAdmin" => {
+                    caps.insert(Capability::EditFirewall);
                 }
                 "Approver" => {
                     caps.insert(Capability::Approve);
@@ -160,6 +180,22 @@ impl Principal {
     pub fn can(&self, cap: Capability) -> bool {
         self.capabilities().contains(&cap)
     }
+}
+
+/// A5: the ACP role catalogue (role name, capability slugs granted). Single source of truth for
+/// SCIM group provisioning and the console's role-aware UI. Separation of duty: registration,
+/// policy, GRC, firewall, approval, export, argument-visibility and break-glass are distinct roles.
+pub fn role_catalogue() -> Vec<(&'static str, Vec<&'static str>)> {
+    vec![
+        ("PolicyAdmin", vec!["EditPolicy"]),
+        ("AppRegistrar", vec!["RegisterApp", "RegisterAgent"]),
+        ("GrcAuthor", vec!["EditGrc"]),
+        ("FirewallAdmin", vec!["EditFirewall"]),
+        ("Approver", vec!["Approve"]),
+        ("Auditor", vec!["Export"]),
+        ("SecurityOfficer", vec!["SeeArgs"]),
+        ("BreakGlassOperator", vec!["BreakGlass"]),
+    ]
 }
 
 /// Verify a bearer JWT and return the authenticated principal, or a specific failure. `now_ms` is
