@@ -276,13 +276,18 @@ cpstore lease test added; guide chapter 14 documents the HA topology and the DR 
 Not code. Acceptance: a written plan exists (SOC 2 / ISO 27001 path, support/SLA model, security-review
 cadence), and the verifiable-evidence architecture is documented as an audit asset.
 
-### C3. Detection corpus + CI efficacy gates (P2, M) - refines A24
+### C3. Detection corpus + CI efficacy gates (P2, M) - refines A24  [DONE 2026-09-27]
 Design: a larger labelled corpus with CI precision/recall/FPR gates for both injection and PII.
 Acceptance:
 - The corpus has a stated size and provenance and is checked into the repo.
 - CI fails if injection OR PII precision/recall/FPR regress below the published thresholds.
 - The current numbers are published in the guide.
-
+Status (2026-09-27): SHIPPED. A labelled corpus (`crates/acp-core/corpus/detection-corpus.jsonl`, 45
+examples, size + provenance in its README) plus a `corpus_gate` test in `content.rs` that runs the
+built-in engine and asserts injection/PII precision, recall and benign FPR against published thresholds
+(injection prec/recall >= 0.90, FPR <= 0.10; PII prec >= 0.90, recall >= 0.80). `cargo test` is the CI
+gate. Measured (signature engine, no ML): injection 1.00/1.00/0.00, PII precision 1.00 recall 0.83;
+published in guide chapter 15.
 ---
 
 ## Suggested phasing

@@ -737,3 +737,59 @@ mod tests {
         assert!(scan_text(&p, "the quarterly picnic").allowed());
     }
 }
+
+
+#[cfg(test)]
+mod corpus_gate {
+    //! C3: efficacy gate. Runs the built-in engine over the checked-in labelled corpus and asserts
+    //! injection/PII precision, recall and the benign false-positive rate stay above the published
+    //! thresholds (see guide chapter 15). CI runs `cargo test`, so this is the CI gate.
+    use super::*;
+
+    const CORPUS: &str = include_str!("../corpus/detection-corpus.jsonl");
+
+    struct Row { label: String, text: String }
+
+    fn corpus() -> Vec<Row> {
+        CORPUS.lines().filter(|l| !l.trim().is_empty()).map(|l| {
+            let v: serde_json::Value = serde_json::from_str(l).expect("corpus line is JSON");
+            Row { label: v["label"].as_str().unwrap().to_string(), text: v["text"].as_str().unwrap().to_string() }
+        }).collect()
+    }
+
+    fn metrics(rows: &[Row], positive_label: &str, finding_kind: &str) -> (f32, f32, f32) {
+        let policy = ContentPolicy { block_injection: true, block_secrets: true, redact_pii: true, denied_topics: vec![] };
+        let (mut tp, mut fp, mut fn_, mut tn) = (0i32, 0i32, 0i32, 0i32);
+        for r in rows {
+            let v = scan_text(&policy, &r.text);
+            let predicted = v.findings.iter().any(|f| f.kind == finding_kind);
+            let actual = r.label == positive_label;
+            match (actual, predicted) {
+                (true, true) => tp += 1,
+                (true, false) => fn_ += 1,
+                (false, true) => fp += 1,
+                (false, false) => tn += 1,
+            }
+        }
+        let precision = if tp + fp == 0 { 1.0 } else { tp as f32 / (tp + fp) as f32 };
+        let recall = if tp + fn_ == 0 { 1.0 } else { tp as f32 / (tp + fn_) as f32 };
+        let fpr = if fp + tn == 0 { 0.0 } else { fp as f32 / (fp + tn) as f32 };
+        (precision, recall, fpr)
+    }
+
+    #[test]
+    fn injection_and_pii_efficacy_meets_thresholds() {
+        let rows = corpus();
+        assert!(rows.len() >= 40, "corpus has a meaningful size (got {})", rows.len());
+        let (ip, ir, ifpr) = metrics(&rows, "injection", "prompt-injection");
+        let (pp, pr, _pfpr) = metrics(&rows, "pii", "pii");
+        eprintln!("injection: precision={ip:.3} recall={ir:.3} fpr={ifpr:.3}");
+        eprintln!("pii:       precision={pp:.3} recall={pr:.3}");
+        // Published thresholds (guide chapter 15). CI fails on regression below these.
+        assert!(ir >= 0.90, "injection recall {ir:.3} >= 0.90");
+        assert!(ip >= 0.90, "injection precision {ip:.3} >= 0.90");
+        assert!(ifpr <= 0.10, "injection benign FPR {ifpr:.3} <= 0.10");
+        assert!(pr >= 0.80, "PII recall {pr:.3} >= 0.80");
+        assert!(pp >= 0.90, "PII precision {pp:.3} >= 0.90");
+    }
+}

@@ -62,6 +62,26 @@ acp verify evidence.db
 acp export evidence.db > pack.json && acp verify-pack pack.json
 ```
 
+## Detection efficacy (measured, gated in CI)
+
+The content firewall's efficacy is measured against a checked-in labelled corpus
+(`crates/acp-core/corpus/detection-corpus.jsonl`, 45 examples: 15 injection, 12 PII, 18 benign,
+hand-authored by the ACP team). The `corpus_gate` test runs the built-in engine over it on every
+`cargo test`, so a regression fails CI.
+
+Current numbers for the built-in signature engine (no ML model loaded):
+
+| Detector | Precision | Recall | Benign false-positive rate |
+| --- | --- | --- | --- |
+| Prompt injection | 1.00 | 1.00 | 0.00 |
+| PII | 1.00 | 0.83 | n/a |
+
+Published thresholds the CI gate enforces (a build fails if any is breached): injection precision and
+recall at least 0.90 with a benign FPR at most 0.10; PII precision at least 0.90 with recall at least
+0.80. These are for the signature engine alone; loading an ML model (the content firewall's `model`
+field) raises recall further. Grow the corpus as new attack families appear and keep these numbers in
+step with the test.
+
 ## Independent review questions
 
 For a cryptographic reviewer, the questions worth answering independently: is the Merkle construction
