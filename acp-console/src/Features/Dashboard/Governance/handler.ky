@@ -2,6 +2,7 @@ import web.routing;
 import web.response;
 import serde.json;
 import string;
+import list;
 import ds_response;
 import Features.Dashboard.Shared.acp_client;
 import Features.Dashboard.views.dashboard;
@@ -48,6 +49,69 @@ pub struct GrcStatusHandler impl RouteHandler {
         let id = ctx.param("id");
         let status = ctx.param("status");
         let _ = self.acp.updateGrcStatus(id, status, auth);
+        return await ds_response.patch(grcPanel(self.acp.grcRows()));
+    }
+}
+
+
+// POST /grc/assess: guided EU AI Act assessment wizard. Reads the screening checkbox signals, builds
+// the answers JSON, and forwards to acp-server which computes the tier and control checklist.
+pub struct CreateAssessmentHandler impl RouteHandler {
+    acp: AcpClient,
+    init(acp: AcpClient) { self.acp = acp; }
+    async fn serve(self: CreateAssessmentHandler, ctx: Context): Response {
+        let auth = ctx.request.headers.get("authorization") ?? "";
+        let subject = json.stringField(ctx.request.body, "asSubject");
+        let title = json.stringField(ctx.request.body, "asTitle");
+        let assignee = json.stringField(ctx.request.body, "asAssignee");
+        let flags = list.List<string>();
+        flags.push("prohibited_practice"); flags.push("safety_component");
+        flags.push("biometric_identification"); flags.push("critical_infrastructure");
+        flags.push("employment_or_education"); flags.push("essential_services");
+        flags.push("law_enforcement"); flags.push("interacts_with_humans");
+        flags.push("generates_content");
+        let bodyV = json.parse(ctx.request.body);
+        let answers = "{";
+        let n = 0;
+        for (i in 0..flags.size()) {
+            let key = flags.get(i) ?? "";
+            // datastar checkboxes post a JSON boolean; a <select> posts the string "true". Accept both.
+            let node = json.get(bodyV, "as_" + key);
+            let on = (json.asBool(node) ?? false) || string.eql(json.asString(node) ?? "", "true");
+            if (n > 0) { answers = answers + ","; }
+            answers = answers + "\"" + key + "\":" + (on ? "true" : "false");
+            n = n + 1;
+        }
+        answers = answers + "}";
+        let res = self.acp.assessGrc(subject, title, answers, assignee, "", auth);
+        return await ds_response.patch(grcCreateResult(res));
+    }
+}
+
+// POST /grc/{id}/assign: set assignee (workflow metadata), then patch the refreshed GRC panel.
+pub struct AssignGrcHandler impl RouteHandler {
+    acp: AcpClient,
+    init(acp: AcpClient) { self.acp = acp; }
+    async fn serve(self: AssignGrcHandler, ctx: Context): Response {
+        let auth = ctx.request.headers.get("authorization") ?? "";
+        let id = ctx.param("id");
+        let assignee = json.stringField(ctx.request.body, "assignTo");
+        let _ = self.acp.assignGrc(id, assignee, "", auth);
+        return await ds_response.patch(grcPanel(self.acp.grcRows()));
+    }
+}
+
+// POST /grc/{id}/control/{cid}/{done}: toggle a checklist control (re-signed server-side), then patch
+// the refreshed GRC panel so the k/m progress updates.
+pub struct ControlToggleHandler impl RouteHandler {
+    acp: AcpClient,
+    init(acp: AcpClient) { self.acp = acp; }
+    async fn serve(self: ControlToggleHandler, ctx: Context): Response {
+        let auth = ctx.request.headers.get("authorization") ?? "";
+        let id = ctx.param("id");
+        let cid = ctx.param("cid");
+        let done = string.eql(ctx.param("done"), "done");
+        let _ = self.acp.toggleControl(id, cid, done, auth);
         return await ds_response.patch(grcPanel(self.acp.grcRows()));
     }
 }

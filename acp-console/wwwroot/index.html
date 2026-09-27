@@ -127,7 +127,7 @@
     .modal input[type=file]{display:none}
   </style>
 </head>
-<body data-signals="{view: 'overview', endpoint: '', disposition: 'govern', appName: '', appOwner: '', agentAppId: '', agentName: '', grcKind: 'assessment', grcSubject: '', grcTitle: '', grcStatus: 'open', grcBody: '{}', grcLinks: '', modal: '', policyTab: 'deployed', fwEnabled: 'false', fwBlockSecrets: 'false', fwDenyTopics: '', fwModel: '', frMatchKind: 'host_contains', frMatchValue: '', frPath: '', frAction: 'block', frClassify: '', author: 'operator', epReason: 'sanctioned', mode: 'lockdown_all', scope: 'global', killReason: 'incident', ttl_ms: '3600000', reason: ''}">
+<body data-signals="{view: 'overview', endpoint: '', disposition: 'govern', appName: '', appOwner: '', agentAppId: '', agentName: '', grcKind: 'assessment', grcSubject: '', grcTitle: '', grcStatus: 'open', grcBody: '{}', grcLinks: '', asSubject: '', asTitle: '', asAssignee: '', as_prohibited_practice: 'false', as_safety_component: 'false', as_biometric_identification: 'false', as_critical_infrastructure: 'false', as_employment_or_education: 'false', as_essential_services: 'false', as_law_enforcement: 'false', as_interacts_with_humans: 'false', as_generates_content: 'false', modal: '', policyTab: 'deployed', fwEnabled: 'false', fwBlockSecrets: 'false', fwDenyTopics: '', fwModel: '', frMatchKind: 'host_contains', frMatchValue: '', frPath: '', frAction: 'block', frClassify: '', author: 'operator', epReason: 'sanctioned', mode: 'lockdown_all', scope: 'global', killReason: 'incident', ttl_ms: '3600000', reason: ''}">
   <div class="navbar">
     <div class="brand">
       <img class="logo" src="/varman-logo.svg" alt="Varman" />
@@ -310,7 +310,7 @@ rules:
           </section>
 
         <section class="view" data-show="$view === 'grc'">
-          <div class="card"><div class="card-h"><span class="ic">&#128209;</span> Governance records<span class="sub">signed operator documents, re-verified on read</span><button class="btn primary card-cta" data-on:click="$modal = 'grc'">+ Create record</button></div>
+          <div class="card"><div class="card-h"><span class="ic">&#128209;</span> Governance records<span class="sub">signed operator documents, re-verified on read</span><button class="btn primary card-cta" data-on:click="$modal = 'assess'">+ New assessment</button><button class="btn card-cta" data-on:click="$modal = 'grc'">+ Record</button></div>
             <div class="card-b"><div id="grc"><p class="empty">&#8230;</p></div></div></div>
 
           </section>
@@ -400,6 +400,34 @@ rules:
       <label class="fld">Linked decision ids <input type="text" data-bind="grcLinks" placeholder="d-8f2a, d-91bc (comma separated, optional)" /><small class="hint">Advisory only. The server checks each id against the ledger and shows how many are verified. It never trusts the values.</small></label>
       <div class="row">
         <button class="btn primary" data-on:click="@post('/grc/create')">Create record</button>
+        <button class="btn" data-on:click="$modal = ''">Close</button>
+        <div class="deploystatus" id="grcresult"></div>
+      </div>
+    </div>
+  </div>
+
+  <div class="modal" data-show="$modal === 'assess'">
+    <div class="modal-h"><span>&#128209; New EU AI Act assessment</span><button class="modal-close" data-on:click="$modal = ''">&times;</button></div>
+    <div class="modal-b">
+      <p class="hint">Answer the screening questions. The control plane computes the EU AI Act risk tier and the control checklist, then stores a signed assessment record. This is a deterministic screening, not a legal opinion.</p>
+      <div class="row">
+        <label class="fld">Subject<span class="req">*</span> <input type="text" data-bind="asSubject" placeholder="hiring-screener" /></label>
+        <label class="fld">Title <input type="text" data-bind="asTitle" placeholder="Hiring model assessment" /></label>
+      </div>
+      <label class="fld">Assignee <input type="text" data-bind="asAssignee" placeholder="asha (optional)" /></label>
+      <div class="fld"><span>Screening</span>
+        <label class="chk"><input type="checkbox" data-bind="as_prohibited_practice" /> Prohibited practice (social scoring, manipulative or exploitative AI, untargeted scraping)</label>
+        <label class="chk"><input type="checkbox" data-bind="as_safety_component" /> Safety component of a product, or Annex III high-risk use</label>
+        <label class="chk"><input type="checkbox" data-bind="as_biometric_identification" /> Biometric identification or categorisation</label>
+        <label class="chk"><input type="checkbox" data-bind="as_critical_infrastructure" /> Used in critical infrastructure</label>
+        <label class="chk"><input type="checkbox" data-bind="as_employment_or_education" /> Makes employment or education decisions</label>
+        <label class="chk"><input type="checkbox" data-bind="as_essential_services" /> Gates access to essential services (credit, benefits, insurance)</label>
+        <label class="chk"><input type="checkbox" data-bind="as_law_enforcement" /> Used for law enforcement</label>
+        <label class="chk"><input type="checkbox" data-bind="as_interacts_with_humans" /> Interacts directly with people (chatbot)</label>
+        <label class="chk"><input type="checkbox" data-bind="as_generates_content" /> Generates or manipulates content (gen-AI, deepfakes)</label>
+      </div>
+      <div class="row">
+        <button class="btn primary" data-on:click="@post('/grc/assess')">Run assessment</button>
         <button class="btn" data-on:click="$modal = ''">Close</button>
         <div class="deploystatus" id="grcresult"></div>
       </div>

@@ -339,7 +339,11 @@ async fn main() {
         .route("/agents/:id/deactivate", post(agent_deactivate))
         .route("/agents/verify", post(agent_verify))
         .route("/grc", get(grc_list).post(grc_create))
+        .route("/grc/templates", get(grc_templates))
+        .route("/grc/assess", post(grc_assess))
         .route("/grc/:id/status", post(grc_status))
+        .route("/grc/:id/assign", post(grc_assign))
+        .route("/grc/:id/control/:control_id", post(grc_control_toggle))
         .route("/approvals/pending", get(approvals_pending))
         .route("/evidence/recent", get(evidence_recent))
         .route("/break-glass", get(break_glass_status))
@@ -1110,10 +1114,19 @@ async fn grc_list(State(st): State<Arc<AppState>>) -> impl IntoResponse {
                         verified_refs += 1;
                     }
                 }
+                // A1: surface checklist progress (k/m controls done) and the assessment tier if the
+                // signed body carries them, plus the workflow metadata (assignee/due/stage).
+                let parsed: serde_json::Value = serde_json::from_str(&r.body).unwrap_or_else(|_| serde_json::json!({}));
+                let checklist = parsed.get("checklist").and_then(|v| v.as_array());
+                let controls_total = checklist.map(|c| c.len()).unwrap_or(0);
+                let controls_done = checklist.map(|c| c.iter().filter(|i| i.get("done").and_then(|v| v.as_bool()).unwrap_or(false)).count()).unwrap_or(0);
+                let tier = parsed.get("tier").and_then(|v| v.as_str()).unwrap_or("").to_string();
                 out.push(serde_json::json!({
                     "id": r.id, "kind": r.kind, "subject": r.subject, "title": r.title,
                     "status": r.status, "body": r.body, "operator": r.operator,
                     "created_ms": r.created_ms, "verified": verified,
+                    "assignee": r.assignee, "due_ms": r.due_ms, "stage": r.stage,
+                    "tier": tier, "controls_done": controls_done, "controls_total": controls_total,
                     "linked_refs": refs, "verified_refs": verified_refs, "total_refs": total_refs,
                 }));
             }
@@ -1154,7 +1167,7 @@ async fn grc_create(State(st): State<Arc<AppState>>, headers: HeaderMap, Json(bo
     let sig = acp_core::sign::Signer::sign(&signer, &acp_core::canonical::canonical_bytes(&doc));
     let pubkey_hex = hex::encode(acp_core::sign::Signer::public_key(&signer));
     let sig_hex = hex::encode(sig);
-    match store.add_grc(&id, &kind, &subject, &title, &status, &doc_body, &operator, now as i64, &pubkey_hex, &sig_hex, &linked_refs).await {
+    match store.add_grc(&id, &kind, &subject, &title, &status, &doc_body, &operator, now as i64, &pubkey_hex, &sig_hex, &linked_refs, "{}", "", 0, &status).await {
         Ok(()) => Json(serde_json::json!({"ok": true, "id": id, "kind": kind})).into_response(),
         Err(e) => Json(serde_json::json!({"ok": false, "error": e})).into_response(),
     }
@@ -1178,11 +1191,134 @@ async fn grc_status(State(st): State<Arc<AppState>>, headers: HeaderMap, Path(id
     let sig = acp_core::sign::Signer::sign(&signer, &acp_core::canonical::canonical_bytes(&doc));
     let pubkey_hex = hex::encode(acp_core::sign::Signer::public_key(&signer));
     let sig_hex = hex::encode(sig);
-    match store.update_grc_signed(&id, &status, &pubkey_hex, &sig_hex).await {
+    match store.update_grc_signed(&id, &status, &rec.body, &status, &pubkey_hex, &sig_hex).await {
         Ok(()) => Json(serde_json::json!({"ok": true, "id": id, "status": status})).into_response(),
         Err(e) => Json(serde_json::json!({"ok": false, "error": e})).into_response(),
     }
 }
+/// A1: the built-in EU AI Act screening questionnaire. Served so the console can render a guided
+/// "New assessment" wizard. Each entry is a yes/no question mapped to an assessment flag.
+async fn grc_templates() -> impl IntoResponse {
+    let q = |key: &str, label: &str| serde_json::json!({"key": key, "label": label});
+    Json(serde_json::json!({
+        "templates": [{
+            "id": "eu-ai-act-screening",
+            "kind": "assessment",
+            "name": "EU AI Act risk screening",
+            "questions": [
+                q("prohibited_practice", "Is this a prohibited practice (social scoring, manipulative or exploitative AI, untargeted scraping)?"),
+                q("safety_component", "Is the AI a safety component of a product, or an Annex III high-risk use?"),
+                q("biometric_identification", "Does it perform biometric identification or categorisation?"),
+                q("critical_infrastructure", "Is it used in critical infrastructure?"),
+                q("employment_or_education", "Does it make employment or education decisions?"),
+                q("essential_services", "Does it gate access to essential services (credit, benefits, insurance)?"),
+                q("law_enforcement", "Is it used for law enforcement?"),
+                q("interacts_with_humans", "Does it interact directly with people (chatbot)?"),
+                q("generates_content", "Does it generate or manipulate content (gen-AI, deepfakes)?")
+            ]
+        }]
+    }))
+}
+
+/// A1: run the assessment engine over a screening questionnaire and persist a signed assessment
+/// record. The signed body carries the computed EU AI Act tier, the reasons, and a control checklist
+/// (each obligation with a `done` flag) derived from the control library. The raw answers, assignee,
+/// due date and stage are stored as workflow metadata (not part of the signed document).
+async fn grc_assess(State(st): State<Arc<AppState>>, headers: HeaderMap, Json(body): Json<serde_json::Value>) -> Response {
+    let principal = match authorize(&st.auth, &headers, acp_auth::Capability::EditPolicy) { Ok(p) => p, Err(r) => return r };
+    let operator = actor_of(&principal);
+    let store = match &st.store { Some(s) => s, None => return Json(serde_json::json!({"ok": false, "error": "no --store configured"})).into_response() };
+    let subject = body.get("subject").and_then(|v| v.as_str()).unwrap_or("").trim().to_string();
+    if subject.is_empty() { return Json(serde_json::json!({"ok": false, "error": "subject is required"})).into_response(); }
+    let title = body.get("title").and_then(|v| v.as_str()).unwrap_or("EU AI Act assessment").to_string();
+    let answers = body.get("answers").cloned().unwrap_or_else(|| serde_json::json!({}));
+    let flag = |k: &str| answers.get(k).and_then(|v| v.as_bool()).unwrap_or(false);
+    let screening = acp_core::assessment::Screening {
+        prohibited_practice: flag("prohibited_practice"),
+        safety_component: flag("safety_component"),
+        biometric_identification: flag("biometric_identification"),
+        critical_infrastructure: flag("critical_infrastructure"),
+        employment_or_education: flag("employment_or_education"),
+        essential_services: flag("essential_services"),
+        law_enforcement: flag("law_enforcement"),
+        interacts_with_humans: flag("interacts_with_humans"),
+        generates_content: flag("generates_content"),
+    };
+    let now = now_ms();
+    let assessment = acp_core::assessment::assess(&subject, &screening, now);
+    let checklist: Vec<serde_json::Value> = assessment.obligations.iter().map(|o| serde_json::json!({
+        "framework": o.framework, "control_id": o.control_id, "title": o.title, "done": false,
+    })).collect();
+    let doc_body = serde_json::json!({
+        "tier": assessment.tier.as_str(),
+        "reasons": assessment.reasons,
+        "checklist": checklist,
+    }).to_string();
+    let assignee = body.get("assignee").and_then(|v| v.as_str()).unwrap_or("").to_string();
+    let due_ms = body.get("due_ms").and_then(|v| v.as_i64()).unwrap_or(0);
+    let answers_json = answers.to_string();
+    let status = "open".to_string();
+    let stage = "draft".to_string();
+    let id = format!("grc-{}", rand_hex(6));
+    let doc = grc_doc(&id, "assessment", &subject, &title, &status, &doc_body);
+    let signer = enroll_signer(&st.cp_key);
+    let sig = acp_core::sign::Signer::sign(&signer, &acp_core::canonical::canonical_bytes(&doc));
+    let pubkey_hex = hex::encode(acp_core::sign::Signer::public_key(&signer));
+    let sig_hex = hex::encode(sig);
+    match store.add_grc(&id, "assessment", &subject, &title, &status, &doc_body, &operator, now as i64, &pubkey_hex, &sig_hex, "[]", &answers_json, &assignee, due_ms, &stage).await {
+        Ok(()) => Json(serde_json::json!({"ok": true, "id": id, "tier": assessment.tier.as_str(), "controls": assessment.obligations.len()})).into_response(),
+        Err(e) => Json(serde_json::json!({"ok": false, "error": e})).into_response(),
+    }
+}
+
+/// A1: set the assignee and due date on a GRC record (workflow metadata, no re-sign needed).
+async fn grc_assign(State(st): State<Arc<AppState>>, headers: HeaderMap, Path(id): Path<String>, Json(body): Json<serde_json::Value>) -> Response {
+    if let Err(r) = authorize(&st.auth, &headers, acp_auth::Capability::EditPolicy) { return r; }
+    let store = match &st.store { Some(s) => s, None => return Json(serde_json::json!({"ok": false, "error": "no --store configured"})).into_response() };
+    let assignee = body.get("assignee").and_then(|v| v.as_str()).unwrap_or("").to_string();
+    let due_ms = body.get("due_ms").and_then(|v| v.as_i64()).unwrap_or(0);
+    match store.set_grc_assignment(&id, &assignee, due_ms).await {
+        Ok(()) => Json(serde_json::json!({"ok": true, "id": id, "assignee": assignee, "due_ms": due_ms})).into_response(),
+        Err(e) => Json(serde_json::json!({"ok": false, "error": e})).into_response(),
+    }
+}
+
+/// A1: toggle a control's done flag in a conformity/assessment checklist and re-sign the record, so
+/// the checklist progress stays tamper-evident. The control_id must already be in the checklist.
+async fn grc_control_toggle(State(st): State<Arc<AppState>>, headers: HeaderMap, Path((id, control_id)): Path<(String, String)>, Json(body): Json<serde_json::Value>) -> Response {
+    if let Err(r) = authorize(&st.auth, &headers, acp_auth::Capability::EditPolicy) { return r; }
+    let store = match &st.store { Some(s) => s, None => return Json(serde_json::json!({"ok": false, "error": "no --store configured"})).into_response() };
+    let rec = match store.get_grc(&id).await {
+        Ok(Some(r)) => r,
+        Ok(None) => return Json(serde_json::json!({"ok": false, "error": "no such record"})).into_response(),
+        Err(e) => return Json(serde_json::json!({"ok": false, "error": e})).into_response(),
+    };
+    let want_done = body.get("done").and_then(|v| v.as_bool());
+    let mut doc_body: serde_json::Value = serde_json::from_str(&rec.body).unwrap_or_else(|_| serde_json::json!({}));
+    let mut found = false;
+    if let Some(list) = doc_body.get_mut("checklist").and_then(|v| v.as_array_mut()) {
+        for item in list.iter_mut() {
+            if item.get("control_id").and_then(|v| v.as_str()) == Some(control_id.as_str()) {
+                let cur = item.get("done").and_then(|v| v.as_bool()).unwrap_or(false);
+                let next = want_done.unwrap_or(!cur);
+                item["done"] = serde_json::Value::Bool(next);
+                found = true;
+            }
+        }
+    }
+    if !found { return Json(serde_json::json!({"ok": false, "error": format!("control '{control_id}' not in checklist")})).into_response(); }
+    let new_body = doc_body.to_string();
+    let doc = grc_doc(&rec.id, &rec.kind, &rec.subject, &rec.title, &rec.status, &new_body);
+    let signer = enroll_signer(&st.cp_key);
+    let sig = acp_core::sign::Signer::sign(&signer, &acp_core::canonical::canonical_bytes(&doc));
+    let pubkey_hex = hex::encode(acp_core::sign::Signer::public_key(&signer));
+    let sig_hex = hex::encode(sig);
+    match store.update_grc_signed(&id, &rec.status, &new_body, &rec.stage, &pubkey_hex, &sig_hex).await {
+        Ok(()) => Json(serde_json::json!({"ok": true, "id": id, "control_id": control_id})).into_response(),
+        Err(e) => Json(serde_json::json!({"ok": false, "error": e})).into_response(),
+    }
+}
+
 fn deploy_signer(store_dir: &str) -> acp_core::sign::Ed25519Signer {
     let key_path = format!("{store_dir}/deploy.key");
     let _ = std::fs::create_dir_all(store_dir);

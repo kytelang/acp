@@ -41,6 +41,9 @@ fn buildApp(): App {
     app.post("/apps/register", RegisterAppHandler(acp));
     app.post("/agents/register", RegisterAgentHandler(acp));
     app.post("/grc/create", CreateGrcHandler(acp));
+    app.post("/grc/assess", CreateAssessmentHandler(acp));
+    app.post("/grc/{id}/assign", AssignGrcHandler(acp));
+    app.post("/grc/{id}/control/{cid}/{done}", ControlToggleHandler(acp));
     app.post("/agents/{id}/deactivate", DeactivateAgentHandler(acp));
     app.post("/grc/{id}/to/{status}", GrcStatusHandler(acp));
     app.post("/firewall/save", FirewallSaveHandler(acp));

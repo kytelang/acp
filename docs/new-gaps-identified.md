@@ -26,7 +26,7 @@ Architecture reuse (all designs assume these existing patterns):
 
 ## A. Governance depth (close vs Credo AI) - BUILD
 
-### A1. GRC assessment/conformity WORKFLOWS, not just records (P1, L)
+### A1. GRC assessment/conformity WORKFLOWS, not just records (P1, L)  [DONE 2026-09-27]
 Gap: today a governance record is a single signed document created from a form. Credo has guided
 questionnaires, multi-step conformity workflows, evidence collection and sign-off.
 Design:
@@ -48,6 +48,14 @@ Acceptance:
   complete.
 - End-to-end run captured: create assessment -> tier + checklist rendered -> assign -> advance stage
   -> `/grc` shows the record verified.
+Status (2026-09-27): SHIPPED. `GET /grc/templates` serves the EU AI Act screening (9 questions);
+`POST /grc/assess` runs `acp_core::assessment::assess`, stores a signed record whose body carries the
+tier + a control checklist (from `controls.rs`), plus `answers_json`, `assignee`, `due_ms`, `stage`
+columns. `POST /grc/:id/control/:cid` toggles a control and re-signs; `POST /grc/:id/assign` sets
+assignee/due; status advance also updates stage. Console: a "New assessment" wizard, tier/stage/
+assignee columns, and an expandable checklist with per-control Mark done/Reopen. Verified live via
+curl and through the console: hiring-screener -> High + 7 controls; support-bot -> Limited + 1;
+control toggle -> k/m advances and the record still verifies.
 
 ### A2. Linked-evidence reconciliation (P1, S) - refines P1-7  [DONE 2026-09-27]
 Gap: GRC "evidence" and "linked-decision" references are free-text, never checked against the ledger.

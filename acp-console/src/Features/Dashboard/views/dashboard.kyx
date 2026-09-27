@@ -488,18 +488,38 @@ pub fn grcPanel(rows: list.List<GrcRow>): Html {
             <p class="empty">No governance records yet. Create one below.</p>
         } else {
             <table class="tbl">
-                <thead><tr><th>Kind</th><th>Subject</th><th>Title</th><th>Status</th><th>Signed</th><th>Linked evidence</th><th>ID</th><th>Advance</th></tr></thead>
+                <thead><tr><th>Kind</th><th>Subject</th><th>Tier</th><th>Stage</th><th>Assignee</th><th>Controls</th><th>Signed</th><th>Linked evidence</th><th>Advance</th></tr></thead>
                 <tbody>
                     {for (i in 0..rows.size()) {
-                        let r = rows.get(i) ?? GrcRow("", "", "", "", "", false, 0, 0);
+                        let r = rows.get(i) ?? GrcRow("", "", "", "", "", false, 0, 0, "", "", "", 0, 0, list.List<GrcControl>());
                         <tr>
-                            <td><span class="badge ver">{r.kind}</span></td>
-                            <td class="strong">{r.subject}</td>
-                            <td>{r.title}</td>
-                            <td><span class="badge warn">{r.status}</span></td>
+                            <td><span class="badge ver">{r.kind}</span><div class="mono dim" style="font-size:.7rem">{r.id}</div></td>
+                            <td class="strong">{r.subject}<div class="dim">{r.title}</div></td>
+                            <td>{if (string.eql(r.tier, "")) { <span class="dim">-</span> } else { <span class={r.tier == "high" || r.tier == "unacceptable" ? "badge bad" : "badge ver"}>{r.tier}</span> }}</td>
+                            <td><span class="badge warn">{string.eql(r.stage, "") ? r.status : r.stage}</span></td>
+                            <td>{string.eql(r.assignee, "") ? <span class="dim">unassigned</span> : <span>{r.assignee}</span>}</td>
+                            <td>
+                                {if (r.controlsTotal == 0) { <span class="dim">-</span> } else {
+                                    <details>
+                                        <summary><span class={r.controlsDone == r.controlsTotal ? "badge ok" : "badge warn"}>{r.controlsDone}/{r.controlsTotal} controls</span></summary>
+                                        {for (j in 0..r.controls.size()) {
+                                            let c = r.controls.get(j) ?? GrcControl("", "", false);
+                                            <div class="row" style="gap:.4rem;align-items:center;margin:.15rem 0">
+                                                {if (c.done) { <span class="badge ok">done</span> } else { <span class="badge">open</span> }}
+                                                <span class="mono dim">{c.controlId}</span>
+                                                <span>{c.title}</span>
+                                                {if (c.done) {
+                                                    <button class="btn" data-on:click={"@post('/grc/" + r.id + "/control/" + c.controlId + "/undone')"}>Reopen</button>
+                                                } else {
+                                                    <button class="btn ok" data-on:click={"@post('/grc/" + r.id + "/control/" + c.controlId + "/done')"}>Mark done</button>
+                                                }}
+                                            </div>
+                                        }}
+                                    </details>
+                                }}
+                            </td>
                             <td>{if (r.verified) { <span class="badge ok">verified</span> } else { <span class="badge bad">unverified</span> }}</td>
-                            <td>{if (r.totalRefs == 0) { <span class="dim">0/0</span> } else { <span class={r.verifiedRefs == r.totalRefs ? "badge ok" : "badge warn"}>{r.verifiedRefs}/{r.totalRefs} linked decisions verified</span> }}</td>
-                            <td class="mono dim">{r.id}</td>
+                            <td>{if (r.totalRefs == 0) { <span class="dim">0/0</span> } else { <span class={r.verifiedRefs == r.totalRefs ? "badge ok" : "badge warn"}>{r.verifiedRefs}/{r.totalRefs} verified</span> }}</td>
                             <td>
                                 <button class="btn" data-on:click={"@post('/grc/" + r.id + "/to/in-review')"}>Review</button>
                                 <button class="btn ok" data-on:click={"@post('/grc/" + r.id + "/to/approved')"}>Approve</button>

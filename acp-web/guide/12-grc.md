@@ -220,3 +220,30 @@ governance from the signed set. Do not present the second kind as if it were the
 4. Fill in **Subject** (required, the system or agent the record is about, for example `checkout-agent`) and, optionally, a **Title** and **Status** (defaults to `open`).
 5. Put the record content in **Details** as JSON or plain text.
 6. Click **Create record**. The control plane signs it (Ed25519), stores it in the control-plane database, and re-verifies it on read, so the list shows a checked "signed" state, not an asserted one.
+
+### How to run a guided assessment (step by step)
+
+Rather than hand-authoring an assessment, use the guided wizard so the tier and the control checklist are computed for you.
+
+1. Select **Governance** in the sidebar.
+2. Click **+ New assessment**. The **New EU AI Act assessment** popup opens.
+3. Fill in **Subject** (required) and optionally a **Title** and an **Assignee**.
+4. Answer the nine screening questions (prohibited practice, safety component or Annex III use, biometric identification, critical infrastructure, employment or education, essential services, law enforcement, interacts with people, generates content).
+5. Click **Run assessment**. The control plane runs the deterministic screening, assigns the EU AI Act tier (unacceptable, high, limited or minimal) and builds a control checklist from the built-in control library. It signs and stores the record.
+6. The new record appears in the table with its **Tier**, **Stage**, **Assignee** and a **Controls** cell showing progress (for example `0/7 controls`).
+
+The screening questionnaire itself is served at `GET /grc/templates`, so a client can render the same wizard from the control plane's own definition.
+
+### How to work an assessment or conformity checklist (step by step)
+
+1. In the **Governance** table, open the **Controls** cell for the record (click the `k/m controls` disclosure).
+2. Each control shows its framework id (for example `art-14`), title and current state (`open` or `done`).
+3. Click **Mark done** as your team completes a control, or **Reopen** to reverse it. Every toggle re-signs the record server-side, so the checklist progress stays tamper-evident and the record still reads as verified.
+4. Use **Review**, **Approve** or **Close** to advance the record's stage; the stage change also re-signs.
+5. Set or change the **Assignee** to route the work to an owner.
+
+The checklist lives inside the signed document, so `k/m` progress is part of what the Ed25519 signature covers, not a side note.
+
+### Linked evidence on a governance record
+
+When you create a record you can list **Linked decision ids** (comma separated). These are advisory references to decisions in the evidence ledger. The control plane checks each id against the central ingested-evidence store and shows a ratio such as `1/2 verified` in the record row. It never trusts or rewrites what you typed: an id that does not exist in the ledger simply counts as unverified. A record with no linked ids shows `0/0`.

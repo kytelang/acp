@@ -185,6 +185,14 @@ pub struct EndpointRow {
     }
 }
 
+pub struct GrcControl {
+    pub controlId: string,
+    pub title: string,
+    pub done: bool,
+    init(controlId: string, title: string, done: bool) {
+        self.controlId = controlId; self.title = title; self.done = done;
+    }
+}
 pub struct GrcRow {
     pub id: string,
     pub kind: string,
@@ -194,9 +202,17 @@ pub struct GrcRow {
     pub verified: bool,
     pub verifiedRefs: long,
     pub totalRefs: long,
-    init(id: string, kind: string, subject: string, title: string, status: string, verified: bool, verifiedRefs: long, totalRefs: long) {
+    pub tier: string,
+    pub stage: string,
+    pub assignee: string,
+    pub controlsDone: long,
+    pub controlsTotal: long,
+    pub controls: list.List<GrcControl>,
+    init(id: string, kind: string, subject: string, title: string, status: string, verified: bool, verifiedRefs: long, totalRefs: long, tier: string, stage: string, assignee: string, controlsDone: long, controlsTotal: long, controls: list.List<GrcControl>) {
         self.id = id; self.kind = kind; self.subject = subject; self.title = title; self.status = status; self.verified = verified;
         self.verifiedRefs = verifiedRefs; self.totalRefs = totalRefs;
+        self.tier = tier; self.stage = stage; self.assignee = assignee;
+        self.controlsDone = controlsDone; self.controlsTotal = controlsTotal; self.controls = controls;
     }
 }
 
@@ -778,6 +794,22 @@ pub struct AcpClient {
         let i = 0;
         while (i < arr.size()) {
             let item = json.at(rv, i);
+            let controls = list.List<GrcControl>();
+            let bodyStr = json.asString(json.get(item, "body")) ?? "{}";
+            let bodyV = json.parse(bodyStr);
+            let cl = json.get(bodyV, "checklist");
+            let clArr = json.asArray(cl);
+            if (clArr != undefined) {
+                let k = 0;
+                while (k < clArr.size()) {
+                    let ci = json.at(cl, k);
+                    controls.push(GrcControl(
+                        json.asString(json.get(ci, "control_id")) ?? "",
+                        json.asString(json.get(ci, "title")) ?? "",
+                        json.asBool(json.get(ci, "done")) ?? false));
+                    k = k + 1;
+                }
+            }
             rows.push(GrcRow(
                 json.asString(json.get(item, "id")) ?? "",
                 json.asString(json.get(item, "kind")) ?? "",
@@ -786,7 +818,13 @@ pub struct AcpClient {
                 json.asString(json.get(item, "status")) ?? "",
                 json.asBool(json.get(item, "verified")) ?? false,
                 json.asNumber(json.get(item, "verified_refs")) ?? 0,
-                json.asNumber(json.get(item, "total_refs")) ?? 0));
+                json.asNumber(json.get(item, "total_refs")) ?? 0,
+                json.asString(json.get(item, "tier")) ?? "",
+                json.asString(json.get(item, "stage")) ?? "",
+                json.asString(json.get(item, "assignee")) ?? "",
+                json.asNumber(json.get(item, "controls_done")) ?? 0,
+                json.asNumber(json.get(item, "controls_total")) ?? 0,
+                controls));
             i = i + 1;
         }
         return rows;
@@ -807,6 +845,54 @@ pub struct AcpClient {
         let v = json.parse(resp.body);
         if (!(json.asBool(json.get(v, "ok")) ?? false)) { return DeployResult(false, json.asString(json.get(v, "error")) ?? "rejected"); }
         return DeployResult(true, "created " + (json.asString(json.get(v, "id")) ?? "") + " (" + kind + ")");
+    }
+
+    // A1: run the EU AI Act assessment engine over a screening questionnaire. answersJson is a raw
+    // JSON object of boolean flags, e.g. {"employment_or_education":true}. The server computes the
+    // risk tier and the control checklist, and persists a signed record.
+    pub fn assessGrc(self: AcpClient, subject: string, title: string, answersJson: string, assignee: string, dueMs: string, userAuth: string): DeployResult {
+        let ans = string.eql(answersJson, "") ? "{}" : answersJson;
+        let due = string.eql(dueMs, "") ? "0" : dueMs;
+        let jbody = "{\"subject\":" + self.jstr(subject) + ",\"title\":" + self.jstr(title) + ",\"assignee\":" + self.jstr(assignee) + ",\"due_ms\":" + due + ",\"answers\":" + ans + "}";
+        let hdrs = client.Http.emptyHeaders();
+        hdrs.set("Content-Type", "application/json");
+        if (!string.eql(userAuth, "")) { hdrs.set("Authorization", userAuth); }
+        else { let tok = self.authToken("PolicyAdmin"); if (!string.eql(tok, "")) { hdrs.set("Authorization", "Bearer " + tok); } }
+        let resp = client.Http.request("POST", self.base + "/grc/assess", hdrs, jbody);
+        if (resp.status.toCode() != 200) { return DeployResult(false, "acp-server unreachable"); }
+        let v = json.parse(resp.body);
+        if (!(json.asBool(json.get(v, "ok")) ?? false)) { return DeployResult(false, json.asString(json.get(v, "error")) ?? "rejected"); }
+        let nc = json.asNumber(json.get(v, "controls")) ?? 0;
+        return DeployResult(true, `assessed ${subject} tier=${json.asString(json.get(v, "tier")) ?? ""} (${nc} controls)`);
+    }
+
+    // A1: set the assignee and due date on a record (workflow metadata).
+    pub fn assignGrc(self: AcpClient, id: string, assignee: string, dueMs: string, userAuth: string): DeployResult {
+        let due = string.eql(dueMs, "") ? "0" : dueMs;
+        let jbody = "{\"assignee\":" + self.jstr(assignee) + ",\"due_ms\":" + due + "}";
+        let hdrs = client.Http.emptyHeaders();
+        hdrs.set("Content-Type", "application/json");
+        if (!string.eql(userAuth, "")) { hdrs.set("Authorization", userAuth); }
+        else { let tok = self.authToken("PolicyAdmin"); if (!string.eql(tok, "")) { hdrs.set("Authorization", "Bearer " + tok); } }
+        let resp = client.Http.request("POST", self.base + "/grc/" + id + "/assign", hdrs, jbody);
+        if (resp.status.toCode() != 200) { return DeployResult(false, "acp-server unreachable"); }
+        let v = json.parse(resp.body);
+        if (!(json.asBool(json.get(v, "ok")) ?? false)) { return DeployResult(false, json.asString(json.get(v, "error")) ?? "rejected"); }
+        return DeployResult(true, "assigned to " + assignee);
+    }
+
+    // A1: toggle a control's done flag in a checklist (re-signs the record server-side).
+    pub fn toggleControl(self: AcpClient, id: string, controlId: string, done: bool, userAuth: string): DeployResult {
+        let jbody = "{\"done\":" + (done ? "true" : "false") + "}";
+        let hdrs = client.Http.emptyHeaders();
+        hdrs.set("Content-Type", "application/json");
+        if (!string.eql(userAuth, "")) { hdrs.set("Authorization", userAuth); }
+        else { let tok = self.authToken("PolicyAdmin"); if (!string.eql(tok, "")) { hdrs.set("Authorization", "Bearer " + tok); } }
+        let resp = client.Http.request("POST", self.base + "/grc/" + id + "/control/" + controlId, hdrs, jbody);
+        if (resp.status.toCode() != 200) { return DeployResult(false, "acp-server unreachable"); }
+        let v = json.parse(resp.body);
+        if (!(json.asBool(json.get(v, "ok")) ?? false)) { return DeployResult(false, json.asString(json.get(v, "error")) ?? "rejected"); }
+        return DeployResult(true, "updated " + controlId);
     }
 
     // Registered AI endpoints (agents/providers) and their disposition, from acp-server. Read-only.

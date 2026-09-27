@@ -99,6 +99,10 @@ pub struct GrcRecord {
     pub pubkey_hex: String,
     pub sig_hex: String,
     pub linked_refs: String,
+    pub answers_json: String,
+    pub assignee: String,
+    pub due_ms: i64,
+    pub stage: String,
 }
 
 pub struct ControlStore {
@@ -147,7 +151,7 @@ impl ControlStore {
             "CREATE TABLE IF NOT EXISTS apps (id VARCHAR(255) PRIMARY KEY, name TEXT NOT NULL, owner TEXT NOT NULL, created_ms BIGINT NOT NULL)",
             "CREATE TABLE IF NOT EXISTS agents (id VARCHAR(255) PRIMARY KEY, app_id TEXT NOT NULL, name TEXT NOT NULL, token_sha256 TEXT NOT NULL, active INTEGER NOT NULL, created_ms BIGINT NOT NULL)",
             "CREATE TABLE IF NOT EXISTS endpoints (endpoint VARCHAR(255) PRIMARY KEY, kind TEXT NOT NULL, provider TEXT NOT NULL, disposition TEXT NOT NULL, operator TEXT NOT NULL, reason TEXT NOT NULL, decided_ms BIGINT NOT NULL, expires_ms BIGINT NOT NULL, pubkey_hex TEXT NOT NULL, sig_hex TEXT NOT NULL)",
-            "CREATE TABLE IF NOT EXISTS grc_records (id VARCHAR(255) PRIMARY KEY, kind TEXT NOT NULL, subject TEXT NOT NULL, title TEXT NOT NULL, status TEXT NOT NULL, body TEXT NOT NULL, operator TEXT NOT NULL, created_ms BIGINT NOT NULL, pubkey_hex TEXT NOT NULL, sig_hex TEXT NOT NULL, linked_refs TEXT NOT NULL DEFAULT '[]')",
+            "CREATE TABLE IF NOT EXISTS grc_records (id VARCHAR(255) PRIMARY KEY, kind TEXT NOT NULL, subject TEXT NOT NULL, title TEXT NOT NULL, status TEXT NOT NULL, body TEXT NOT NULL, operator TEXT NOT NULL, created_ms BIGINT NOT NULL, pubkey_hex TEXT NOT NULL, sig_hex TEXT NOT NULL, linked_refs TEXT NOT NULL DEFAULT '[]', answers_json TEXT NOT NULL DEFAULT '{}', assignee TEXT NOT NULL DEFAULT '', due_ms BIGINT NOT NULL DEFAULT 0, stage TEXT NOT NULL DEFAULT '')",
             "CREATE TABLE IF NOT EXISTS ingested_evidence (decision_id VARCHAR(255) PRIMARY KEY, pep TEXT NOT NULL, kind TEXT NOT NULL, verdict TEXT NOT NULL, record TEXT NOT NULL, operator TEXT NOT NULL, created_ms BIGINT NOT NULL, pubkey_hex TEXT NOT NULL, sig_hex TEXT NOT NULL)",
             "CREATE TABLE IF NOT EXISTS firewall_config (id INTEGER PRIMARY KEY, enabled INTEGER NOT NULL, block_secrets INTEGER NOT NULL, deny_topics TEXT NOT NULL, model TEXT NOT NULL, updated_ms BIGINT NOT NULL)",
             "CREATE TABLE IF NOT EXISTS firewall_rules (id VARCHAR(255) PRIMARY KEY, match_json TEXT NOT NULL, classify TEXT NOT NULL, action TEXT NOT NULL, created_ms BIGINT NOT NULL)",
@@ -313,11 +317,16 @@ impl ControlStore {
         pubkey_hex: &str,
         sig_hex: &str,
         linked_refs: &str,
+        answers_json: &str,
+        assignee: &str,
+        due_ms: i64,
+        stage: &str,
     ) -> Result<(), String> {
-        let sql = self.ph("INSERT INTO grc_records (id, kind, subject, title, status, body, operator, created_ms, pubkey_hex, sig_hex, linked_refs) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)");
+        let sql = self.ph("INSERT INTO grc_records (id, kind, subject, title, status, body, operator, created_ms, pubkey_hex, sig_hex, linked_refs, answers_json, assignee, due_ms, stage) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)");
         sqlx::query(&sql)
             .bind(id).bind(kind).bind(subject).bind(title).bind(status).bind(body)
             .bind(operator).bind(created_ms).bind(pubkey_hex).bind(sig_hex).bind(linked_refs)
+            .bind(answers_json).bind(assignee).bind(due_ms).bind(stage)
             .execute(&self.pool).await.map_err(|e| e.to_string())?;
         Ok(())
     }
@@ -424,29 +433,38 @@ impl ControlStore {
 
     /// Fetch a single GRC record by id (for re-signing on a status change).
     pub async fn get_grc(&self, id: &str) -> Result<Option<GrcRecord>, String> {
-        let sql = self.ph("SELECT id, kind, subject, title, status, body, operator, created_ms, pubkey_hex, sig_hex, linked_refs FROM grc_records WHERE id = ?");
+        let sql = self.ph("SELECT id, kind, subject, title, status, body, operator, created_ms, pubkey_hex, sig_hex, linked_refs, answers_json, assignee, due_ms, stage FROM grc_records WHERE id = ?");
         let row = sqlx::query(&sql).bind(id).fetch_optional(&self.pool).await.map_err(|e| e.to_string())?;
         Ok(row.map(|r| GrcRecord {
             id: r.get("id"), kind: r.get("kind"), subject: r.get("subject"), title: r.get("title"),
             status: r.get("status"), body: r.get("body"), operator: r.get("operator"),
             created_ms: r.get("created_ms"), pubkey_hex: r.get("pubkey_hex"), sig_hex: r.get("sig_hex"),
             linked_refs: r.get("linked_refs"),
+            answers_json: r.get("answers_json"), assignee: r.get("assignee"), due_ms: r.get("due_ms"), stage: r.get("stage"),
         }))
     }
 
     /// Update a record's status AND its signature together, so the stored signature always matches
     /// the current document (gap A4: a status change must re-sign, or the record reads as tampered).
-    pub async fn update_grc_signed(&self, id: &str, status: &str, pubkey_hex: &str, sig_hex: &str) -> Result<(), String> {
-        let sql = self.ph("UPDATE grc_records SET status = ?, pubkey_hex = ?, sig_hex = ? WHERE id = ?");
-        sqlx::query(&sql).bind(status).bind(pubkey_hex).bind(sig_hex).bind(id).execute(&self.pool).await.map_err(|e| e.to_string())?;
+    pub async fn update_grc_signed(&self, id: &str, status: &str, body: &str, stage: &str, pubkey_hex: &str, sig_hex: &str) -> Result<(), String> {
+        let sql = self.ph("UPDATE grc_records SET status = ?, body = ?, stage = ?, pubkey_hex = ?, sig_hex = ? WHERE id = ?");
+        sqlx::query(&sql).bind(status).bind(body).bind(stage).bind(pubkey_hex).bind(sig_hex).bind(id).execute(&self.pool).await.map_err(|e| e.to_string())?;
+        Ok(())
+    }
+
+    /// A1: set the assignee and due date on a GRC record. Workflow metadata, not part of the signed
+    /// document, so it does not require a re-sign.
+    pub async fn set_grc_assignment(&self, id: &str, assignee: &str, due_ms: i64) -> Result<(), String> {
+        let sql = self.ph("UPDATE grc_records SET assignee = ?, due_ms = ? WHERE id = ?");
+        sqlx::query(&sql).bind(assignee).bind(due_ms).bind(id).execute(&self.pool).await.map_err(|e| e.to_string())?;
         Ok(())
     }
 
     pub async fn list_grc(&self, kind: Option<&str>) -> Result<Vec<GrcRecord>, String> {
         let rows = match kind {
-            Some(k) => sqlx::query(&self.ph("SELECT id, kind, subject, title, status, body, operator, created_ms, pubkey_hex, sig_hex, linked_refs FROM grc_records WHERE kind = ? ORDER BY created_ms"))
+            Some(k) => sqlx::query(&self.ph("SELECT id, kind, subject, title, status, body, operator, created_ms, pubkey_hex, sig_hex, linked_refs, answers_json, assignee, due_ms, stage FROM grc_records WHERE kind = ? ORDER BY created_ms"))
                 .bind(k).fetch_all(&self.pool).await,
-            None => sqlx::query("SELECT id, kind, subject, title, status, body, operator, created_ms, pubkey_hex, sig_hex, linked_refs FROM grc_records ORDER BY created_ms")
+            None => sqlx::query("SELECT id, kind, subject, title, status, body, operator, created_ms, pubkey_hex, sig_hex, linked_refs, answers_json, assignee, due_ms, stage FROM grc_records ORDER BY created_ms")
                 .fetch_all(&self.pool).await,
         }
         .map_err(|e| e.to_string())?;
@@ -457,6 +475,7 @@ impl ControlStore {
                 status: r.get("status"), body: r.get("body"), operator: r.get("operator"),
                 created_ms: r.get("created_ms"), pubkey_hex: r.get("pubkey_hex"), sig_hex: r.get("sig_hex"),
                 linked_refs: r.get("linked_refs"),
+                answers_json: r.get("answers_json"), assignee: r.get("assignee"), due_ms: r.get("due_ms"), stage: r.get("stage"),
             })
             .collect())
     }
@@ -480,14 +499,14 @@ mod tests {
         let eps = s.list_endpoints().await.unwrap();
         assert_eq!(eps.len(), 1, "upsert keeps one row per endpoint");
         assert_eq!(eps[0].disposition, "block", "latest disposition wins");
-        s.add_grc("grc-1", "risk", "checkout-agent", "PII exfiltration", "open", "{\"likelihood\":3,\"impact\":3}", "console", 4000, "aa", "bb", "[]").await.unwrap();
-        s.add_grc("grc-2", "assessment", "checkout-agent", "EU AI Act tiering", "high", "{}", "console", 4001, "aa", "cc", "[]").await.unwrap();
+        s.add_grc("grc-1", "risk", "checkout-agent", "PII exfiltration", "open", "{\"likelihood\":3,\"impact\":3}", "console", 4000, "aa", "bb", "[]", "{}", "", 0, "").await.unwrap();
+        s.add_grc("grc-2", "assessment", "checkout-agent", "EU AI Act tiering", "high", "{}", "console", 4001, "aa", "cc", "[]", "{}", "", 0, "").await.unwrap();
         assert_eq!(s.list_grc(None).await.unwrap().len(), 2);
         assert_eq!(s.list_grc(Some("risk")).await.unwrap().len(), 1);
         // A4: get_grc + update_grc_signed round-trip (status + signature updated together).
         let g = s.get_grc("grc-1").await.unwrap().expect("record present");
         assert_eq!(g.status, "open");
-        s.update_grc_signed("grc-1", "mitigated", "dd", "ee").await.unwrap();
+        s.update_grc_signed("grc-1", "mitigated", "{\"body\":1}", "treatment", "dd", "ee").await.unwrap();
         let g2 = s.get_grc("grc-1").await.unwrap().unwrap();
         assert_eq!(g2.status, "mitigated");
         assert_eq!(g2.sig_hex, "ee", "signature updated with the status");
