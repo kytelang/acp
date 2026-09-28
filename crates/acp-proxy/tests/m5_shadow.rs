@@ -72,8 +72,8 @@ fn shadow_forwards_but_records() {
     );
     assert_ne!(r.pointer("/result/isError"), Some(&Value::Bool(true)));
     // but the would-block was still recorded and the ledger verifies
-    acp_ledger::verify_file(&db).expect("ledger verifies");
-    let pack = acp_ledger::export_file(&db).unwrap();
+    acp_core::ledger::verify_file(&db).expect("ledger verifies");
+    let pack = acp_core::ledger::export_file(&db).unwrap();
     assert!(
         pack["records"].as_array().unwrap().len() >= 2,
         "would-block decision + outcome recorded"

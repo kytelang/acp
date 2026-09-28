@@ -104,7 +104,7 @@ fn step_up_holds_then_forwards_exactly_once() {
         .to_string();
 
     // A human approves out of band (here: directly via the store, as the CLI `acp approve` would).
-    let store = acp_approvals::ApprovalStore::open(&approvals).unwrap();
+    let store = acp_core::approvals::ApprovalStore::open(&approvals).unwrap();
     store
         .resolve(&approval_id, true, "boss@corp", "cli")
         .unwrap();
@@ -132,7 +132,7 @@ fn step_up_holds_then_forwards_exactly_once() {
     );
 
     // Evidence remains verifiable throughout.
-    acp_ledger::verify_file(&ledger).expect("ledger verifies");
+    acp_core::ledger::verify_file(&ledger).expect("ledger verifies");
 }
 
 #[test]
@@ -167,7 +167,7 @@ fn changed_arguments_cannot_ride_an_approval() {
         .unwrap()
         .to_string();
     // approve the $900 charge
-    acp_approvals::ApprovalStore::open(&approvals)
+    acp_core::approvals::ApprovalStore::open(&approvals)
         .unwrap()
         .resolve(&approval_id, true, "boss", "cli")
         .unwrap();

@@ -2,7 +2,7 @@
 //! record fields (verdict, rule, impact, hash) and must never emit the raw argument payload.
 
 use acp_core::sign::Ed25519Signer;
-use acp_ledger::Ledger;
+use acp_core::ledger::Ledger;
 use serde_json::json;
 use std::process::Command;
 

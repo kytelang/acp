@@ -63,14 +63,14 @@ fn proxy_writes_verifiable_evidence_with_outcomes() {
     );
 
     // Two decisions + two linked outcomes = 4 leaves; the ledger must verify.
-    acp_ledger::verify_file(&db).expect("ledger must verify");
-    let pack = acp_ledger::export_file(&db).unwrap();
+    acp_core::ledger::verify_file(&db).expect("ledger must verify");
+    let pack = acp_core::ledger::export_file(&db).unwrap();
     assert_eq!(
         pack["records"].as_array().unwrap().len(),
         4,
         "2 decisions + 2 outcomes"
     );
-    acp_ledger::verify_pack(&pack).expect("export pack must verify standalone");
+    acp_core::ledger::verify_pack(&pack).expect("export pack must verify standalone");
 
     // Every decision has a linked outcome (kind decision -> a matching :out outcome).
     let kinds: Vec<&str> = pack["records"]
@@ -109,7 +109,7 @@ fn spooled_evidence_survives_restart() {
         ],
         &reqs,
     );
-    let n1 = acp_ledger::export_file(&db).unwrap()["records"]
+    let n1 = acp_core::ledger::export_file(&db).unwrap()["records"]
         .as_array()
         .unwrap()
         .len();
@@ -121,5 +121,5 @@ fn spooled_evidence_survives_restart() {
         ],
         &reqs,
     );
-    acp_ledger::verify_file(&db).expect("ledger verifies after restart");
+    acp_core::ledger::verify_file(&db).expect("ledger verifies after restart");
 }

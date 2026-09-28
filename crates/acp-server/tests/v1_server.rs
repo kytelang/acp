@@ -53,7 +53,7 @@ async fn control_service_inbox_and_endpoints() {
     std::fs::write(&policy, "version: 1\ndefault: allow\nrules: []\n").unwrap();
 
     // Seed a pending approval and a small verifiable ledger.
-    let store = acp_approvals::ApprovalStore::open(&approvals).unwrap();
+    let store = acp_core::approvals::ApprovalStore::open(&approvals).unwrap();
     store
         .request(
             "appr-1",
@@ -68,7 +68,7 @@ async fn control_service_inbox_and_endpoints() {
     drop(store);
     {
         let mut l =
-            acp_ledger::Ledger::open(&ledger, Box::new(acp_core::sign::Ed25519Signer::generate()))
+            acp_core::ledger::Ledger::open(&ledger, Box::new(acp_core::sign::Ed25519Signer::generate()))
                 .unwrap();
         l.append(
             "d1",
@@ -150,7 +150,7 @@ async fn control_service_inbox_and_endpoints() {
         .await
         .unwrap();
     assert!(r.status().is_success() || r.status().is_redirection());
-    let store = acp_approvals::ApprovalStore::open(&approvals).unwrap();
+    let store = acp_core::approvals::ApprovalStore::open(&approvals).unwrap();
     let view = store.get("appr-1").unwrap().unwrap();
     assert_eq!(view.state, "approved");
     // With RBAC off (no auth flags), an approve is attributed to the local operator "console"
