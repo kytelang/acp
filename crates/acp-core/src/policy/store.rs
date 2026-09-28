@@ -82,14 +82,28 @@ pub fn load_current(store_dir: &str) -> Result<PolicyEngine, String> {
     let sig = hex::decode(get("sig")).map_err(|_| "bad sig hex".to_string())?;
     let pubkey = hex::decode(get("pubkey")).map_err(|_| "bad pubkey hex".to_string())?;
 
-    let signed = SignedPolicy { policy_hash: hash.clone(), author, sig };
-    if !verify_policy(&pubkey, &signed) {
+    let src = fs::read_to_string(format!("{store_dir}/{file}")).map_err(|e| e.to_string())?;
+    load_signed(&src, &hash, &author, &sig, &pubkey)
+}
+
+/// Verify and load a signed policy from its parts (no filesystem), so a remote enforcement point can
+/// fetch the deployed policy over HTTP and load it under the same rules as the on-disk store: verify
+/// the author-bound signature against the public key, then confirm the source hashes to the signed
+/// manifest. Fails closed on either check.
+pub fn load_signed(
+    source: &str,
+    hash: &str,
+    author: &str,
+    sig: &[u8],
+    pubkey: &[u8],
+) -> Result<PolicyEngine, String> {
+    let signed = SignedPolicy { policy_hash: hash.to_string(), author: author.to_string(), sig: sig.to_vec() };
+    if !verify_policy(pubkey, &signed) {
         return Err("policy signature verification failed (fail-closed)".into());
     }
-    let src = fs::read_to_string(format!("{store_dir}/{file}")).map_err(|e| e.to_string())?;
-    let engine = PolicyEngine::from_yaml(&src)?;
+    let engine = PolicyEngine::from_yaml(source)?;
     if engine.hash() != hash {
-        return Err("policy file hash does not match the signed manifest (tampered)".into());
+        return Err("policy source hash does not match the signed manifest (tampered)".into());
     }
     Ok(engine)
 }
@@ -105,6 +119,23 @@ mod tests {
         d.to_string_lossy().to_string()
     }
     const POL: &str = "version: 1\ndefault: allow\nrules:\n  - id: r\n    when: { tool: \"x\" }\n    verdict: deny\n";
+
+    #[test]
+    fn load_signed_round_trips_and_is_tamper_evident() {
+        use crate::canonical::sha256_hex;
+        let signer = Ed25519Signer::generate();
+        let hash = sha256_hex(&POL.to_string());
+        let signed = crate::policyprov::sign_policy(&signer, &hash, "alice");
+        let pk = crate::sign::Signer::public_key(&signer);
+        // Correct parts verify and load.
+        assert!(load_signed(POL, &hash, "alice", &signed.sig, &pk).is_ok());
+        // A tampered source (hash no longer matches the signed manifest) is rejected.
+        let other = "version: 1\ndefault: allow\nrules: []\n";
+        assert!(load_signed(other, &hash, "alice", &signed.sig, &pk).is_err());
+        // A wrong public key is rejected (signature does not verify).
+        let pk2 = crate::sign::Signer::public_key(&Ed25519Signer::generate());
+        assert!(load_signed(POL, &hash, "alice", &signed.sig, &pk2).is_err());
+    }
 
     #[test]
     fn deploy_then_load_verifies() {

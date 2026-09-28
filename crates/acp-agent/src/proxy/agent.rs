@@ -33,6 +33,8 @@ struct Opts {
     syslog: Option<String>,
     break_glass: Option<String>,
     policy_dir: Option<String>,
+    policy_url: Option<String>,
+    policy_pubkey: Option<String>,
     registry: Option<String>,
     registry_url: Option<String>,
     agent_id: Option<String>,
@@ -92,6 +94,8 @@ fn parse_opts(items: &[String]) -> Result<(Opts, Vec<String>), String> {
             "--entra-tenant" => o.entra_tenant = it.next().cloned(),
             "--entra-audience" => o.entra_audience = it.next().cloned(),
             "--policy-dir" => o.policy_dir = it.next().cloned(),
+            "--policy-url" => o.policy_url = it.next().cloned(),
+            "--policy-pubkey" => o.policy_pubkey = it.next().cloned(),
             "--registry" => o.registry = it.next().cloned(),
             "--registry-url" => o.registry_url = it.next().cloned(),
             "--agent-id" => o.agent_id = it.next().cloned(),
@@ -137,26 +141,29 @@ fn proxy_id(o: &Opts) -> String {
 }
 
 async fn build_controller(o: &Opts) -> Result<Arc<Controller>, String> {
+    // Policy source precedence: an explicit local --policy-dir or --policy wins over the control-plane
+    // fetch, so a --control-plane URL (which auto-adds --policy-url) does not override a policy the
+    // operator pinned locally. --policy-url is the fallback that lets a remote proxy get its signed
+    // policy over HTTP instead of a shared filesystem.
     let engine = if let Some(dir) = &o.policy_dir {
         let eng = acp_core::policy::store::load_current(dir)
             .map_err(|e| format!("cannot load current policy from {dir}: {e}"))?;
         tracing::info!("signed policy loaded from {dir} ({}...)", &eng.hash()[..12.min(eng.hash().len())]);
         Some(Arc::new(eng))
+    } else if let Some(p) = &o.policy {
+        let src = std::fs::read_to_string(p).map_err(|e| format!("cannot read policy {p}: {e}"))?;
+        let eng = PolicyEngine::from_yaml(&src).map_err(|e| format!("invalid policy {p}: {e}"))?;
+        tracing::info!("policy loaded ({}...)", &eng.hash()[..12.min(eng.hash().len())]);
+        Some(Arc::new(eng))
+    } else if let Some(url) = &o.policy_url {
+        // Fetch the signed policy from the control plane and verify it before enforcing (fail-closed).
+        let eng = fetch_signed_policy(url, &o.policy_pubkey)
+            .await
+            .map_err(|e| format!("cannot fetch signed policy from {url}: {e}"))?;
+        tracing::info!("signed policy fetched from control plane ({}...)", &eng.hash()[..12.min(eng.hash().len())]);
+        Some(Arc::new(eng))
     } else {
-        match &o.policy {
-        Some(p) => {
-            let src =
-                std::fs::read_to_string(p).map_err(|e| format!("cannot read policy {p}: {e}"))?;
-            let eng =
-                PolicyEngine::from_yaml(&src).map_err(|e| format!("invalid policy {p}: {e}"))?;
-            tracing::info!(
-                "policy loaded ({}...)",
-                &eng.hash()[..12.min(eng.hash().len())]
-            );
-            Some(Arc::new(eng))
-        }
-        None => None,
-        }
+        None
     };
     let approvals_default = o.ledger.as_ref().map(|l| format!("{l}.approvals"));
     let ev_reporter = o.evidence_url.as_ref().map(|u| events::EvidenceReporter::new(u.clone(), proxy_id(o), o.report_token.clone()));
@@ -252,6 +259,23 @@ async fn build_controller(o: &Opts) -> Result<Arc<Controller>, String> {
     if let Some(dir) = &o.policy_dir {
         controller.set_policy_dir(dir.clone());
         tracing::info!("hot-reloading signed policies from {dir}");
+    }
+    if o.policy_url.is_some() && o.policy_dir.is_none() && o.policy.is_none() {
+        let url = o.policy_url.clone().unwrap();
+        // Periodically re-fetch the signed policy so a console deploy reaches this proxy over HTTP.
+        let c = controller.clone();
+        let base = url.clone();
+        let pin = o.policy_pubkey.clone();
+        tokio::spawn(async move {
+            loop {
+                tokio::time::sleep(std::time::Duration::from_secs(30)).await;
+                match fetch_signed_policy(&base, &pin).await {
+                    Ok(eng) => c.set_engine(std::sync::Arc::new(eng)),
+                    Err(e) => tracing::warn!("signed-policy refresh from {base} failed: {e}"),
+                }
+            }
+        });
+        tracing::info!("refreshing signed policy from {url} every 30s");
     }
     if let Some(pins) = &o.tool_pins {
         controller.set_tool_pins_file(pins.clone());
@@ -404,8 +428,8 @@ pub async fn run(args: Vec<String>) -> ExitCode {
     // A11: transparent (no-policy) mode passes tool calls through by design, so we do not refuse to
     // start, but we make it impossible to run ungoverned unknowingly: a prominent warning when no
     // policy is configured. Any real governance deployment sets --policy or --policy-dir.
-    if opts.policy.is_none() && opts.policy_dir.is_none() {
-        tracing::warn!("NO POLICY configured (--policy / --policy-dir): running in TRANSPARENT mode; tool calls are forwarded ungoverned. Configure a policy for enforcement.");
+    if opts.policy.is_none() && opts.policy_dir.is_none() && opts.policy_url.is_none() {
+        tracing::warn!("NO POLICY configured (--policy / --policy-dir / --policy-url): running in TRANSPARENT mode; tool calls are forwarded ungoverned. Configure a policy for enforcement.");
     }
 
     let controller = match build_controller(&opts).await {
@@ -605,4 +629,33 @@ async fn fetch_principal_groups(base: &str, principal: &str) -> Vec<String> {
             .unwrap_or_default(),
         Err(_) => Vec::new(),
     }
+}
+
+
+/// Fetch the deployed signed policy from the control plane and verify it (fail-closed) before use.
+/// With a pinned public key (`--policy-pubkey`), the signing key must match, so a spoofed control
+/// plane cannot push a policy signed by another key.
+async fn fetch_signed_policy(base: &str, pin_pubkey: &Option<String>) -> Result<PolicyEngine, String> {
+    let base = base.trim_end_matches('/');
+    let v: serde_json::Value = reqwest::Client::new()
+        .get(format!("{base}/policy-store/signed"))
+        .send()
+        .await
+        .map_err(|e| e.to_string())?
+        .json()
+        .await
+        .map_err(|e| e.to_string())?;
+    let g = |k: &str| v.get(k).and_then(|x| x.as_str()).unwrap_or("").to_string();
+    let (source, hash, author, sig_hex, pubkey_hex) = (g("source"), g("hash"), g("author"), g("sig"), g("pubkey"));
+    if source.is_empty() {
+        return Err("control plane has no deployed policy".into());
+    }
+    if let Some(pin) = pin_pubkey {
+        if !pin.trim().eq_ignore_ascii_case(&pubkey_hex) {
+            return Err("policy signing key does not match the pinned --policy-pubkey (fail-closed)".into());
+        }
+    }
+    let sig = hex::decode(&sig_hex).map_err(|_| "bad sig hex".to_string())?;
+    let pubkey = hex::decode(&pubkey_hex).map_err(|_| "bad pubkey hex".to_string())?;
+    acp_core::policy::store::load_signed(&source, &hash, &author, &sig, &pubkey)
 }

@@ -234,6 +234,11 @@ impl Controller {
     /// (verifying its signature) and swaps it in when the store changes. A deploy that fails
     /// verification is ignored (the current policy keeps enforcing), so a bad deploy never opens the
     /// gate.
+    /// Swap the active policy engine (used by the signed-policy-over-HTTP refresh task).
+    pub fn set_engine(&self, engine: std::sync::Arc<PolicyEngine>) {
+        *self.engine.lock().unwrap() = Some(engine);
+    }
+
     pub fn set_policy_dir(&self, dir: String) {
         *self.policy_dir.lock().unwrap() = Some(dir);
     }

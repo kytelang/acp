@@ -51,6 +51,7 @@ pub(crate) fn build_router(state: Arc<AppState>) -> Router {
             .route("/agents", get(agents))
             .route("/policy-store", get(policy_store_current))
             .route("/policy-store/rules", get(policy_store_rules))
+        .route("/policy-store/signed", get(policy_store_signed))
             .route("/policy-store/deploy", post(policy_store_deploy))
             .route("/policy/suggest", get(policy_suggest))
             .route("/endpoints", get(endpoints_list))

@@ -42,6 +42,15 @@ The HTTP transport adds a concurrency cap: a burst beyond the limit is shed with
 `Retry-after`, so it cannot be exhausted, and it can stamp an enforcement attestation header for the
 [guard](06-guard.md) to check.
 
+## Central policy over HTTP
+
+A remote proxy does not need a local policy file. With `--control-plane <url>` (which adds
+`--policy-url`), the proxy fetches the **signed** policy the console deployed to the control plane,
+verifies its Ed25519 signature and source hash before enforcing (fail-closed on either), and re-fetches
+it every 30 seconds so a new deploy reaches the fleet without redeploying agents. Pin the signing key
+with `--policy-pubkey <hex>` so a spoofed control plane cannot push a policy signed by another key. An
+explicit `--policy` or `--policy-dir` still wins, for air-gapped or pinned-local setups.
+
 ## The enforcement pipeline
 
 For each tool call the proxy runs, in order:
@@ -64,9 +73,11 @@ For each tool call the proxy runs, in order:
 
 | Flag | Effect |
 | --- | --- |
-| `--control-plane <url>` | the one URL to set: expands into `--registry-url`, `--firewall-url`, `--report-url`, `--evidence-url` and `--approvals-url`. Any of those set explicitly overrides the expansion |
+| `--control-plane <url>` | the one URL to set: expands into `--registry-url`, `--firewall-url`, `--report-url`, `--evidence-url`, `--approvals-url` and `--policy-url`. Any of those set explicitly overrides the expansion |
 | `--policy <file>` | the policy file to enforce |
 | `--policy-dir <dir>` | a signed policy-store directory to watch and hot-reload |
+| `--policy-url <url>` | fetch the signed policy from the control plane over HTTP, verify it, and refresh every 30s (auto-set by `--control-plane`). An explicit `--policy` or `--policy-dir` takes precedence |
+| `--policy-pubkey <hex>` | pin the policy signing key: a fetched policy signed by any other key is refused (fail-closed) |
 | `--ledger <db>` | the evidence ledger to append to |
 | `--key <file>` | the Ed25519 signing key (generated 0600 if absent; see below for HSM) |
 | `--registry <file>` | verify the agent against a local registry file |

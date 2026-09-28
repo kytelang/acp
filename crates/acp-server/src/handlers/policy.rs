@@ -27,6 +27,31 @@ pub(crate) async fn policy_store_current(State(st): State<Arc<AppState>>) -> imp
     }
 }
 
+/// The full signed policy bundle (source + manifest), so a remote enforcement point can fetch, verify
+/// and load the deployed policy over HTTP instead of a shared filesystem. Open like the other startup
+/// fetches (report-token gated only when one is configured); it exposes only the policy, which the PEP
+/// enforces anyway, plus its public signature.
+pub(crate) async fn policy_store_signed(State(st): State<Arc<AppState>>) -> Response {
+    if let Err(r) = authorize_report(&st, &axum::http::HeaderMap::new()) { return r; }
+    let dir = match st.policy_store.as_ref() {
+        Some(d) => d,
+        None => return Json(serde_json::json!({"error": "no policy store configured"})).into_response(),
+    };
+    let info = match acp_core::policy::store::current_info(dir) {
+        Ok(v) => v,
+        Err(e) => return Json(serde_json::json!({"error": e})).into_response(),
+    };
+    let source = acp_core::policy::store::current_source(dir).unwrap_or_default();
+    Json(serde_json::json!({
+        "source": source,
+        "hash": info.get("hash"),
+        "author": info.get("author"),
+        "sig": info.get("sig"),
+        "pubkey": info.get("pubkey"),
+        "version": info.get("version"),
+    })).into_response()
+}
+
 /// G2: GET /policy/suggest - propose the least-privilege policy synthesised from the fleet-evidence
 /// the control plane has ingested, with a diff against the live policy and a would-block check. It
 /// deploys nothing: the console shows the diff and the operator posts the proposal to

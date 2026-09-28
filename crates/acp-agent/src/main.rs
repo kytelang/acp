@@ -59,7 +59,7 @@ async fn run_multi(rest: Vec<String>) -> ExitCode {
         let mut a = vec!["http".to_string(), "--addr".to_string(), addr, "--upstream".to_string(), up];
         if let Some(t) = &token { a.push("--report-token".into()); a.push(t.clone()); }
         let mut full = vec!["acp-agent-mcp".to_string()];
-        full.extend(expand_cp(a, &cp, &["--registry-url", "--firewall-url", "--report-url", "--evidence-url", "--approvals-url"]));
+        full.extend(expand_cp(a, &cp, &["--registry-url", "--firewall-url", "--report-url", "--evidence-url", "--approvals-url", "--policy-url"]));
         eprintln!("acp-agent: mcp (http) capability enabled");
         set.spawn(crate::proxy::agent::run(full));
     }
@@ -138,7 +138,7 @@ async fn main() -> ExitCode {
             dispatch("acp-agent-firewall", args, Cap::Firewall).await
         }
         Some("mcp") => {
-            let args = expand(rest, &["--registry-url", "--firewall-url", "--report-url", "--evidence-url", "--approvals-url"]);
+            let args = expand(rest, &["--registry-url", "--firewall-url", "--report-url", "--evidence-url", "--approvals-url", "--policy-url"]);
             dispatch("acp-agent-mcp", args, Cap::Mcp).await
         }
         Some("guard") => {

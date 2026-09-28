@@ -104,9 +104,9 @@ Today the firewall config and interception rules are stored **per tenant**: ever
 a tenant fetches the same content config and rules from the control plane, and the single deployed
 policy differentiates per user by matching on the principal's directory `group` (from the IdP), or a
 specific `agent:` / `app:`, from within its own rules. An agent identifies
-itself with its registered id and enrolment token; its authorization policy is currently supplied
-locally (`--policy`), while its firewall config and interception rules are fetched from the control
-plane over `--control-plane`.
+itself with its registered id and enrolment token; its authorization policy, firewall config and interception rules are all fetched from the control
+plane over `--control-plane` (the policy signed and signature-verified), so a remote proxy needs no
+local policy file; an explicit local `--policy` still takes precedence when you want one.
 
 ## Deploy where
 
