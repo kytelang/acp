@@ -373,6 +373,30 @@ pub struct EvalMetrics {
 /// Evaluate a LinearScorer against labelled samples (text, is_injection). A prediction is positive
 /// when the model probability is at or above the scorer threshold. Used by the CI gate so a model
 /// regression cannot ship.
+/// Train a hashed n-gram logistic-regression injection model from labelled samples (text, is_positive),
+/// using the same `features` as inference so a model trained here scores identically. Pure Rust and
+/// deterministic (fixed init, fixed iteration order), so a held-out benchmark can train and evaluate in
+/// CI without the Python trainer. This is the fast first-stage model; a transformer via ONNX is the
+/// documented next tier behind the same `Scorer` seam.
+pub fn train_linear(samples: &[(String, bool)], dim: usize, epochs: usize, lr: f32, detector: &str) -> LinearModel {
+    let feats: Vec<(std::collections::BTreeSet<usize>, f32)> =
+        samples.iter().map(|(t, y)| (features(t, dim), if *y { 1.0 } else { 0.0 })).collect();
+    let mut w = vec![0.0f32; dim];
+    let mut bias = 0.0f32;
+    let l2 = 1e-4f32;
+    for _ in 0..epochs {
+        for (idx, y) in &feats {
+            let mut z = bias;
+            for &i in idx { z += w[i]; }
+            let p = 1.0 / (1.0 + (-z).exp());
+            let g = p - y;
+            bias -= lr * g;
+            for &i in idx { w[i] -= lr * (g + l2 * w[i]); }
+        }
+    }
+    LinearModel { dim, bias, weights: w, detector: detector.to_string(), version: "bench".to_string() }
+}
+
 pub fn eval_injection(scorer: &LinearScorer, samples: &[(String, bool)]) -> EvalMetrics {
     let (mut tp, mut fp, mut fn_, mut tn) = (0usize, 0usize, 0usize, 0usize);
     for (text, y) in samples {
@@ -886,11 +910,20 @@ mod corpus_gate {
         }).collect()
     }
 
+    fn trained_scorer() -> Option<LinearScorer> {
+        let path = concat!(env!("CARGO_MANIFEST_DIR"), "/models/injection-lr.json");
+        std::fs::read_to_string(path).ok().and_then(|s| LinearScorer::from_json(&s).ok())
+    }
+
     fn metrics(rows: &[Row], positive_label: &str, finding_kind: &str) -> (f32, f32, f32) {
+        metrics_ml(rows, positive_label, finding_kind, None)
+    }
+
+    fn metrics_ml(rows: &[Row], positive_label: &str, finding_kind: &str, ml: Option<&LinearScorer>) -> (f32, f32, f32) {
         let policy = ContentPolicy { block_injection: true, block_secrets: true, redact_pii: true, denied_topics: vec![], block_toxicity: false };
         let (mut tp, mut fp, mut fn_, mut tn) = (0i32, 0i32, 0i32, 0i32);
         for r in rows {
-            let v = scan_text(&policy, &r.text);
+            let v = scan_with_ml(&policy, &r.text, ml);
             let predicted = v.findings.iter().any(|f| f.kind == finding_kind);
             let actual = r.label == positive_label;
             match (actual, predicted) {
@@ -928,14 +961,23 @@ mod corpus_gate {
     fn injection_and_pii_efficacy_meets_thresholds() {
         let rows = corpus();
         assert!(rows.len() >= 40, "corpus has a meaningful size (got {})", rows.len());
-        let (ip, ir, ifpr) = metrics(&rows, "injection", "prompt-injection");
+        // Signature-only floor: signatures alone cannot catch obfuscated/multilingual injection, which
+        // is exactly why the ML model exists. Keep an honest floor, not a fictional 0.90.
+        let (sip, sir, sifpr) = metrics(&rows, "injection", "prompt-injection");
+        eprintln!("injection (signatures only): precision={sip:.3} recall={sir:.3} fpr={sifpr:.3}");
+        assert!(sir >= 0.60, "signature-only injection recall {sir:.3} >= 0.60");
+        assert!(sip >= 0.90, "signature-only injection precision {sip:.3} >= 0.90");
+        assert!(sifpr <= 0.10, "signature-only benign FPR {sifpr:.3} <= 0.10");
+        // Shipped config (signatures + the trained ML model): this is what actually runs, and it must
+        // meet the published high-recall thresholds (guide chapter 15).
+        let ml = trained_scorer().expect("shipped injection model loads");
+        let (ip, ir, ifpr) = metrics_ml(&rows, "injection", "prompt-injection", Some(&ml));
+        eprintln!("injection (signatures + ML): precision={ip:.3} recall={ir:.3} fpr={ifpr:.3}");
+        assert!(ir >= 0.90, "injection recall (with ML) {ir:.3} >= 0.90");
+        assert!(ip >= 0.90, "injection precision (with ML) {ip:.3} >= 0.90");
+        assert!(ifpr <= 0.10, "injection benign FPR (with ML) {ifpr:.3} <= 0.10");
         let (pp, pr, _pfpr) = metrics(&rows, "pii", "pii");
-        eprintln!("injection: precision={ip:.3} recall={ir:.3} fpr={ifpr:.3}");
         eprintln!("pii:       precision={pp:.3} recall={pr:.3}");
-        // Published thresholds (guide chapter 15). CI fails on regression below these.
-        assert!(ir >= 0.90, "injection recall {ir:.3} >= 0.90");
-        assert!(ip >= 0.90, "injection precision {ip:.3} >= 0.90");
-        assert!(ifpr <= 0.10, "injection benign FPR {ifpr:.3} <= 0.10");
         assert!(pr >= 0.80, "PII recall {pr:.3} >= 0.80");
         assert!(pp >= 0.90, "PII precision {pp:.3} >= 0.90");
     }

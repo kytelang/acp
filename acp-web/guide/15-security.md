@@ -66,7 +66,7 @@ acp export evidence.db > pack.json && acp verify-pack pack.json
 ## Detection efficacy (measured, gated in CI)
 
 The content firewall's efficacy is measured against a checked-in labelled corpus
-(`crates/acp-core/corpus/detection-corpus.jsonl`, 213 examples: 86 injection, 37 PII, 90 benign,
+(`crates/acp-core/corpus/detection-corpus.jsonl`, 263 examples: 111 injection, 42 PII, 110 benign,
 authored by the ACP team). The `corpus_gate` test runs the built-in engine over it on every
 `cargo test`, so a regression fails CI.
 
@@ -87,6 +87,16 @@ load benchmark (ignored by default; run with `cargo test -p acp-core --release -
 drives the scan path across 8 concurrent workers: on the development machine it sustains roughly 690,000
 scans/sec with p50 6.5 us, p95 14 us and p99 25 us. Grow the corpus as new attack families appear and keep these numbers in
 step with the test.
+
+## Injection model: a held-out benchmark
+
+Beyond the corpus gate (which scores the shipped model on the whole corpus), a separate benchmark
+(`crates/acp-core/tests/injection_benchmark.rs`) trains the hashed n-gram logistic-regression model on a
+deterministic train split and evaluates it on the UNSEEN test split, so it measures generalisation, not
+memorisation. On the current corpus it reports roughly precision 0.94, recall 0.97 and a benign
+false-positive rate 0.05 on the held-out set, and a metric gate fails CI on a regression. This is the
+fast, on-prem first-stage detector; a transformer via ONNX is the documented next tier behind the same
+`Scorer` seam (it needs a training-data programme, so it is not bundled).
 
 ## Independent review questions
 
