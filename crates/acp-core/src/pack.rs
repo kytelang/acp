@@ -78,6 +78,8 @@ pub fn builtin_packs(generated_ms: u64) -> Vec<ControlPack> {
         ("iso-42001", "ISO/IEC 42001"),
         ("soc2", "SOC 2"),
         ("gdpr", "GDPR"),
+        ("dpdp", "India DPDP Act"),
+        ("uk-ai", "UK AI principles"),
     ];
     frameworks
         .iter()
@@ -99,7 +101,7 @@ mod tests {
     #[test]
     fn builtin_packs_cover_three_frameworks_and_verify() {
         let packs = builtin_packs(1000);
-        assert_eq!(packs.len(), 5);
+        assert_eq!(packs.len(), 7);
         let signer = Ed25519Signer::from_seed(&[7u8; 32]);
         for p in &packs {
             assert!(!p.controls.is_empty(), "{} has controls", p.id);

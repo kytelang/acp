@@ -54,6 +54,18 @@ pub fn library() -> Vec<Control> {
         c("gdpr", "art-25", "Data protection by design and by default", "Embed data protection into processing.", "content firewall, resource-boundary authz"),
         c("gdpr", "art-30", "Records of processing", "Maintain records of processing activities.", "tamper-evident decision ledger"),
         c("gdpr", "art-32", "Security of processing", "Appropriate technical and organisational security.", "encryption at rest, mTLS, signed evidence"),
+        // India DPDP Act 2023 (Digital Personal Data Protection).
+        c("dpdp", "s4", "Lawful processing", "Process personal data only for a lawful purpose with consent or legitimate use.", "use-case registry, consent basis records"),
+        c("dpdp", "s8", "Data fiduciary obligations", "Accuracy, security safeguards and breach notification as a data fiduciary.", "content firewall, encryption, incident records"),
+        c("dpdp", "s8-5", "Security safeguards", "Reasonable security safeguards to prevent personal data breach.", "encryption at rest, mTLS, resource-boundary authz"),
+        c("dpdp", "s8-6", "Breach notification", "Notify the Board and affected principals of a personal data breach.", "serious-incident workflow, tamper-evident ledger"),
+        c("dpdp", "s10", "Significant data fiduciary", "Additional obligations including DPIA and audit for significant fiduciaries.", "impact assessment records, signed audit evidence"),
+        // UK approach (pro-innovation AI regulation, cross-sector principles).
+        c("uk-ai", "safety", "Safety, security and robustness", "AI systems function robustly and securely throughout their lifecycle.", "content firewall, tool-integrity, coverage evidence"),
+        c("uk-ai", "transparency", "Appropriate transparency and explainability", "Provide appropriate information about AI systems and decisions.", "transparency obligations, decision ledger"),
+        c("uk-ai", "fairness", "Fairness", "AI systems do not undermine legal rights or discriminate unfairly.", "bias/performance test evidence"),
+        c("uk-ai", "accountability", "Accountability and governance", "Clear accountability and effective oversight for AI outcomes.", "RBAC/SoD, approvals, oversight-quality monitoring"),
+        c("uk-ai", "contestability", "Contestability and redress", "Routes to contest AI decisions and seek redress.", "approval/override records, signed evidence"),
     ]
 }
 

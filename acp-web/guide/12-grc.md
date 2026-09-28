@@ -183,6 +183,10 @@ bill of materials. The ledger is machine-generated proof; governance records are
 paperwork. Both are signed and useful, but do not present a governance record as if it were ledger
 proof: an auditor gets runtime evidence from the ledger and documented governance from these records.
 
+The signed control packs now cover seven frameworks: EU AI Act, NIST AI RMF, ISO/IEC 42001, SOC 2,
+GDPR, India DPDP Act and the UK AI principles. Each is a signed, versioned data pack, verified before
+it loads.
+
 ## Oversight-quality monitoring
 
 Human oversight has to be effective, not just present (EU AI Act Article 14). Because the control plane

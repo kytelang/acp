@@ -101,6 +101,14 @@ The built-in baseline is a zero-dependency lexical detector, suitable for on-pre
 use. For production-grade groundedness, delegate to an external specialist service (Azure or Bedrock)
 through the content-scan hook; the lexical baseline remains the on-prem floor.
 
+## Output-side scanning
+
+The firewall is not input-only. The same engine scans the response direction: MCP tool results
+(`screen_response_frame`) and the gateway's model responses (`response_gate`) run the identical policy,
+so injection, secrets, PII, denied topics and system-prompt-leak patterns are caught on the way back,
+not just on the way in. Output findings surface in the console Violations view alongside input findings.
+Enable it with the same flags; the response path is on whenever the firewall is.
+
 ## Honest boundary
 
 The content firewall is deliberately lightweight: signatures and heuristics by default, plus an
