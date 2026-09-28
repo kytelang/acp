@@ -45,7 +45,7 @@ pub fn metricsPanel(r: AcpReport): Html {
                     <div class="stat"><div class="stat-k">Step-up</div><div class="stat-v warn">{`${r.stepUps}`}</div></div>
                 </div>
                 <div class="barwrap">
-                    <div class="barlbl"><span>Verdict distribution</span><span class="dim">{`${tot}`} decisions</span></div>
+                    <div class="barlbl"><span>Verdict distribution</span><span class="dim">{`${tot} decisions`}</span></div>
                     <div class="bar">
                         <div class="barseg allow" style={"width:" + awS + "%"}></div>
                         <div class="barseg step" style={"width:" + swS + "%"}></div>
@@ -53,10 +53,10 @@ pub fn metricsPanel(r: AcpReport): Html {
                         <div class="barseg deny" style={"width:" + dwS + "%"}></div>
                     </div>
                     <div class="barkey">
-                        <span><i class="dot allow"></i>allow {`${r.allows}`}</span>
-                        <span><i class="dot step"></i>step-up {`${r.stepUps}`}</span>
-                        <span><i class="dot shadow"></i>shadow {`${r.shadows}`}</span>
-                        <span><i class="dot deny"></i>deny {`${r.denies}`}</span>
+                        <span><i class="dot allow"></i>{`allow ${r.allows}`}</span>
+                        <span><i class="dot step"></i>{`step-up ${r.stepUps}`}</span>
+                        <span><i class="dot shadow"></i>{`shadow ${r.shadows}`}</span>
+                        <span><i class="dot deny"></i>{`deny ${r.denies}`}</span>
                     </div>
                 </div>
             </div>
@@ -86,19 +86,19 @@ pub fn healthPanel(h: HealthStatus): Html {
                 <div class="stat">
                     <div class="stat-k">Proxy liveness</div>
                     <div style="margin-top:.5rem">{healthPill(h.liveHealthy, "all live", "gaps")}</div>
-                    <div class="dim" style="margin-top:.4rem;font-size:.78rem">{`${h.gaps}`} silent proxy gap(s)</div>
+                    <div class="dim" style="margin-top:.4rem;font-size:.78rem">{`${h.gaps} silent proxy gap(s)`}</div>
                 </div>
                 <div class="stat">
                     <div class="stat-k">Spike alerts</div>
                     <div style="margin-top:.5rem">{healthPill(h.alertsHealthy, "quiet", "tripped")}</div>
-                    <div class="dim" style="margin-top:.4rem;font-size:.78rem">{`${h.tripped}`} event kind(s) spiking</div>
+                    <div class="dim" style="margin-top:.4rem;font-size:.78rem">{`${h.tripped} event kind(s) spiking`}</div>
                 </div>
                 <div class="stat">
                     <div class="stat-k">Self-governance log</div>
                     <div style="margin-top:.5rem">{if (h.metaConfigured) {
                         if (h.metaVerified) { <span class="badge ok">verified</span> } else { <span class="badge bad">unverified</span> }
                     } else { <span class="badge warn">off</span> }}</div>
-                    <div class="dim" style="margin-top:.4rem;font-size:.78rem">{`${h.metaSize}`} meta-audit record(s)</div>
+                    <div class="dim" style="margin-top:.4rem;font-size:.78rem">{`${h.metaSize} meta-audit record(s)`}</div>
                 </div>
             </div>
         }}
@@ -116,7 +116,7 @@ pub fn reportsPanel(r: AcpReport, h: HealthStatus, evidenceCount: int): Html {
                 <div class="repcard">
                     <div class="rep-k">Governed decisions</div>
                     <div class="rep-v">{`${r.decisions}`}</div>
-                    <div class="dim">{`${r.records}`} total ledger records</div>
+                    <div class="dim">{`${r.records} total ledger records`}</div>
                 </div>
                 <div class="repcard">
                     <div class="rep-k">Policy coverage</div>
@@ -126,12 +126,12 @@ pub fn reportsPanel(r: AcpReport, h: HealthStatus, evidenceCount: int): Html {
                 <div class="repcard">
                     <div class="rep-k">Denied</div>
                     <div class="rep-v" style="color:var(--bad)">{`${r.denies}`}</div>
-                    <div class="dim">{`${r.stepUps}`} sent to human step-up</div>
+                    <div class="dim">{`${r.stepUps} sent to human step-up`}</div>
                 </div>
                 <div class="repcard">
                     <div class="rep-k">Ledger integrity</div>
                     <div style="margin-top:.4rem">{healthPill(h.ledgerOk, "verified", "FAILED")}</div>
-                    <div class="dim">{`${evidenceCount}`} recent decisions shown</div>
+                    <div class="dim">{`${evidenceCount} recent decisions shown`}</div>
                 </div>
             </div>
         }}
@@ -269,7 +269,7 @@ fn tallyTable(title: string, rows: list.List<Tally>): Html {
 pub fn violationReportPanel(rep: ViolReport): Html {
     return <div id="violationreport">
         <div class="row" style="align-items:center;gap:1rem;margin-bottom:1rem">
-            <div><span class="mono strong" style="font-size:1.6rem">{rep.total}</span> <span class="dim">total policy breaches and firewall violations recorded</span></div>
+            <div><span class="mono strong" style="font-size:1.6rem">{rep.total}</span>{" "}<span class="dim">total policy breaches and firewall violations recorded</span></div>
             <a class="btn" href="/report/violations.csv">Download CSV</a>
             <button class="btn" onclick="window.print()">Print</button>
         </div>
@@ -307,15 +307,15 @@ pub fn firewallRulesPanel(rows: list.List<FwRuleRow>): Html {
 
 pub fn firewallStatusPanel(cfg: FirewallCfg): Html {
     return <div id="firewallstatus">
-        <div class="row" style="gap:.6rem;align-items:center">
+        <div class="row" style="gap:.85rem;align-items:center">
             {if (cfg.enabled) { <span class="badge ok">enabled</span> } else { <span class="badge bad">disabled</span> }}
             {if (cfg.blockSecrets) { <span class="badge ver">block secrets</span> } else { <span class="dim">secrets: allow</span> }}
             {if (cfg.blockToxicity) { <span class="badge ver">toxicity on</span> } else { <span class="dim">toxicity off</span> }}
             {if (cfg.hasModel) { <span class="badge ver">ML model loaded</span> } else { <span class="dim">signatures only</span> }}
             {if (string.eql(cfg.scanUrl, "")) { <span class="dim">external scanner: off</span> } else { <span class="badge ver">external scanner</span> }}
             {if (cfg.blockOnScannerError) { <span class="badge warn">fail closed</span> } else { <span class="dim">scanner error: fail open</span> }}
-            {if (cfg.feedVersion > 0) { <span class="badge ver">threat feed v{cfg.feedVersion} ({cfg.threatCount} sigs)</span> } else { <span class="dim">no threat feed</span> }}
-            <span class="dim">denied topics: {string.eql(cfg.denyTopics, "") ? "none" : cfg.denyTopics}</span>
+            {if (cfg.feedVersion > 0) { <span class="badge ver">{`threat feed v${cfg.feedVersion} (${cfg.threatCount} sigs)`}</span> } else { <span class="dim">no threat feed</span> }}
+            <span class="dim">{`denied topics: ${string.eql(cfg.denyTopics, "") ? "none" : cfg.denyTopics}`}</span>
         </div>
     </div>;
 }
@@ -552,14 +552,14 @@ pub fn grcPanel(rows: list.List<GrcRow>): Html {
                             }}</td>
                             <td>
                                 {if (string.eql(r.kind, "use-case")) {
-                                    <span>
+                                    <span class="actcol">
                                         {if (string.eql(r.status, "proposed") || string.eql(r.status, "open")) { <button class="btn" data-on:click={"@post('/grc/" + r.id + "/usecase/assessed')"}>Assess</button> } else { <span></span> }}
                                         {if (string.eql(r.status, "assessed")) { <button class="btn ok" data-on:click={"@post('/grc/" + r.id + "/usecase/approved')"}>Approve</button> } else { <span></span> }}
                                         {if (string.eql(r.status, "approved")) { <button class="btn ok" data-on:click={"@post('/grc/" + r.id + "/usecase/deployed')"}>Deploy</button> } else { <span></span> }}
                                         {if (string.eql(r.status, "retired")) { <span class="dim">retired</span> } else { <button class="btn no" data-on:click={"@post('/grc/" + r.id + "/usecase/retired')"}>Retire</button> }}
                                     </span>
                                 } else {
-                                    <span>
+                                    <span class="actcol">
                                         <button class="btn" data-on:click={"@post('/grc/" + r.id + "/to/in-review')"}>Review</button>
                                         <button class="btn ok" data-on:click={"@post('/grc/" + r.id + "/to/approved')"}>Approve</button>
                                         <button class="btn no" data-on:click={"@post('/grc/" + r.id + "/to/closed')"}>Close</button>
@@ -639,7 +639,7 @@ pub fn policySuggestPanel(info: SuggestInfo): Html {
             <p class="empty">No observed traffic yet. Run agents through a PEP (shadow mode is ideal), then a least-privilege proposal appears here.</p>
         } else {
             <div>
-                <p class="hint">Synthesised from {`${info.observed}`} observed decisions: a default-deny policy with {`${info.proposedRules}`} rule(s) permitting exactly what was seen. {if (string.eql(info.wouldBlock, "")) { <span class="badge ok">blocks nothing observed</span> } else { <span class="badge bad">would block: {info.wouldBlock}</span> }}</p>
+                <p class="hint">{`Synthesised from ${info.observed} observed decisions: a default-deny policy with ${info.proposedRules} rule(s) permitting exactly what was seen.`}{" "}{if (string.eql(info.wouldBlock, "")) { <span class="badge ok">blocks nothing observed</span> } else { <span class="badge bad">{`would block: ${info.wouldBlock}`}</span> }}</p>
                 <pre class="mono" style="max-height:20rem;overflow:auto;background:var(--panel);padding:.8rem;border-radius:8px;white-space:pre-wrap">{info.proposed}</pre>
                 <div class="row" style="margin-top:.8rem;gap:.5rem">
                     <button class="btn primary" data-on:click="@post('/policy/approve-suggestion')">Approve and deploy (signed)</button>
@@ -815,7 +815,7 @@ pub fn riskPanel(rows: list.List<RiskRow>): Html {
                             <td>{r.likelihood}</td>
                             <td>{r.impact}</td>
                             <td>{r.score}</td>
-                            <td>{if (string.eql(r.band, "critical") || string.eql(r.band, "high")) { <span class="badge bad">{r.band}</span> } else { if (string.eql(r.band, "medium")) { <span class="badge warn">{r.band}</span> } else { <span class="badge ok">{r.band}</span> } }}</td>
+                            <td>{if (string.eql(r.band, "critical") || string.eql(r.band, "high")) { <span class="badge bad">{r.band}</span> } else { if (string.eql(r.band, "medium")) { <span class="badge warn">{r.band}</span> } else { if (string.eql(r.band, "")) { <span class="dim">-</span> } else { <span class="badge ok">{r.band}</span> } } }}</td>
                             <td>{r.treatment}</td>
                             <td>
                                 <span class="badge warn">{r.status}</span>

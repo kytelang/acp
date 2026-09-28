@@ -119,6 +119,11 @@
     .fwreport-h h2{font-size:1.05rem;font-weight:650;margin:0}
     .fwreport-stats{display:flex;align-items:center;gap:.5rem;flex-wrap:wrap}
     .fwreport-stats .badge{padding:.3rem .7rem;font-size:.74rem}
+    #firewallstatus{display:block;margin-bottom:1.1rem;padding-bottom:1.1rem;border-bottom:1px solid var(--line)}
+    /* compact action buttons inside tables; stacked action groups align as an equal-width column */
+    .tbl td .btn{height:32px;padding:0 .75rem;font-size:.8rem}
+    .actcol{display:inline-flex;flex-direction:column;gap:.35rem;min-width:98px}
+    .actcol .btn{width:100%}
     #policy-editor{height:360px;width:100%;border:1px solid var(--line2);border-radius:10px;overflow:hidden}
     .polrow{display:flex;align-items:center;gap:.6rem;flex-wrap:wrap}
     @media print{.sidebar,.topbar{display:none}.app{display:block}.content{max-width:none}}
