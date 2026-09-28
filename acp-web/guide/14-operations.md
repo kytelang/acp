@@ -140,7 +140,7 @@ acp-server ... --webhook-url https://hooks.example.com/acp --webhook-secret "$AC
 ```
 
 Each event is a JSON body `{type, ts_ms, event}` where `type` is `grc.created`, `grc.status`,
-`grc.assigned` or `violation`. The request carries an `x-acp-signature: t=<unix>,v1=<hmac-sha256>`
+`grc.assigned`, `violation` or `approval.overdue` (see SLA escalation below). The request carries an `x-acp-signature: t=<unix>,v1=<hmac-sha256>`
 header the receiver verifies against the shared secret (the same primitive as the inbound Slack
 verification). Attacker-influenced fields (a tool name, a record title) are carried only as JSON values,
 never interpolated into markup, so a crafted value cannot forge the notification. Delivery is
@@ -167,6 +167,19 @@ vendor-neutral adapters for the common enterprise tools; no vendor SDK is embedd
   manually registered ones. It is idempotent by (name, version).
 
 These are documented with the request/response shapes in `docs/connectors.md`.
+
+**Approval SLA escalation.** Set `--approval-sla-ms <ms>` and the control plane watches the approvals
+inbox: any hold still pending past that age fires a single `approval.overdue` event (deduplicated per
+hold) to the configured webhook and Slack sink, so a stalled human decision pages the on-call instead
+of silently blocking the agent. This is the operational hook behind EU AI Act Art. 14 human oversight:
+the step-up does not just wait, it escalates.
+
+**Other channels (same injection-safe contract).** All notifications are built by `acp_core::notify`,
+which renders the same hold or event as a Slack Block Kit message, a Microsoft Teams Adaptive Card, a
+PagerDuty Events API payload, or plain email JSON, with attacker-influenced fields carried only as
+values. Slack is wired directly with `--slack-webhook-url`; Teams, PagerDuty and email are available
+through the generic `--webhook-url` sink (which carries the raw signed event) plus the matching renderer,
+so no vendor SDK is embedded and adding a channel is a thin adapter, not a new integration.
 
 ## Logging
 
