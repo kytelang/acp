@@ -1,0 +1,37 @@
+import web.routing;
+import web.response;
+import ds_response;
+import serde.json;
+import Features.Dashboard.Shared.acp_client;
+import Features.Dashboard.views.dashboard;
+
+// Generic assurance forwarder: forwards the browser's datastar signals to a server endpoint with a
+// role token and patches a named result element. `pathTemplate` may contain {modelId}, filled from the
+// body's modelId signal (for the fairness endpoint). This closes the console-parity gap for the
+// oversight scan/config, incident, red-team-target and fairness actions with one handler.
+pub struct ForwardHandler impl RouteHandler {
+    acp: AcpClient,
+    pathTemplate: string,
+    role: string,
+    resultId: string,
+    init(acp: AcpClient, pathTemplate: string, role: string, resultId: string) {
+        self.acp = acp; self.pathTemplate = pathTemplate; self.role = role; self.resultId = resultId;
+    }
+    async fn serve(self: ForwardHandler, ctx: Context): Response {
+        let auth = ctx.request.headers.get("authorization") ?? "";
+        let mid = json.stringField(ctx.request.body, "modelId");
+        let path = string.replace(self.pathTemplate, "{modelId}", mid);
+        let res = self.acp.forward(path, ctx.request.body, self.role, auth);
+        return await ds_response.patch(assuranceResultPanel(self.resultId, res));
+    }
+}
+
+// GET the signed auditor evidence pack and show a summary (G18).
+pub struct AuditPackHandler impl RouteHandler {
+    acp: AcpClient,
+    init(acp: AcpClient) { self.acp = acp; }
+    async fn serve(self: AuditPackHandler, ctx: Context): Response {
+        let res = self.acp.auditPack();
+        return await ds_response.patch(assuranceResultPanel("auditresult", res));
+    }
+}

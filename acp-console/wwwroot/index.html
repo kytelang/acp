@@ -127,7 +127,7 @@
     .modal input[type=file]{display:none}
   </style>
 </head>
-<body data-signals="{view: 'overview', tenant: 'default', endpoint: '', disposition: 'govern', appName: '', appOwner: '', agentAppId: '', agentName: '', agentOwner: '', agentDeps: '', modelName: '', modelProvider: '', modelVersion: '', vendorName: '', vendorResidency: 'eu', vendorSubs: '0', vendorCerts: '', vendorIncidents: '0', grcKind: 'assessment', grcSubject: '', grcTitle: '', grcStatus: 'open', grcBody: '{}', grcLinks: '', riskSubject: '', riskTitle: '', riskLikelihood: 'high', riskImpact: 'high', riskTreatment: 'mitigate', mcSubject: '', mcTitle: '', mcModelId: '', mcUseCaseId: '', mcRiskId: '', asSubject: '', asTitle: '', asAssignee: '', as_prohibited_practice: 'false', as_safety_component: 'false', as_biometric_identification: 'false', as_critical_infrastructure: 'false', as_employment_or_education: 'false', as_essential_services: 'false', as_law_enforcement: 'false', as_interacts_with_humans: 'false', as_generates_content: 'false', modal: '', policyTab: 'deployed', authorText: '', fwEnabled: 'false', fwBlockSecrets: 'false', fwDenyTopics: '', fwModel: '', fwScanUrl: '', fwBlockOnScannerError: 'false', fwBlockToxicity: 'false', frMatchKind: 'host_contains', frMatchValue: '', frPath: '', frAction: 'block', frClassify: '', author: 'operator', epReason: 'sanctioned', mode: 'lockdown_all', scope: 'global', killReason: 'incident', ttl_ms: '3600000', reason: ''}">
+<body data-signals="{view: 'overview', tenant: 'default', endpoint: '', disposition: 'govern', appName: '', appOwner: '', agentAppId: '', agentName: '', agentOwner: '', agentDeps: '', modelName: '', modelProvider: '', modelVersion: '', vendorName: '', vendorResidency: 'eu', vendorSubs: '0', vendorCerts: '', vendorIncidents: '0', grcKind: 'assessment', grcSubject: '', grcTitle: '', grcStatus: 'open', grcBody: '{}', grcLinks: '', riskSubject: '', riskTitle: '', riskLikelihood: 'high', riskImpact: 'high', riskTreatment: 'mitigate', mcSubject: '', mcTitle: '', mcModelId: '', mcUseCaseId: '', mcRiskId: '', asSubject: '', asTitle: '', asAssignee: '', as_prohibited_practice: 'false', as_safety_component: 'false', as_biometric_identification: 'false', as_critical_infrastructure: 'false', as_employment_or_education: 'false', as_essential_services: 'false', as_law_enforcement: 'false', as_interacts_with_humans: 'false', as_generates_content: 'false', modal: '', policyTab: 'deployed', authorText: '', incidentSubject: '', incidentTitle: '', redteamTargetUrl: '', fairnessModelId: '', fairnessRows: '', ovApproveRate: '0.95', ovFastMs: '5000', auditFrom: '0', auditTo: '',  fwEnabled: 'false', fwBlockSecrets: 'false', fwDenyTopics: '', fwModel: '', fwScanUrl: '', fwBlockOnScannerError: 'false', fwBlockToxicity: 'false', frMatchKind: 'host_contains', frMatchValue: '', frPath: '', frAction: 'block', frClassify: '', author: 'operator', epReason: 'sanctioned', mode: 'lockdown_all', scope: 'global', killReason: 'incident', ttl_ms: '3600000', reason: ''}">
   <div class="navbar">
     <div class="brand">
       <img class="logo" src="/varman-logo.svg" alt="Varman" />
@@ -177,7 +177,15 @@
 
         <section class="view" data-show="$view === 'oversight'">
           <div class="card"><div class="card-h"><span class="ic">&#128064;</span> Oversight quality<span class="sub">is human approval effective, or rubber-stamping? (EU AI Act Art. 14). Derived from the signed approval records.</span></div>
-            <div class="card-b"><div id="oversight"><p class="empty">connecting to acp-server&#8230;</p></div></div></div>
+            <div class="card-b"><div id="oversight"><p class="empty">connecting to acp-server&#8230;</p></div>
+              <div class="row" style="gap:.5rem;margin-top:.8rem;align-items:end;flex-wrap:wrap">
+                <label class="fld">Approve-rate threshold <input type="text" data-bind="ovApproveRate" style="width:5rem" /></label>
+                <label class="fld">Fast decision (ms) <input type="text" data-bind="ovFastMs" style="width:6rem" /></label>
+                <button class="btn" data-on:click="@post('/oversight/config-save')">Save thresholds</button>
+                <button class="btn primary" data-on:click="@post('/oversight/scan-run')">Scan &amp; record findings</button>
+              </div>
+              <div id="oversightscanresult" style="margin-top:.5rem"></div>
+            </div></div>
         </section>
         <section class="view" data-show="$view === 'reports'">
           <div class="card"><div class="card-h"><span class="ic">&#128200;</span> Post-market monitoring<span class="sub">EU AI Act Art. 72: assembled from runtime violations, drift and red-team evidence. Snapshot to sign it.</span></div>
@@ -203,7 +211,13 @@
               <div id="frameworkreport"><p class="empty">Choose a framework to build its report.</p></div>
             </div></div>
           <div class="card"><div class="card-h"><span class="ic">&#128737;</span> Continuous red-teaming<span class="sub">each run is a signed attestation; failing runs (below min-catch) are flagged</span><button class="btn primary card-cta" data-on:click="@post('/redteam/run')">Run red-team</button></div>
-            <div class="card-b"><div id="redteam"><p class="empty">&#8230;</p></div></div></div>
+            <div class="card-b"><div id="redteam"><p class="empty">&#8230;</p></div>
+              <div class="row" style="gap:.5rem;margin-top:.8rem;align-items:end">
+                <label class="fld" style="flex:1">Target agent URL <input type="text" data-bind="redteamTargetUrl" placeholder="http://agent.internal/act" style="width:100%" /></label>
+                <button class="btn" data-on:click="@post('/redteam/target-run')">Run against target</button>
+              </div>
+              <div id="redteamtargetresult" style="margin-top:.5rem"></div>
+            </div></div>
         </section>
 
         <section class="view" data-show="$view === 'monitors'">
@@ -214,6 +228,8 @@
         </section>
 
         <section class="view" data-show="$view === 'health'">
+          <div class="card"><div class="card-h"><span class="ic">&#128274;</span> Public trust summary<span class="sub">signed controls-in-force summary a customer can publish (G19)</span></div>
+            <div class="card-b"><div id="trust"><p class="empty">connecting to acp-server&#8230;</p></div></div></div>
           <div class="card"><div class="card-h"><span class="ic">&#128737;</span> Control-plane integrity<span class="sub">acp-server verifiable endpoints</span></div>
             <div class="card-b"><div id="health"><p class="empty">connecting to acp-server&#8230;</p></div></div></div>
         </section>
@@ -224,6 +240,9 @@
         </section>
 
         <section class="view" data-show="$view === 'evidence'">
+          <div class="card"><div class="card-h"><span class="ic">&#128196;</span> Auditor evidence pack<span class="sub">a signed pack an external auditor verifies with the public key alone (G18)</span>
+            <button class="btn card-cta" data-on:click="@post('/audit/download')">Build signed pack</button></div>
+            <div class="card-b"><div id="auditresult"><p class="empty">click Build to fetch a signed evidence pack for the window</p></div></div></div>
           <div class="card"><div class="card-h"><span class="ic">&#128220;</span> Recent governed decisions<span class="sub">tamper-evident ledger</span></div>
             <div class="card-b"><div id="evidence"><p class="empty">&#8230;</p></div></div></div>
           <div class="card"><div class="card-h"><span class="ic">&#128225;</span> Fleet evidence<span class="sub">decision records streamed from the enforcement points, re-verified by the control plane</span></div>
@@ -245,6 +264,15 @@
         </section>
 
         <section class="view" data-show="$view === 'models'">
+          <div class="card"><div class="card-h"><span class="ic">&#9878;</span> Fairness &amp; performance test<span class="sub">paste labelled outcomes; the report is stored as signed evidence linked to the model (G15)</span></div>
+            <div class="card-b">
+              <div class="row" style="gap:.5rem;align-items:end;flex-wrap:wrap">
+                <label class="fld">Model id <input type="text" data-bind="fairnessModelId" placeholder="mdl-abc123" /></label>
+              </div>
+              <textarea data-bind="fairnessRows" rows="3" style="width:100%;margin-top:.5rem" placeholder='[{"group":"A","predicted_positive":true,"actual_positive":true},{"group":"B","predicted_positive":false,"actual_positive":true}]'></textarea>
+              <div style="margin-top:.5rem"><button class="btn" data-on:click="@post('/models/fairness-run')">Run fairness test</button></div>
+              <div id="fairnessresult" style="margin-top:.5rem"></div>
+            </div></div>
           <div class="card"><div class="card-h"><span class="ic">&#129520;</span> Models<span class="sub">provider, version, admission scan and signed AI-BOM</span><button class="btn primary card-cta" data-on:click="$modal = 'model'">+ Register model</button></div>
             <div class="card-b"><div id="models"><p class="empty">&#8230;</p></div></div></div>
           <div class="card"><div class="card-h"><span class="ic">&#127970;</span> Vendors<span class="sub">third-party risk</span><button class="btn primary card-cta" data-on:click="$modal = 'vendor'">+ Add vendor</button></div>
@@ -365,6 +393,15 @@ rules:
           </section>
 
         <section class="view" data-show="$view === 'grc'">
+          <div class="card"><div class="card-h"><span class="ic">&#128680;</span> Open a serious-incident case<span class="sub">EU AI Act Art. 73: a signed incident record with a reporting deadline</span></div>
+            <div class="card-b">
+              <div class="row" style="gap:.5rem;align-items:end;flex-wrap:wrap">
+                <label class="fld">Subject <input type="text" data-bind="incidentSubject" placeholder="leak-2026-09" /></label>
+                <label class="fld" style="flex:1">Title <input type="text" data-bind="incidentTitle" placeholder="Suspected data leak" style="width:100%" /></label>
+                <button class="btn primary" data-on:click="@post('/incident/open')">Open incident</button>
+              </div>
+              <div id="incidentresult" style="margin-top:.5rem"></div>
+            </div></div>
           <div class="card"><div class="card-h"><span class="ic">&#128209;</span> Governance records<span class="sub">signed operator documents, re-verified on read</span><button class="btn primary card-cta" data-on:click="$modal = 'assess'">+ New assessment</button><button class="btn card-cta" data-on:click="$modal = 'grc'">+ Record</button></div>
             <div class="card-b"><div id="grc"><p class="empty">&#8230;</p></div></div></div>
           <div class="card"><div class="card-h"><span class="ic">&#128230;</span> Control packs<span class="sub">signed, versioned framework content (EU AI Act, NIST AI RMF, ISO 42001)</span><button class="btn primary card-cta" data-on:click="@post('/packs/load')">Load built-in packs</button></div>

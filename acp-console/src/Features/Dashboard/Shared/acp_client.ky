@@ -968,6 +968,54 @@ pub struct AcpClient {
             wb);
     }
 
+    // Generic POST forwarder for assurance actions: sends the datastar signal body to a server path
+    // with a role token; returns DeployResult(ok, message).
+    pub fn forward(self: AcpClient, path: string, body: string, role: string, userAuth: string): DeployResult {
+        let hdrs = client.Http.emptyHeaders();
+        hdrs.set("Content-Type", "application/json"); hdrs.set("x-acp-tenant", self.tenant);
+        if (!string.eql(userAuth, "")) { hdrs.set("Authorization", userAuth); }
+        else { let tok = self.authToken(role); if (!string.eql(tok, "")) { hdrs.set("Authorization", "Bearer " + tok); } }
+        let resp = client.Http.request("POST", self.base + path, hdrs, body);
+        if (resp.status.toCode() != 200) { return DeployResult(false, "acp-server unreachable (HTTP " + `${resp.status.toCode()}` + ")"); }
+        let v = json.parse(resp.body);
+        if (!(json.asBool(json.get(v, "ok")) ?? false)) { return DeployResult(false, json.asString(json.get(v, "error")) ?? "rejected"); }
+        let id = json.asString(json.get(v, "id")) ?? "";
+        return DeployResult(true, string.eql(id, "") ? "done" : "done (" + id + ")");
+    }
+
+    // GET a role-gated endpoint, returning the raw body (for the trust summary and auditor pack).
+    pub fn getWithRole(self: AcpClient, path: string, role: string): string {
+        let hdrs = client.Http.emptyHeaders(); hdrs.set("x-acp-tenant", self.tenant);
+        let tok = self.authToken(role); if (!string.eql(tok, "")) { hdrs.set("Authorization", "Bearer " + tok); }
+        let resp = client.Http.request("GET", self.base + path, hdrs, "");
+        if (resp.status.toCode() != 200) { return ""; }
+        return resp.body;
+    }
+
+    // G18: fetch the signed auditor evidence pack (whole window) and summarise it.
+    pub fn auditPack(self: AcpClient): DeployResult {
+        let body = self.getWithRole("/audit/pack?from=0&to=99999999999999", "Auditor");
+        if (string.eql(body, "")) { return DeployResult(false, "acp-server unreachable or not authorised"); }
+        let v = json.parse(body);
+        let count = json.asNumber(json.get(json.get(v, "body"), "count")) ?? 0;
+        let sig = json.asString(json.get(v, "sig_hex")) ?? "";
+        return DeployResult(true, "signed pack ready: " + `${count}` + " record(s), sig " + (string.eql(sig, "") ? "none" : "present") + " (verify with acp verify-pack)");
+    }
+
+    // G19: the signed public trust summary (a compact one-line view of the controls in force).
+    pub fn trustSummary(self: AcpClient): string {
+        let body = self.getWithRole("/trust", "Auditor");
+        if (string.eql(body, "")) { return ""; }
+        let sum = json.get(json.parse(body), "summary");
+        let ctrls = json.get(sum, "controls");
+        let authz = (json.asBool(json.get(ctrls, "resource_boundary_authorization")) ?? false) ? "on" : "off";
+        let rbac = (json.asBool(json.get(ctrls, "rbac")) ?? false) ? "on" : "off";
+        let ev = (json.asBool(json.get(ctrls, "tamper_evident_evidence")) ?? false) ? "on" : "off";
+        let fw = (json.asBool(json.get(ctrls, "content_firewall")) ?? false) ? "on" : "off";
+        let ha = (json.asBool(json.get(ctrls, "high_availability")) ?? false) ? "on" : "off";
+        return "authz=" + authz + "  rbac=" + rbac + "  evidence=" + ev + "  firewall=" + fw + "  HA=" + ha;
+    }
+
     // G3: draft a policy from an English description and return the draft + verification matrix as a
     // display struct. The caller reviews before deploying via the existing signed deploy path.
     pub fn authorPolicy(self: AcpClient, text: string, userAuth: string): DeployResult {

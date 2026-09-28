@@ -18,6 +18,7 @@ import Features.Dashboard.Policy.kill_handler;
 import Features.Dashboard.Endpoints.handler;
 import Features.Dashboard.Identity.handler;
 import Features.Dashboard.Governance.handler;
+import Features.Dashboard.Assurance.handler;
 
 fn buildApp(): App {
     let app = App();
@@ -38,6 +39,12 @@ fn buildApp(): App {
     app.post("/policy/deploy", DeployHandler(acp));
     app.post("/policy/approve-suggestion", SuggestApproveHandler(acp));
     app.post("/policy/author-draft", AuthorHandler(acp));
+    app.post("/oversight/scan-run", ForwardHandler(acp, "/oversight/scan", "GrcAuthor", "oversightscanresult"));
+    app.post("/oversight/config-save", ForwardHandler(acp, "/oversight/config", "GrcAuthor", "oversightscanresult"));
+    app.post("/incident/open", ForwardHandler(acp, "/incident/promote", "GrcAuthor", "incidentresult"));
+    app.post("/redteam/target-run", ForwardHandler(acp, "/redteam/target", "FirewallAdmin", "redteamtargetresult"));
+    app.post("/models/fairness-run", ForwardHandler(acp, "/models/{modelId}/fairness", "GrcAuthor", "fairnessresult"));
+    app.post("/audit/download", AuditPackHandler(acp));
     app.post("/kill/engage", KillHandler(acp, true));
     app.post("/kill/clear", KillHandler(acp, false));
     app.post("/endpoints/register", RegisterEndpointHandler(acp));

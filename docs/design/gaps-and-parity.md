@@ -352,7 +352,19 @@ Cross-cutting workstreams A (console parity) and B (UI-first docs) are not a pha
 carries its console surface and its console-first documentation as acceptance criteria, and the existing
 guide's curl-for-console-tasks is cleaned up as those chapters are touched.
 
----## Delivery status (2026-09-28, honest)
+---## Console coverage audit (2026-09-28)
+
+Audited all server routes against console surfaces. Of the routes, the vast majority are covered by a
+console view/panel/button; ~27 are API-only by design (PEP reporting `/event` `/heartbeat`
+`/evidence/ingest`, PEP-enforcement endpoints `/memory/write` `/retrieval/check` `/delegation/verify`
+`/credential/stamp`, IdP `/scim/*`, inbound `/tickets/*`, infra `/healthz` `/readyz` `/metrics`
+`/policy/current` `/leader` `/auth/dev-token`). The eight capabilities that previously had no console
+surface now do: oversight scan + threshold config, open-incident, red-team a target URL, model fairness
+test, the public trust summary, and the auditor evidence pack. The only uncovered read is
+`/intercept/rules` (agent-side; the AI Endpoints view drives it). Each new action was verified end to
+end through the console.
+
+## Delivery status (2026-09-28, honest)
 
 Each item is labelled inline with exactly how far it is wired. Grouped:
 

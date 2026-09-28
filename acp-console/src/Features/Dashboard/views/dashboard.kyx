@@ -635,6 +635,20 @@ pub fn policySuggestPanel(info: SuggestInfo): Html {
     </div>;
 }
 
+pub fn assuranceResultPanel(id: string, res: DeployResult): Html {
+    return <div id={id}>
+        {if (res.ok) { <span class="badge ok">{res.message}</span> } else { <span class="badge bad">{res.message}</span> }}
+    </div>;
+}
+
+pub fn trustPanel(summary: string): Html {
+    return <div id="trust">
+        {if (string.eql(summary, "")) { <p class="empty">connecting to acp-server&#8230;</p> } else {
+            <div><p class="mono">{summary}</p><p class="hint">Signed at <span class="mono">GET /trust</span>; a client verifies it with the public key alone.</p></div>
+        }}
+    </div>;
+}
+
 pub fn oversightPanel(rows: list.List<OversightRow>): Html {
     return <div id="oversight">
         {if (rows.size() == 0) {

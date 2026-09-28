@@ -1958,12 +1958,15 @@ async fn oversight_config_post(State(st): State<Arc<AppState>>, headers: HeaderM
     let before = load_oversight_config(&st, &tenant).await;
     // Start from the current config; override only the fields present in the body.
     let mut cfg = before.clone();
-    if let Some(v) = body.get("min_decisions").and_then(|v| v.as_u64()) { cfg.min_decisions = v as u32; }
-    if let Some(v) = body.get("approve_rate").and_then(|v| v.as_f64()) { cfg.approve_rate = v; }
-    if let Some(v) = body.get("fast_ms").and_then(|v| v.as_u64()) { cfg.fast_ms = v; }
-    if let Some(v) = body.get("fast_fraction").and_then(|v| v.as_f64()) { cfg.fast_fraction = v; }
-    if let Some(v) = body.get("bulk_window_ms").and_then(|v| v.as_u64()) { cfg.bulk_window_ms = v; }
-    if let Some(v) = body.get("bulk_count").and_then(|v| v.as_u64()) { cfg.bulk_count = v as u32; }
+    // Accept numbers or numeric strings (the console sends datastar string signals).
+    let as_f = |b: &serde_json::Value, k: &str| b.get(k).and_then(|v| v.as_f64().or_else(|| v.as_str().and_then(|s| s.parse().ok())));
+    let as_u = |b: &serde_json::Value, k: &str| b.get(k).and_then(|v| v.as_u64().or_else(|| v.as_str().and_then(|s| s.parse().ok())));
+    if let Some(v) = as_u(&body, "min_decisions") { cfg.min_decisions = v as u32; }
+    if let Some(v) = as_f(&body, "approve_rate") { cfg.approve_rate = v; }
+    if let Some(v) = as_u(&body, "fast_ms") { cfg.fast_ms = v; }
+    if let Some(v) = as_f(&body, "fast_fraction") { cfg.fast_fraction = v; }
+    if let Some(v) = as_u(&body, "bulk_window_ms") { cfg.bulk_window_ms = v; }
+    if let Some(v) = as_u(&body, "bulk_count") { cfg.bulk_count = v as u32; }
     let cfg_json = serde_json::to_string(&cfg).unwrap_or_default();
     if let Err(e) = store.put_state(&format!("oversight:config:{tenant}"), &cfg_json, now_ms() as i64).await {
         return Json(serde_json::json!({"ok": false, "error": e})).into_response();
@@ -2107,7 +2110,12 @@ async fn policy_author(State(st): State<Arc<AppState>>, headers: HeaderMap, Json
 async fn model_fairness(State(st): State<Arc<AppState>>, headers: HeaderMap, Path(id): Path<String>, Json(body): Json<serde_json::Value>) -> Response {
     let principal = match authorize(&st.auth, &headers, acp_core::auth::Capability::EditGrc) { Ok(p) => p, Err(r) => return r };
     let store = match &st.store { Some(s) => s, None => return Json(serde_json::json!({"ok": false, "error": "no --store configured"})).into_response() };
-    let rows: Vec<acp_core::fairness::EvalRow> = body.get("rows").and_then(|v| v.as_array()).map(|a| a.iter().filter_map(|r| {
+    let rows_val = match body.get("rows") {
+        Some(serde_json::Value::String(s)) => serde_json::from_str::<serde_json::Value>(s).unwrap_or(serde_json::Value::Null),
+        Some(v) => v.clone(),
+        None => serde_json::Value::Null,
+    };
+    let rows: Vec<acp_core::fairness::EvalRow> = rows_val.as_array().map(|a| a.iter().filter_map(|r| {
         Some(acp_core::fairness::EvalRow { group: r.get("group")?.as_str()?.to_string(),
             predicted_positive: r.get("predicted_positive").and_then(|v| v.as_bool()).unwrap_or(false),
             actual_positive: r.get("actual_positive").and_then(|v| v.as_bool()).unwrap_or(false) })

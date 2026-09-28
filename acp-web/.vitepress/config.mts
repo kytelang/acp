@@ -34,7 +34,6 @@ export default defineConfig({
       { text: 'Install', link: '/guide/16-setup' },
       { text: 'Tools', link: '/guide/13-cli' },
       { text: 'Deploy', link: '/guide/14-operations' },
-      { text: 'Kyte', link: 'https://kyteweb.web.app/' },
     ],
     sidebar: {
       '/guide/': [
@@ -100,7 +99,7 @@ export default defineConfig({
         },
       ],
     },
-    socialLinks: [{ icon: 'github', link: 'https://github.com/kytelang/acp' }],
+    socialLinks: [{ icon: 'github', link: 'https://github.com/' }],
     search: { provider: 'local' },
     outline: { level: [2, 3] },
   },
