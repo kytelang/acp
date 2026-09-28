@@ -6,10 +6,22 @@ version = 4
 name = "acp-agent"
 version = "0.0.0"
 dependencies = [
- "acp-guard",
- "acp-intercept",
- "acp-proxy",
+ "acp-core",
+ "anyhow",
+ "axum",
+ "futures-util",
+ "hex",
+ "rcgen",
+ "reqwest",
+ "rustls",
+ "rustls-pemfile",
+ "serde",
+ "serde_json",
+ "serde_yaml",
  "tokio",
+ "tokio-rustls",
+ "tracing",
+ "webpki-roots",
 ]
 
 [[package]]
@@ -56,62 +68,6 @@ dependencies = [
  "hex",
  "reqwest",
  "serde_json",
- "tokio",
- "tracing",
-]
-
-[[package]]
-name = "acp-guard"
-version = "0.0.0"
-dependencies = [
- "acp-core",
- "anyhow",
- "axum",
- "hex",
- "reqwest",
- "serde_json",
- "tokio",
- "tracing",
-]
-
-[[package]]
-name = "acp-intercept"
-version = "0.0.0"
-dependencies = [
- "acp-core",
- "hex",
- "rcgen",
- "reqwest",
- "rustls",
- "rustls-pemfile",
- "serde_json",
- "tokio",
- "tokio-rustls",
- "tracing",
- "webpki-roots",
-]
-
-[[package]]
-name = "acp-jsonrpc"
-version = "0.0.0"
-dependencies = [
- "serde",
- "serde_json",
-]
-
-[[package]]
-name = "acp-proxy"
-version = "0.0.0"
-dependencies = [
- "acp-core",
- "acp-jsonrpc",
- "anyhow",
- "axum",
- "futures-util",
- "hex",
- "reqwest",
- "serde_json",
- "serde_yaml",
  "tokio",
  "tracing",
 ]

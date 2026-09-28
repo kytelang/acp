@@ -8,8 +8,27 @@ description = "Varman (ACP) workstation agent: one service; its capability (fire
 name = "acp-agent"
 path = "src/main.rs"
 
+[[bin]]
+name = "mock-mcp-server"
+path = "src/bin/mock_mcp_server.rs"
+
 [dependencies]
-acp-proxy = { path = "../acp-proxy" }
-acp-intercept = { path = "../acp-intercept" }
-acp-guard = { path = "../acp-guard" }
+acp-core = { path = "../acp-core", features = ["hsm", "postgres"] }
+tokio = { workspace = true }
+tracing.workspace = true
+hex.workspace = true
+serde.workspace = true
+serde_json.workspace = true
+serde_yaml.workspace = true
+anyhow.workspace = true
+axum.workspace = true
+reqwest.workspace = true
+futures-util.workspace = true
+rcgen = { version = "0.13", features = ["x509-parser"] }
+rustls = { version = "0.23", features = ["ring"] }
+tokio-rustls = "0.26"
+rustls-pemfile = "2"
+webpki-roots = "1"
+
+[dev-dependencies]
 tokio = { workspace = true }

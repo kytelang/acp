@@ -9,6 +9,10 @@
 //! control-plane URLs (rules, firewall config, reporting, evidence, approvals), so the workstation
 //! carries no local rule or model files. Explicit per-URL flags still override.
 
+mod jsonrpc;
+mod proxy;
+mod intercept;
+mod guard;
 use std::process::ExitCode;
 
 enum Cap { Firewall, Mcp, Guard }
@@ -35,7 +39,7 @@ async fn run_multi(rest: Vec<String>) -> ExitCode {
         let mut full = vec!["acp-agent-firewall".to_string()];
         full.extend(expand_cp(a, &cp, &["--registry-url", "--firewall-url", "--report-url"]));
         eprintln!("acp-agent: firewall capability enabled");
-        set.spawn(acp_intercept::agent::run(full));
+        set.spawn(crate::intercept::agent::run(full));
     }
     // Guard (tool-server sidecar)
     if let Some(addr) = flag(&rest, "--guard") {
@@ -47,7 +51,7 @@ async fn run_multi(rest: Vec<String>) -> ExitCode {
         let mut full = vec!["acp-agent-guard".to_string()];
         full.extend(expand_cp(a, &cp, &["--report-url"]));
         eprintln!("acp-agent: guard capability enabled");
-        set.spawn(acp_guard::agent::run(full));
+        set.spawn(crate::guard::agent::run(full));
     }
     // MCP proxy over HTTP (stdio mode is launched per-session by the agent host, not here)
     if let Some(addr) = flag(&rest, "--mcp") {
@@ -57,7 +61,7 @@ async fn run_multi(rest: Vec<String>) -> ExitCode {
         let mut full = vec!["acp-agent-mcp".to_string()];
         full.extend(expand_cp(a, &cp, &["--registry-url", "--firewall-url", "--report-url", "--evidence-url", "--approvals-url"]));
         eprintln!("acp-agent: mcp (http) capability enabled");
-        set.spawn(acp_proxy::agent::run(full));
+        set.spawn(crate::proxy::agent::run(full));
     }
 
     if set.is_empty() {
@@ -118,9 +122,9 @@ async fn dispatch(prog: &str, args: Vec<String>, cap: Cap) -> ExitCode {
     let mut full = vec![prog.to_string()];
     full.extend(args);
     match cap {
-        Cap::Firewall => acp_intercept::agent::run(full).await,
-        Cap::Mcp => acp_proxy::agent::run(full).await,
-        Cap::Guard => acp_guard::agent::run(full).await,
+        Cap::Firewall => crate::intercept::agent::run(full).await,
+        Cap::Mcp => crate::proxy::agent::run(full).await,
+        Cap::Guard => crate::guard::agent::run(full).await,
     }
 }
 
