@@ -81,6 +81,10 @@
     /* ---- uniform form controls (cards + modals) ---- */
     .card input, .card select, .card textarea, .modal input, .modal select, .modal textarea{width:100%;box-sizing:border-box;background:var(--panel2);color:var(--txt);border:1px solid var(--line2);border-radius:9px;padding:0 .75rem;height:38px;font-size:.9rem;font-family:inherit;transition:border-color .15s,box-shadow .15s}
     .card input:focus, .card select:focus, .card textarea:focus, .modal input:focus, .modal select:focus, .modal textarea:focus{outline:none;border-color:var(--accent);box-shadow:0 0 0 3px rgba(99,102,241,.25)}
+    /* checkboxes and radios must NOT inherit the full-width 38px text-input sizing above */
+    .card input[type=checkbox], .card input[type=radio], .modal input[type=checkbox], .modal input[type=radio]{width:auto;height:auto;flex:0 0 auto;margin:0;padding:0;accent-color:var(--accent)}
+    .chk{display:flex;align-items:flex-start;gap:.6rem;font-size:.85rem;line-height:1.4;color:var(--txt);font-weight:500;cursor:pointer;padding:.15rem 0}
+    .chk input{margin-top:.15rem}
     .card textarea, .modal textarea{height:auto;min-height:130px;padding:.7rem .75rem;font-family:ui-monospace,SFMono-Regular,Menlo,monospace;font-size:.85rem;line-height:1.55;resize:vertical}
     .card select option, .modal select option{background:var(--panel);color:var(--txt)}
     /* ---- fields, rows, status ---- */
@@ -106,6 +110,15 @@
     .rep-k{font-size:.68rem;text-transform:uppercase;letter-spacing:.07em;color:var(--muted)}
     .rep-v{font-size:1.9rem;font-weight:750;margin:.25rem 0 .1rem;letter-spacing:-.02em}
     .repcard .dim{font-size:.76rem}
+    /* ---- post-market summary blocks ---- */
+    .stat-n{font-size:1.9rem;font-weight:750;letter-spacing:-.02em;line-height:1.1}
+    .stat-l{font-size:.68rem;text-transform:uppercase;letter-spacing:.07em;color:var(--muted);margin-top:.2rem}
+    /* ---- regulator (framework) conformance report ---- */
+    .fwreport{display:flex;flex-direction:column;gap:1rem}
+    .fwreport-h{display:flex;align-items:center;justify-content:space-between;gap:1rem;flex-wrap:wrap}
+    .fwreport-h h2{font-size:1.05rem;font-weight:650;margin:0}
+    .fwreport-stats{display:flex;align-items:center;gap:.5rem;flex-wrap:wrap}
+    .fwreport-stats .badge{padding:.3rem .7rem;font-size:.74rem}
     #policy-editor{height:360px;width:100%;border:1px solid var(--line2);border-radius:10px;overflow:hidden}
     .polrow{display:flex;align-items:center;gap:.6rem;flex-wrap:wrap}
     @media print{.sidebar,.topbar{display:none}.app{display:block}.content{max-width:none}}
