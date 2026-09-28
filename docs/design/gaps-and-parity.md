@@ -97,7 +97,7 @@ median decision time, bulk-approval count, and a "weakness" badge; a threshold c
 - The thresholds (rate, latency, window) are configurable and the config change is itself audited.
 - The console card lists flagged approvers and refreshes over SSE.
 
-### G2. Least-privilege policy synthesis  (review #1, M, discounted)
+### G2. Least-privilege policy synthesis  (review #1, M, discounted)  [DONE 2026-09-28]
 
 **Design.** Extend the existing `acp learn` (which today emits a coarse review policy from shadow
 traffic) into minimal allow-only synthesis: from observed decisions, propose the smallest rule set that

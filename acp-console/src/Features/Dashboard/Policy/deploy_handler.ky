@@ -20,3 +20,17 @@ pub struct DeployHandler impl RouteHandler {
         return await ds_response.patch(deployResultPanel(res));
     }
 }
+
+// POST /policy/approve-suggestion (G2): the operator approves the least-privilege proposal. The console
+// fetches the current proposal from acp-server and deploys it via the signed policy-store path, so the
+// deployed policy is versioned and signed. The human click is the explicit approval.
+pub struct SuggestApproveHandler impl RouteHandler {
+    acp: AcpClient,
+    init(acp: AcpClient) { self.acp = acp; }
+
+    async fn serve(self: SuggestApproveHandler, ctx: Context): Response {
+        let auth = ctx.request.headers.get("authorization") ?? "";
+        let res = self.acp.approveSuggestion(auth);
+        return await ds_response.patch(suggestResultPanel(res));
+    }
+}

@@ -593,6 +593,30 @@ pub fn modelsPanel(rows: list.List<ModelRow>): Html {
     </div>;
 }
 
+pub fn suggestResultPanel(res: DeployResult): Html {
+    return <div id="suggestresult">
+        {if (res.ok) { <span class="badge ok">{res.message}</span> } else { <span class="badge bad">{res.message}</span> }}
+    </div>;
+}
+
+pub fn policySuggestPanel(info: SuggestInfo): Html {
+    return <div id="policysuggest">
+        {if (info.proposedRules == 0) {
+            <p class="empty">No observed traffic yet. Run agents through a PEP (shadow mode is ideal), then a least-privilege proposal appears here.</p>
+        } else {
+            <div>
+                <p class="hint">Synthesised from {`${info.observed}`} observed decisions: a default-deny policy with {`${info.proposedRules}`} rule(s) permitting exactly what was seen. {if (string.eql(info.wouldBlock, "")) { <span class="badge ok">blocks nothing observed</span> } else { <span class="badge bad">would block: {info.wouldBlock}</span> }}</p>
+                <pre class="mono" style="max-height:20rem;overflow:auto;background:var(--panel);padding:.8rem;border-radius:8px;white-space:pre-wrap">{info.proposed}</pre>
+                <div class="row" style="margin-top:.8rem;gap:.5rem">
+                    <button class="btn primary" data-on:click="@post('/policy/approve-suggestion')">Approve and deploy (signed)</button>
+                    <span class="dim" style="font-size:.8rem">deploys via the signed policy store; requires your PolicyAdmin identity</span>
+                </div>
+                <div id="suggestresult" style="margin-top:.6rem"></div>
+            </div>
+        }}
+    </div>;
+}
+
 pub fn oversightPanel(rows: list.List<OversightRow>): Html {
     return <div id="oversight">
         {if (rows.size() == 0) {

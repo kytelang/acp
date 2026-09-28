@@ -79,6 +79,16 @@ pub struct ModelRow {
     }
 }
 
+pub struct SuggestInfo {
+    pub proposed: string,
+    pub proposedRules: long,
+    pub observed: long,
+    pub wouldBlock: string,
+    init(proposed: string, proposedRules: long, observed: long, wouldBlock: string) {
+        self.proposed = proposed; self.proposedRules = proposedRules; self.observed = observed; self.wouldBlock = wouldBlock;
+    }
+}
+
 pub struct OversightRow {
     pub approver: string,
     pub flagged: bool,
@@ -900,6 +910,40 @@ pub struct AcpClient {
         return rows;
     }
 
+    // G2: the least-privilege policy proposal synthesised from observed traffic (EditPolicy read).
+    pub fn policySuggest(self: AcpClient): SuggestInfo {
+        let hdrs = client.Http.emptyHeaders();
+        hdrs.set("x-acp-tenant", self.tenant);
+        let tok = self.authToken("PolicyAdmin");
+        if (!string.eql(tok, "")) { hdrs.set("Authorization", "Bearer " + tok); }
+        let resp = client.Http.request("GET", self.base + "/policy/suggest", hdrs, "");
+        if (resp.status.toCode() != 200) { return SuggestInfo("", 0, 0, ""); }
+        let v = json.parse(resp.body);
+        let wbArr = json.asArray(json.get(v, "would_block"));
+        let wb = "";
+        if (wbArr != undefined) {
+            let i = 0;
+            while (i < wbArr.size()) {
+                let t = json.asString(json.at(json.get(v, "would_block"), i)) ?? "";
+                if (!string.eql(t, "")) { if (string.eql(wb, "")) { wb = t; } else { wb = wb + ", " + t; } }
+                i = i + 1;
+            }
+        }
+        return SuggestInfo(
+            json.asString(json.get(v, "proposed")) ?? "",
+            json.asNumber(json.get(v, "proposed_rules")) ?? 0,
+            json.asNumber(json.get(v, "observed_decisions")) ?? 0,
+            wb);
+    }
+
+    // G2: approve the current proposal: fetch it and deploy it via the signed policy-store path.
+    pub fn approveSuggestion(self: AcpClient, userAuth: string): DeployResult {
+        let info = self.policySuggest();
+        if (string.eql(info.proposed, "")) { return DeployResult(false, "no proposal available (no observed traffic yet)"); }
+        let body = "{\"policy\":" + self.jstr(info.proposed) + ",\"author\":\"console-approved\"}";
+        return self.deployRaw(body, userAuth);
+    }
+
     // G1: oversight-quality profile of each approver (EU AI Act Art. 14). Export-gated read.
     pub fn oversightRows(self: AcpClient): list.List<OversightRow> {
         let rows = list.List<OversightRow>();
@@ -1310,7 +1354,10 @@ pub struct AcpClient {
     fn jstr(self: AcpClient, s: string): string {
         let a = string.replace(s, "\\", "\\\\");
         let b = string.replace(a, "\"", "\\\"");
-        return "\"" + b + "\"";
+        let c = string.replace(b, "\n", "\\n");
+        let d = string.replace(c, "\r", "\\r");
+        let e = string.replace(d, "\t", "\\t");
+        return "\"" + e + "\"";
     }
 
     fn postJson(self: AcpClient, route: string, body: string, role: string, userAuth: string): DeployResult {

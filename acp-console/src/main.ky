@@ -36,6 +36,7 @@ fn buildApp(): App {
     app.post("/approve/{id}", ResolveHandler(acp, srv, true));
     app.post("/deny/{id}", ResolveHandler(acp, srv, false));
     app.post("/policy/deploy", DeployHandler(acp));
+    app.post("/policy/approve-suggestion", SuggestApproveHandler(acp));
     app.post("/kill/engage", KillHandler(acp, true));
     app.post("/kill/clear", KillHandler(acp, false));
     app.post("/endpoints/register", RegisterEndpointHandler(acp));

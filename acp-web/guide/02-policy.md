@@ -100,6 +100,23 @@ tools that would newly block under default-deny, and tells you whether it is saf
 says READY and you have added explicit allow rules for the would-block set, switch `default` to
 `deny`.
 
+## Least-privilege policy from observed traffic
+
+You do not have to write the allow-list by hand. Once agents have run through a PEP (shadow mode is
+ideal), ACP can synthesise the smallest default-deny policy that permits exactly what was observed and
+denies everything else.
+
+In the console, open **Policy**. The **Suggested least-privilege policy** card shows the proposal
+synthesised from the observed decisions: a default-deny policy with one rule per tool that was allowed
+(or held for step-up), a would-block check confirming it blocks nothing that was actually allowed, and
+an **Approve and deploy** button. Approving deploys the proposal through the signed policy store, so the
+policy that goes live is versioned and signed, and the approval is your PolicyAdmin identity. Review the
+proposal before approving: it is a starting point, and you can tighten it further in the editor.
+
+> API (for automation and CI): `acp learn <ledger.db> --least-privilege` prints the same synthesised
+> policy from a local ledger, and `GET /policy/suggest` returns it (with the would-block check) from the
+> control plane. Deploy it with `POST /policy-store/deploy`, which signs and versions it.
+
 ## Compiling, testing and deploying
 
 ```sh
