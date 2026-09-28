@@ -1071,6 +1071,15 @@ async fn main() {
         .route("/oversight", get(oversight_get))
         .route("/oversight/config", post(oversight_config_post))
         .route("/oversight/scan", post(oversight_scan))
+        .route("/policy/author", post(policy_author))
+        .route("/models/:id/fairness", post(model_fairness))
+        .route("/trust", get(trust_summary))
+        .route("/audit/pack", get(audit_pack))
+        .route("/incident/promote", post(incident_promote))
+        .route("/memory/write", post(memory_write))
+        .route("/retrieval/check", post(retrieval_check))
+        .route("/delegation/verify", post(delegation_verify))
+        .route("/credential/stamp", post(credential_stamp))
         .route("/grc/assess", post(grc_assess))
         .route("/grc/risk", post(grc_risk))
         .route("/grc/model-card", post(grc_model_card))
@@ -1891,7 +1900,7 @@ async fn agent_deactivate(State(st): State<Arc<AppState>>, headers: HeaderMap, P
     }
 }
 
-const GRC_KINDS: &[&str] = &["assessment", "conformity", "risk", "model-card", "use-case", "attestation", "aibom", "fria"];
+const GRC_KINDS: &[&str] = &["assessment", "conformity", "risk", "model-card", "use-case", "attestation", "aibom", "fria", "incident"];
 
 /// G1: load the per-tenant oversight thresholds from control_state, or the defaults.
 async fn load_oversight_config(st: &Arc<AppState>, tenant: &str) -> acp_core::oversight::OversightConfig {
@@ -2031,6 +2040,171 @@ async fn policy_suggest(State(st): State<Arc<AppState>>, headers: HeaderMap) -> 
         "proposed_rules": proposed_rules,
         "would_block": would_block,
     })).into_response()
+}
+
+/// G3: POST /policy/author {text, tests?[{tool,principal}]} -> best-effort DSL draft + the verification
+/// matrix (allow/deny per test request through the real engine). Deploy remains a separate, signed step.
+async fn policy_author(State(st): State<Arc<AppState>>, headers: HeaderMap, Json(body): Json<serde_json::Value>) -> Response {
+    if let Err(r) = authorize(&st.auth, &headers, acp_core::auth::Capability::EditPolicy) { return r; }
+    let text = body.get("text").and_then(|v| v.as_str()).unwrap_or("");
+    let draft = match acp_core::policy::author::draft_from_text(text) {
+        Some(d) => d,
+        None => return Json(serde_json::json!({"ok": false, "error": "could not draft from that description; rephrase or use the editor", "draft": ""})).into_response(),
+    };
+    let reqs: Vec<acp_core::policy::author::TestRequest> = body.get("tests").and_then(|v| v.as_array()).map(|a| a.iter().filter_map(|t| {
+        Some(acp_core::policy::author::TestRequest { tool: t.get("tool")?.as_str()?.to_string(), principal: t.get("principal").and_then(|p| p.as_str()).unwrap_or("").to_string() })
+    }).collect()).unwrap_or_default();
+    match acp_core::policy::author::verify_matrix(&draft, &reqs) {
+        Ok(matrix) => Json(serde_json::json!({"ok": true, "draft": draft, "matrix": matrix})).into_response(),
+        Err(e) => Json(serde_json::json!({"ok": false, "error": e, "draft": draft})).into_response(),
+    }
+}
+
+/// G15: POST /models/:id/fairness {rows:[{group,predicted_positive,actual_positive}]} -> fairness report,
+/// stored as a signed GRC record linked to the model.
+async fn model_fairness(State(st): State<Arc<AppState>>, headers: HeaderMap, Path(id): Path<String>, Json(body): Json<serde_json::Value>) -> Response {
+    let principal = match authorize(&st.auth, &headers, acp_core::auth::Capability::EditGrc) { Ok(p) => p, Err(r) => return r };
+    let store = match &st.store { Some(s) => s, None => return Json(serde_json::json!({"ok": false, "error": "no --store configured"})).into_response() };
+    let rows: Vec<acp_core::fairness::EvalRow> = body.get("rows").and_then(|v| v.as_array()).map(|a| a.iter().filter_map(|r| {
+        Some(acp_core::fairness::EvalRow { group: r.get("group")?.as_str()?.to_string(),
+            predicted_positive: r.get("predicted_positive").and_then(|v| v.as_bool()).unwrap_or(false),
+            actual_positive: r.get("actual_positive").and_then(|v| v.as_bool()).unwrap_or(false) })
+    }).collect()).unwrap_or_default();
+    if rows.is_empty() { return Json(serde_json::json!({"ok": false, "error": "rows required"})).into_response(); }
+    let report = acp_core::fairness::evaluate(&rows);
+    let doc_body = serde_json::to_string(&report).unwrap_or_default();
+    let operator = actor_of(&principal);
+    let tenant = tenant_of(&headers, &principal);
+    let gid = format!("grc-{}", rand_hex(6));
+    let title = format!("Fairness test: {id}");
+    let doc = grc_doc(&gid, "attestation", &id, &title, "tested", &doc_body);
+    let signer = tenant_signer(&st.cp_key, &tenant);
+    let sig = acp_core::sign::Signer::sign(&signer, &acp_core::canonical::canonical_bytes(&doc));
+    let refs = serde_json::json!([id]).to_string();
+    match store.add_grc(&gid, "attestation", &id, &title, "tested", &doc_body, &operator, now_ms() as i64, &hex::encode(acp_core::sign::Signer::public_key(&signer)), &hex::encode(sig), &refs, "{}", "", 0, "tested", &tenant).await {
+        Ok(()) => Json(serde_json::json!({"ok": true, "id": gid, "report": report})).into_response(),
+        Err(e) => Json(serde_json::json!({"ok": false, "error": e})).into_response(),
+    }
+}
+
+/// G19: GET /trust -> a signed, public summary of the controls in force, verifiable with the pubkey.
+async fn trust_summary(State(st): State<Arc<AppState>>) -> Response {
+    let packs = match &st.store { Some(s) => s.list_packs().await.map(|p| p.len()).unwrap_or(0), None => 0 };
+    let body = serde_json::json!({
+        "product": "Varman (ACP)",
+        "generated_ms": now_ms(),
+        "controls": {
+            "resource_boundary_authorization": st.policy.is_some(),
+            "rbac": st.auth.is_some(),
+            "tamper_evident_evidence": st.ledger.is_some(),
+            "content_firewall": true,
+            "high_availability": st.node_id.len() > 0,
+            "control_packs_loaded": packs,
+        },
+        "verify": "acp verify-pack against the published evidence pack, public key only",
+    });
+    let signer = enroll_signer(&st.cp_key);
+    let sig = acp_core::sign::Signer::sign(&signer, &acp_core::canonical::canonical_bytes(&body));
+    Json(serde_json::json!({"summary": body, "pubkey_hex": hex::encode(acp_core::sign::Signer::public_key(&signer)), "sig_hex": hex::encode(sig)})).into_response()
+}
+
+/// G18: GET /audit/pack?from=<ms>&to=<ms> -> a signed evidence pack for a window, downloadable and
+/// verifiable with the public key alone. Auditor scope (Export).
+async fn audit_pack(State(st): State<Arc<AppState>>, headers: HeaderMap, axum::extract::Query(q): axum::extract::Query<std::collections::HashMap<String, String>>) -> Response {
+    if let Err(r) = authorize(&st.auth, &headers, acp_core::auth::Capability::Export) { return r; }
+    let store = match &st.store { Some(s) => s, None => return Json(serde_json::json!({"ok": false, "error": "no --store configured"})).into_response() };
+    let from: i64 = q.get("from").and_then(|v| v.parse().ok()).unwrap_or(0);
+    let to: i64 = q.get("to").and_then(|v| v.parse().ok()).unwrap_or(i64::MAX);
+    let recs = store.list_ingested(10000).await.unwrap_or_default();
+    let window: Vec<serde_json::Value> = recs.iter().filter(|r| r.created_ms >= from && r.created_ms <= to)
+        .map(|r| serde_json::json!({"decision_id": r.decision_id, "verdict": r.verdict, "record": r.record, "created_ms": r.created_ms})).collect();
+    let body = serde_json::json!({"pack": "audit-window", "from_ms": from, "to_ms": to, "count": window.len(), "records": window});
+    let signer = enroll_signer(&st.cp_key);
+    let sig = acp_core::sign::Signer::sign(&signer, &acp_core::canonical::canonical_bytes(&body));
+    Json(serde_json::json!({"body": body, "pubkey_hex": hex::encode(acp_core::sign::Signer::public_key(&signer)), "sig_hex": hex::encode(sig)})).into_response()
+}
+
+/// G5: POST /incident/promote {subject, title, deadline_ms?} -> open a signed incident case (a GRC
+/// record of kind "incident") with a reporting deadline (EU AI Act Art. 73).
+async fn incident_promote(State(st): State<Arc<AppState>>, headers: HeaderMap, Json(body): Json<serde_json::Value>) -> Response {
+    let principal = match authorize(&st.auth, &headers, acp_core::auth::Capability::EditGrc) { Ok(p) => p, Err(r) => return r };
+    let store = match &st.store { Some(s) => s, None => return Json(serde_json::json!({"ok": false, "error": "no --store configured"})).into_response() };
+    let subject = body.get("subject").and_then(|v| v.as_str()).unwrap_or("").trim().to_string();
+    if subject.is_empty() { return Json(serde_json::json!({"ok": false, "error": "subject is required"})).into_response(); }
+    let title = body.get("title").and_then(|v| v.as_str()).unwrap_or("Serious incident").to_string();
+    let now = now_ms();
+    // EU AI Act Art. 73: initial report deadline; default 15 days.
+    let due = body.get("deadline_ms").and_then(|v| v.as_i64()).unwrap_or(now as i64 + 15 * 86_400_000);
+    let doc_body = serde_json::json!({"kind": "incident", "opened_ms": now, "deadline_ms": due, "source": body.get("source").cloned().unwrap_or(serde_json::Value::Null)}).to_string();
+    let operator = actor_of(&principal);
+    let tenant = tenant_of(&headers, &principal);
+    let gid = format!("grc-{}", rand_hex(6));
+    let doc = grc_doc(&gid, "incident", &subject, &title, "detected", &doc_body);
+    let signer = tenant_signer(&st.cp_key, &tenant);
+    let sig = acp_core::sign::Signer::sign(&signer, &acp_core::canonical::canonical_bytes(&doc));
+    match store.add_grc(&gid, "incident", &subject, &title, "detected", &doc_body, &operator, now as i64, &hex::encode(acp_core::sign::Signer::public_key(&signer)), &hex::encode(sig), "[]", "{}", "", due, "detected", &tenant).await {
+        Ok(()) => Json(serde_json::json!({"ok": true, "id": gid, "deadline_ms": due})).into_response(),
+        Err(e) => Json(serde_json::json!({"ok": false, "error": e})).into_response(),
+    }
+}
+
+/// G9: POST /memory/write {content, store_id?} -> scan content the agent wants to persist; block/flag
+/// planted instructions, and record the write for later incident tracing. Gated by the report token.
+async fn memory_write(State(st): State<Arc<AppState>>, headers: HeaderMap, Json(body): Json<serde_json::Value>) -> Response {
+    if let Err(r) = authorize_report(&st, &headers) { return r; }
+    let content = body.get("content").and_then(|v| v.as_str()).unwrap_or("");
+    let policy = acp_core::content::ContentPolicy::default();
+    let cv = acp_core::content::scan_with_ml(&policy, content, None);
+    let kinds: Vec<String> = cv.findings.iter().map(|f| f.kind.clone()).collect();
+    // Record the write (blocked or allowed) in the fleet-evidence store for traceability.
+    if let Some(store) = &st.store {
+        let did = format!("mem-{}", rand_hex(8));
+        let rec = serde_json::json!({"type": "memory-write", "blocked": cv.block, "kinds": kinds, "store_id": body.get("store_id").cloned().unwrap_or(serde_json::Value::Null), "ts_ms": now_ms()});
+        let signer = enroll_signer(&st.cp_key);
+        let sig = acp_core::sign::Signer::sign(&signer, &acp_core::canonical::canonical_bytes(&rec));
+        let _ = store.add_ingested(&did, "memory", "memory-write", if cv.block {"deny"} else {"allow"}, &rec.to_string(), "control-plane", now_ms() as i64, &hex::encode(acp_core::sign::Signer::public_key(&signer)), &hex::encode(sig)).await;
+    }
+    Json(serde_json::json!({"ok": true, "blocked": cv.block, "findings": kinds})).into_response()
+}
+
+/// G7: POST /retrieval/check {principal, groups, docs:[{doc_id,allow_principals,allow_groups}]} -> which
+/// docs the principal may read and which are filtered (permission-aware retrieval).
+async fn retrieval_check(State(_st): State<Arc<AppState>>, Json(body): Json<serde_json::Value>) -> Response {
+    let principal = body.get("principal").and_then(|v| v.as_str()).unwrap_or("");
+    let groups: Vec<String> = body.get("groups").and_then(|v| v.as_array()).map(|a| a.iter().filter_map(|x| x.as_str().map(String::from)).collect()).unwrap_or_default();
+    let docs: Vec<acp_core::retrieval::DocAcl> = body.get("docs").and_then(|v| serde_json::from_value(v.clone()).ok()).unwrap_or_default();
+    let (visible, filtered) = acp_core::retrieval::filter(principal, &groups, &docs);
+    Json(serde_json::json!({"ok": true, "visible": visible.iter().map(|d| d.doc_id.clone()).collect::<Vec<_>>(), "filtered": filtered})).into_response()
+}
+
+/// G8: POST /delegation/verify {chain:[{actor,scopes}], scope?} -> the effective scopes of a delegation
+/// chain (and whether it permits a given scope), enforcing monotonic narrowing.
+async fn delegation_verify(State(_st): State<Arc<AppState>>, Json(body): Json<serde_json::Value>) -> Response {
+    let hops: Vec<acp_core::registry::chain::Hop> = body.get("chain").and_then(|v| v.as_array()).map(|a| a.iter().filter_map(|h| {
+        let actor = h.get("actor")?.as_str()?.to_string();
+        let scopes: Vec<String> = h.get("scopes").and_then(|s| s.as_array()).map(|x| x.iter().filter_map(|v| v.as_str().map(String::from)).collect()).unwrap_or_default();
+        Some(acp_core::registry::chain::Hop { actor, scopes: scopes.into_iter().collect() })
+    }).collect()).unwrap_or_default();
+    match acp_core::registry::chain::effective_scopes(&hops) {
+        Ok(eff) => {
+            let permits = body.get("scope").and_then(|v| v.as_str()).map(|sc| eff.contains(sc));
+            Json(serde_json::json!({"ok": true, "effective_scopes": eff.into_iter().collect::<Vec<_>>(), "permits": permits})).into_response()
+        }
+        Err(e) => Json(serde_json::json!({"ok": false, "error": format!("{e:?}")})).into_response(),
+    }
+}
+
+/// G11: POST /credential/stamp {content_b64, model, disclosure} -> a signed content credential.
+async fn credential_stamp(State(st): State<Arc<AppState>>, headers: HeaderMap, Json(body): Json<serde_json::Value>) -> Response {
+    if let Err(r) = authorize(&st.auth, &headers, acp_core::auth::Capability::EditGrc) { return r; }
+    let content_b64 = body.get("content_b64").and_then(|v| v.as_str()).unwrap_or("");
+    use base64::Engine;
+    let content = base64::engine::general_purpose::STANDARD.decode(content_b64).unwrap_or_default();
+    let model = body.get("model").and_then(|v| v.as_str()).unwrap_or("");
+    let disclosure = body.get("disclosure").and_then(|v| v.as_str()).unwrap_or("This content was generated by AI.");
+    let signer = enroll_signer(&st.cp_key);
+    let cred = acp_core::credential::stamp(&content, model, disclosure, now_ms(), &signer);
+    Json(serde_json::json!({"ok": true, "credential": cred})).into_response()
 }
 
 fn grc_doc(id: &str, kind: &str, subject: &str, title: &str, status: &str, body: &str) -> serde_json::Value {
