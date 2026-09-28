@@ -593,6 +593,18 @@ pub fn modelsPanel(rows: list.List<ModelRow>): Html {
     </div>;
 }
 
+pub fn postMarketPanel(pm: PostMarket): Html {
+    return <div id="postmarket">
+        <div class="row" style="gap:1.5rem;flex-wrap:wrap">
+            <div><div class="stat-n">{`${pm.totalEvents}`}</div><div class="stat-l">events</div></div>
+            <div><div class="stat-n">{`${pm.blocks}`}</div><div class="stat-l">blocks</div></div>
+            <div><div class="stat-n">{`${pm.driftClasses}`}</div><div class="stat-l">drift classes</div></div>
+            <div><div class="stat-n">{pm.redteam}</div><div class="stat-l">red-team</div></div>
+        </div>
+        <p class="hint" style="margin-top:.6rem">Assembled from runtime evidence, not a questionnaire. Snapshot to store a signed copy.</p>
+    </div>;
+}
+
 pub fn suggestResultPanel(res: DeployResult): Html {
     return <div id="suggestresult">
         {if (res.ok) { <span class="badge ok">{res.message}</span> } else { <span class="badge bad">{res.message}</span> }}

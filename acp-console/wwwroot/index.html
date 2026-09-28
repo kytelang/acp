@@ -180,6 +180,10 @@
             <div class="card-b"><div id="oversight"><p class="empty">connecting to acp-server&#8230;</p></div></div></div>
         </section>
         <section class="view" data-show="$view === 'reports'">
+          <div class="card"><div class="card-h"><span class="ic">&#128200;</span> Post-market monitoring<span class="sub">EU AI Act Art. 72: assembled from runtime violations, drift and red-team evidence. Snapshot to sign it.</span></div>
+            <div class="card-b"><div id="postmarket"><p class="empty">connecting to acp-server&#8230;</p></div>
+              <div style="margin-top:.8rem"><button class="btn" data-on:click="@post('/report/post-market/snapshot')">Snapshot (signed)</button></div>
+            </div></div>
           <div class="card"><div class="card-h"><span class="ic">&#128203;</span> Governance report<span class="sub">every figure re-derivable from the signed ledger</span></div>
             <div class="card-b">
               <div id="reports"><p class="empty">connecting to acp-server&#8230;</p></div>
@@ -474,6 +478,7 @@ rules:
             <option value="use-case">use-case</option>
             <option value="attestation">attestation</option>
             <option value="aibom">aibom</option>
+            <option value="fria">fria (fundamental-rights impact)</option>
           </select>
         </label>
         <label class="fld">Subject<span class="req">*</span> <input type="text" data-bind="grcSubject" placeholder="checkout-agent" /></label>

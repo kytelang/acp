@@ -1037,6 +1037,9 @@ async fn main() {
         .route("/report/framework/:name/csv", get(report_framework_csv))
         .route("/report/framework/:name/snapshot", post(report_framework_snapshot))
         .route("/report/framework/:name/history", get(report_framework_history))
+        .route("/report/post-market", get(report_post_market))
+        .route("/report/post-market/snapshot", post(report_post_market_snapshot))
+        .route("/report/post-market/history", get(report_post_market_history))
         .route("/report/violations.csv", get(report_violations_csv))
         .route("/evidence/ingest", post(evidence_ingest))
         .route("/evidence/ingested", get(evidence_ingested))
@@ -1888,7 +1891,7 @@ async fn agent_deactivate(State(st): State<Arc<AppState>>, headers: HeaderMap, P
     }
 }
 
-const GRC_KINDS: &[&str] = &["assessment", "conformity", "risk", "model-card", "use-case", "attestation", "aibom"];
+const GRC_KINDS: &[&str] = &["assessment", "conformity", "risk", "model-card", "use-case", "attestation", "aibom", "fria"];
 
 /// G1: load the per-tenant oversight thresholds from control_state, or the defaults.
 async fn load_oversight_config(st: &Arc<AppState>, tenant: &str) -> acp_core::oversight::OversightConfig {
@@ -3049,6 +3052,70 @@ fn tally(map: &std::collections::HashMap<String, usize>) -> Vec<serde_json::Valu
 /// A6: build the framework-level report for a regulator: for each control in the framework, its
 /// status derived from GRC checklists, the linked-evidence verification counts, the breach summary,
 /// and a coverage figure. Returns structured JSON.
+/// G4: assemble the post-market monitoring report (EU AI Act Art. 72) purely from runtime data the
+/// control plane already holds: violation/block events, classifier drift, and red-team outcomes. No
+/// manual entry. Signed with the tenant key so a snapshot is verifiable evidence.
+async fn post_market_report_value(st: &Arc<AppState>, tenant: &str) -> serde_json::Value {
+    let store = match &st.store { Some(s) => s, None => return serde_json::json!({"error": "no --store configured"}) };
+    let violations = store.list_violations(1000).await.unwrap_or_default();
+    let blocks = violations.iter().filter(|v| v.verdict == "deny" || v.outcome == "block").count();
+    let drift = store.list_drift().await.unwrap_or_default();
+    let drift_summary: Vec<serde_json::Value> = drift.iter().map(|(class, hits, total, rate)| {
+        serde_json::json!({"class": class, "hits": hits, "total": total, "hit_rate": rate})
+    }).collect();
+    // Latest red-team outcome from the signed GRC attestations.
+    let mut redteam: Option<serde_json::Value> = None;
+    if let Ok(recs) = store.list_grc(tenant, None).await {
+        for r in recs.iter().filter(|r| r.kind == "attestation" && r.subject == "content-firewall") {
+            if let Ok(b) = serde_json::from_str::<serde_json::Value>(&r.body) {
+                redteam = Some(serde_json::json!({"status": r.status, "catch_rate": b.get("catch_rate")}));
+                break;
+            }
+        }
+    }
+    serde_json::json!({
+        "report": "post-market-monitoring",
+        "framework": "eu-ai-act-art-72",
+        "generated_ms": now_ms(),
+        "tenant": tenant,
+        "total_events": violations.len(),
+        "blocks": blocks,
+        "drift": drift_summary,
+        "redteam": redteam,
+        "method": "assembled from runtime violation/block, classifier drift and red-team evidence; no manual entry",
+    })
+}
+
+async fn report_post_market(State(st): State<Arc<AppState>>, headers: HeaderMap) -> Response {
+    if let Err(r) = authorize(&st.auth, &headers, acp_core::auth::Capability::Export) { return r; }
+    let tenant = tenant_of(&headers, &None);
+    Json(post_market_report_value(&st, &tenant).await).into_response()
+}
+
+async fn report_post_market_snapshot(State(st): State<Arc<AppState>>, headers: HeaderMap) -> Response {
+    if let Err(r) = authorize(&st.auth, &headers, acp_core::auth::Capability::Export) { return r; }
+    let store = match &st.store { Some(s) => s, None => return Json(serde_json::json!({"ok": false, "error": "no --store configured"})).into_response() };
+    let tenant = tenant_of(&headers, &None);
+    let body = post_market_report_value(&st, &tenant).await;
+    let signer = tenant_signer(&st.cp_key, &tenant);
+    let sig = acp_core::sign::Signer::sign(&signer, &acp_core::canonical::canonical_bytes(&body));
+    let signed = serde_json::json!({"body": body, "pubkey_hex": hex::encode(acp_core::sign::Signer::public_key(&signer)), "sig_hex": hex::encode(sig)});
+    let id = format!("pms-{}", rand_hex(6));
+    match store.add_snapshot(&id, "post-market", &tenant, &signed.to_string(), now_ms() as i64).await {
+        Ok(()) => Json(serde_json::json!({"ok": true, "id": id})).into_response(),
+        Err(e) => Json(serde_json::json!({"ok": false, "error": e})).into_response(),
+    }
+}
+
+async fn report_post_market_history(State(st): State<Arc<AppState>>, headers: HeaderMap) -> Response {
+    let tenant = tenant_of(&headers, &None);
+    let store = match &st.store { Some(s) => s, None => return Json(serde_json::json!({"snapshots": []})).into_response() };
+    match store.list_snapshots("post-market", &tenant).await {
+        Ok(rows) => Json(serde_json::json!({"snapshots": rows.iter().map(|(id, ts, _)| serde_json::json!({"id": id, "created_ms": ts})).collect::<Vec<_>>()})).into_response(),
+        Err(e) => Json(serde_json::json!({"snapshots": [], "error": e})).into_response(),
+    }
+}
+
 async fn framework_report_value(st: &Arc<AppState>, tenant: &str, name: &str) -> serde_json::Value {
     let store = match &st.store { Some(s) => s, None => return serde_json::json!({"error": "no --store configured"}) };
     // 1. Controls for the framework (loaded packs, else built-in).

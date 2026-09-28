@@ -79,6 +79,16 @@ pub struct ModelRow {
     }
 }
 
+pub struct PostMarket {
+    pub totalEvents: long,
+    pub blocks: long,
+    pub driftClasses: long,
+    pub redteam: string,
+    init(totalEvents: long, blocks: long, driftClasses: long, redteam: string) {
+        self.totalEvents = totalEvents; self.blocks = blocks; self.driftClasses = driftClasses; self.redteam = redteam;
+    }
+}
+
 pub struct SuggestInfo {
     pub proposed: string,
     pub proposedRules: long,
@@ -908,6 +918,28 @@ pub struct AcpClient {
             i = i + 1;
         }
         return rows;
+    }
+
+    // G4: post-market monitoring summary (EU AI Act Art. 72), Export-gated.
+    pub fn postMarket(self: AcpClient): PostMarket {
+        let hdrs = client.Http.emptyHeaders();
+        hdrs.set("x-acp-tenant", self.tenant);
+        let tok = self.authToken("Auditor");
+        if (!string.eql(tok, "")) { hdrs.set("Authorization", "Bearer " + tok); }
+        let resp = client.Http.request("GET", self.base + "/report/post-market", hdrs, "");
+        if (resp.status.toCode() != 200) { return PostMarket(0, 0, 0, ""); }
+        let v = json.parse(resp.body);
+        let rt = json.get(v, "redteam");
+        let rtStatus = "not run";
+        if (json.asString(json.get(rt, "status")) != undefined) { rtStatus = json.asString(json.get(rt, "status")) ?? "not run"; }
+        let drift = json.asArray(json.get(v, "drift"));
+        let dc = 0;
+        if (drift != undefined) { dc = drift.size(); }
+        return PostMarket(
+            json.asNumber(json.get(v, "total_events")) ?? 0,
+            json.asNumber(json.get(v, "blocks")) ?? 0,
+            dc,
+            rtStatus);
     }
 
     // G2: the least-privilege policy proposal synthesised from observed traffic (EditPolicy read).

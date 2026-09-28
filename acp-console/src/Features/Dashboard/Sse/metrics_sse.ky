@@ -79,6 +79,7 @@ pub class MetricsSse impl SseHandler {
             if (w24 < 0) { alive = false; }
             let w25 = await ds.patchElementsSimple(lineagePanel(sc.lineageRows()));
             if (w25 < 0) { alive = false; }
+            let w26d = await ds.patchElementsSimple(postMarketPanel(sc.postMarket()));
             let w26c = await ds.patchElementsSimple(policySuggestPanel(sc.policySuggest()));
             let w26b = await ds.patchElementsSimple(oversightPanel(sc.oversightRows()));
             let w26 = await ds.patchElementsSimple(tenantSwitcher(sc.tenantsList(), sc.tenant));

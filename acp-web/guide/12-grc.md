@@ -187,6 +187,19 @@ The signed control packs now cover seven frameworks: EU AI Act, NIST AI RMF, ISO
 GDPR, India DPDP Act and the UK AI principles. Each is a signed, versioned data pack, verified before
 it loads.
 
+## Post-market monitoring (EU AI Act Art. 72)
+
+The **Reports** page carries a Post-market monitoring card assembled entirely from runtime evidence:
+the count of governed events, blocks, classifier drift and the latest red-team outcome. Nothing is
+typed in. Snapshot it to store a signed copy with history, the same as the framework reports. This is
+where runtime evidence beats a questionnaire most clearly.
+
+A **fundamental-rights impact assessment (Art. 27)** is a governance record kind (`fria`): create it
+from the Governance page like any other record, link it to the use-case, and it feeds the framework
+report and coverage.
+
+> API: `GET /report/post-market`, `POST /report/post-market/snapshot`, `GET /report/post-market/history`.
+
 ## Oversight-quality monitoring
 
 Human oversight has to be effective, not just present (EU AI Act Article 14). Because the control plane
