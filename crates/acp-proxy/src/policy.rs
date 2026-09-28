@@ -6,7 +6,7 @@
 
 use acp_core::types::Verdict;
 use acp_jsonrpc::ToolCall;
-use acp_policy::{valid_tool, PolicyEngine};
+use acp_core::policy::{valid_tool, PolicyEngine};
 use serde_json::{json, Value};
 
 /// What the proxy should do with a gated tool call.
@@ -41,7 +41,7 @@ fn approval_required(id: &Value, rule: &str) -> String {
 
 use acp_core::impact::ImpactTaxonomy;
 use acp_core::resource::ResourceTaxonomy;
-use acp_policy::{build_context_identified_full, PolicyOutcome};
+use acp_core::policy::{build_context_identified_full, PolicyOutcome};
 
 /// The full assessment of a tool call: the proxy action plus the fields needed to build an
 /// evidence record (M3). `gated` is true for deny/step_up (which must fail closed on a write

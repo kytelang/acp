@@ -6,7 +6,7 @@
 use acp_core::modelclass::ModelTaxonomy;
 use acp_core::types::Verdict;
 use acp_gateway::decide;
-use acp_policy::PolicyEngine;
+use acp_core::policy::PolicyEngine;
 use axum::{
     body::Bytes,
     extract::State,
@@ -508,7 +508,7 @@ async fn handle(
         Verdict::Allow | Verdict::Shadow => {
             // Obligations (model v2, D4) on the gateway: a rate_limit acts as a per-(app, model-class)
             // token/cost budget and denies once spent; a confirm routes to step-up. Deny-overrides.
-            use acp_policy::dsl::ObligationKind;
+            use acp_core::policy::dsl::ObligationKind;
             let (mut over_budget, mut needs_confirm) = (false, false);
             for ob in &d.obligations {
                 match ob.kind {

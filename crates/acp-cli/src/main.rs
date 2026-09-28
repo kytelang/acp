@@ -1,7 +1,7 @@
 //! acp: the single CLI (init, verify, export, policy-compile, policy-test).
 
 mod nativecompile;
-use acp_policy::{build_context, PolicyEngine};
+use acp_core::policy::{build_context, PolicyEngine};
 use serde_json::Value;
 use std::process::ExitCode;
 
@@ -131,18 +131,18 @@ fn policy_compile(path: &str) -> ExitCode {
             return ExitCode::from(1);
         }
     };
-    let policy = match acp_policy::parse_str(&src) {
+    let policy = match acp_core::policy::parse_str(&src) {
         Ok(p) => p,
         Err(e) => {
             eprintln!("acp: invalid policy {path}: {e}");
             return ExitCode::from(1);
         }
     };
-    if let Err(e) = acp_policy::validate(&policy) {
+    if let Err(e) = acp_core::policy::validate(&policy) {
         eprintln!("acp: invalid policy {path}: {e}");
         return ExitCode::from(1);
     }
-    print!("{}", acp_policy::compile_to_cedar(&policy));
+    print!("{}", acp_core::policy::compile_to_cedar(&policy));
     ExitCode::SUCCESS
 }
 
@@ -2117,7 +2117,7 @@ fn cmd_native_compile(rest: &[String]) -> ExitCode {
         Ok(s) => s,
         Err(e) => { eprintln!("acp: cannot read {file}: {e}"); return ExitCode::from(1); }
     };
-    let policy = match acp_policy::parse_str(&src) {
+    let policy = match acp_core::policy::parse_str(&src) {
         Ok(p) => p,
         Err(e) => { eprintln!("acp: invalid policy: {e}"); return ExitCode::from(1); }
     };
@@ -2304,14 +2304,14 @@ fn cmd_policy(rest: &[String]) -> ExitCode {
                 Ok(b) if b.len() == 32 => { let mut s=[0u8;32]; s.copy_from_slice(&b); Ed25519Signer::from_seed(&s) }
                 _ => { let s = Ed25519Signer::generate(); if acp_core::secret::write_key_secure(keyf, &s.seed()).is_err() { eprintln!("acp: cannot write key {keyf}"); return ExitCode::from(1); } s }
             };
-            match acp_policy::store::deploy(&src, store, &signer, "cli") {
+            match acp_core::policy::store::deploy(&src, store, &signer, "cli") {
                 Ok(d) => { println!("deployed policy v{} (hash {}...) to {store}", d.version, &d.hash[..12.min(d.hash.len())]); ExitCode::SUCCESS }
                 Err(e) => { eprintln!("acp: deploy rejected: {e}"); ExitCode::from(1) }
             }
         }
         Some("current") => {
             let Some(store) = rest.get(1) else { return usage("acp policy current <store-dir>"); };
-            match acp_policy::store::current_info(store) {
+            match acp_core::policy::store::current_info(store) {
                 Ok(v) => { println!("{}", serde_json::to_string_pretty(&v).unwrap()); ExitCode::SUCCESS }
                 Err(e) => { eprintln!("acp: {e}"); ExitCode::from(1) }
             }

@@ -18,7 +18,6 @@ version = "0.0.0"
 dependencies = [
  "acp-core",
  "acp-ledger",
- "acp-policy",
  "hex",
  "serde_json",
  "serde_yaml",
@@ -29,6 +28,7 @@ name = "acp-core"
 version = "0.0.0"
 dependencies = [
  "base64 0.22.1",
+ "cedar-policy",
  "ed25519-dalek",
  "getrandom 0.2.17",
  "hex",
@@ -51,7 +51,6 @@ dependencies = [
  "acp-hsm",
  "acp-ledger",
  "acp-pgstate",
- "acp-policy",
  "anyhow",
  "axum",
  "futures-util",
@@ -141,18 +140,6 @@ dependencies = [
 ]
 
 [[package]]
-name = "acp-policy"
-version = "0.0.0"
-dependencies = [
- "acp-core",
- "cedar-policy",
- "hex",
- "serde",
- "serde_json",
- "serde_yaml",
-]
-
-[[package]]
 name = "acp-proxy"
 version = "0.0.0"
 dependencies = [
@@ -161,7 +148,6 @@ dependencies = [
  "acp-jsonrpc",
  "acp-ledger",
  "acp-pgstate",
- "acp-policy",
  "anyhow",
  "axum",
  "futures-util",
@@ -180,7 +166,6 @@ dependencies = [
  "acp-core",
  "acp-hsm",
  "acp-ledger",
- "acp-policy",
  "axum",
  "getrandom 0.2.17",
  "hex",

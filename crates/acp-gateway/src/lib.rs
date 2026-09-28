@@ -4,9 +4,9 @@
 
 use acp_core::modelclass::ModelTaxonomy;
 use acp_core::types::Verdict;
-use acp_policy::build_model_context;
-use acp_policy::dsl::Obligation;
-use acp_policy::PolicyEngine;
+use acp_core::policy::build_model_context;
+use acp_core::policy::dsl::Obligation;
+use acp_core::policy::PolicyEngine;
 use serde_json::Value;
 
 /// The gateway's decision for one model call.

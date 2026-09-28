@@ -1,6 +1,6 @@
 //! The YAML policy DSL: types, parsing, and validation.
 
-use acp_core::types::Verdict;
+use crate::types::Verdict;
 use serde::{Deserialize, Serialize};
 use std::collections::BTreeMap;
 

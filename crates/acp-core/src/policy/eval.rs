@@ -7,9 +7,9 @@
 //!     silent fall-through to the default (D13/A3);
 //!   - when several policies co-determine, verdict precedence is deny > step_up > shadow > allow.
 
-use crate::compile::compile_to_cedar;
-use crate::dsl;
-use acp_core::types::Verdict;
+use crate::policy::compile::compile_to_cedar;
+use crate::policy::dsl;
+use crate::types::Verdict;
 use cedar_policy::{Authorizer, Context, Entities, EntityUid, PolicySet, Request};
 use std::str::FromStr;
 
@@ -38,7 +38,7 @@ impl PolicyEngine {
         let cedar_src = compile_to_cedar(&policy);
         let pset =
             PolicySet::from_str(&cedar_src).map_err(|e| format!("cedar compile error: {e}"))?;
-        let hash = acp_core::canonical::sha256_hex(&src.to_string());
+        let hash = crate::canonical::sha256_hex(&src.to_string());
         Ok(PolicyEngine {
             pset,
             hash,
@@ -155,9 +155,9 @@ fn fixed_entities() -> (EntityUid, EntityUid, EntityUid) {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::context::build_context_identified_full;
-    use acp_core::impact::ImpactTaxonomy;
-    use acp_core::resource::ResourceTaxonomy;
+    use crate::policy::context::build_context_identified_full;
+    use crate::impact::ImpactTaxonomy;
+    use crate::resource::ResourceTaxonomy;
 
     fn ctx(tool: &str, agent: &str, principal: &str) -> serde_json::Value {
         build_context_identified_full(

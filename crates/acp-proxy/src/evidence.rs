@@ -11,7 +11,7 @@ use acp_core::sign::{Ed25519Signer, Signer};
 use acp_core::types::Verdict;
 use acp_jsonrpc::ToolCall;
 use acp_ledger::{spool::Spool, Ledger};
-use acp_policy::PolicyOutcome;
+use acp_core::policy::PolicyOutcome;
 use serde_json::json;
 use std::time::{SystemTime, UNIX_EPOCH};
 

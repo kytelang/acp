@@ -8,7 +8,6 @@ description = "Agent Control Plane: LLM gateway PEP governing direct model API c
 acp-hsm = { path = "../acp-hsm" }
 tracing.workspace = true
 acp-core = { path = "../acp-core" }
-acp-policy = { path = "../acp-policy" }
 acp-ledger = { path = "../acp-ledger" }
 acp-pgstate = { path = "../acp-pgstate" }
 axum = { workspace = true }

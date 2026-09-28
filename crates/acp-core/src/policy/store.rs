@@ -6,9 +6,9 @@
 //! built: `PolicyEngine` validation, `policyprov` signing/verification, and (for rollout) the
 //! `rollout` state machine. Local-first: the store is a directory the proxy watches, no cloud.
 
-use crate::eval::PolicyEngine;
-use acp_core::policyprov::{sign_policy, verify_policy, SignedPolicy};
-use acp_core::sign::Signer;
+use crate::policy::eval::PolicyEngine;
+use crate::policyprov::{sign_policy, verify_policy, SignedPolicy};
+use crate::sign::Signer;
 use serde_json::{json, Value};
 use std::fs;
 
@@ -97,7 +97,7 @@ pub fn load_current(store_dir: &str) -> Result<PolicyEngine, String> {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use acp_core::sign::Ed25519Signer;
+    use crate::sign::Ed25519Signer;
 
     fn tmp(tag: &str) -> String {
         let d = std::env::temp_dir().join(format!("acp-pstore-{}-{tag}", std::process::id()));

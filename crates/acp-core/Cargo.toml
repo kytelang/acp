@@ -17,6 +17,7 @@ ed25519-dalek.workspace = true
 getrandom.workspace = true
 ring.workspace = true
 rusqlite.workspace = true
+cedar-policy.workspace = true
 tracing.workspace = true
 tracing-subscriber.workspace = true
 

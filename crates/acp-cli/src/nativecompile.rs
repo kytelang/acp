@@ -6,7 +6,7 @@
 //! to the proxy instead of silently dropped.
 
 use acp_core::types::Verdict;
-use acp_policy::dsl::{Policy, Rule};
+use acp_core::policy::dsl::{Policy, Rule};
 use serde_json::{json, Value};
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -162,7 +162,7 @@ mod tests {
     use super::*;
 
     fn pol() -> Policy {
-        acp_policy::dsl::parse_str(
+        acp_core::policy::dsl::parse_str(
             "version: 1\ndefault: allow\nrules:\n\
              \x20 - id: no-fs-write\n    when: { resource: filesystem, operation: write }\n    verdict: deny\n\
              \x20 - id: no-egress\n    when: { resource: network, operation: egress }\n    verdict: deny\n\

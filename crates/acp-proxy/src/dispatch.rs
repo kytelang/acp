@@ -19,7 +19,7 @@ use acp_core::toolintegrity::{tool_fingerprint, tools_from_list_result, PinResul
 use std::collections::HashSet;
 use acp_core::types::Verdict;
 use acp_jsonrpc::{classify, error_response, inspect, ParsedFrame};
-use acp_policy::PolicyEngine;
+use acp_core::policy::PolicyEngine;
 use serde_json::{json, Value};
 use std::sync::{Arc, Mutex};
 
@@ -238,7 +238,7 @@ impl Controller {
             }
             *last = mtime;
         }
-        match acp_policy::store::load_current(&dir) {
+        match acp_core::policy::store::load_current(&dir) {
             Ok(engine) => {
                 *self.engine.lock().unwrap() = Some(Arc::new(engine));
                 tracing::info!("hot-reloaded policy from {dir}");
@@ -791,7 +791,7 @@ impl Controller {
             // per-(agent, resource) budget is spent. Deny-overrides among obligations. redact (a
             // frame rewrite) lands in 3b-2.
             if a.outcome.verdict == Verdict::Allow && !a.outcome.obligations.is_empty() {
-                use acp_policy::dsl::ObligationKind;
+                use acp_core::policy::dsl::ObligationKind;
                 let (res, _op) = self.resource_tax.classify(&tc.name);
                 let (mut rate_exceeded, mut needs_confirm) = (false, false);
                 let mut redact_fields: Vec<String> = Vec::new();

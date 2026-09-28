@@ -1,10 +1,10 @@
 //! Building the namespaced Cedar context from a tool call (decision D9), shared by the proxy and
 //! the CLI so enforcement and offline testing use exactly the same derivation.
 
-use acp_core::classify::classify;
-use acp_core::impact::ImpactTaxonomy;
-use acp_core::resource::ResourceTaxonomy;
-use acp_core::types::BlastRadius;
+use crate::classify::classify;
+use crate::impact::ImpactTaxonomy;
+use crate::resource::ResourceTaxonomy;
+use crate::types::BlastRadius;
 use serde_json::{json, Map, Value};
 
 /// Tool names are restricted to a safe charset (D9, safe entity ids). A malformed name is

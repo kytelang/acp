@@ -700,7 +700,7 @@ async fn main() {
 
     let policy = match policy_path {
         Some(p) => match std::fs::read_to_string(&p).ok().and_then(|src| {
-            acp_policy::PolicyEngine::from_yaml(&src)
+            acp_core::policy::PolicyEngine::from_yaml(&src)
                 .ok()
                 .map(|e| (e.hash().to_string(), src))
         }) {
@@ -1445,7 +1445,7 @@ async fn agents(State(st): State<Arc<AppState>>, headers: HeaderMap) -> impl Int
 
 /// Current deployed signed policy (version/hash/author) from the policy store.
 async fn policy_store_current(State(st): State<Arc<AppState>>) -> impl IntoResponse {
-    match st.policy_store.as_ref().map(|p| acp_policy::store::current_info(p)) {
+    match st.policy_store.as_ref().map(|p| acp_core::policy::store::current_info(p)) {
         Some(Ok(v)) => Json(v),
         _ => Json(serde_json::json!({"version": 0})),
     }
@@ -2440,11 +2440,11 @@ fn deploy_signer(store_dir: &str) -> acp_core::sign::Ed25519Signer {
 /// The rules of the current deployed policy, with app/agent ids resolved to registered names, so the
 /// console can show which rule governs which app and agent. Read-only projection of the signed file.
 async fn policy_store_rules(State(st): State<Arc<AppState>>) -> impl IntoResponse {
-    let src = match st.policy_store.as_ref().map(|p| acp_policy::store::current_source(p)) {
+    let src = match st.policy_store.as_ref().map(|p| acp_core::policy::store::current_source(p)) {
         Some(Ok(s)) => s,
         _ => return Json(serde_json::json!({"rules": [], "count": 0})),
     };
-    let pol = match acp_policy::dsl::parse_str(&src) {
+    let pol = match acp_core::policy::dsl::parse_str(&src) {
         Ok(p) => p,
         Err(e) => return Json(serde_json::json!({"rules": [], "count": 0, "error": e.to_string()})),
     };
@@ -2462,7 +2462,7 @@ async fn policy_store_rules(State(st): State<Arc<AppState>>) -> impl IntoRespons
             .or_else(|| Some(id.to_string()))
     };
     let _ = &app_name; // app is display-only now; kept for team resolution elsewhere.
-    use acp_policy::dsl::ObligationKind;
+    use acp_core::policy::dsl::ObligationKind;
     let rules: Vec<_> = pol
         .rules
         .iter()
@@ -2530,7 +2530,7 @@ async fn policy_store_deploy(
         return Json(serde_json::json!({"ok": false, "error": "policy source is empty"})).into_response();
     }
     let signer = deploy_signer(&store);
-    match acp_policy::store::deploy(src, &store, &signer, author) {
+    match acp_core::policy::store::deploy(src, &store, &signer, author) {
         Ok(d) => Json(serde_json::json!({"ok": true, "version": d.version, "hash": d.hash})).into_response(),
         Err(e) => Json(serde_json::json!({"ok": false, "error": e})).into_response(),
     }

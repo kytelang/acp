@@ -7,7 +7,7 @@
 //! opts: --policy <file> --ledger <file> --key <file> --approvals <file> --env <name> --shadow
 
 
-use acp_policy::PolicyEngine;
+use acp_core::policy::PolicyEngine;
 use crate::dispatch::Controller;
 use crate::{events, evidence, http, stdio};
 use std::process::ExitCode;
@@ -136,7 +136,7 @@ fn proxy_id(o: &Opts) -> String {
 
 async fn build_controller(o: &Opts) -> Result<Arc<Controller>, String> {
     let engine = if let Some(dir) = &o.policy_dir {
-        let eng = acp_policy::store::load_current(dir)
+        let eng = acp_core::policy::store::load_current(dir)
             .map_err(|e| format!("cannot load current policy from {dir}: {e}"))?;
         tracing::info!("signed policy loaded from {dir} ({}...)", &eng.hash()[..12.min(eng.hash().len())]);
         Some(Arc::new(eng))

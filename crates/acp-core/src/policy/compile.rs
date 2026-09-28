@@ -8,8 +8,8 @@
 //!
 //! The four-way verdict rides on a `@verdict` annotation read back from the determining policy.
 
-use crate::dsl::{Matcher, Policy, Rule};
-use acp_core::types::Verdict;
+use crate::policy::dsl::{Matcher, Policy, Rule};
+use crate::types::Verdict;
 
 pub fn compile_to_cedar(policy: &Policy) -> String {
     policy
