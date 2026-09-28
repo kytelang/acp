@@ -7,7 +7,7 @@
 //! key includes the canonical `arg_hash`, a re-issue whose arguments differ maps to a different
 //! key and cannot ride the approval (canonical binding).
 
-use acp_approvals::{ApprovalStore, ApprovalView};
+use acp_core::approvals::{ApprovalStore, ApprovalView};
 use acp_core::canonical::sha256_hex;
 use acp_jsonrpc::ToolCall;
 use serde_json::{json, Value};

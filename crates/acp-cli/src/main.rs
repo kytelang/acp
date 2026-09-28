@@ -618,7 +618,7 @@ fn cmd_resolve(rest: &[String], approve: bool) -> ExitCode {
     if rest.len() < 2 {
         return usage("acp approve|deny <approvals.db> <id> [approver]");
     }
-    let store = match acp_approvals::ApprovalStore::open(&rest[0]) {
+    let store = match acp_core::approvals::ApprovalStore::open(&rest[0]) {
         Ok(s) => s,
         Err(e) => {
             eprintln!("acp: cannot open approvals {}: {e}", rest[0]);
@@ -644,7 +644,7 @@ fn cmd_resolve(rest: &[String], approve: bool) -> ExitCode {
 
 #[allow(dead_code)]
 fn cmd_list_approvals(path: &str) -> ExitCode {
-    let store = match acp_approvals::ApprovalStore::open(path) {
+    let store = match acp_core::approvals::ApprovalStore::open(path) {
         Ok(s) => s,
         Err(e) => {
             eprintln!("acp: cannot open approvals {path}: {e}");
@@ -2231,7 +2231,7 @@ fn cmd_break_glass(rest: &[String]) -> ExitCode {
 fn cmd_app(rest: &[String]) -> ExitCode {
     match (rest.first().map(String::as_str), rest.get(1), rest.get(2), rest.get(3)) {
         (Some("register"), Some(file), Some(name), owner) => {
-            let mut reg = match acp_registry::Registry::load(file) { Ok(r) => r, Err(e) => { eprintln!("acp: {e}"); return ExitCode::from(1); } };
+            let mut reg = match acp_core::registry::Registry::load(file) { Ok(r) => r, Err(e) => { eprintln!("acp: {e}"); return ExitCode::from(1); } };
             let app = reg.register_app(name, owner.map(String::as_str).unwrap_or(""));
             if reg.save(file).is_err() { eprintln!("acp: cannot write {file}"); return ExitCode::from(1); }
             println!("registered app: id={} name={}", app.id, app.name);
@@ -2243,7 +2243,7 @@ fn cmd_app(rest: &[String]) -> ExitCode {
 
 #[allow(dead_code)]
 fn cmd_agent(rest: &[String]) -> ExitCode {
-    let reg_of = |file: &str| acp_registry::Registry::load(file);
+    let reg_of = |file: &str| acp_core::registry::Registry::load(file);
     match (rest.first().map(String::as_str), rest.get(1), rest.get(2), rest.get(3)) {
         (Some("register"), Some(file), Some(app_id), Some(name)) => {
             let mut reg = match reg_of(file) { Ok(r) => r, Err(e) => { eprintln!("acp: {e}"); return ExitCode::from(1); } };
@@ -2273,7 +2273,7 @@ fn cmd_agent(rest: &[String]) -> ExitCode {
 fn cmd_registry(rest: &[String]) -> ExitCode {
     match (rest.first().map(String::as_str), rest.get(1)) {
         (Some("list"), Some(file)) => {
-            let reg = match acp_registry::Registry::load(file) { Ok(r) => r, Err(e) => { eprintln!("acp: {e}"); return ExitCode::from(1); } };
+            let reg = match acp_core::registry::Registry::load(file) { Ok(r) => r, Err(e) => { eprintln!("acp: {e}"); return ExitCode::from(1); } };
             println!("apps:");
             for a in reg.apps() { println!("  {} ({}) owner={}", a.id, a.name, a.owner); }
             println!("agents:");

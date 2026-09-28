@@ -74,9 +74,9 @@ struct AppState {
 /// with the right capability. `dev` is an in-memory mock issuer for local use (issues test tokens);
 /// production sets jwks+cfg from the org IdP and leaves dev None.
 struct Auth {
-    jwks: std::sync::Arc<std::sync::RwLock<acp_auth::Jwks>>,
-    cfg: acp_auth::EntraConfig,
-    dev: Option<acp_auth::MockEntra>,
+    jwks: std::sync::Arc<std::sync::RwLock<acp_core::auth::Jwks>>,
+    cfg: acp_core::auth::EntraConfig,
+    dev: Option<acp_core::auth::MockEntra>,
 }
 
 /// A4: the built-in signed control packs (EU AI Act, NIST AI RMF, ISO 42001), signed with the
@@ -91,7 +91,7 @@ async fn packs_available(State(st): State<Arc<AppState>>) -> impl IntoResponse {
 /// A4: load a signed control pack. The signature is verified before storing; a tampered pack (body
 /// no longer matches the signature) is rejected with a clear error. Idempotent by pack id.
 async fn pack_load(State(st): State<Arc<AppState>>, headers: HeaderMap, Json(body): Json<serde_json::Value>) -> Response {
-    if let Err(r) = authorize(&st.auth, &headers, acp_auth::Capability::EditPolicy) { return r; }
+    if let Err(r) = authorize(&st.auth, &headers, acp_core::auth::Capability::EditPolicy) { return r; }
     let store = match &st.store { Some(s) => s, None => return Json(serde_json::json!({"ok": false, "error": "no --store configured"})).into_response() };
     let signed: acp_core::pack::SignedPack = match serde_json::from_value(body.clone()) {
         Ok(s) => s,
@@ -217,7 +217,7 @@ async fn admission_scan(st: &Arc<AppState>, name: &str, provider: &str, version:
 /// A3: register a model in the registry (provider, version, card). B3 later wires an admission scan;
 /// here the scan_status defaults to "unscanned".
 async fn model_register(State(st): State<Arc<AppState>>, headers: HeaderMap, Json(body): Json<serde_json::Value>) -> Response {
-    if let Err(r) = authorize(&st.auth, &headers, acp_auth::Capability::RegisterApp) { return r; }
+    if let Err(r) = authorize(&st.auth, &headers, acp_core::auth::Capability::RegisterApp) { return r; }
     let store = match &st.store { Some(s) => s, None => return Json(serde_json::json!({"ok": false, "error": "no --store configured"})).into_response() };
     let name = body.get("name").and_then(|v| v.as_str()).unwrap_or("").trim().to_string();
     if name.is_empty() { return Json(serde_json::json!({"ok": false, "error": "name is required"})).into_response(); }
@@ -277,7 +277,7 @@ async fn model_get(State(st): State<Arc<AppState>>, headers: HeaderMap, Path(id)
     }
 }
 async fn vendor_register(State(st): State<Arc<AppState>>, headers: HeaderMap, Json(body): Json<serde_json::Value>) -> Response {
-    if let Err(r) = authorize(&st.auth, &headers, acp_auth::Capability::RegisterApp) { return r; }
+    if let Err(r) = authorize(&st.auth, &headers, acp_core::auth::Capability::RegisterApp) { return r; }
     let store = match &st.store { Some(s) => s, None => return Json(serde_json::json!({"ok": false, "error": "no --store configured"})).into_response() };
     let name = body.get("name").and_then(|v| v.as_str()).unwrap_or("").trim().to_string();
     if name.is_empty() { return Json(serde_json::json!({"ok": false, "error": "name is required"})).into_response(); }
@@ -314,7 +314,7 @@ async fn vendor_register(State(st): State<Arc<AppState>>, headers: HeaderMap, Js
 }
 /// M5: mark a vendor re-reviewed, pushing its next review date out by the interval (default 90d).
 async fn vendor_review(State(st): State<Arc<AppState>>, headers: HeaderMap, Path(id): Path<String>, Json(body): Json<serde_json::Value>) -> Response {
-    if let Err(r) = authorize(&st.auth, &headers, acp_auth::Capability::RegisterApp) { return r; }
+    if let Err(r) = authorize(&st.auth, &headers, acp_core::auth::Capability::RegisterApp) { return r; }
     let store = match &st.store { Some(s) => s, None => return Json(serde_json::json!({"ok": false, "error": "no --store configured"})).into_response() };
     let tenant = tenant_of(&headers, &None);
     let interval = body.get("review_interval_ms").and_then(|v| v.as_i64()).unwrap_or(90 * 24 * 60 * 60 * 1000);
@@ -490,18 +490,18 @@ fn load_scim_users(path: Option<&str>) -> Vec<(String, String, Vec<String>)> {
 }
 
 /// Load a JWKS from a URL (fetched) or a file path (read). Used for real Entra keys.
-async fn load_jwks(source: &str) -> Result<acp_auth::Jwks, String> {
+async fn load_jwks(source: &str) -> Result<acp_core::auth::Jwks, String> {
     let body = if source.starts_with("http") {
         reqwest::get(source).await.map_err(|e| e.to_string())?
             .text().await.map_err(|e| e.to_string())?
     } else {
         std::fs::read_to_string(source).map_err(|e| e.to_string())?
     };
-    acp_auth::Jwks::from_jwks_json(&body).map_err(|e| format!("{e:?}"))
+    acp_core::auth::Jwks::from_jwks_json(&body).map_err(|e| format!("{e:?}"))
 }
 
 /// Authorise a request for a capability. RBAC disabled (auth None) allows everything (local demo).
-fn authorize(auth: &Option<Auth>, headers: &HeaderMap, cap: acp_auth::Capability) -> Result<Option<acp_auth::Principal>, Response> {
+fn authorize(auth: &Option<Auth>, headers: &HeaderMap, cap: acp_core::auth::Capability) -> Result<Option<acp_core::auth::Principal>, Response> {
     let a = match auth { Some(a) => a, None => return Ok(None) };
     let token = headers
         .get("authorization")
@@ -509,7 +509,7 @@ fn authorize(auth: &Option<Auth>, headers: &HeaderMap, cap: acp_auth::Capability
         .and_then(|s| s.strip_prefix("Bearer "))
         .ok_or_else(|| (StatusCode::UNAUTHORIZED, Json(serde_json::json!({"ok":false,"error":"missing bearer token"}))).into_response())?;
     let jwks = a.jwks.read().unwrap();
-    let p = acp_auth::verify(token, &jwks, &a.cfg, now_ms())
+    let p = acp_core::auth::verify(token, &jwks, &a.cfg, now_ms())
         .map_err(|e| (StatusCode::UNAUTHORIZED, Json(serde_json::json!({"ok":false,"error":format!("invalid token: {e:?}")}))).into_response())?;
     if !p.can(cap) {
         return Err((StatusCode::FORBIDDEN, Json(serde_json::json!({"ok":false,"error":format!("principal lacks {cap:?}")}))).into_response());
@@ -522,7 +522,7 @@ fn authorize(auth: &Option<Auth>, headers: &HeaderMap, cap: acp_auth::Capability
 /// change is attributable to the authenticated admin, not a hardcoded literal (gap A9).
 /// T1: resolve the tenant for a request: the `x-acp-tenant` header if present, else the authenticated
 /// principal's Entra tenant (when it is a real tenant, not the dev "common"), else "default".
-fn tenant_of(headers: &HeaderMap, principal: &Option<acp_auth::Principal>) -> String {
+fn tenant_of(headers: &HeaderMap, principal: &Option<acp_core::auth::Principal>) -> String {
     if let Some(h) = headers.get("x-acp-tenant").and_then(|v| v.to_str().ok()) {
         let t = h.trim();
         if !t.is_empty() { return t.to_string(); }
@@ -533,7 +533,7 @@ fn tenant_of(headers: &HeaderMap, principal: &Option<acp_auth::Principal>) -> St
     "default".to_string()
 }
 
-fn actor_of(p: &Option<acp_auth::Principal>) -> String {
+fn actor_of(p: &Option<acp_core::auth::Principal>) -> String {
     match p {
         Some(pr) if !pr.username.is_empty() => pr.username.clone(),
         Some(pr) => pr.oid.clone(),
@@ -677,8 +677,8 @@ async fn main() {
             Err(e) => { println!("  [FAIL] JWKS load: {e}"); std::process::exit(1); }
         };
         if let Some(tok) = &entra_test_token {
-            let cfg = acp_auth::EntraConfig { issuer, audience };
-            match acp_auth::verify(tok, &jwks, &cfg, now_ms()) {
+            let cfg = acp_core::auth::EntraConfig { issuer, audience };
+            match acp_core::auth::verify(tok, &jwks, &cfg, now_ms()) {
                 Ok(p) => {
                     println!("  [ok] token verified");
                     println!("       oid={} user={} tid={}", p.oid, p.username, p.tenant);
@@ -753,7 +753,7 @@ async fn main() {
     //   --oidc-jwks(url|file) + --oidc-issuer + --oidc-audience : explicit
     // With none, RBAC is off and the local demo is unaffected.
     let auth: Option<Auth> = if dev_auth {
-        let mock = acp_auth::MockEntra::new("common", "acp-app");
+        let mock = acp_core::auth::MockEntra::new("common", "acp-app");
         tracing::info!("DEV auth enabled (mock issuer); GET /auth/dev-token?role=PolicyAdmin");
         Some(Auth {
             jwks: std::sync::Arc::new(std::sync::RwLock::new(mock.jwks())),
@@ -794,7 +794,7 @@ async fn main() {
                     }
                     Some(Auth {
                         jwks: jwks_arc,
-                        cfg: acp_auth::EntraConfig { issuer, audience },
+                        cfg: acp_core::auth::EntraConfig { issuer, audience },
                         dev: None,
                     })
                 }
@@ -998,7 +998,7 @@ async fn main() {
             loop {
                 tokio::time::sleep(std::time::Duration::from_secs(2)).await;
                 let path = match &st2.approvals { Some(p) => p.clone(), None => continue };
-                if let Ok(store) = acp_approvals::ApprovalStore::open(&path) {
+                if let Ok(store) = acp_core::approvals::ApprovalStore::open(&path) {
                     if let Ok(ids) = store.list_overdue(st2.approval_sla_ms as u64, now_ms()) {
                         for id in ids {
                             let already = { st2.escalated.lock().unwrap().contains(&id) };
@@ -1110,7 +1110,7 @@ async fn main() {
 
 async fn inbox(State(st): State<Arc<AppState>>) -> Html<String> {
     let items = match &st.approvals {
-        Some(p) => acp_approvals::ApprovalStore::open(p)
+        Some(p) => acp_core::approvals::ApprovalStore::open(p)
             .and_then(|s| s.list_pending())
             .unwrap_or_default(),
         None => vec![],
@@ -1140,18 +1140,18 @@ async fn inbox(State(st): State<Arc<AppState>>) -> Html<String> {
 }
 
 async fn approve(State(st): State<Arc<AppState>>, headers: HeaderMap, Path(id): Path<String>) -> Response {
-    let principal = match authorize(&st.auth, &headers, acp_auth::Capability::Approve) { Ok(p) => p, Err(r) => return r };
+    let principal = match authorize(&st.auth, &headers, acp_core::auth::Capability::Approve) { Ok(p) => p, Err(r) => return r };
     resolve(&st, &id, true, &actor_of(&principal));
     Redirect::to("/").into_response()
 }
 async fn deny(State(st): State<Arc<AppState>>, headers: HeaderMap, Path(id): Path<String>) -> Response {
-    let principal = match authorize(&st.auth, &headers, acp_auth::Capability::Approve) { Ok(p) => p, Err(r) => return r };
+    let principal = match authorize(&st.auth, &headers, acp_core::auth::Capability::Approve) { Ok(p) => p, Err(r) => return r };
     resolve(&st, &id, false, &actor_of(&principal));
     Redirect::to("/").into_response()
 }
 fn resolve(st: &AppState, id: &str, ok: bool, actor: &str) {
     if let Some(p) = &st.approvals {
-        if let Ok(store) = acp_approvals::ApprovalStore::open(p) {
+        if let Ok(store) = acp_core::approvals::ApprovalStore::open(p) {
             let _ = store.resolve(id, ok, actor, "web");
         }
     }
@@ -1162,7 +1162,7 @@ fn resolve(st: &AppState, id: &str, ok: bool, actor: &str) {
 async fn approval_register(State(st): State<Arc<AppState>>, headers: HeaderMap, Json(body): Json<serde_json::Value>) -> Response {
     if let Err(r) = authorize_report(&st, &headers) { return r; }
     let path = match &st.approvals { Some(p) => p.clone(), None => return Json(serde_json::json!({"ok": false, "error": "no approvals store"})).into_response() };
-    let store = match acp_approvals::ApprovalStore::open(&path) { Ok(s) => s, Err(e) => return Json(serde_json::json!({"ok": false, "error": e})).into_response() };
+    let store = match acp_core::approvals::ApprovalStore::open(&path) { Ok(s) => s, Err(e) => return Json(serde_json::json!({"ok": false, "error": e})).into_response() };
     let g = |k: &str| body.get(k).and_then(|v| v.as_str()).unwrap_or("").to_string();
     let id = g("id");
     if id.is_empty() { return Json(serde_json::json!({"ok": false, "error": "id is required"})).into_response(); }
@@ -1177,7 +1177,7 @@ async fn approval_register(State(st): State<Arc<AppState>>, headers: HeaderMap, 
 /// F1: the resolution state of a hold, so a PEP can poll for the console operator's decision.
 async fn approval_status(State(st): State<Arc<AppState>>, Path(id): Path<String>) -> Response {
     let path = match &st.approvals { Some(p) => p.clone(), None => return Json(serde_json::json!({"state": "unknown"})).into_response() };
-    let store = match acp_approvals::ApprovalStore::open(&path) { Ok(s) => s, Err(_) => return Json(serde_json::json!({"state": "unknown"})).into_response() };
+    let store = match acp_core::approvals::ApprovalStore::open(&path) { Ok(s) => s, Err(_) => return Json(serde_json::json!({"state": "unknown"})).into_response() };
     match store.get(&id) {
         Ok(Some(v)) => Json(serde_json::json!({"state": v.state, "approver": v.approver})).into_response(),
         Ok(None) => Json(serde_json::json!({"state": "unknown"})).into_response(),
@@ -1326,7 +1326,7 @@ async fn timeline(State(st): State<Arc<AppState>>) -> impl IntoResponse {
 /// H0.7: record a self-governance change (policy/key/RBAC/approver/break-glass) to the tamper-
 /// evident meta-audit log. Body: {kind, actor, reason, before?, after?}.
 async fn record_meta(State(st): State<Arc<AppState>>, headers: HeaderMap, Json(body): Json<serde_json::Value>) -> Response {
-    let principal = match authorize(&st.auth, &headers, acp_auth::Capability::EditPolicy) { Ok(p) => p, Err(r) => return r };
+    let principal = match authorize(&st.auth, &headers, acp_core::auth::Capability::EditPolicy) { Ok(p) => p, Err(r) => return r };
     let Some(meta) = st.meta.as_ref() else {
         return Json(serde_json::json!({"ok": false, "detail": "meta-audit not configured"})).into_response();
     };
@@ -1370,7 +1370,7 @@ async fn meta_audit(State(st): State<Arc<AppState>>) -> impl IntoResponse {
 async fn evidence_recent(State(st): State<Arc<AppState>>, headers: HeaderMap) -> Response {
     // A5: the raw decision detail (per-action tool/resource/principal) requires SeeArgs
     // (SecurityOfficer). Aggregate dashboards use ungated summary routes instead.
-    if let Err(r) = authorize(&st.auth, &headers, acp_auth::Capability::SeeArgs) { return r; }
+    if let Err(r) = authorize(&st.auth, &headers, acp_core::auth::Capability::SeeArgs) { return r; }
     let recs = match st.ledger.as_ref().and_then(|p| acp_ledger::export_file(p).ok()) {
         Some(pack) => pack.get("records").and_then(|r| r.as_array()).cloned().unwrap_or_default(),
         None => vec![],
@@ -1400,7 +1400,7 @@ async fn evidence_recent(State(st): State<Arc<AppState>>, headers: HeaderMap) ->
 /// Pending approvals as JSON (for the console).
 async fn approvals_pending(State(st): State<Arc<AppState>>) -> impl IntoResponse {
     let items = match &st.approvals {
-        Some(p) => acp_approvals::ApprovalStore::open(p).and_then(|s| s.list_pending()).unwrap_or_default(),
+        Some(p) => acp_core::approvals::ApprovalStore::open(p).and_then(|s| s.list_pending()).unwrap_or_default(),
         None => vec![],
     };
     let list: Vec<_> = items.iter().map(|a| serde_json::json!({"id": a.id, "tool": a.tool})).collect();
@@ -1416,7 +1416,7 @@ async fn apps(State(st): State<Arc<AppState>>, headers: HeaderMap) -> impl IntoR
             Err(e) => return Json(serde_json::json!({"apps": [], "error": e})).into_response(),
         }
     }
-    match st.registry.as_ref().map(|p| acp_registry::Registry::load(p)) {
+    match st.registry.as_ref().map(|p| acp_core::registry::Registry::load(p)) {
         Some(Ok(reg)) => {
             let list: Vec<_> = reg.apps().into_iter().map(|a| serde_json::json!({"id":a.id,"name":a.name,"owner":a.owner})).collect();
             Json(serde_json::json!({"apps": list})).into_response()
@@ -1434,7 +1434,7 @@ async fn agents(State(st): State<Arc<AppState>>, headers: HeaderMap) -> impl Int
             Err(e) => return Json(serde_json::json!({"agents": [], "error": e})).into_response(),
         }
     }
-    match st.registry.as_ref().map(|p| acp_registry::Registry::load(p)) {
+    match st.registry.as_ref().map(|p| acp_core::registry::Registry::load(p)) {
         Some(Ok(reg)) => {
             let list: Vec<_> = reg.agents().into_iter().map(|a| serde_json::json!({"id":a.id,"name":a.name,"app_id":a.app_id,"active":a.active})).collect();
             Json(serde_json::json!({"agents": list})).into_response()
@@ -1574,7 +1574,7 @@ async fn threat_pack_available(State(st): State<Arc<AppState>>) -> impl IntoResp
 /// rejected. On success the firewall_config feed version is bumped and the signatures stored, so every
 /// acp-agent applies them on its next firewall fetch.
 async fn threat_pack_load(State(st): State<Arc<AppState>>, headers: HeaderMap, Json(body): Json<serde_json::Value>) -> Response {
-    if let Err(r) = authorize(&st.auth, &headers, acp_auth::Capability::EditFirewall) { return r; }
+    if let Err(r) = authorize(&st.auth, &headers, acp_core::auth::Capability::EditFirewall) { return r; }
     let store = match &st.store { Some(s) => s, None => return Json(serde_json::json!({"ok": false, "error": "no --store configured"})).into_response() };
     let signed: acp_core::threatfeed::SignedThreatPack = match serde_json::from_value(body.clone()) {
         Ok(s) => s,
@@ -1618,7 +1618,7 @@ async fn firewall_config_get(State(st): State<Arc<AppState>>, headers: HeaderMap
 /// POST /firewall/config: set the central content-firewall configuration from the console
 /// (RBAC-gated on EditPolicy). Body: {enabled, block_secrets, deny_topics:[...], model:"<json or empty>"}.
 async fn firewall_config_set(State(st): State<Arc<AppState>>, headers: HeaderMap, Json(body): Json<serde_json::Value>) -> Response {
-    if let Err(r) = authorize(&st.auth, &headers, acp_auth::Capability::EditFirewall) { return r; }
+    if let Err(r) = authorize(&st.auth, &headers, acp_core::auth::Capability::EditFirewall) { return r; }
     let store = match &st.store { Some(s) => s, None => return Json(serde_json::json!({"ok": false, "error": "no --store configured"})).into_response() };
     let enabled = body.get("enabled").and_then(|v| v.as_bool()).unwrap_or(false);
     let block_secrets = body.get("block_secrets").and_then(|v| v.as_bool()).unwrap_or(false);
@@ -1727,7 +1727,7 @@ async fn firewall_rules_list(State(st): State<Arc<AppState>>) -> Response {
 /// POST /firewall/rules: add an operator rule (RBAC-gated on EditPolicy). Body: a match predicate set
 /// (host_contains|host_suffix|host_exact|sni|path_contains|path_prefix|port) + action + optional classify.
 async fn firewall_rules_add(State(st): State<Arc<AppState>>, headers: HeaderMap, Json(body): Json<serde_json::Value>) -> Response {
-    if let Err(r) = authorize(&st.auth, &headers, acp_auth::Capability::EditFirewall) { return r; }
+    if let Err(r) = authorize(&st.auth, &headers, acp_core::auth::Capability::EditFirewall) { return r; }
     let store = match &st.store { Some(s) => s, None => return Json(serde_json::json!({"ok": false, "error": "no --store configured"})).into_response() };
     let mut m = serde_json::Map::new();
     for k in ["host_contains", "host_suffix", "host_exact", "sni", "path_contains", "path_prefix"] {
@@ -1750,7 +1750,7 @@ async fn firewall_rules_add(State(st): State<Arc<AppState>>, headers: HeaderMap,
 
 /// POST /firewall/rules/:id/delete: remove an operator rule (RBAC-gated on EditPolicy).
 async fn firewall_rules_delete(State(st): State<Arc<AppState>>, headers: HeaderMap, Path(id): Path<String>) -> Response {
-    if let Err(r) = authorize(&st.auth, &headers, acp_auth::Capability::EditFirewall) { return r; }
+    if let Err(r) = authorize(&st.auth, &headers, acp_core::auth::Capability::EditFirewall) { return r; }
     let store = match &st.store { Some(s) => s, None => return Json(serde_json::json!({"ok": false, "error": "no --store configured"})).into_response() };
     match store.delete_firewall_rule(&id).await {
         Ok(()) => Json(serde_json::json!({"ok": true, "id": id})).into_response(),
@@ -1766,7 +1766,7 @@ async fn endpoints_register(
     headers: HeaderMap,
     Json(body): Json<serde_json::Value>,
 ) -> Response {
-    let principal = match authorize(&st.auth, &headers, acp_auth::Capability::EditPolicy) { Ok(p) => p, Err(r) => return r };
+    let principal = match authorize(&st.auth, &headers, acp_core::auth::Capability::EditPolicy) { Ok(p) => p, Err(r) => return r };
     let operator = actor_of(&principal);
     let endpoint = body.get("endpoint").and_then(|v| v.as_str()).unwrap_or("").trim().to_string();
     if endpoint.is_empty() {
@@ -1841,7 +1841,7 @@ async fn agent_verify(State(st): State<Arc<AppState>>, Json(body): Json<serde_js
 
 /// POST /apps: register an application in the control-plane store. Body: {name, owner}.
 async fn app_register(State(st): State<Arc<AppState>>, headers: HeaderMap, Json(body): Json<serde_json::Value>) -> Response {
-    if let Err(r) = authorize(&st.auth, &headers, acp_auth::Capability::RegisterApp) { return r; }
+    if let Err(r) = authorize(&st.auth, &headers, acp_core::auth::Capability::RegisterApp) { return r; }
     let store = match &st.store { Some(s) => s, None => return Json(serde_json::json!({"ok": false, "error": "no --store configured"})).into_response() };
     let name = body.get("name").and_then(|v| v.as_str()).unwrap_or("").trim().to_string();
     if name.is_empty() { return Json(serde_json::json!({"ok": false, "error": "name is required"})).into_response(); }
@@ -1857,7 +1857,7 @@ async fn app_register(State(st): State<Arc<AppState>>, headers: HeaderMap, Json(
 
 /// POST /agents: register an agent. Body: {app_id, name}. Returns a one-time token (stored hashed).
 async fn agent_register(State(st): State<Arc<AppState>>, headers: HeaderMap, Json(body): Json<serde_json::Value>) -> Response {
-    if let Err(r) = authorize(&st.auth, &headers, acp_auth::Capability::RegisterAgent) { return r; }
+    if let Err(r) = authorize(&st.auth, &headers, acp_core::auth::Capability::RegisterAgent) { return r; }
     let store = match &st.store { Some(s) => s, None => return Json(serde_json::json!({"ok": false, "error": "no --store configured"})).into_response() };
     let app_id = body.get("app_id").and_then(|v| v.as_str()).unwrap_or("").trim().to_string();
     let name = body.get("name").and_then(|v| v.as_str()).unwrap_or("").trim().to_string();
@@ -1876,7 +1876,7 @@ async fn agent_register(State(st): State<Arc<AppState>>, headers: HeaderMap, Jso
 
 /// POST /agents/:id/deactivate: revoke an agent.
 async fn agent_deactivate(State(st): State<Arc<AppState>>, headers: HeaderMap, Path(id): Path<String>) -> Response {
-    if let Err(r) = authorize(&st.auth, &headers, acp_auth::Capability::RegisterAgent) { return r; }
+    if let Err(r) = authorize(&st.auth, &headers, acp_core::auth::Capability::RegisterAgent) { return r; }
     let store = match &st.store { Some(s) => s, None => return Json(serde_json::json!({"ok": false, "error": "no --store configured"})).into_response() };
     match store.deactivate_agent(&id).await {
         Ok(()) => Json(serde_json::json!({"ok": true, "id": id})).into_response(),
@@ -1952,7 +1952,7 @@ async fn grc_list(State(st): State<Arc<AppState>>, headers: HeaderMap) -> impl I
 
 /// POST /grc: create a signed governance record. Body: {kind, subject, title, status, body}.
 async fn grc_create(State(st): State<Arc<AppState>>, headers: HeaderMap, Json(body): Json<serde_json::Value>) -> Response {
-    let principal = match authorize(&st.auth, &headers, acp_auth::Capability::EditGrc) { Ok(p) => p, Err(r) => return r };
+    let principal = match authorize(&st.auth, &headers, acp_core::auth::Capability::EditGrc) { Ok(p) => p, Err(r) => return r };
     let operator = actor_of(&principal);
     let store = match &st.store { Some(s) => s, None => return Json(serde_json::json!({"ok": false, "error": "no --store configured"})).into_response() };
     let kind = body.get("kind").and_then(|v| v.as_str()).unwrap_or("").trim().to_string();
@@ -1993,7 +1993,7 @@ async fn grc_create(State(st): State<Arc<AppState>>, headers: HeaderMap, Json(bo
 
 /// POST /grc/:id/status: advance a record's status (e.g. use-case lifecycle, risk treatment).
 async fn grc_status(State(st): State<Arc<AppState>>, headers: HeaderMap, Path(id): Path<String>, Json(body): Json<serde_json::Value>) -> Response {
-    if let Err(r) = authorize(&st.auth, &headers, acp_auth::Capability::EditGrc) { return r; }
+    if let Err(r) = authorize(&st.auth, &headers, acp_core::auth::Capability::EditGrc) { return r; }
     let store = match &st.store { Some(s) => s, None => return Json(serde_json::json!({"ok": false, "error": "no --store configured"})).into_response() };
     let status = body.get("status").and_then(|v| v.as_str()).unwrap_or("").trim().to_string();
     if status.is_empty() { return Json(serde_json::json!({"ok": false, "error": "status is required"})).into_response(); }
@@ -2024,7 +2024,7 @@ async fn grc_status(State(st): State<Arc<AppState>>, headers: HeaderMap, Path(id
 /// --min-catch is stored with status "failed" so it is visibly flagged. A scheduled runner (cron)
 /// simply calls this endpoint on an interval.
 async fn redteam_run(State(st): State<Arc<AppState>>, headers: HeaderMap, Json(body): Json<serde_json::Value>) -> Response {
-    let principal = match authorize(&st.auth, &headers, acp_auth::Capability::EditFirewall) { Ok(p) => p, Err(r) => return r };
+    let principal = match authorize(&st.auth, &headers, acp_core::auth::Capability::EditFirewall) { Ok(p) => p, Err(r) => return r };
     let operator = actor_of(&principal);
     let store = match &st.store { Some(s) => s, None => return Json(serde_json::json!({"ok": false, "error": "no --store configured"})).into_response() };
     let min_catch = body.get("min_catch").and_then(|v| v.as_f64()).unwrap_or(0.9) as f32;
@@ -2124,7 +2124,7 @@ async fn grc_templates() -> impl IntoResponse {
 /// G3: create a model-card GRC record that references a model, a use-case and a risk by id. On read
 /// (`grc_list`) the server resolves each reference and reports which links resolve.
 async fn grc_model_card(State(st): State<Arc<AppState>>, headers: HeaderMap, Json(body): Json<serde_json::Value>) -> Response {
-    let principal = match authorize(&st.auth, &headers, acp_auth::Capability::EditGrc) { Ok(p) => p, Err(r) => return r };
+    let principal = match authorize(&st.auth, &headers, acp_core::auth::Capability::EditGrc) { Ok(p) => p, Err(r) => return r };
     let operator = actor_of(&principal);
     let store = match &st.store { Some(s) => s, None => return Json(serde_json::json!({"ok": false, "error": "no --store configured"})).into_response() };
     let subject = body.get("subject").and_then(|v| v.as_str()).unwrap_or("").trim().to_string();
@@ -2156,7 +2156,7 @@ async fn grc_model_card(State(st): State<Arc<AppState>>, headers: HeaderMap, Jso
 /// treatment and owner; the server computes the score (likelihood x impact) and severity band via
 /// `acp_core::riskregister::RiskItem` and stores them in the signed body. Console renders a risk table.
 async fn grc_risk(State(st): State<Arc<AppState>>, headers: HeaderMap, Json(body): Json<serde_json::Value>) -> Response {
-    let principal = match authorize(&st.auth, &headers, acp_auth::Capability::EditGrc) { Ok(p) => p, Err(r) => return r };
+    let principal = match authorize(&st.auth, &headers, acp_core::auth::Capability::EditGrc) { Ok(p) => p, Err(r) => return r };
     let operator = actor_of(&principal);
     let store = match &st.store { Some(s) => s, None => return Json(serde_json::json!({"ok": false, "error": "no --store configured"})).into_response() };
     let subject = body.get("subject").and_then(|v| v.as_str()).unwrap_or("").trim().to_string();
@@ -2202,7 +2202,7 @@ async fn grc_risk(State(st): State<Arc<AppState>>, headers: HeaderMap, Json(body
 /// (each obligation with a `done` flag) derived from the control library. The raw answers, assignee,
 /// due date and stage are stored as workflow metadata (not part of the signed document).
 async fn grc_assess(State(st): State<Arc<AppState>>, headers: HeaderMap, Json(body): Json<serde_json::Value>) -> Response {
-    let principal = match authorize(&st.auth, &headers, acp_auth::Capability::EditGrc) { Ok(p) => p, Err(r) => return r };
+    let principal = match authorize(&st.auth, &headers, acp_core::auth::Capability::EditGrc) { Ok(p) => p, Err(r) => return r };
     let operator = actor_of(&principal);
     let store = match &st.store { Some(s) => s, None => return Json(serde_json::json!({"ok": false, "error": "no --store configured"})).into_response() };
     let subject = body.get("subject").and_then(|v| v.as_str()).unwrap_or("").trim().to_string();
@@ -2251,7 +2251,7 @@ async fn grc_assess(State(st): State<Arc<AppState>>, headers: HeaderMap, Json(bo
 
 /// A1: set the assignee and due date on a GRC record (workflow metadata, no re-sign needed).
 async fn grc_assign(State(st): State<Arc<AppState>>, headers: HeaderMap, Path(id): Path<String>, Json(body): Json<serde_json::Value>) -> Response {
-    if let Err(r) = authorize(&st.auth, &headers, acp_auth::Capability::EditGrc) { return r; }
+    if let Err(r) = authorize(&st.auth, &headers, acp_core::auth::Capability::EditGrc) { return r; }
     let store = match &st.store { Some(s) => s, None => return Json(serde_json::json!({"ok": false, "error": "no --store configured"})).into_response() };
     let assignee = body.get("assignee").and_then(|v| v.as_str()).unwrap_or("").to_string();
     let due_ms = body.get("due_ms").and_then(|v| v.as_i64()).unwrap_or(0);
@@ -2273,7 +2273,7 @@ async fn grc_assign(State(st): State<Arc<AppState>>, headers: HeaderMap, Path(id
 /// T5: post a comment on a GRC record (author from the principal). Tenant-scoped: only the record's
 /// tenant may comment; body is stored as-is and rendered as a value (never interpolated).
 async fn grc_comments_post(State(st): State<Arc<AppState>>, headers: HeaderMap, Path(id): Path<String>, Json(body): Json<serde_json::Value>) -> Response {
-    let principal = match authorize(&st.auth, &headers, acp_auth::Capability::EditGrc) { Ok(p) => p, Err(r) => return r };
+    let principal = match authorize(&st.auth, &headers, acp_core::auth::Capability::EditGrc) { Ok(p) => p, Err(r) => return r };
     let author = actor_of(&principal);
     let store = match &st.store { Some(s) => s, None => return Json(serde_json::json!({"ok": false, "error": "no --store configured"})).into_response() };
     let tenant = tenant_of(&headers, &principal);
@@ -2306,7 +2306,7 @@ async fn grc_comments_get(State(st): State<Arc<AppState>>, headers: HeaderMap, P
 /// G1/A2: append an advisory linked reference (another GRC id or a decision id) to a record. Unsigned
 /// workflow metadata; used to link an assessment/attestation to a use-case for its lifecycle gates.
 async fn grc_link(State(st): State<Arc<AppState>>, headers: HeaderMap, Path(id): Path<String>, Json(body): Json<serde_json::Value>) -> Response {
-    if let Err(r) = authorize(&st.auth, &headers, acp_auth::Capability::EditGrc) { return r; }
+    if let Err(r) = authorize(&st.auth, &headers, acp_core::auth::Capability::EditGrc) { return r; }
     let store = match &st.store { Some(s) => s, None => return Json(serde_json::json!({"ok": false, "error": "no --store configured"})).into_response() };
     let link_id = body.get("id").and_then(|v| v.as_str()).unwrap_or("").trim().to_string();
     if link_id.is_empty() { return Json(serde_json::json!({"ok": false, "error": "id is required"})).into_response(); }
@@ -2330,7 +2330,7 @@ async fn grc_link(State(st): State<Arc<AppState>>, headers: HeaderMap, Path(id):
 /// A1: toggle a control's done flag in a conformity/assessment checklist and re-sign the record, so
 /// the checklist progress stays tamper-evident. The control_id must already be in the checklist.
 async fn grc_control_toggle(State(st): State<Arc<AppState>>, headers: HeaderMap, Path((id, control_id)): Path<(String, String)>, Json(body): Json<serde_json::Value>) -> Response {
-    if let Err(r) = authorize(&st.auth, &headers, acp_auth::Capability::EditGrc) { return r; }
+    if let Err(r) = authorize(&st.auth, &headers, acp_core::auth::Capability::EditGrc) { return r; }
     let store = match &st.store { Some(s) => s, None => return Json(serde_json::json!({"ok": false, "error": "no --store configured"})).into_response() };
     let tenant = tenant_of(&headers, &None);
     let rec = match store.get_grc(&id).await {
@@ -2369,7 +2369,7 @@ async fn grc_control_toggle(State(st): State<Arc<AppState>>, headers: HeaderMap,
 /// `acp_core::usecase`: `assessed` requires a linked assessment GRC record, `approved` requires a
 /// linked attestation. Linked records are the record's `linked_refs` (by GRC id). Re-signs on success.
 async fn grc_usecase_transition(State(st): State<Arc<AppState>>, headers: HeaderMap, Path((id, stage)): Path<(String, String)>, Json(_body): Json<serde_json::Value>) -> Response {
-    if let Err(r) = authorize(&st.auth, &headers, acp_auth::Capability::EditGrc) { return r; }
+    if let Err(r) = authorize(&st.auth, &headers, acp_core::auth::Capability::EditGrc) { return r; }
     let store = match &st.store { Some(s) => s, None => return Json(serde_json::json!({"ok": false, "error": "no --store configured"})).into_response() };
     let to = match acp_core::usecase::Stage::parse(&stage) {
         Some(s) => s,
@@ -2448,7 +2448,7 @@ async fn policy_store_rules(State(st): State<Arc<AppState>>) -> impl IntoRespons
         Ok(p) => p,
         Err(e) => return Json(serde_json::json!({"rules": [], "count": 0, "error": e.to_string()})),
     };
-    let reg = st.registry.as_ref().and_then(|p| acp_registry::Registry::load(p).ok());
+    let reg = st.registry.as_ref().and_then(|p| acp_core::registry::Registry::load(p).ok());
     let app_name = |m: &Option<String>| -> Option<String> {
         let id = m.as_deref()?;
         reg.as_ref()
@@ -2512,7 +2512,7 @@ async fn policy_store_deploy(
     headers: HeaderMap,
     Json(body): Json<serde_json::Value>,
 ) -> Response {
-    if let Err(r) = authorize(&st.auth, &headers, acp_auth::Capability::EditPolicy) {
+    if let Err(r) = authorize(&st.auth, &headers, acp_core::auth::Capability::EditPolicy) {
         return r;
     }
     let store = match &st.policy_store {
@@ -2557,7 +2557,7 @@ async fn break_glass_engage(
     headers: HeaderMap,
     Json(body): Json<serde_json::Value>,
 ) -> Response {
-    if let Err(r) = authorize(&st.auth, &headers, acp_auth::Capability::BreakGlass) {
+    if let Err(r) = authorize(&st.auth, &headers, acp_core::auth::Capability::BreakGlass) {
         return r;
     }
     use acp_core::breakglass::{GrantFile, Mode, Scope};
@@ -2593,7 +2593,7 @@ async fn break_glass_engage(
 
 /// Clear break-glass: remove the grant file (the proxy reverts to normal on its next decision).
 async fn break_glass_clear(State(st): State<Arc<AppState>>, headers: HeaderMap) -> Response {
-    if let Err(r) = authorize(&st.auth, &headers, acp_auth::Capability::BreakGlass) {
+    if let Err(r) = authorize(&st.auth, &headers, acp_core::auth::Capability::BreakGlass) {
         return r;
     }
     if let Some(f) = &st.break_glass_file {
@@ -2608,8 +2608,8 @@ async fn break_glass_clear(State(st): State<Arc<AppState>>, headers: HeaderMap) 
 /// operator can see the provisionable groups and the capabilities each grants. Gated on Export
 /// (read-only administrative view). Groups are the ACP role catalogue (single source of truth).
 async fn scim_groups(State(st): State<Arc<AppState>>, headers: HeaderMap) -> Response {
-    if let Err(r) = authorize(&st.auth, &headers, acp_auth::Capability::Export) { return r; }
-    let resources: Vec<serde_json::Value> = acp_auth::role_catalogue().into_iter().map(|(name, caps)| {
+    if let Err(r) = authorize(&st.auth, &headers, acp_core::auth::Capability::Export) { return r; }
+    let resources: Vec<serde_json::Value> = acp_core::auth::role_catalogue().into_iter().map(|(name, caps)| {
         serde_json::json!({
             "schemas": ["urn:ietf:params:scim:schemas:core:2.0:Group"],
             "id": name, "displayName": name,
@@ -2627,7 +2627,7 @@ async fn scim_groups(State(st): State<Arc<AppState>>, headers: HeaderMap) -> Res
 /// shape. Gated on Export. The source is the control-plane user directory when configured; in the
 /// mocked-IdP dev setup it reflects the dev principal so the shape and mapping are exercisable.
 async fn scim_users(State(st): State<Arc<AppState>>, headers: HeaderMap) -> Response {
-    if let Err(r) = authorize(&st.auth, &headers, acp_auth::Capability::Export) { return r; }
+    if let Err(r) = authorize(&st.auth, &headers, acp_core::auth::Capability::Export) { return r; }
     // Users are provisioned by the IdP; here we surface the operators the control plane knows about.
     // With the dev mock issuer, that is the dev principal carrying whatever role it was minted with.
     let users = st.scim_users.clone();
@@ -3007,7 +3007,7 @@ async fn report_framework_csv(State(st): State<Arc<AppState>>, headers: HeaderMa
 
 /// T6: capture the current framework report as a signed-in-time snapshot (history). Gated on Export.
 async fn report_framework_snapshot(State(st): State<Arc<AppState>>, headers: HeaderMap, Path(name): Path<String>) -> Response {
-    if let Err(r) = authorize(&st.auth, &headers, acp_auth::Capability::Export) { return r; }
+    if let Err(r) = authorize(&st.auth, &headers, acp_core::auth::Capability::Export) { return r; }
     let store = match &st.store { Some(s) => s, None => return Json(serde_json::json!({"ok": false, "error": "no --store configured"})).into_response() };
     let tenant = tenant_of(&headers, &None);
     let report = framework_report_value(&st, &tenant, &name).await;
@@ -3062,7 +3062,7 @@ async fn report_violations(State(st): State<Arc<AppState>>) -> Response {
 /// GET /report/violations.csv: the violation records as a CSV download.
 async fn report_violations_csv(State(st): State<Arc<AppState>>, headers: HeaderMap) -> Response {
     // A5: exporting the violation ledger requires the Export capability (Auditor).
-    if let Err(r) = authorize(&st.auth, &headers, acp_auth::Capability::Export) { return r; }
+    if let Err(r) = authorize(&st.auth, &headers, acp_core::auth::Capability::Export) { return r; }
     let store = match &st.store { Some(s) => s, None => return (StatusCode::OK, "no store\n").into_response() };
     let rows = match store.list_violations(10000).await { Ok(r) => r, Err(e) => return (StatusCode::INTERNAL_SERVER_ERROR, e).into_response() };
     let esc = |x: &str| format!("\"{}\"", x.replace('"', "\"\""));

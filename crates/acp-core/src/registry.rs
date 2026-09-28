@@ -7,7 +7,7 @@
 //! stamps the VERIFIED app/agent into the trusted policy context. An agent cannot assert its own id;
 //! it proves it. Local-first: the registry persists as a JSON file the proxy loads (no cloud).
 
-use acp_core::canonical::sha256_hex_bytes;
+use crate::canonical::sha256_hex_bytes;
 use serde::{Deserialize, Serialize};
 use std::collections::BTreeMap;
 

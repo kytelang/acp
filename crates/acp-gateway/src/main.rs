@@ -39,7 +39,7 @@ struct GwState {
     upstream: String,
     upstream_key: Option<String>,
     env: String,
-    oidc: Option<(acp_auth::Jwks, acp_auth::EntraConfig)>,
+    oidc: Option<(acp_core::auth::Jwks, acp_core::auth::EntraConfig)>,
     client: reqwest::Client,
     limiters: Mutex<HashMap<String, acp_core::ratelimit::TokenBucket>>,
     ledger: Option<Mutex<acp_ledger::Ledger>>,
@@ -141,7 +141,7 @@ async fn main() -> std::process::ExitCode {
             match load_jwks(&url).await {
                 Ok(jwks) => {
                     tracing::info!("per-request human identity enabled");
-                    Some((jwks, acp_auth::EntraConfig {
+                    Some((jwks, acp_core::auth::EntraConfig {
                         issuer: format!("https://login.microsoftonline.com/{tid}/v2.0"),
                         audience: aud,
                     }))
@@ -339,13 +339,13 @@ async fn content_blocked(st: &GwState, body: &serde_json::Value) -> Option<Strin
     }
 }
 
-async fn load_jwks(source: &str) -> Result<acp_auth::Jwks, String> {
+async fn load_jwks(source: &str) -> Result<acp_core::auth::Jwks, String> {
     let body = if source.starts_with("http") {
         reqwest::get(source).await.map_err(|e| e.to_string())?.text().await.map_err(|e| e.to_string())?
     } else {
         std::fs::read_to_string(source).map_err(|e| e.to_string())?
     };
-    acp_auth::Jwks::from_jwks_json(&body).map_err(|e| format!("{e:?}"))
+    acp_core::auth::Jwks::from_jwks_json(&body).map_err(|e| format!("{e:?}"))
 }
 
 fn open_ledger(path: &str) -> Option<acp_ledger::Ledger> {
@@ -591,7 +591,7 @@ fn resolve_principal(st: &GwState, headers: &HeaderMap) -> Option<String> {
         .get("authorization")
         .and_then(|v| v.to_str().ok())
         .and_then(|s| s.strip_prefix("Bearer "))?;
-    match acp_auth::verify(token, jwks, cfg, now_ms()) {
+    match acp_core::auth::verify(token, jwks, cfg, now_ms()) {
         Ok(p) => Some(if p.username.is_empty() { p.oid } else { p.username }),
         Err(_) => None,
     }

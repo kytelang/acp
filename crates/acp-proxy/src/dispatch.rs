@@ -12,7 +12,7 @@ use crate::evidence::Evidence;
 use crate::intercept::{decide, Action, CODE_BLOCKED};
 use crate::limits;
 use crate::policy::{self, Enforce};
-use acp_approvals::ApprovalStore;
+use acp_core::approvals::ApprovalStore;
 use acp_core::impact::ImpactTaxonomy;
 use acp_core::resource::ResourceTaxonomy;
 use acp_core::toolintegrity::{tool_fingerprint, tools_from_list_result, PinResult, ToolPins};
@@ -159,8 +159,8 @@ impl ExternalScanOutcome {
 }
 
 struct Oidc {
-    jwks: acp_auth::Jwks,
-    cfg: acp_auth::EntraConfig,
+    jwks: acp_core::auth::Jwks,
+    cfg: acp_core::auth::EntraConfig,
 }
 
 impl Controller {
@@ -334,7 +334,7 @@ impl Controller {
     }
 
     /// Configure per-request human-identity verification (the org IdP JWKS + issuer/audience).
-    pub fn set_oidc(&self, jwks: acp_auth::Jwks, cfg: acp_auth::EntraConfig) {
+    pub fn set_oidc(&self, jwks: acp_core::auth::Jwks, cfg: acp_core::auth::EntraConfig) {
         *self.oidc.lock().unwrap() = Some(Oidc { jwks, cfg });
     }
 
@@ -346,7 +346,7 @@ impl Controller {
         let guard = self.oidc.lock().unwrap();
         let oidc = guard.as_ref()?;
         let token = token?;
-        match acp_auth::verify(token, &oidc.jwks, &oidc.cfg, dispatch_now_ms()) {
+        match acp_core::auth::verify(token, &oidc.jwks, &oidc.cfg, dispatch_now_ms()) {
             Ok(p) => Some(if p.username.is_empty() { p.oid } else { p.username }),
             Err(_) => None,
         }
@@ -1303,7 +1303,7 @@ mod integrity_tests {
 #[cfg(test)]
 mod oidc_tests {
     use super::*;
-    use acp_auth::MockEntra;
+    use acp_core::auth::MockEntra;
 
     fn controller() -> Controller {
         let engine = Arc::new(PolicyEngine::from_yaml("version: 1\ndefault: allow\nrules: []\n").unwrap());

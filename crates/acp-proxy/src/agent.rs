@@ -119,13 +119,13 @@ fn parse_opts(items: &[String]) -> Result<(Opts, Vec<String>), String> {
     Ok((o, cmd))
 }
 
-async fn load_jwks(source: &str) -> Result<acp_auth::Jwks, String> {
+async fn load_jwks(source: &str) -> Result<acp_core::auth::Jwks, String> {
     let body = if source.starts_with("http") {
         reqwest::get(source).await.map_err(|e| e.to_string())?.text().await.map_err(|e| e.to_string())?
     } else {
         std::fs::read_to_string(source).map_err(|e| e.to_string())?
     };
-    acp_auth::Jwks::from_jwks_json(&body).map_err(|e| format!("{e:?}"))
+    acp_core::auth::Jwks::from_jwks_json(&body).map_err(|e| format!("{e:?}"))
 }
 
 /// Stable id for this PEP in control-plane reports (heartbeats, events). Operator-set via
@@ -169,7 +169,7 @@ async fn build_controller(o: &Opts) -> Result<Arc<Controller>, String> {
     };
     let approvals = match o.approvals.clone().or(approvals_default) {
         Some(ap) => {
-            let s = acp_approvals::ApprovalStore::open(&ap)?;
+            let s = acp_core::approvals::ApprovalStore::open(&ap)?;
             tracing::info!("approvals store {ap}");
             Some(s)
         }
@@ -344,7 +344,7 @@ async fn build_controller(o: &Opts) -> Result<Arc<Controller>, String> {
             return Err(format!("agent {aid} failed control-plane verification (unknown, revoked, or bad token)"));
         }
     } else if let Some(reg_path) = &o.registry {
-        let reg = acp_registry::Registry::load(reg_path)
+        let reg = acp_core::registry::Registry::load(reg_path)
             .map_err(|e| format!("cannot load registry {reg_path}: {e}"))?;
         let (aid, tok) = match (&o.agent_id, &o.agent_token) {
             (Some(a), Some(t)) => (a.clone(), t.clone()),
@@ -439,7 +439,7 @@ pub async fn run(args: Vec<String>) -> ExitCode {
                 let client = reqwest::Client::new();
                 loop {
                     tokio::time::sleep(std::time::Duration::from_secs(3)).await;
-                    let store = match acp_approvals::ApprovalStore::open(&path) { Ok(s) => s, Err(_) => continue };
+                    let store = match acp_core::approvals::ApprovalStore::open(&path) { Ok(s) => s, Err(_) => continue };
                     let pending = match store.list_pending() { Ok(p) => p, Err(_) => continue };
                     for v in pending {
                         let url = format!("{base}/approvals/{}/status", v.id);
@@ -504,7 +504,7 @@ pub async fn run(args: Vec<String>) -> ExitCode {
         let jwks_url = format!("https://login.microsoftonline.com/{tid}/discovery/v2.0/keys");
         match load_jwks(&jwks_url).await {
             Ok(jwks) => {
-                controller.set_oidc(jwks, acp_auth::EntraConfig { issuer: issuer.clone(), audience: aud.clone() });
+                controller.set_oidc(jwks, acp_core::auth::EntraConfig { issuer: issuer.clone(), audience: aud.clone() });
                 tracing::info!("per-request human identity enabled (issuer {issuer})");
             }
             Err(e) => {

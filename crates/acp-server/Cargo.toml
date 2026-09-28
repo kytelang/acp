@@ -11,7 +11,6 @@ acp-hsm = { path = "../acp-hsm" }
 tracing.workspace = true
 reqwest.workspace = true
 acp-core = { path = "../acp-core" }
-acp-auth = { path = "../acp-auth" }
 tokio-rustls = "0.26"
 rustls = "0.23"
 rustls-pemfile = "2"
@@ -21,9 +20,7 @@ hyper = { version = "1", features = ["server", "http1"] }
 hyper-util = { version = "0.1", features = ["server-auto", "tokio", "service"] }
 tower = "0.5"
 acp-policy = { path = "../acp-policy" }
-acp-registry = { path = "../acp-registry" }
 acp-ledger = { path = "../acp-ledger" }
-acp-approvals = { path = "../acp-approvals" }
 tokio = { workspace = true }
 axum = { workspace = true }
 maud = { workspace = true }

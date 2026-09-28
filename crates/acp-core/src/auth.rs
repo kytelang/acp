@@ -11,7 +11,7 @@
 //! path is exercised deterministically offline. EdDSA is a real JOSE algorithm; an RS256 key is
 //! simply another JWKS entry once an RSA verifier is linked. Nothing above the JWKS seam changes.
 
-use acp_core::sign::{verify_ed25519, Ed25519Signer, Signer};
+use crate::sign::{verify_ed25519, Ed25519Signer, Signer};
 use base64::Engine;
 use std::collections::{BTreeSet, HashMap};
 
