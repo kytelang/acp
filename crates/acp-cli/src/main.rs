@@ -1,5 +1,6 @@
 //! acp: the single CLI (init, verify, export, policy-compile, policy-test).
 
+mod nativecompile;
 use acp_policy::{build_context, PolicyEngine};
 use serde_json::Value;
 use std::process::ExitCode;
@@ -2101,7 +2102,7 @@ fn cmd_groundedness(rest: &[String]) -> ExitCode {
 /// Prints the native settings JSON to stdout and a coverage report (what mapped, what is routed to
 /// the proxy) to stderr.
 fn cmd_native_compile(rest: &[String]) -> ExitCode {
-    use acp_nativecompile::{compile_with_gateway, Vendor};
+    use crate::nativecompile::{compile_with_gateway, Vendor};
     let positionals: Vec<&String> = rest.iter().filter(|a| !a.starts_with("--")).collect();
     let (file, vendor_s) = match (positionals.first(), positionals.get(1)) {
         (Some(f), Some(v)) => (*f, *v),

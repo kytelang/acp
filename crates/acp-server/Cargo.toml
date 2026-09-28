@@ -6,15 +6,17 @@ license.workspace = true
 description = "Agent Control Plane: control service - approval inbox, policy endpoint, verify, reporting."
 
 [dependencies]
-acp-cpstore = { path = "../acp-cpstore" }
 getrandom.workspace = true
 acp-hsm = { path = "../acp-hsm" }
 tracing.workspace = true
 reqwest.workspace = true
 acp-core = { path = "../acp-core" }
 acp-auth = { path = "../acp-auth" }
-acp-mtls = { path = "../acp-mtls" }
 tokio-rustls = "0.26"
+rustls = "0.23"
+rustls-pemfile = "2"
+sqlx.workspace = true
+serde.workspace = true
 hyper = { version = "1", features = ["server", "http1"] }
 hyper-util = { version = "0.1", features = ["server-auto", "tokio", "service"] }
 tower = "0.5"

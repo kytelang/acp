@@ -5,6 +5,8 @@
 //! auto-escapes, so attacker-controlled content in the inbox cannot inject markup (M4.5).
 //! Multi-tenant Postgres, per-tenant keys, and SSO are the next layer (v1.1.1-1.1.3 / H1).
 
+mod store;
+mod mtls;
 use axum::{
     extract::{Path, Query, State},
     http::{HeaderMap, StatusCode},
@@ -29,7 +31,7 @@ struct AppState {
     registry: Option<String>,
     policy_store: Option<String>,
     enrollment: Option<String>,
-    store: Option<std::sync::Arc<acp_cpstore::ControlStore>>,
+    store: Option<std::sync::Arc<crate::store::ControlStore>>,
     cp_key: String,
     break_glass_file: Option<String>,
     break_glass_seed: Option<[u8; 32]>,
@@ -358,7 +360,7 @@ async fn leader_status(State(st): State<Arc<AppState>>) -> impl IntoResponse {
 
 /// C1: restore persisted liveness heartbeats and spike-event timestamps from the shared store into
 /// the in-memory detectors, so a restart does not lose the dead-man's-switch or the alert state.
-async fn restore_control_state(st: &Arc<AppState>, store: &acp_cpstore::ControlStore) {
+async fn restore_control_state(st: &Arc<AppState>, store: &crate::store::ControlStore) {
     // Liveness: one row per proxy ("liveness:{proxy}" -> ts), so replicas never clobber each other.
     if let Ok(rows) = store.list_state_prefix("liveness:").await {
         let mut live = st.liveness.lock().unwrap();
@@ -807,7 +809,7 @@ async fn main() {
     // Config-driven control-plane store (identity, endpoints; GRC later). The backend is chosen by
     // the --store URL (sqlite / postgres / mysql). Fail closed if it was requested but cannot connect.
     let store = match store_url {
-        Some(u) => match acp_cpstore::ControlStore::connect(&u).await {
+        Some(u) => match crate::store::ControlStore::connect(&u).await {
             Ok(s) => {
                 tracing::info!("control-plane store connected");
                 Some(std::sync::Arc::new(s))
@@ -2657,11 +2659,11 @@ async fn dev_token(State(st): State<Arc<AppState>>, Query(q): Query<StdHashMap<S
 /// Serve the axum app over mutual TLS: present the server cert and REQUIRE a client cert signed by
 /// the ACP CA, so only enrolled components can reach the control API.
 async fn serve_mtls(addr: &str, app: Router, ca: &str, cert: &str, key: &str) {
-    acp_mtls::ensure_provider();
+    crate::mtls::ensure_provider();
     let ca = std::fs::read(ca).expect("read tls-ca");
     let cert = std::fs::read(cert).expect("read tls-cert");
     let key = std::fs::read(key).expect("read tls-key");
-    let cfg = acp_mtls::server_config(&ca, &cert, &key).expect("mtls server config");
+    let cfg = crate::mtls::server_config(&ca, &cert, &key).expect("mtls server config");
     let acceptor = tokio_rustls::TlsAcceptor::from(cfg);
     let listener = tokio::net::TcpListener::bind(addr).await.expect("bind");
     loop {

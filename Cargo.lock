@@ -40,7 +40,6 @@ dependencies = [
  "acp-approvals",
  "acp-core",
  "acp-ledger",
- "acp-nativecompile",
  "acp-policy",
  "acp-registry",
  "hex",
@@ -63,16 +62,6 @@ dependencies = [
  "sha2 0.10.9",
  "tracing",
  "tracing-subscriber",
-]
-
-[[package]]
-name = "acp-cpstore"
-version = "0.0.0"
-dependencies = [
- "serde",
- "serde_json",
- "sqlx",
- "tokio",
 ]
 
 [[package]]
@@ -167,23 +156,6 @@ dependencies = [
 ]
 
 [[package]]
-name = "acp-mtls"
-version = "0.0.0"
-dependencies = [
- "rustls",
- "rustls-pemfile",
-]
-
-[[package]]
-name = "acp-nativecompile"
-version = "0.0.0"
-dependencies = [
- "acp-core",
- "acp-policy",
- "serde_json",
-]
-
-[[package]]
 name = "acp-pgstate"
 version = "0.0.0"
 dependencies = [
@@ -255,10 +227,8 @@ dependencies = [
  "acp-approvals",
  "acp-auth",
  "acp-core",
- "acp-cpstore",
  "acp-hsm",
  "acp-ledger",
- "acp-mtls",
  "acp-policy",
  "acp-registry",
  "axum",
@@ -268,7 +238,11 @@ dependencies = [
  "hyper-util",
  "maud",
  "reqwest",
+ "rustls",
+ "rustls-pemfile",
+ "serde",
  "serde_json",
+ "sqlx",
  "tokio",
  "tokio-rustls",
  "tower",
