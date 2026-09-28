@@ -79,6 +79,18 @@ pub struct ModelRow {
     }
 }
 
+pub struct OversightRow {
+    pub approver: string,
+    pub flagged: bool,
+    pub approveRate: string,
+    pub medianMs: long,
+    pub total: long,
+    pub reasons: string,
+    init(approver: string, flagged: bool, approveRate: string, medianMs: long, total: long, reasons: string) {
+        self.approver = approver; self.flagged = flagged; self.approveRate = approveRate; self.medianMs = medianMs; self.total = total; self.reasons = reasons;
+    }
+}
+
 pub struct VendorRow {
     pub id: string,
     pub name: string,
@@ -883,6 +895,45 @@ pub struct AcpClient {
             let id = json.asString(json.get(item, "id")) ?? "";
             let tool = json.asString(json.get(item, "tool")) ?? "";
             rows.push(ApprovalRow(id, tool));
+            i = i + 1;
+        }
+        return rows;
+    }
+
+    // G1: oversight-quality profile of each approver (EU AI Act Art. 14). Export-gated read.
+    pub fn oversightRows(self: AcpClient): list.List<OversightRow> {
+        let rows = list.List<OversightRow>();
+        let hdrs = client.Http.emptyHeaders();
+        hdrs.set("x-acp-tenant", self.tenant);
+        let tok = self.authToken("Auditor");
+        if (!string.eql(tok, "")) { hdrs.set("Authorization", "Bearer " + tok); }
+        let resp = client.Http.request("GET", self.base + "/oversight", hdrs, "");
+        if (resp.status.toCode() != 200) { return rows; }
+        let av = json.get(json.parse(resp.body), "approvers");
+        let arr = json.asArray(av);
+        if (arr == undefined) { return rows; }
+        let i = 0;
+        while (i < arr.size()) {
+            let a = json.at(av, i);
+            let ratePctN = json.asNumber(json.get(a, "approve_rate_pct")) ?? 0;
+            let ratePct = `${ratePctN}%`;
+            let reasonsArr = json.asArray(json.get(a, "reasons"));
+            let reasons = "";
+            if (reasonsArr != undefined) {
+                let k = 0;
+                while (k < reasonsArr.size()) {
+                    let r = json.asString(json.at(json.get(a, "reasons"), k)) ?? "";
+                    if (!string.eql(r, "")) { if (string.eql(reasons, "")) { reasons = r; } else { reasons = reasons + "; " + r; } }
+                    k = k + 1;
+                }
+            }
+            rows.push(OversightRow(
+                json.asString(json.get(a, "approver")) ?? "",
+                json.asBool(json.get(a, "flagged")) ?? false,
+                ratePct,
+                json.asNumber(json.get(a, "median_latency_ms")) ?? 0,
+                json.asNumber(json.get(a, "total")) ?? 0,
+                reasons));
             i = i + 1;
         }
         return rows;

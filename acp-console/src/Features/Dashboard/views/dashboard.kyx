@@ -593,6 +593,30 @@ pub fn modelsPanel(rows: list.List<ModelRow>): Html {
     </div>;
 }
 
+pub fn oversightPanel(rows: list.List<OversightRow>): Html {
+    return <div id="oversight">
+        {if (rows.size() == 0) {
+            <p class="empty">No resolved approvals yet, so there is nothing to assess.</p>
+        } else {
+            <table class="tbl">
+                <thead><tr><th>Approver</th><th>Decisions</th><th>Approve rate</th><th>Median decision</th><th>Oversight</th></tr></thead>
+                <tbody>
+                    {for (i in 0..rows.size()) {
+                        let o = rows.get(i) ?? OversightRow("", false, "0%", 0, 0, "");
+                        <tr>
+                            <td class="strong">{o.approver}</td>
+                            <td>{`${o.total}`}</td>
+                            <td>{o.approveRate}</td>
+                            <td>{`${o.medianMs} ms`}</td>
+                            <td>{if (o.flagged) { <span class="badge bad" title={o.reasons}>weakness: {o.reasons}</span> } else { <span class="badge ok">effective</span> }}</td>
+                        </tr>
+                    }}
+                </tbody>
+            </table>
+        }}
+    </div>;
+}
+
 pub fn vendorsPanel(rows: list.List<VendorRow>): Html {
     return <div id="vendors">
         {if (rows.size() == 0) {

@@ -56,6 +56,8 @@ pub struct ApproverOversight {
     pub total: u32,
     pub approved: u32,
     pub approve_rate: f64,
+    /// approve_rate as an integer percentage, for display.
+    pub approve_rate_pct: u32,
     pub median_latency_ms: u64,
     pub fast_fraction: f64,
     pub max_in_window: u32,
@@ -126,6 +128,7 @@ pub fn analyze(decisions: &[Decision], cfg: &OversightConfig) -> Vec<ApproverOve
             total,
             approved,
             approve_rate,
+            approve_rate_pct: (approve_rate * 100.0).round() as u32,
             median_latency_ms: median(latencies),
             fast_fraction,
             max_in_window: miw,
