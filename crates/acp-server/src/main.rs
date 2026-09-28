@@ -15,10 +15,11 @@ mod common;
 mod handlers;
 mod router;
 mod serve;
+mod auth;
 mod config;
 mod preflight;
 mod tasks;
-use state::{AppState, Auth};
+use state::AppState;
 use config::Config;
 use common::*;
 
@@ -83,69 +84,7 @@ async fn main() {
         }
     });
 
-    if dev_auth && std::env::var("ACP_ALLOW_DEV_AUTH").ok().as_deref() != Some("1") {
-        tracing::info!("--dev-auth requires ACP_ALLOW_DEV_AUTH=1 (never enable in production)");
-        std::process::exit(2);
-    }
-    // Control-plane RBAC (opt-in). Three ways to enable, in priority order:
-    //   --dev-auth                         : in-memory mock issuer (local use)
-    //   --entra-tenant + --entra-audience  : real Entra; issuer + JWKS URL derived from the tenant
-    //   --oidc-jwks(url|file) + --oidc-issuer + --oidc-audience : explicit
-    // With none, RBAC is off and the local demo is unaffected.
-    let auth: Option<Auth> = if dev_auth {
-        let mock = acp_core::auth::MockEntra::new("common", "acp-app");
-        tracing::info!("DEV auth enabled (mock issuer); GET /auth/dev-token?role=PolicyAdmin");
-        Some(Auth {
-            jwks: std::sync::Arc::new(std::sync::RwLock::new(mock.jwks())),
-            cfg: mock.config(),
-            dev: Some(mock),
-        })
-    } else {
-        // Resolve (issuer, audience, jwks_source) from either the Entra convenience flags or the
-        // explicit OIDC flags.
-        let resolved = if let (Some(tid), Some(aud)) = (&entra_tenant, &entra_audience) {
-            Some((
-                format!("https://login.microsoftonline.com/{tid}/v2.0"),
-                aud.clone(),
-                format!("https://login.microsoftonline.com/{tid}/discovery/v2.0/keys"),
-            ))
-        } else if let (Some(src), Some(iss), Some(aud)) = (&oidc_jwks, &oidc_issuer, &oidc_audience) {
-            Some((iss.clone(), aud.clone(), src.clone()))
-        } else {
-            None
-        };
-        match resolved {
-            Some((issuer, audience, source)) => match load_jwks(&source).await {
-                Ok(jwks) => {
-                    tracing::info!("OIDC RBAC enabled (issuer {issuer}, aud {audience})");
-                    let jwks_arc = std::sync::Arc::new(std::sync::RwLock::new(jwks));
-                    // Key rotation: refresh the JWKS hourly when it came from a URL.
-                    if source.starts_with("http") {
-                        let arc = jwks_arc.clone();
-                        let url = source.clone();
-                        tokio::spawn(async move {
-                            loop {
-                                tokio::time::sleep(std::time::Duration::from_secs(3600)).await;
-                                if let Ok(fresh) = load_jwks(&url).await {
-                                    *arc.write().unwrap() = fresh;
-                                }
-                            }
-                        });
-                    }
-                    Some(Auth {
-                        jwks: jwks_arc,
-                        cfg: acp_core::auth::EntraConfig { issuer, audience },
-                        dev: None,
-                    })
-                }
-                Err(e) => {
-                    tracing::error!("could not load JWKS from {source}: {e}; refusing to start (auth was requested, failing closed)");
-                    std::process::exit(1);
-                }
-            },
-            None => None,
-        }
-    };
+    let auth = crate::auth::build(dev_auth, &entra_tenant, &entra_audience, &oidc_jwks, &oidc_issuer, &oidc_audience).await;
     // Config-driven control-plane store (identity, endpoints; GRC later). The backend is chosen by
     // the --store URL (sqlite / postgres / mysql). Fail closed if it was requested but cannot connect.
     let store = match store_url {

@@ -1,5 +1,6 @@
 //! Entra / OIDC identity-cutover preflight: verify the RBAC setup without starting the server.
-use crate::common::{load_jwks, now_ms};
+use crate::auth::load_jwks;
+use crate::common::now_ms;
 
 /// Verify the identity configuration, then exit: resolve the issuer/audience/JWKS, fetch and parse
 /// the JWKS, and (when a sample token is given) run full verification, printing each claim check and

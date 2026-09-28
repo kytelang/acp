@@ -1,12 +1,11 @@
 //! Cross-cutting helpers shared by the control-plane handlers: authorization, tenancy, signing,
 //! webhooks and small utilities.
-use crate::state::{AppState, Auth};
-use axum::{
-    http::{HeaderMap, StatusCode},
-    response::{IntoResponse, Response},
-    Json,
-};
+use crate::state::AppState;
+use axum::http::HeaderMap;
 use std::sync::Arc;
+
+// Auth checks live in crate::auth; re-export so handlers keep using them via the common prelude.
+pub(crate) use crate::auth::{authorize, authorize_report};
 
 pub(crate) fn fire_webhook(st: &Arc<AppState>, event_type: &str, fields: serde_json::Value) {
     let now = now_ms();
@@ -66,33 +65,7 @@ pub(crate) fn load_scim_users(path: Option<&str>) -> Vec<(String, String, Vec<St
     ]
 }
 
-/// Load a JWKS from a URL (fetched) or a file path (read). Used for real Entra keys.
-pub(crate) async fn load_jwks(source: &str) -> Result<acp_core::auth::Jwks, String> {
-    let body = if source.starts_with("http") {
-        reqwest::get(source).await.map_err(|e| e.to_string())?
-            .text().await.map_err(|e| e.to_string())?
-    } else {
-        std::fs::read_to_string(source).map_err(|e| e.to_string())?
-    };
-    acp_core::auth::Jwks::from_jwks_json(&body).map_err(|e| format!("{e:?}"))
-}
 
-/// Authorise a request for a capability. RBAC disabled (auth None) allows everything (local demo).
-pub(crate) fn authorize(auth: &Option<Auth>, headers: &HeaderMap, cap: acp_core::auth::Capability) -> Result<Option<acp_core::auth::Principal>, Response> {
-    let a = match auth { Some(a) => a, None => return Ok(None) };
-    let token = headers
-        .get("authorization")
-        .and_then(|v| v.to_str().ok())
-        .and_then(|s| s.strip_prefix("Bearer "))
-        .ok_or_else(|| (StatusCode::UNAUTHORIZED, Json(serde_json::json!({"ok":false,"error":"missing bearer token"}))).into_response())?;
-    let jwks = a.jwks.read().unwrap();
-    let p = acp_core::auth::verify(token, &jwks, &a.cfg, now_ms())
-        .map_err(|e| (StatusCode::UNAUTHORIZED, Json(serde_json::json!({"ok":false,"error":format!("invalid token: {e:?}")}))).into_response())?;
-    if !p.can(cap) {
-        return Err((StatusCode::FORBIDDEN, Json(serde_json::json!({"ok":false,"error":format!("principal lacks {cap:?}")}))).into_response());
-    }
-    Ok(Some(p))
-}
 
 /// The actor string to attribute a change to: the verified principal's username (or oid), else
 /// "console" when RBAC is off (local/dev). Threaded into evidence and control-plane records so a
@@ -171,20 +144,6 @@ pub(crate) fn now_ms() -> u64 {
         .unwrap_or(0)
 }
 
-/// E1: PEP reporting routes present a shared bearer token when the server is configured with one.
-/// Fail-closed when a token is set; open (dev) when it is not, with the check a no-op.
-pub(crate) fn authorize_report(st: &AppState, headers: &HeaderMap) -> Result<(), Response> {
-    let want = match &st.report_token { Some(t) => t, None => return Ok(()) };
-    let got = headers
-        .get("authorization")
-        .and_then(|v| v.to_str().ok())
-        .and_then(|s| s.strip_prefix("Bearer "));
-    if got == Some(want.as_str()) {
-        Ok(())
-    } else {
-        Err((StatusCode::UNAUTHORIZED, Json(serde_json::json!({"ok":false,"error":"invalid report token"}))).into_response())
-    }
-}
 
 pub(crate) fn grc_doc(id: &str, kind: &str, subject: &str, title: &str, status: &str, body: &str) -> serde_json::Value {
     serde_json::json!({"id": id, "kind": kind, "subject": subject, "title": title, "status": status, "body": body})

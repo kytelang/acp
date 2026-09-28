@@ -2,12 +2,11 @@
 use crate::state::AppState;
 use crate::common::*;
 use axum::{
-    extract::{Path, Query, State},
+    extract::{Path, State},
     http::HeaderMap,
     response::{IntoResponse, Response},
     Json,
 };
-use std::collections::HashMap as StdHashMap;
 use std::sync::Arc;
 
 pub(crate) async fn vendor_register(State(st): State<Arc<AppState>>, headers: HeaderMap, Json(body): Json<serde_json::Value>) -> Response {
@@ -225,13 +224,3 @@ pub(crate) async fn scim_users(State(st): State<Arc<AppState>>, headers: HeaderM
     })).into_response()
 }
 
-pub(crate) async fn dev_token(State(st): State<Arc<AppState>>, Query(q): Query<StdHashMap<String, String>>) -> impl IntoResponse {
-    match st.auth.as_ref().and_then(|a| a.dev.as_ref()) {
-        Some(mock) => {
-            let role = q.get("role").map(String::as_str).unwrap_or("PolicyAdmin");
-            let tok = mock.issue("dev-oid", "dev@local", "common", &[role], now_ms(), 3600);
-            Json(serde_json::json!({"token": tok, "role": role}))
-        }
-        None => Json(serde_json::json!({"error": "dev auth not enabled"})),
-    }
-}

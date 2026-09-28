@@ -1,4 +1,5 @@
 //! Shared application state for the control-plane HTTP service.
+use crate::auth::Auth;
 
 pub(crate) struct AppState {
     pub(crate) approvals: Option<String>,
@@ -56,11 +57,3 @@ pub(crate) struct AppState {
     pub(crate) lease: std::sync::Mutex<(bool, String, i64)>,
 }
 
-/// Optional control-plane RBAC. When present, mutating endpoints require a verified bearer token
-/// with the right capability. `dev` is an in-memory mock issuer for local use (issues test tokens);
-/// production sets jwks+cfg from the org IdP and leaves dev None.
-pub(crate) struct Auth {
-    pub(crate) jwks: std::sync::Arc<std::sync::RwLock<acp_core::auth::Jwks>>,
-    pub(crate) cfg: acp_core::auth::EntraConfig,
-    pub(crate) dev: Option<acp_core::auth::MockEntra>,
-}
