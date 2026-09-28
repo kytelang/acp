@@ -91,6 +91,12 @@ pub struct When {
     /// verified human behind them (model v2, D1).
     #[serde(default)]
     pub principal: Option<String>,
+    /// A directory group / role the human principal belongs to (from the IdP: Entra app roles or
+    /// group claims), matched against the trusted `principal_scopes` set. Absent for any. This is how
+    /// one org-wide policy differentiates by team without a config per user: membership is managed in
+    /// the IdP, and a rule keys on the group.
+    #[serde(default)]
+    pub group: Option<String>,
     /// Resource class the tool touches (database, filesystem, ...); exact, glob, or absent for any.
     /// Trusted: derived by the proxy from the tool via the resource taxonomy (model v2, D2).
     #[serde(default)]

@@ -69,6 +69,11 @@ fn compile_rule(rule: &Rule) -> String {
             conds.push(c);
         }
     }
+    if let Some(g) = &rule.when.group {
+        // Group membership is a set-contains over the trusted principal_scopes (the IdP-provided
+        // groups/roles), never argument content. Exact match only; groups are discrete identifiers.
+        conds.push(format!("context.principal_scopes.contains(\"{}\")", esc(g)));
+    }
     if let Some(r) = &rule.when.resource {
         if let Some(c) = id_cond("context.resource", r) {
             conds.push(c);

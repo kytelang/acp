@@ -74,7 +74,7 @@ pub fn verify_matrix(dsl: &str, requests: &[TestRequest]) -> Result<Vec<MatrixRo
     let tax = ImpactTaxonomy::default();
     let rtax = ResourceTaxonomy::default();
     Ok(requests.iter().map(|r| {
-        let ctx = build_context_identified_full(&r.tool, &serde_json::json!({}), "prod", "agent", "", &r.principal, &tax, &rtax);
+        let ctx = build_context_identified_full(&r.tool, &serde_json::json!({}), "prod", "agent", "", &r.principal, &[], &tax, &rtax);
         MatrixRow { tool: r.tool.clone(), principal: r.principal.clone(), verdict: verdict_str(engine.evaluate(ctx).verdict).to_string() }
     }).collect())
 }

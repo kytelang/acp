@@ -38,6 +38,7 @@ struct Opts {
     agent_id: Option<String>,
     agent_token: Option<String>,
     principal: Option<String>,
+    principal_groups: Vec<String>,
     break_glass_key: Option<String>,
     tool_pins: Option<String>,
     enforcement_key: Option<String>,
@@ -96,6 +97,7 @@ fn parse_opts(items: &[String]) -> Result<(Opts, Vec<String>), String> {
             "--agent-id" => o.agent_id = it.next().cloned(),
             "--agent-token" => o.agent_token = it.next().cloned(),
             "--principal" => o.principal = it.next().cloned(),
+            "--principal-groups" => { if let Some(v) = it.next() { o.principal_groups = v.split(',').map(|x| x.trim().to_string()).filter(|x| !x.is_empty()).collect(); } }
             "--shadow" => o.shadow = true,
             "--fail-open" => o.fail_open = true,
             "--content-firewall" => o.content_firewall = true,
@@ -321,6 +323,7 @@ async fn build_controller(o: &Opts) -> Result<Arc<Controller>, String> {
     // agents; the OAuth-token subject for remote agents once wired). It is proxy-supplied and
     // trusted, never asserted by the agent. Absent -> "unattributed" so the gap is governable.
     let principal = o.principal.clone().unwrap_or_else(|| "unattributed".to_string());
+    let groups = o.principal_groups.clone();
     if let Some(base) = &o.registry_url {
         // Verify against the control-plane database (DB-registered agents, no registry file).
         let (aid, tok) = match (&o.agent_id, &o.agent_token) {
@@ -339,7 +342,7 @@ async fn build_controller(o: &Opts) -> Result<Arc<Controller>, String> {
             let app = v["app"].as_str().unwrap_or("").to_string();
             let agent = v["agent"].as_str().unwrap_or("").to_string();
             tracing::info!("verified identity via control plane agent={agent} app={app} principal={principal}");
-            controller.set_identity(app, agent, principal);
+            controller.set_identity(app, agent, principal, groups);
         } else {
             return Err(format!("agent {aid} failed control-plane verification (unknown, revoked, or bad token)"));
         }
@@ -357,13 +360,13 @@ async fn build_controller(o: &Opts) -> Result<Arc<Controller>, String> {
                     id.app_name, id.app_id, id.agent_name, id.agent_id, principal
                 );
                 // Policy rules reference the human names; evidence-friendly ids remain in the registry.
-                controller.set_identity(id.app_name, id.agent_name, principal);
+                controller.set_identity(id.app_name, id.agent_name, principal, groups);
             }
             None => return Err(format!("agent {aid} failed registry verification (unknown, revoked, or bad token)")),
         }
     } else if o.principal.is_some() {
         // No registry, but a principal was declared: still stamp it (agent/app stay empty).
-        controller.set_identity(String::new(), String::new(), principal);
+        controller.set_identity(String::new(), String::new(), principal, groups);
     }
     Ok(controller)
 }

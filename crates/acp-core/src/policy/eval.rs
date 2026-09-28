@@ -192,9 +192,32 @@ mod tests {
 
     fn ctx(tool: &str, agent: &str, principal: &str) -> serde_json::Value {
         build_context_identified_full(
-            tool, &serde_json::json!({}), "prod", agent, "", principal,
+            tool, &serde_json::json!({}), "prod", agent, "", principal, &[],
             &ImpactTaxonomy::default(), &ResourceTaxonomy::default(),
         )
+    }
+
+    fn ctx_grp(tool: &str, principal: &str, groups: &[&str]) -> serde_json::Value {
+        let g: Vec<String> = groups.iter().map(|s| s.to_string()).collect();
+        build_context_identified_full(
+            tool, &serde_json::json!({}), "prod", "a", "", principal, &g,
+            &ImpactTaxonomy::default(), &ResourceTaxonomy::default(),
+        )
+    }
+
+    #[test]
+    fn policy_matches_on_the_principal_group() {
+        // One org-wide policy differentiates by IdP group: finance is denied shell.exec, others allowed.
+        let src = "version: 1\ndefault: allow\nrules:\n  - id: finance-no-shell\n    when: { group: finance, tool: shell.exec }\n    verdict: deny\n";
+        let e = PolicyEngine::from_yaml(src).unwrap();
+        // A user in the finance group is denied.
+        assert_eq!(e.evaluate(ctx_grp("shell.exec", "alice", &["finance", "all-staff"])).verdict, Verdict::Deny);
+        // A user in a different group is allowed (default).
+        assert_eq!(e.evaluate(ctx_grp("shell.exec", "bob", &["engineering"])).verdict, Verdict::Allow);
+        // A user with no groups is allowed (the group rule does not match).
+        assert_eq!(e.evaluate(ctx_grp("shell.exec", "carol", &[])).verdict, Verdict::Allow);
+        // The same finance user calling a different tool is unaffected by the shell rule.
+        assert_eq!(e.evaluate(ctx_grp("db.query", "alice", &["finance"])).verdict, Verdict::Allow);
     }
 
     #[test]

@@ -49,7 +49,7 @@ pub fn build_context_identified(
     app: &str,
     tax: &ImpactTaxonomy,
 ) -> Value {
-    build_context_identified_full(tool, args, env, agent, app, "", tax, &ResourceTaxonomy::default())
+    build_context_identified_full(tool, args, env, agent, app, "", &[], tax, &ResourceTaxonomy::default())
 }
 
 /// The full model-v2 context: the verified agent AND human principal (D1), plus the proxy-derived
@@ -64,6 +64,7 @@ pub fn build_context_identified_full(
     agent: &str,
     app: &str,
     principal: &str,
+    groups: &[String],
     tax: &ImpactTaxonomy,
     rtax: &ResourceTaxonomy,
 ) -> Value {
@@ -84,7 +85,7 @@ pub fn build_context_identified_full(
         "env": env,
         "impact": level_str(tax.score(tool, args)),
         "impact_taxonomy": tax.version,
-        "principal_scopes": [],
+        "principal_scopes": groups,
         "agent": agent,
         "app": app,
         "principal": principal,
@@ -106,6 +107,7 @@ pub fn build_model_context(
     operation: &str,
     app: &str,
     principal: &str,
+    groups: &[String],
     args: &Value,
     env: &str,
 ) -> Value {
@@ -126,7 +128,7 @@ pub fn build_model_context(
         "env": env,
         "impact": level_str(tax.score(model, args)),
         "impact_taxonomy": tax.version,
-        "principal_scopes": [],
+        "principal_scopes": groups,
         "agent": app,
         "app": app,
         "principal": principal,

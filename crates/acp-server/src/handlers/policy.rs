@@ -60,7 +60,7 @@ pub(crate) async fn policy_suggest(State(st): State<Arc<AppState>>, headers: Hea
         let mut seen = std::collections::BTreeSet::new();
         for a in observed.iter().filter(|a| a.verdict == "allow") {
             if !seen.insert(a.tool.clone()) { continue; }
-            let ctx = acp_core::policy::context::build_context_identified_full(&a.tool, &serde_json::json!({}), "prod", "agent", "", "principal", &tax, &rtax);
+            let ctx = acp_core::policy::context::build_context_identified_full(&a.tool, &serde_json::json!({}), "prod", "agent", "", "principal", &[], &tax, &rtax);
             if engine.evaluate(ctx).verdict == acp_core::types::Verdict::Deny {
                 would_block.push(a.tool.clone());
             }

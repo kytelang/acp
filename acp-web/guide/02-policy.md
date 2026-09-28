@@ -25,8 +25,8 @@ Each rule has an `id`, a `when` matcher, a `verdict`, and optional `obligations`
 Every request is described by a **subject**, an **object** and an **operation**, and a rule matches
 on any combination of them.
 
-- **Subject:** the `agent` (its registered identity or label) and the human `principal` it acts for
-  (`unattributed` when there is no verified human).
+- **Subject:** the `agent` (its registered identity or label), the human `principal` it acts for
+  (`unattributed` when there is no verified human), and the principal's directory `group` (see below).
 - **Object:** the `resource`. Resources are a trusted taxonomy derived from the tool or model name,
   never asserted by the agent: `database`, `filesystem`, `secrets`, `payments`, `network`,
   `model-class` and so on.
@@ -52,6 +52,30 @@ on any combination of them.
 Because the resource and operation are derived from a trusted taxonomy, a rule about `resource:
 database` governs every tool that touches a database, without you enumerating tool names. The
 taxonomy is configurable, and it fails safe to the most-privileged classification on ambiguity.
+
+## Differentiating by directory group
+
+`group` matches a directory group or role the human principal belongs to, taken from the identity
+provider (Entra app roles or group claims, or an OIDC `groups`/`roles` claim). It is how **one
+org-wide policy treats different teams differently without a config per user**: membership lives in
+the IdP, which the organisation already manages for thousands of people, and a rule keys on the group.
+
+```yaml
+  - id: finance-no-external-shell
+    when: { group: finance, tool: shell.exec, resource: external_network }
+    verdict: deny
+  - id: contractors-writes-need-approval
+    when: { group: contractors, operation: write }
+    verdict: step_up
+```
+
+Move a person between groups in the IdP and their governance changes automatically, with nothing to
+edit in Varman. The match is exact set-membership against the trusted `principal_scopes` the
+enforcement point receives from the verified identity (never argument content), so an agent cannot
+spoof a group. The gateway fills `principal_scopes` from the verified bearer token's roles; a
+workstation proxy takes them from its declared `--principal-groups` (the same way it declares
+`--principal`). This is the recommended way to scale one policy across a large organisation: keep the
+firewall config and policy org-wide, and let `group` rules express the per-team differences.
 
 ## Verdicts
 
@@ -328,6 +352,7 @@ spoof them through its arguments.
 | `app` | the registered application id | exact, glob, or absent | yes |
 | `agent` | the registered agent id | exact, glob, or absent | yes |
 | `principal` | the human the agent acts for | exact, glob, or absent. Use `unattributed` to match calls with no verified human | yes |
+| `group` | a directory group / role of the human principal (from the IdP) | exact group name, or absent for any | yes |
 | `resource` | the resource class the tool touches | a taxonomy value: `database`, `filesystem`, `source-code`, `network`, `secrets`, `payments`, `messaging`, `compute`, `identity`, `other` | yes |
 | `operation` | the operation the tool performs | a taxonomy value: `read`, `write`, `delete`, `execute`, `egress`, `admin` | yes |
 | `arg` | agent-supplied argument fields | a map of field name to a matcher (see below), evaluated against the `context.args` namespace | no (agent data) |

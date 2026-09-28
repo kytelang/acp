@@ -72,6 +72,7 @@ pub fn assess(
     agent: &str,
     app: &str,
     principal: &str,
+    groups: &[String],
 ) -> Assessment {
     let impact = impact_str(tax, &tc.name, &tc.arguments);
     if !valid_tool(&tc.name) {
@@ -100,6 +101,7 @@ pub fn assess(
         agent,
         app,
         principal,
+        groups,
         tax,
         rtax,
     ));

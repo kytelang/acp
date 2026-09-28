@@ -88,7 +88,7 @@ mod tests {
         ObservedAction { tool: tool.into(), resource: r.as_str().into(), operation: o.as_str().into(), verdict: verdict.into() }
     }
     fn ctx(tool: &str) -> serde_json::Value {
-        build_context_identified_full(tool, &serde_json::json!({}), "prod", "a", "", "alice",
+        build_context_identified_full(tool, &serde_json::json!({}), "prod", "a", "", "alice", &[],
             &ImpactTaxonomy::default(), &ResourceTaxonomy::default())
     }
 

@@ -447,7 +447,7 @@ async fn handle(
     // Subject: the calling app (an id header the caller cannot forge for policy is a future hardening;
     // for now an explicit header) and the verified human principal from the bearer.
     let app = headers.get("x-acp-app").and_then(|v| v.to_str().ok()).unwrap_or("unknown-app");
-    let principal = resolve_principal(&st, &headers).unwrap_or_else(|| "unattributed".to_string());
+    let (principal, groups) = resolve_principal(&st, &headers).unwrap_or_else(|| ("unattributed".to_string(), Vec::new()));
 
     // A small, non-sensitive summary for policy matching. Never the prompt (that is a scan obligation).
     let argsum = json!({
@@ -456,7 +456,7 @@ async fn handle(
         "max_tokens": parsed.get("max_tokens").and_then(|v| v.as_u64()).unwrap_or(0),
     });
 
-    let mut d = decide(&st.engine, &st.tax, model, app, &principal, &argsum, &st.env);
+    let mut d = decide(&st.engine, &st.tax, model, app, &principal, &groups, &argsum, &st.env);
     apply_break_glass(&st, app, model, &mut d);
     if !record_decision(&st, app, &principal, model, &d) {
         // Record-before-forward: if the evidence write failed, fail closed rather than act unrecorded.
@@ -586,14 +586,15 @@ async fn handle(
 }
 
 /// Verify the request bearer against the org IdP and return the human principal, if configured.
-fn resolve_principal(st: &GwState, headers: &HeaderMap) -> Option<String> {
+fn resolve_principal(st: &GwState, headers: &HeaderMap) -> Option<(String, Vec<String>)> {
     let (jwks, cfg) = st.oidc.as_ref()?;
     let token = headers
         .get("authorization")
         .and_then(|v| v.to_str().ok())
         .and_then(|s| s.strip_prefix("Bearer "))?;
     match acp_core::auth::verify(token, jwks, cfg, now_ms()) {
-        Ok(p) => Some(if p.username.is_empty() { p.oid } else { p.username }),
+        // The principal's IdP groups/roles ride along so a policy rule can match on group membership.
+        Ok(p) => Some((if p.username.is_empty() { p.oid } else { p.username }, p.roles)),
         Err(_) => None,
     }
 }
