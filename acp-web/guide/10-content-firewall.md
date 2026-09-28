@@ -30,8 +30,8 @@ a poisoned fetched document is caught on the way back.
 
 Enabled with a flag on both surfaces:
 
-- The [gateway](04-gateway.md) prompt path: `--content-firewall` (signatures) and `--content-ml
-  <model.json>` (the trained model).
+- The [gateway](04-gateway.md) prompt path: `--content-firewall` (signatures) and
+  `--content-ml <model.json>` (the trained model).
 - The [proxy](03-proxy.md) tool-call arguments: the same flags.
 
 If a scan is configured and errors, the enforcing component blocks (fail-closed).

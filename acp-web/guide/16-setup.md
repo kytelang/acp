@@ -176,8 +176,11 @@ The gateway runs as a service once configured (step 2). Point your application's
 
 `acp-agent guard` in front of a tool server ([chapter 6](06-guard.md)), `acp-agent firewall` as a
 forward proxy ([chapter 5](05-intercept.md)), and `acp native-compile` for coding agents
-([chapter 7](07-native-compile.md)). Run several capabilities from one config with `acp-agent run
---control-plane <url> --firewall <addr> --guard <addr> --guard-upstream <url> --mcp <addr> --mcp-upstream <url>`.
+([chapter 7](07-native-compile.md)). Run several capabilities from one config with a single command:
+
+```sh
+acp-agent run --control-plane <url> --firewall <addr> --guard <addr> --guard-upstream <url> --mcp <addr> --mcp-upstream <url>
+```
 
 ## 5. The web console
 
