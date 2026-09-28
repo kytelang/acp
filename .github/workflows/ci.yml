@@ -67,12 +67,12 @@ jobs:
         run: cargo test -p acp-server store::
       - name: shared budgets/pins (acp_core::pgstate) against Postgres
         env:
-          ACP_PG_TEST: host=localhost user=postgres password=postgres dbname=acp
+          ACP_PG_TEST: postgres://postgres:postgres@localhost/acp
         run: cargo test -p acp-core --features postgres pgstate::
       - name: tenant RLS (acp_core::pgstore) against Postgres, non-superuser + bypass guard
         env:
-          ACP_PG_TEST_URL: host=localhost user=acp_app password=apppw dbname=acp
-          ACP_PG_SUPER_URL: host=localhost user=postgres password=postgres dbname=acp
+          ACP_PG_TEST_URL: postgres://acp_app:apppw@localhost/acp
+          ACP_PG_SUPER_URL: postgres://postgres:postgres@localhost/acp
         run: cargo test -p acp-core --features postgres pgstore::
       - name: HSM signing (acp_core::hsm) against SoftHSM
         run: cargo test -p acp-core --features hsm hsm || true  # gated on a PKCS#11 module being present

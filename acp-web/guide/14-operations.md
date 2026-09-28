@@ -219,6 +219,17 @@ rollout: turning the sequence and firewall protections on by default, an enduran
 Postgres store in your environment, and third-party certification (a control-mapping readiness
 assessment is in `docs/soc2-iso-control-mapping.md`).
 
+## Storage: one database library
+
+All networked and multi-engine storage runs on **sqlx**: the control-plane store (`acp_server::store`,
+sqlite/postgres/mysql by connection URL), the shared budget and tool-pin state (`acp_core::pgstate`,
+feature `postgres`), and the multi-tenant RLS store (`acp_core::pgstore`). The only remaining use of a
+second database crate is the embedded, per-host evidence **ledger** and the approval store, which stay
+on rusqlite by design: they are synchronous, crypto-critical, embedded SQLite files with no server or
+multi-engine requirement, and the ledger sits on the append hot path. Porting the ledger to async sqlx
+would be a large change to the trust core for no functional gain, so it is kept as a deliberate
+exception.
+
 ## Setting up Postgres or MySQL
 
 Two different things can move off SQLite, and they take different DSNs. Do not confuse them.

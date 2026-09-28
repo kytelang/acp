@@ -19,14 +19,14 @@ ring.workspace = true
 rusqlite.workspace = true
 cedar-policy.workspace = true
 cryptoki = { workspace = true, optional = true }
-tokio-postgres = { workspace = true, optional = true }
+sqlx = { workspace = true, optional = true }
 tokio = { workspace = true, optional = true }
 tracing.workspace = true
 tracing-subscriber.workspace = true
 
 [features]
 hsm = ["dep:cryptoki"]
-postgres = ["dep:tokio-postgres", "dep:tokio"]
+postgres = ["dep:sqlx", "dep:tokio"]
 
 [dev-dependencies]
 hex.workspace = true
