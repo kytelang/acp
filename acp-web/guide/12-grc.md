@@ -183,6 +183,23 @@ bill of materials. The ledger is machine-generated proof; governance records are
 paperwork. Both are signed and useful, but do not present a governance record as if it were ledger
 proof: an auditor gets runtime evidence from the ledger and documented governance from these records.
 
+## Oversight-quality monitoring
+
+Human oversight has to be effective, not just present (EU AI Act Article 14). Because the control plane
+records every approval decision with the approver, the request time and the decision time, it can
+measure whether oversight is real or rubber-stamping, rather than assume it.
+
+In the console, open **Oversight** (under Governance). The page lists each approver with their decision
+count, approve rate, median decision time, and an effective-or-weakness badge. An approver is flagged
+when they approve nearly everything, decide faster than a human plausibly could have reviewed, or
+approve in bulk within a short window. The thresholds are configurable, and a change to them is written
+to the meta-audit log. Flagging an approver writes a signed governance finding, so the weakness is
+itself tamper-evident evidence.
+
+> API (for automation and CI): `GET /oversight` returns the same profiles, `POST /oversight/config`
+> updates the thresholds, and `POST /oversight/scan` writes the signed findings. These are for
+> schedulers; day to day, use the console page above.
+
 ## The GRC surface
 
 Varman produces two honestly different kinds of compliance artifact. Know which is which.

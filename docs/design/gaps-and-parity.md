@@ -77,7 +77,7 @@ break-glass all have console pages, yet are taught with curl.
 Ordered by the recommended build sequence. Effort key: S = 1 to 2 weeks, M = 3 to 6 weeks, L = a
 quarter or more.
 
-### G1. Oversight-quality monitoring  (review #5, S)
+### G1. Oversight-quality monitoring  (review #5, S)  [DONE 2026-09-28]
 
 **Design.** A monitor over the approval records that scores each approver for rubber-stamping:
 approve-rate near 100 percent, sub-threshold decision latency (for example under 5 seconds), and bulk
