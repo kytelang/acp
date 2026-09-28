@@ -185,7 +185,7 @@ recent output findings.
 - System-prompt-leak patterns in a response are detected.
 - Toggling the controls in the console changes enforcement on the next request with no restart.
 
-### G7. Permission-aware retrieval  (review #3, M)  [CORE + REAL CONNECTOR + endpoint; NOT yet enforced inline at the RAG PEP]
+### G7. Permission-aware retrieval  (review #3, M)  [WIRED + PEP-ENFORCED: real connector + control-plane endpoint + filtered on the proxy response path]
 **Design.** At RAG retrieval time, enforce that the agent only receives documents the acting human may
 see. A retrieval PEP path checks each candidate document's access against the delegated principal before
 it reaches the model, and records the filtering decision.
@@ -200,7 +200,7 @@ access-rule mapping, and a recent-filtered-documents view.
   document U cannot see is filtered and the filtering is recorded.
 - The decision references the verified delegated principal, not a claim from the request.
 
-### G8. Multi-agent delegation chains  (review #4, M)  [CORE + /delegation/verify endpoint; NOT yet enforced in the agent policy context]
+### G8. Multi-agent delegation chains  (review #4, M)  [WIRED + PEP-ENFORCED: verify endpoint + chain checked in decide_frame (deny on widening / missing scope)]
 **Design.** Extend the single-hop `Delegation` to a chain: when agent A calls agent B for user U,
 authorize each hop against the whole chain (U to A to B), with rights that can only narrow along the
 chain, and record the full chain in the ledger.
@@ -216,7 +216,7 @@ evidence records.
 - The ledger record for the action shows the full U to A to B chain.
 - An expired hop anywhere in the chain fails closed.
 
-### G9. Agent-memory protection  (review #6, M)  [CONTROL-PLANE ENDPOINT (/memory/write scans + records); NOT yet wired to a live vector store]
+### G9. Agent-memory protection  (review #6, M)  [WIRED + PEP-ENFORCED: /memory/write endpoint + memory-tool writes scanned at the proxy even with the firewall off]
 **Design.** Govern writes to agent persistent memory or a vector store: scan the content being persisted
 (reusing the content engine) so a poisoned tool result or document cannot plant instructions the agent
 later acts on, and record every memory write in the ledger for later incident tracing.
@@ -242,7 +242,7 @@ DPIA. Reuses the existing assessment/checklist machinery.
 - A FRIA record can be created and worked through the console, linked to a use-case, and signed.
 - Its completion state feeds the framework report and coverage.
 
-### G11. Transparency obligations and C2PA  (review #10, M)  [CORE + /credential/stamp endpoint; obligation-driven auto-stamping NOT yet enforced]
+### G11. Transparency obligations and C2PA  (review #10, M)  [WIRED + PEP-ENFORCED: /credential/stamp + a Disclose obligation annotates the response (signs when an enforcement key is set)]
 **Design.** Add enforcement obligations "disclose AI interaction" and "label generated content," and
 C2PA content-credential stamping of generated media, with proof of disclosure recorded in the ledger.
 
@@ -363,13 +363,14 @@ G14 injection model + held-out benchmark + CI gate, G15 fairness harness, G17 re
 G18 auditor pack, G19 trust page. G6 output DLP was already covered by response-side scanning and is
 documented.
 
-**Control-plane + core, but NOT yet enforced at the PEP (the honest gap):**
-G7 permission-aware retrieval (core + a real document-ACL connector + endpoint, but the agent does not
-yet call it inline during retrieval), G8 delegation chains (verify endpoint, not enforced in the agent
-policy context), G9 agent-memory protection (scan/record endpoint, not wired to a live vector store),
-G11 content credentials (stamp endpoint, no obligation-driven auto-stamping). Their cores are tested and
-API-exercisable; the remaining work is integration at the enforcement point (the agent / gateway),
-which is the natural next step.
+**Now enforced at the PEP (the previous gap, closed):**
+G7 permission-aware retrieval (the proxy filters documents the acting principal may not see out of a
+retrieval tool result, on both stdio and http), G8 delegation chains (the proxy verifies a presented
+`_acp_delegation` chain in `decide_frame` and denies a widening chain or one that does not permit the
+operation), G9 agent-memory protection (writes to memory/vector tools are scanned at the proxy even when
+the general firewall is off, and a planted instruction is blocked), G11 content credentials (a `disclose`
+obligation makes the proxy annotate the response as AI-generated and sign a content credential when an
+enforcement key is set). Each has PEP enforcement tests in `acp-agent`.
 
 **Partial workflow:**
 G5 serious incidents (record kind + promote endpoint + Governance view; the deadline-tracking case UI

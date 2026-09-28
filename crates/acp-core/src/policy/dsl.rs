@@ -49,6 +49,9 @@ pub enum ObligationKind {
     Redact,
     /// Cap the call frequency for this (agent, resource) window.
     RateLimit,
+    /// Transparency (G11): the response must disclose it is AI-generated; the PEP annotates it (and
+    /// signs a content credential when an enforcement key is present).
+    Disclose,
 }
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]

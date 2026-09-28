@@ -2889,6 +2889,7 @@ async fn policy_store_rules(State(st): State<Arc<AppState>>) -> impl IntoRespons
                 .map(|o| match o.kind {
                     ObligationKind::Confirm => "confirm".to_string(),
                     ObligationKind::Redact => format!("redact({})", o.fields.join(",")),
+                    ObligationKind::Disclose => "disclose".to_string(),
                     ObligationKind::RateLimit => {
                         format!("rate_limit({}/{}ms)", o.max.unwrap_or(0), o.window_ms.unwrap_or(0))
                     }

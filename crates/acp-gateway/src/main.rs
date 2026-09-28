@@ -550,6 +550,7 @@ async fn handle(
                         }
                     }
                     ObligationKind::Redact => { /* prompt/response redaction is C3-scan, wired with the content plane */ }
+                    ObligationKind::Disclose => { /* G11: AI-disclosure is annotated on the response at the PEP */ }
                 }
             }
             if over_budget {

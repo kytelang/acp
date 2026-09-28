@@ -175,6 +175,13 @@ async fn handle(State(st): State<Arc<HttpState>>, headers: HeaderMap, body: Byte
                             }
                         }
                     }
+                    // G7: permission-aware retrieval filtering on the response.
+                    if st.controller.has_retrieval_acls() {
+                        let (principal, groups) = st.controller.retrieval_identity();
+                        if let Some(filtered) = st.controller.filter_retrieval(&out, &principal, &groups) {
+                            out = filtered.into_bytes();
+                        }
+                    }
                     (status, [("content-type", "application/json")], out).into_response()
                 }
             }

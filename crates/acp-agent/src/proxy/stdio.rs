@@ -83,6 +83,17 @@ pub async fn run(cmd: &str, args: &[String], controller: Arc<Controller>) -> any
                     }
                 }
             }
+            // G7: permission-aware retrieval - drop documents the acting principal may not see.
+            if s2c_ctl.has_retrieval_acls() {
+                let (principal, groups) = s2c_ctl.retrieval_identity();
+                if let Some(filtered) = s2c_ctl.filter_retrieval(outline.as_bytes(), &principal, &groups) {
+                    outline = filtered;
+                }
+            }
+            // G11: if a Disclose obligation fired on the request, annotate this response as AI-generated.
+            if s2c_ctl.has_disclose_pending() {
+                if let Some(disclosed) = s2c_ctl.stamp_disclosure(outline.as_bytes()) { outline = disclosed; }
+            }
             if s2c_out.send(outline).await.is_err() {
                 break;
             }
