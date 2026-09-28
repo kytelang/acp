@@ -31,7 +31,7 @@ fn main() -> ExitCode {
         "init" => cmd_init(args.get(2).map(String::as_str).unwrap_or("acp-demo")),
         "replay" => cmd_replay(&args[2..]),
         "purge" => cmd_purge(&args[2..]),
-        "learn" => cmd_learn(args.get(2).map(String::as_str)),
+        "learn" => cmd_learn(&args[2..]),
         "classify-eval" => cmd_classify_eval(args.get(2).map(String::as_str)),
         "canary" => cmd_canary(&args[2..]),
         "diagnose" => cmd_diagnose(&args[2..]),
@@ -472,11 +472,26 @@ fn cmd_classify_eval(path: Option<&str>) -> ExitCode {
     ExitCode::SUCCESS
 }
 
-fn cmd_learn(ledger: Option<&str>) -> ExitCode {
-    let ledger = match ledger {
-        Some(l) => l,
-        None => return usage("acp learn <ledger.db>"),
+fn cmd_learn(rest: &[String]) -> ExitCode {
+    let least_privilege = rest.iter().any(|a| a == "--least-privilege" || a == "--strict");
+    let ledger = match rest.iter().find(|a| !a.starts_with("--")) {
+        Some(l) => l.as_str(),
+        None => return usage("acp learn <ledger.db> [--least-privilege]"),
     };
+    // G2: least-privilege mode emits the smallest default-deny allow-list from observed traffic.
+    if least_privilege {
+        match acp_core::ledger::observed_actions(ledger) {
+            Ok(actions) => {
+                if actions.is_empty() {
+                    eprintln!("acp: no decision records observed in {ledger}; run the proxy in --shadow first");
+                    return ExitCode::from(1);
+                }
+                print!("{}", acp_core::policy::synth::synthesize_least_privilege(&actions));
+                return ExitCode::SUCCESS;
+            }
+            Err(e) => { eprintln!("acp: {e}"); return ExitCode::from(1); }
+        }
+    }
     let tools = match acp_core::ledger::observed_tools(ledger) {
         Ok(t) => t,
         Err(e) => {

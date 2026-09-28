@@ -683,6 +683,34 @@ pub fn purge_args_file(path: &str, before_ms: u64) -> Result<usize, String> {
 
 /// Summarise the distinct tools observed in decision records and the highest impact seen for
 /// each (read-only). Used by `acp learn` to propose a starter policy (E5).
+/// G2: every observed action from the decision records: (tool, resource, operation, verdict). Feeds
+/// least-privilege policy synthesis. Read-only; no signing key needed.
+pub fn observed_actions(path: &str) -> Result<Vec<crate::policy::synth::ObservedAction>, String> {
+    let conn = Connection::open_with_flags(path, OpenFlags::SQLITE_OPEN_READ_ONLY)
+        .map_err(|e| e.to_string())?;
+    let mut stmt = conn
+        .prepare("SELECT canonical FROM records WHERE kind='decision'")
+        .map_err(|e| e.to_string())?;
+    let rows = stmt
+        .query_map([], |r| r.get::<_, Vec<u8>>(0))
+        .map_err(|e| e.to_string())?;
+    let mut out = Vec::new();
+    for row in rows {
+        let canonical = row.map_err(|e| e.to_string())?;
+        if let Ok(v) = serde_json::from_slice::<Value>(&canonical) {
+            let tool = v["action"]["tool"].as_str().unwrap_or("").to_string();
+            if tool.is_empty() { continue; }
+            out.push(crate::policy::synth::ObservedAction {
+                tool,
+                resource: v["action"]["resource"].as_str().unwrap_or("").to_string(),
+                operation: v["action"]["operation"].as_str().unwrap_or("").to_string(),
+                verdict: v["decision"]["verdict"].as_str().unwrap_or("").to_string(),
+            });
+        }
+    }
+    Ok(out)
+}
+
 pub fn observed_tools(path: &str) -> Result<Vec<(String, String)>, String> {
     let conn = Connection::open_with_flags(path, OpenFlags::SQLITE_OPEN_READ_ONLY)
         .map_err(|e| e.to_string())?;
