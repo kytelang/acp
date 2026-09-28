@@ -231,7 +231,7 @@ fn read_calls(path: &str) -> Result<Vec<Value>, ExitCode> {
 }
 
 fn cmd_verify(path: &str) -> ExitCode {
-    match acp_ledger::verify_file(path) {
+    match acp_core::ledger::verify_file(path) {
         Ok(()) => {
             println!("OK: {path} verifies");
             ExitCode::SUCCESS
@@ -258,7 +258,7 @@ fn cmd_verify_pack(path: &str) -> ExitCode {
             return ExitCode::from(1);
         }
     };
-    match acp_ledger::verify_pack(&pack) {
+    match acp_core::ledger::verify_pack(&pack) {
         Ok(()) => {
             println!("OK: export pack verifies standalone");
             ExitCode::SUCCESS
@@ -271,7 +271,7 @@ fn cmd_verify_pack(path: &str) -> ExitCode {
 }
 
 fn cmd_export(path: &str) -> ExitCode {
-    match acp_ledger::export_file(path) {
+    match acp_core::ledger::export_file(path) {
         Ok(pack) => {
             println!("{}", serde_json::to_string_pretty(&pack).unwrap());
             ExitCode::SUCCESS
@@ -363,7 +363,7 @@ fn cmd_posture(rest: &[String]) -> ExitCode {
             i += 1;
         }
     }
-    let pack = match acp_ledger::export_file(path) {
+    let pack = match acp_core::ledger::export_file(path) {
         Ok(p) => p,
         Err(e) => {
             eprintln!("acp: {e}");
@@ -477,7 +477,7 @@ fn cmd_learn(ledger: Option<&str>) -> ExitCode {
         Some(l) => l,
         None => return usage("acp learn <ledger.db>"),
     };
-    let tools = match acp_ledger::observed_tools(ledger) {
+    let tools = match acp_core::ledger::observed_tools(ledger) {
         Ok(t) => t,
         Err(e) => {
             eprintln!("acp: {e}");
@@ -531,10 +531,10 @@ fn cmd_purge(rest: &[String]) -> ExitCode {
         .unwrap()
         .as_millis() as u64;
     let before = now.saturating_sub(days.saturating_mul(86_400_000));
-    match acp_ledger::purge_args_file(&rest[0], before) {
+    match acp_core::ledger::purge_args_file(&rest[0], before) {
         Ok(n) => {
             println!("purged {n} argument payloads older than {days} days");
-            match acp_ledger::verify_file(&rest[0]) {
+            match acp_core::ledger::verify_file(&rest[0]) {
                 Ok(()) => {
                     println!("ledger still verifies");
                     ExitCode::SUCCESS
@@ -563,7 +563,7 @@ fn cmd_replay(rest: &[String]) -> ExitCode {
             return ExitCode::from(2);
         }
     };
-    let (record, args) = match acp_ledger::read_record(&rest[0], seq) {
+    let (record, args) = match acp_core::ledger::read_record(&rest[0], seq) {
         Ok(v) => v,
         Err(e) => {
             eprintln!("acp: {e}");
@@ -750,7 +750,7 @@ fn cmd_diagnose(rest: &[String]) -> ExitCode {
         }
     };
     // Deliberately ignore the args half of the tuple: the support bundle never carries payloads.
-    let (record, _args) = match acp_ledger::read_record(ledger, seq) {
+    let (record, _args) = match acp_core::ledger::read_record(ledger, seq) {
         Ok(v) => v,
         Err(e) => {
             eprintln!("acp: cannot read record #{seq}: {e}");
@@ -846,7 +846,7 @@ fn cmd_verify_artifact(rest: &[String]) -> ExitCode {
 /// with a bigger N on a load box).
 fn cmd_bench_ledger(rest: &[String]) -> ExitCode {
     use acp_core::sign::Ed25519Signer;
-    use acp_ledger::Ledger;
+    use acp_core::ledger::Ledger;
     use std::time::Instant;
     let n: u64 = rest.first().and_then(|s| s.parse().ok()).unwrap_or(10_000);
     let path = std::env::temp_dir().join(format!("acp-bench-{}.db", std::process::id()));
@@ -921,7 +921,7 @@ fn cmd_ledger_backup(rest: &[String]) -> ExitCode {
             }
         }
     }
-    match acp_ledger::verify_file(dst) {
+    match acp_core::ledger::verify_file(dst) {
         Ok(()) => { println!("backup OK: {dst} copied and verifies"); ExitCode::SUCCESS }
         Err(e) => { eprintln!("acp: backup {dst} does NOT verify: {e}"); ExitCode::from(1) }
     }
@@ -965,7 +965,7 @@ fn cmd_grc_report(rest: &[String]) -> ExitCode {
     let Some(ledger) = rest.first() else {
         return usage("acp grc-report <ledger.db>");
     };
-    let pack = match acp_ledger::export_file(ledger) {
+    let pack = match acp_core::ledger::export_file(ledger) {
         Ok(p) => p,
         Err(e) => { eprintln!("acp: cannot read ledger {ledger}: {e}"); return ExitCode::from(1); }
     };
@@ -1421,7 +1421,7 @@ fn cmd_siem(rest: &[String]) -> ExitCode {
         return usage("acp siem <ledger.db> --format <cef|ocsf|syslog>");
     };
     let format = flag_value(rest, "--format").unwrap_or_else(|| "cef".into());
-    let pack = match acp_ledger::export_file(db) {
+    let pack = match acp_core::ledger::export_file(db) {
         Ok(p) => p,
         Err(e) => {
             eprintln!("acp: cannot export {db}: {e}");

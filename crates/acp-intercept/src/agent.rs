@@ -24,7 +24,7 @@ struct Cfg {
     content: RwLock<ContentPolicy>,
     content_ml: RwLock<Option<std::sync::Arc<LinearScorer>>>,
     client: reqwest::Client,
-    ledger: Option<Mutex<acp_ledger::Ledger>>,
+    ledger: Option<Mutex<acp_core::ledger::Ledger>>,
     ca: Option<Arc<CaSigner>>,
     connector: TlsConnector,
 }
@@ -201,7 +201,7 @@ pub async fn run(args: Vec<String>) -> std::process::ExitCode {
         }
     };
     let ledger = match ledger_path.as_ref() {
-        Some(p) => match acp_ledger::Ledger::open(p, Box::new(acp_core::sign::Ed25519Signer::generate())) {
+        Some(p) => match acp_core::ledger::Ledger::open(p, Box::new(acp_core::sign::Ed25519Signer::generate())) {
             Ok(l) => Some(Mutex::new(l)),
             Err(e) => { tracing::error!("cannot open ledger {p}: {e}"); return std::process::ExitCode::from(1); }
         },

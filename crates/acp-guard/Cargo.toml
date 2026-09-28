@@ -12,7 +12,6 @@ path = "src/lib.rs"
 [dependencies]
 tracing.workspace = true
 acp-core = { path = "../acp-core" }
-acp-ledger = { path = "../acp-ledger" }
 axum = { workspace = true }
 tokio = { workspace = true }
 reqwest.workspace = true

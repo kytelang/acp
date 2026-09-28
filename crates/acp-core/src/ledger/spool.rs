@@ -5,7 +5,7 @@
 //! ledger idempotently. A malformed entry is dead-lettered, not allowed to head-of-line-block the
 //! rest of the replay (D11).
 
-use crate::Ledger;
+use crate::ledger::Ledger;
 use serde_json::Value;
 use std::fs::OpenOptions;
 use std::io::{BufRead, BufReader, Write};
@@ -53,7 +53,7 @@ impl Spool {
         let args = match entry.get("args") { Some(a) if !a.is_null() => a, _ => return entry.clone() };
         let did = entry.get("decision_id").and_then(Value::as_str).unwrap_or("");
         let pt = match serde_json::to_vec(args) { Ok(v) => v, Err(_) => return entry.clone() };
-        let env = match acp_core::encrypt::encrypt(&kek, &pt, did.as_bytes()) { Ok(e) => e, Err(_) => return entry.clone() };
+        let env = match crate::encrypt::encrypt(&kek, &pt, did.as_bytes()) { Ok(e) => e, Err(_) => return entry.clone() };
         let mut e2 = entry.clone();
         if let Some(o) = e2.as_object_mut() {
             o.remove("args");
@@ -66,9 +66,9 @@ impl Spool {
     fn unseal(&self, mut entry: Value) -> Value {
         let kek = match self.kek { Some(k) => k, None => return entry };
         let env_v = match entry.get("args_enc").cloned() { Some(v) => v, None => return entry };
-        let env: acp_core::encrypt::Envelope = match serde_json::from_value(env_v) { Ok(e) => e, Err(_) => return entry };
+        let env: crate::encrypt::Envelope = match serde_json::from_value(env_v) { Ok(e) => e, Err(_) => return entry };
         let did = entry.get("decision_id").and_then(Value::as_str).unwrap_or("").to_string();
-        if let Ok(pt) = acp_core::encrypt::decrypt(&kek, &env, did.as_bytes()) {
+        if let Ok(pt) = crate::encrypt::decrypt(&kek, &env, did.as_bytes()) {
             if let Ok(args) = serde_json::from_slice::<Value>(&pt) {
                 if let Some(o) = entry.as_object_mut() { o.remove("args_enc"); o.insert("args".to_string(), args); }
             }

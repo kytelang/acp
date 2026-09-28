@@ -23,7 +23,7 @@ struct GuardState {
     upstream: String,
     max_age_ms: u64,
     client: reqwest::Client,
-    ledger: Option<Mutex<acp_ledger::Ledger>>,
+    ledger: Option<Mutex<acp_core::ledger::Ledger>>,
     forwarded: AtomicU64,
     rejected: AtomicU64,
     // A10: active break-glass grant; lockdown_all makes the guard refuse all forwards.
@@ -114,7 +114,7 @@ pub async fn run(args: Vec<String>) -> std::process::ExitCode {
                 },
                 None => Box::new(acp_core::sign::Ed25519Signer::generate()),
             };
-            match acp_ledger::Ledger::open(path, signer) {
+            match acp_core::ledger::Ledger::open(path, signer) {
                 Ok(l) => Some(Mutex::new(l)),
                 Err(e) => {
                     tracing::error!("cannot open ledger '{path}': {e}");

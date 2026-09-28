@@ -8,5 +8,5 @@ name = "acp-verify"
 path = "src/main.rs"
 
 [dependencies]
-acp-ledger = { path = "../acp-ledger" }
+acp-core = { path = "../acp-core" }
 serde_json.workspace = true

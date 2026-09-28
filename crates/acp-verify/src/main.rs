@@ -51,7 +51,7 @@ fn main() -> ExitCode {
                     return ExitCode::from(1);
                 }
             };
-            match acp_ledger::verify_pack(&v) {
+            match acp_core::ledger::verify_pack(&v) {
                 Ok(()) => {
                     println!("OK: {path} verifies (public key only)");
                     ExitCode::SUCCESS
@@ -62,7 +62,7 @@ fn main() -> ExitCode {
                 }
             }
         }
-        Some(path) => match acp_ledger::verify_file(path) {
+        Some(path) => match acp_core::ledger::verify_file(path) {
             Ok(()) => {
                 println!("OK: {path} verifies (public key only)");
                 ExitCode::SUCCESS

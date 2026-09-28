@@ -27,7 +27,7 @@ struct AppState {
     // B3: fail-open/deny spike detectors, one per event kind.
     spikes: std::sync::Mutex<std::collections::HashMap<String, acp_core::anomaly::SpikeDetector>>,
     // H0.7: tamper-evident self-governance meta-audit log (None if not configured).
-    meta: Option<std::sync::Mutex<acp_ledger::Ledger>>,
+    meta: Option<std::sync::Mutex<acp_core::ledger::Ledger>>,
     registry: Option<String>,
     policy_store: Option<String>,
     enrollment: Option<String>,
@@ -734,7 +734,7 @@ async fn main() {
             Some(Err(e)) => { tracing::error!("HSM signer requested but failed: {e}"); return None; }
             None => signer,
         };
-        match acp_ledger::Ledger::open(&path, signer) {
+        match acp_core::ledger::Ledger::open(&path, signer) {
             Ok(l) => Some(std::sync::Mutex::new(l)),
             Err(e) => {
                 tracing::error!("could not open meta-ledger {path}: {e}");
@@ -1197,7 +1197,7 @@ async fn policy_current(State(st): State<Arc<AppState>>) -> impl IntoResponse {
 
 async fn verify(State(st): State<Arc<AppState>>) -> impl IntoResponse {
     match &st.ledger {
-        Some(l) => match acp_ledger::verify_file(l) {
+        Some(l) => match acp_core::ledger::verify_file(l) {
             Ok(()) => Json(serde_json::json!({"ok": true})).into_response(),
             Err(e) => Json(serde_json::json!({"ok": false, "detail": e})).into_response(),
         },
@@ -1209,7 +1209,7 @@ async fn metrics(State(st): State<Arc<AppState>>) -> impl IntoResponse {
     let pack = st
         .ledger
         .as_ref()
-        .and_then(|l| acp_ledger::export_file(l).ok());
+        .and_then(|l| acp_core::ledger::export_file(l).ok());
     let recs = pack
         .as_ref()
         .and_then(|p| p["records"].as_array().cloned())
@@ -1253,7 +1253,7 @@ async fn report(State(st): State<Arc<AppState>>) -> impl IntoResponse {
     match st
         .ledger
         .as_ref()
-        .and_then(|l| acp_ledger::export_file(l).ok())
+        .and_then(|l| acp_core::ledger::export_file(l).ok())
     {
         Some(pack) => {
             let recs = pack["records"].as_array().cloned().unwrap_or_default();
@@ -1309,7 +1309,7 @@ async fn report(State(st): State<Arc<AppState>>) -> impl IntoResponse {
 /// sees one ordered view even across proxies.
 async fn timeline(State(st): State<Arc<AppState>>) -> impl IntoResponse {
     match st.ledger.as_ref() {
-        Some(path) => match acp_ledger::ordered_by_hlc(path) {
+        Some(path) => match acp_core::ledger::ordered_by_hlc(path) {
             Ok(rows) => {
                 let entries: Vec<serde_json::Value> = rows
                     .into_iter()
@@ -1371,7 +1371,7 @@ async fn evidence_recent(State(st): State<Arc<AppState>>, headers: HeaderMap) ->
     // A5: the raw decision detail (per-action tool/resource/principal) requires SeeArgs
     // (SecurityOfficer). Aggregate dashboards use ungated summary routes instead.
     if let Err(r) = authorize(&st.auth, &headers, acp_core::auth::Capability::SeeArgs) { return r; }
-    let recs = match st.ledger.as_ref().and_then(|p| acp_ledger::export_file(p).ok()) {
+    let recs = match st.ledger.as_ref().and_then(|p| acp_core::ledger::export_file(p).ok()) {
         Some(pack) => pack.get("records").and_then(|r| r.as_array()).cloned().unwrap_or_default(),
         None => vec![],
     };

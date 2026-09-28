@@ -42,7 +42,7 @@ struct GwState {
     oidc: Option<(acp_core::auth::Jwks, acp_core::auth::EntraConfig)>,
     client: reqwest::Client,
     limiters: Mutex<HashMap<String, acp_core::ratelimit::TokenBucket>>,
-    ledger: Option<Mutex<acp_ledger::Ledger>>,
+    ledger: Option<Mutex<acp_core::ledger::Ledger>>,
     breakglass: Mutex<acp_core::breakglass::BreakGlassRegistry>,
     bg_file: Option<String>,
     bg_mtime: Mutex<Option<std::time::SystemTime>>,
@@ -348,7 +348,7 @@ async fn load_jwks(source: &str) -> Result<acp_core::auth::Jwks, String> {
     acp_core::auth::Jwks::from_jwks_json(&body).map_err(|e| format!("{e:?}"))
 }
 
-fn open_ledger(path: &str) -> Option<acp_ledger::Ledger> {
+fn open_ledger(path: &str) -> Option<acp_core::ledger::Ledger> {
     let key_path = format!("{path}.key");
     let signer: Box<dyn acp_core::sign::Signer + Send> = match std::fs::read(&key_path) {
         Ok(b) if b.len() == 32 => {
@@ -368,7 +368,7 @@ fn open_ledger(path: &str) -> Option<acp_ledger::Ledger> {
         Some(Err(e)) => { tracing::error!("HSM signer requested but failed: {e}"); return None; }
         None => signer,
     };
-    acp_ledger::Ledger::open(path, signer).ok()
+    acp_core::ledger::Ledger::open(path, signer).ok()
 }
 
 fn verdict_str(v: Verdict) -> &'static str {

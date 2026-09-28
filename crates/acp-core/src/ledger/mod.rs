@@ -10,9 +10,9 @@ pub mod spool;
 
 pub mod migrate;
 
-use acp_core::canonical::{canonical_bytes, sha256_hex};
-use acp_core::merkle::{leaf_hash, Hash, MerkleLog};
-use acp_core::sign::{sign_sth, verify_sth, SignedTreeHead, Signer};
+use crate::canonical::{canonical_bytes, sha256_hex};
+use crate::merkle::{leaf_hash, Hash, MerkleLog};
+use crate::sign::{sign_sth, verify_sth, SignedTreeHead, Signer};
 use rusqlite::{params, Connection, OpenFlags, OptionalExtension};
 use serde_json::{json, Value};
 use std::time::{SystemTime, UNIX_EPOCH};
@@ -84,8 +84,8 @@ pub fn kek_from_env() -> Option<[u8; 32]> {
 fn decode_blob(blob: &[u8], args_hash: &str, kek: Option<[u8; 32]>) -> Option<Vec<u8>> {
     if blob.first() == Some(&0x01u8) {
         let kek = kek?;
-        let env: acp_core::encrypt::Envelope = serde_json::from_slice(&blob[1..]).ok()?;
-        acp_core::encrypt::decrypt(&kek, &env, args_hash.as_bytes()).ok()
+        let env: crate::encrypt::Envelope = serde_json::from_slice(&blob[1..]).ok()?;
+        crate::encrypt::decrypt(&kek, &env, args_hash.as_bytes()).ok()
     } else {
         Some(blob.to_vec())
     }
@@ -215,7 +215,7 @@ impl Ledger {
     fn encode_blob(&self, args_hash: &str, plaintext: &[u8]) -> Result<Vec<u8>, String> {
         match self.kek {
             Some(kek) => {
-                let env = acp_core::encrypt::encrypt(&kek, plaintext, args_hash.as_bytes())?;
+                let env = crate::encrypt::encrypt(&kek, plaintext, args_hash.as_bytes())?;
                 let mut out = Vec::with_capacity(plaintext.len() + 160);
                 out.push(0x01u8);
                 out.extend_from_slice(&serde_json::to_vec(&env).map_err(|e| e.to_string())?);
@@ -542,7 +542,7 @@ pub fn verify_file(path: &str) -> Result<(), String> {
                 merkle.size()
             ));
         }
-        let recomputed = acp_core::merkle::root_of(
+        let recomputed = crate::merkle::root_of(
             &(0..size)
                 .map(|i| merkle.leaf(i).unwrap())
                 .collect::<Vec<_>>(),

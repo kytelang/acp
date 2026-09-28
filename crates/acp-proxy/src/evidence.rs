@@ -10,7 +10,7 @@ use acp_core::hlc::Hlc;
 use acp_core::sign::{Ed25519Signer, Signer};
 use acp_core::types::Verdict;
 use acp_jsonrpc::ToolCall;
-use acp_ledger::{spool::Spool, Ledger};
+use acp_core::ledger::{spool::Spool, Ledger};
 use acp_core::policy::PolicyOutcome;
 use serde_json::json;
 use std::time::{SystemTime, UNIX_EPOCH};
@@ -79,7 +79,7 @@ impl Evidence {
     pub fn open_with_reporter(ledger_path: &str, key_path: &str, reporter: Option<crate::events::EvidenceReporter>) -> Result<Evidence, String> {
         let signer = load_or_create_key(key_path)?;
         let mut ledger = Ledger::open(ledger_path, signer)?;
-        let spool = Spool::open_with_kek(&format!("{ledger_path}.spool"), acp_ledger::kek_from_env());
+        let spool = Spool::open_with_kek(&format!("{ledger_path}.spool"), acp_core::ledger::kek_from_env());
         let report = spool.drain_into(&mut ledger).map_err(|e| e.to_string())?;
         if report.ingested > 0 {
             tracing::info!("replayed {} spooled records", report.ingested);

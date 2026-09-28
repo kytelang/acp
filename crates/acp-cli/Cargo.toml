@@ -7,12 +7,10 @@ description = "Agent Control Plane: acp CLI - init, verify, export, policy-compi
 
 [dependencies]
 acp-core = { path = "../acp-core" }
-acp-ledger = { path = "../acp-ledger" }
 hex.workspace = true
 serde_json.workspace = true
 serde_yaml.workspace = true
 
 [dev-dependencies]
-acp-ledger = { path = "../acp-ledger" }
 acp-core = { path = "../acp-core" }
 serde_json.workspace = true
