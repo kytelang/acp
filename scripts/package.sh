@@ -12,10 +12,10 @@ STAGE="dist/${NAME}"
 echo "== packaging ${NAME} =="
 
 echo "-- building release binaries --"
-cargo build --release -q -p acp-proxy -p acp-server -p acp-cli
+cargo build --release -q -p acp-agent -p acp-server -p acp-cli
 
 rm -rf "$STAGE"; mkdir -p "$STAGE/bin" "$STAGE/scripts" "$STAGE/docs"
-cp target/release/acp-proxy target/release/acp-server target/release/acp-cli target/release/mock-mcp-server "$STAGE/bin/"
+cp target/release/acp-agent target/release/acp-server target/release/acp-cli target/release/mock-mcp-server "$STAGE/bin/"
 cp scripts/run-local.sh scripts/pentest.sh scripts/sbom.sh "$STAGE/scripts/" 2>/dev/null || true
 cp -r docs/ops docs/compliance "$STAGE/docs/" 2>/dev/null || true
 

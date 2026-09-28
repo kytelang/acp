@@ -54,7 +54,7 @@ jobs:
 
       - name: Build workstation tools (all platforms)
         shell: bash
-        run: cargo build --release --locked --target ${{ matrix.target }} -p acp-agent -p acp-verify -p acp-proxy   # acp-proxy is built only for its mock-mcp-server test binary
+        run: cargo build --release --locked --target ${{ matrix.target }} -p acp-agent -p acp-verify   # acp-agent also produces the mock-mcp-server test binary
 
       - name: Build server services (Linux only)
         if: matrix.os == 'linux'

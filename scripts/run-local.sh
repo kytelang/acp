@@ -11,8 +11,8 @@ echo "== ACP local run (self-contained) =="
 echo "workdir: $WORK"
 
 echo "-- building release binaries (proxy, mock tool server, cli) --"
-cargo build --release -q -p acp-proxy -p acp-cli
-PROXY=target/release/acp-proxy
+cargo build --release -q -p acp-agent -p acp-cli
+PROXY=target/release/acp-agent
 MOCK=target/release/mock-mcp-server
 CLI=target/release/acp-cli
 
@@ -38,7 +38,7 @@ echo "-- driving two tool calls through the local stdio proxy (no network) --"
   echo '{"jsonrpc":"2.0","id":1,"method":"initialize","params":{"protocolVersion":"2025-06-18"}}'
   echo '{"jsonrpc":"2.0","id":10,"method":"tools/call","params":{"name":"payments.charge","arguments":{"amount_cents":90000}}}'
   echo '{"jsonrpc":"2.0","id":11,"method":"tools/call","params":{"name":"payments.charge","arguments":{"amount_cents":100}}}'
-} | "$PROXY" stdio --policy "$WORK/policy.yaml" --ledger "$LEDGER" --key "$KEY" -- "$MOCK" \
+} | "$PROXY" mcp stdio --policy "$WORK/policy.yaml" --ledger "$LEDGER" --key "$KEY" -- "$MOCK" \
   | sed 's/^/  proxy> /'
 
 echo "-- verifying the evidence ledger locally --"

@@ -22,8 +22,8 @@ bad(){ echo "  [FAIL] $1"; FAIL=$((FAIL+1)); }
 note(){ echo "$1" >> "$OUT"; }
 
 echo "== ACP soak drill =="
-cargo build --release -q -p acp-proxy -p acp-gateway -p acp-server -p acp-cli 2>&1 | tail -1
-PROXY=target/release/acp-proxy; GW=target/release/acp-gateway; SRV=target/release/acp-server
+cargo build --release -q -p acp-agent -p acp-gateway -p acp-server -p acp-cli 2>&1 | tail -1
+PROXY=target/release/acp-agent; GW=target/release/acp-gateway; SRV=target/release/acp-server
 
 W="$(mktemp -d)"
 PIDS=()
@@ -60,7 +60,7 @@ sleep 1
 
 # ---- 1. proxy load ----
 echo "== 1. MCP proxy under load =="
-"$PROXY" http --addr 127.0.0.1:8890 --upstream http://127.0.0.1:8896/ >"$W/proxy.log" 2>&1 &
+"$PROXY" mcp http --addr 127.0.0.1:8890 --upstream http://127.0.0.1:8896/ >"$W/proxy.log" 2>&1 &
 PIDS+=($!)
 if wait_port 8890; then
   note "### MCP proxy"
