@@ -304,8 +304,13 @@ the spike detector plus violation feed.
 
 The control plane, the gateway and the guard each serve a Prometheus `GET /metrics` endpoint. Scrape
 these for request rates, verdict counts and latency, and build your dashboards and alerts on them the
-usual way. For distributed tracing, the proxy can stream OTLP spans to an OpenTelemetry collector with
-`--otel <endpoint>`; this is a live trace path, separate from the offline `acp siem` projection.
+usual way. The control-plane series include `acp_records_total`, `acp_decisions_total`,
+`acp_decisions_by_verdict{verdict=...}`, `acp_violations_total`, and two human-oversight gauges worth
+alerting on: `acp_approvals_pending` and `acp_approvals_overdue` (holds sitting past `--approval-sla-ms`;
+a non-zero value is an unmet Art. 14 oversight obligation, the same condition that fires the
+`approval.overdue` webhook). For distributed tracing, the proxy can stream OTLP spans to an
+OpenTelemetry collector with `--otel <endpoint>`; this is a live trace path, separate from the offline
+`acp siem` projection.
 
 ### The liveness dead-man's-switch
 

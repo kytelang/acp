@@ -1280,6 +1280,29 @@ async fn metrics(State(st): State<Arc<AppState>>) -> impl IntoResponse {
             "acp_decisions_by_verdict{{verdict=\"{v}\"}} {n}\n"
         ));
     }
+    // Governance-health gauges for alerting (Grafana/Prometheus). Best-effort: a gauge whose source is
+    // not configured is simply omitted, never a scrape error.
+    if let Some(store) = &st.store {
+        if let Ok(v) = store.list_violations(100_000).await {
+            out.push_str("# HELP acp_violations_total Policy denials and firewall blocks recorded.\n# TYPE acp_violations_total counter\n");
+            out.push_str(&format!("acp_violations_total {}\n", v.len()));
+        }
+    }
+    if let Some(path) = &st.approvals {
+        if let Ok(astore) = acp_core::approvals::ApprovalStore::open(path) {
+            if let Ok(p) = astore.list_pending() {
+                out.push_str("# HELP acp_approvals_pending Approval holds awaiting a human decision.\n# TYPE acp_approvals_pending gauge\n");
+                out.push_str(&format!("acp_approvals_pending {}\n", p.len()));
+            }
+            if st.approval_sla_ms > 0 {
+                if let Ok(o) = astore.list_overdue(st.approval_sla_ms as u64, now_ms()) {
+                    // Alert on this: a hold past the SLA is an unmet human-oversight obligation.
+                    out.push_str("# HELP acp_approvals_overdue Approval holds pending past the configured SLA.\n# TYPE acp_approvals_overdue gauge\n");
+                    out.push_str(&format!("acp_approvals_overdue {}\n", o.len()));
+                }
+            }
+        }
+    }
     ([("content-type", "text/plain; version=0.0.4")], out)
 }
 
