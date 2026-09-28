@@ -45,6 +45,33 @@ pub fn filter<'a>(principal: &str, groups: &[String], candidates: &'a [DocAcl]) 
     (visible, filtered)
 }
 
+/// A real connector: parse a documents-with-ACL export into DocAcls. Handles the common shapes a
+/// content system exports: a top-level `documents` (or `items`/`value`) array, each entry carrying an
+/// id (`doc_id`/`id`/`name`) and an ACL under `acl`/`permissions`/`sharing` with `principals`/`users`
+/// and `groups`. This is what a SharePoint, Confluence or Drive export looks like once flattened, so an
+/// operator points the retrieval PEP at the export their DLP or content platform already produces.
+pub fn from_export(v: &serde_json::Value) -> Vec<DocAcl> {
+    let arr = v.get("documents").or_else(|| v.get("items")).or_else(|| v.get("value"))
+        .and_then(|x| x.as_array()).cloned()
+        .unwrap_or_else(|| v.as_array().cloned().unwrap_or_default());
+    let strs = |node: Option<&serde_json::Value>| -> Vec<String> {
+        node.and_then(|x| x.as_array()).map(|a| a.iter().filter_map(|s| s.as_str().map(String::from)).collect()).unwrap_or_default()
+    };
+    arr.iter().filter_map(|d| {
+        let doc_id = d.get("doc_id").or_else(|| d.get("id")).or_else(|| d.get("name")).and_then(|x| x.as_str())?.to_string();
+        let acl = d.get("acl").or_else(|| d.get("permissions")).or_else(|| d.get("sharing")).unwrap_or(d);
+        let allow_principals = {
+            let mut p = strs(acl.get("allow_principals"));
+            p.extend(strs(acl.get("principals"))); p.extend(strs(acl.get("users"))); p
+        };
+        let allow_groups = {
+            let mut g = strs(acl.get("allow_groups"));
+            g.extend(strs(acl.get("groups"))); g
+        };
+        Some(DocAcl { doc_id, allow_principals, allow_groups })
+    }).collect()
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -61,6 +88,18 @@ mod tests {
         assert!(ids.contains(&"d2")); // via group hr
         assert!(!ids.contains(&"d3")); // neither
         assert_eq!(filt, vec!["d3".to_string()]);
+    }
+
+    #[test]
+    fn connector_parses_a_sharepoint_style_export() {
+        let export = serde_json::json!({"documents": [
+            {"id": "doc-1", "permissions": {"users": ["alice"], "groups": ["hr"]}},
+            {"name": "doc-2", "acl": {"allow_groups": ["legal"]}}
+        ]});
+        let docs = from_export(&export);
+        assert_eq!(docs.len(), 2);
+        let (vis, _) = filter("alice", &vec![], &docs);
+        assert_eq!(vis.len(), 1, "alice sees doc-1 via her principal, not doc-2 (legal only)");
     }
 
     #[test]

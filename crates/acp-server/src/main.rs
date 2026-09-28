@@ -61,6 +61,10 @@ struct AppState {
     // Named connector adapters: Slack notify delivery and MLflow model import.
     slack_webhook_url: Option<String>,
     mlflow_url: Option<String>,
+    retrieval_source: Option<String>,
+    author_llm_url: Option<String>,
+    author_llm_key: Option<String>,
+    author_llm_model: Option<String>,
     // M3: periodic framework-report snapshotting + delivery.
     snapshot_interval_ms: i64,
     snapshot_frameworks: Vec<String>,
@@ -575,6 +579,10 @@ async fn main() {
     let mut ticket_poll_url: Option<String> = None;
     let mut slack_webhook_url: Option<String> = None;
     let mut mlflow_url: Option<String> = None;
+    let mut retrieval_source: Option<String> = None;
+    let mut author_llm_url: Option<String> = None;
+    let mut author_llm_key: Option<String> = None;
+    let mut author_llm_model: Option<String> = None;
     let mut snapshot_interval_ms: i64 = 0;
     let mut snapshot_frameworks: Vec<String> = Vec::new();
     let mut approval_sla_ms: i64 = 0;
@@ -605,6 +613,10 @@ async fn main() {
             "--ticket-poll-url" => ticket_poll_url = it.next().cloned(),
             "--slack-webhook-url" => slack_webhook_url = it.next().cloned(),
             "--mlflow-url" => mlflow_url = it.next().cloned(),
+            "--retrieval-source" => retrieval_source = it.next().cloned(),
+            "--author-llm-url" => author_llm_url = it.next().cloned(),
+            "--author-llm-key" => author_llm_key = it.next().cloned(),
+            "--author-llm-model" => author_llm_model = it.next().cloned(),
             "--snapshot-interval-ms" => snapshot_interval_ms = it.next().and_then(|v| v.parse().ok()).unwrap_or(0),
             "--snapshot-frameworks" => snapshot_frameworks = it.next().map(|v| v.split(',').map(|x| x.trim().to_string()).filter(|x| !x.is_empty()).collect()).unwrap_or_default(),
             "--approval-sla-ms" => approval_sla_ms = it.next().and_then(|v| v.parse().ok()).unwrap_or(0),
@@ -850,6 +862,10 @@ async fn main() {
         ticket_poll_url,
         slack_webhook_url,
         mlflow_url,
+        retrieval_source,
+        author_llm_url,
+        author_llm_key,
+        author_llm_model,
         snapshot_interval_ms,
         snapshot_frameworks,
         approval_sla_ms,
@@ -2043,14 +2059,39 @@ async fn policy_suggest(State(st): State<Arc<AppState>>, headers: HeaderMap) -> 
     })).into_response()
 }
 
+/// G3: draft the model-v2 DSL from an English description via a configured OpenAI-compatible LLM. Returns
+/// None if no LLM is configured or the call/parse fails (the caller then uses the deterministic drafter).
+async fn author_llm_draft(st: &Arc<AppState>, text: &str) -> Option<String> {
+    let url = st.author_llm_url.as_ref()?;
+    let model = st.author_llm_model.clone().unwrap_or_else(|| "gpt-4o-mini".to_string());
+    let sys = "You are a policy compiler for the Varman (ACP) model-v2 YAML DSL. Output ONLY a YAML policy document, no prose, no markdown fences. Shape: `version: 1`, `default: allow` (or deny), and `rules:` where each rule has `id`, a `when:` map keyed by any of tool/resource/operation/principal/agent/app (resource is one of database/filesystem/secrets/network/payments/model; operation is read/write/delete), and `verdict:` one of allow/deny/step_up. Translate the user's rule faithfully and minimally.";
+    let mut req = reqwest::Client::new().post(url).json(&serde_json::json!({
+        "model": model,
+        "messages": [{"role": "system", "content": sys}, {"role": "user", "content": text}],
+        "temperature": 0
+    }));
+    if let Some(k) = &st.author_llm_key { req = req.header("authorization", format!("Bearer {k}")); }
+    let v: serde_json::Value = req.send().await.ok()?.json().await.ok()?;
+    let content = v.get("choices")?.get(0)?.get("message")?.get("content")?.as_str()?.to_string();
+    // Strip any accidental markdown fences.
+    let cleaned = content.lines().filter(|l| !l.trim_start().starts_with("```")).collect::<Vec<_>>().join("\n");
+    // Only accept it if it compiles.
+    if acp_core::policy::PolicyEngine::from_yaml(&cleaned).is_ok() { Some(cleaned) } else { None }
+}
+
 /// G3: POST /policy/author {text, tests?[{tool,principal}]} -> best-effort DSL draft + the verification
 /// matrix (allow/deny per test request through the real engine). Deploy remains a separate, signed step.
 async fn policy_author(State(st): State<Arc<AppState>>, headers: HeaderMap, Json(body): Json<serde_json::Value>) -> Response {
     if let Err(r) = authorize(&st.auth, &headers, acp_core::auth::Capability::EditPolicy) { return r; }
     let text = body.get("text").and_then(|v| v.as_str()).unwrap_or("");
-    let draft = match acp_core::policy::author::draft_from_text(text) {
+    // Prefer a real LLM drafter when configured (OpenAI-compatible chat/completions); the deterministic
+    // pattern drafter is the offline fallback. Either way the draft is VERIFIED below before it can ship.
+    let draft = match author_llm_draft(&st, text).await {
         Some(d) => d,
-        None => return Json(serde_json::json!({"ok": false, "error": "could not draft from that description; rephrase or use the editor", "draft": ""})).into_response(),
+        None => match acp_core::policy::author::draft_from_text(text) {
+            Some(d) => d,
+            None => return Json(serde_json::json!({"ok": false, "error": "could not draft from that description; rephrase or use the editor", "draft": ""})).into_response(),
+        },
     };
     let reqs: Vec<acp_core::policy::author::TestRequest> = body.get("tests").and_then(|v| v.as_array()).map(|a| a.iter().filter_map(|t| {
         Some(acp_core::policy::author::TestRequest { tool: t.get("tool")?.as_str()?.to_string(), principal: t.get("principal").and_then(|p| p.as_str()).unwrap_or("").to_string() })
@@ -2170,10 +2211,20 @@ async fn memory_write(State(st): State<Arc<AppState>>, headers: HeaderMap, Json(
 
 /// G7: POST /retrieval/check {principal, groups, docs:[{doc_id,allow_principals,allow_groups}]} -> which
 /// docs the principal may read and which are filtered (permission-aware retrieval).
-async fn retrieval_check(State(_st): State<Arc<AppState>>, Json(body): Json<serde_json::Value>) -> Response {
+async fn retrieval_check(State(st): State<Arc<AppState>>, Json(body): Json<serde_json::Value>) -> Response {
     let principal = body.get("principal").and_then(|v| v.as_str()).unwrap_or("");
     let groups: Vec<String> = body.get("groups").and_then(|v| v.as_array()).map(|a| a.iter().filter_map(|x| x.as_str().map(String::from)).collect()).unwrap_or_default();
-    let docs: Vec<acp_core::retrieval::DocAcl> = body.get("docs").and_then(|v| serde_json::from_value(v.clone()).ok()).unwrap_or_default();
+    // Inline docs, else load the document-ACL export from the configured connector source (file or URL).
+    let mut docs: Vec<acp_core::retrieval::DocAcl> = body.get("docs").and_then(|v| serde_json::from_value(v.clone()).ok()).unwrap_or_default();
+    if docs.is_empty() {
+        if let Some(src) = &st.retrieval_source {
+            let raw = if src.starts_with("http") {
+                reqwest::Client::new().get(src).send().await.ok().map(|r| async move { r.text().await.unwrap_or_default() })
+            } else { None };
+            let text = if let Some(fut) = raw { fut.await } else { std::fs::read_to_string(src).unwrap_or_default() };
+            if let Ok(v) = serde_json::from_str::<serde_json::Value>(&text) { docs = acp_core::retrieval::from_export(&v); }
+        }
+    }
     let (visible, filtered) = acp_core::retrieval::filter(principal, &groups, &docs);
     Json(serde_json::json!({"ok": true, "visible": visible.iter().map(|d| d.doc_id.clone()).collect::<Vec<_>>(), "filtered": filtered})).into_response()
 }
