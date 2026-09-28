@@ -1,0 +1,7 @@
+{
+  "dim": 8,
+  "bias": -1.2,
+  "weights": [0.0, 3.4, 0.0, -0.7, 2.1, 0.0, 1.8, 0.0],
+  "detector": "prompt-injection",
+  "version": "illustrative-1"
+}
