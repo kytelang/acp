@@ -243,3 +243,38 @@ pub(crate) async fn principal_groups(State(st): State<Arc<AppState>>, Query(q): 
     Json(serde_json::json!({"principal": who, "groups": groups})).into_response()
 }
 
+
+/// Default per-agent capability config: the forward-proxy firewall on, mcp/guard off. Editable from
+/// the console Agent config page and fetched by `acp-agent run --agent-id ... --control-plane ...`.
+fn default_agent_config() -> serde_json::Value {
+    serde_json::json!({
+        "firewall": {"enabled": true,  "listen": "127.0.0.1:8080"},
+        "mcp":      {"enabled": false, "listen": "127.0.0.1:8090", "upstream": ""},
+        "guard":    {"enabled": false, "listen": "127.0.0.1:8091", "upstream": "", "pubkey": ""}
+    })
+}
+
+/// GET /agents/:id/config: the stored capability config for an agent (defaults if none saved yet).
+pub(crate) async fn agent_config_get(State(st): State<Arc<AppState>>, Path(id): Path<String>) -> Response {
+    let store = match &st.store { Some(s) => s, None => return Json(serde_json::json!({"id": id, "config": default_agent_config()})).into_response() };
+    let cfg = store
+        .get_state(&format!("agentcfg:{id}"))
+        .await
+        .ok()
+        .flatten()
+        .and_then(|raw| serde_json::from_str::<serde_json::Value>(&raw).ok())
+        .unwrap_or_else(default_agent_config);
+    Json(serde_json::json!({"id": id, "config": cfg})).into_response()
+}
+
+/// POST /agents/:id/config: store an agent's capability config (RegisterAgent scope). Body is the
+/// config object, or {config: {...}}.
+pub(crate) async fn agent_config_set(State(st): State<Arc<AppState>>, headers: HeaderMap, Path(id): Path<String>, Json(body): Json<serde_json::Value>) -> Response {
+    if let Err(r) = authorize(&st.auth, &headers, acp_core::auth::Capability::RegisterAgent) { return r; }
+    let store = match &st.store { Some(s) => s, None => return Json(serde_json::json!({"ok": false, "error": "no --store configured"})).into_response() };
+    let cfg = body.get("config").cloned().unwrap_or(body);
+    match store.put_state(&format!("agentcfg:{id}"), &cfg.to_string(), now_ms() as i64).await {
+        Ok(()) => Json(serde_json::json!({"ok": true, "id": id})).into_response(),
+        Err(e) => Json(serde_json::json!({"ok": false, "error": e})).into_response(),
+    }
+}

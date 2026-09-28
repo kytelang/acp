@@ -25,10 +25,50 @@ fn flag(args: &[String], name: &str) -> Option<String> {
 /// Run several capabilities at once from one config: enable each with its listen address, all sharing
 /// one --control-plane. This is the "one workstation service, multiple capabilities by configuration"
 /// mode. Each enabled capability runs concurrently until it exits.
+/// Fetch an agent's stored capability config from the control plane (best-effort).
+async fn fetch_agent_config(base: &str, agent_id: &str) -> Option<serde_json::Value> {
+    let base = base.trim_end_matches('/');
+    let v: serde_json::Value = reqwest::Client::new()
+        .get(format!("{base}/agents/{agent_id}/config"))
+        .send()
+        .await
+        .ok()?
+        .json()
+        .await
+        .ok()?;
+    v.get("config").cloned()
+}
+
 async fn run_multi(rest: Vec<String>) -> ExitCode {
     let cp = flag(&rest, "--control-plane");
     let token = flag(&rest, "--report-token");
     let ledger = flag(&rest, "--ledger");
+    // Server-driven capabilities: if none are given on the command line, fetch this agent's stored
+    // config from the control plane (console Agent config page) and enable what it says.
+    let mut rest = rest;
+    let has_caps = flag(&rest, "--firewall").is_some() || flag(&rest, "--guard").is_some() || flag(&rest, "--mcp").is_some();
+    if !has_caps {
+        if let (Some(base), Some(id)) = (cp.clone(), flag(&rest, "--agent-id")) {
+            if let Some(cfg) = fetch_agent_config(&base, &id).await {
+                let get = |cap: &str, k: &str| cfg.get(cap).and_then(|c| c.get(k)).and_then(|v| v.as_str()).unwrap_or("").to_string();
+                let on = |cap: &str| cfg.get(cap).and_then(|c| c.get("enabled")).and_then(|v| v.as_bool()).unwrap_or(false);
+                if on("firewall") {
+                    rest.push("--firewall".into()); rest.push(get("firewall", "listen"));
+                }
+                if on("mcp") {
+                    rest.push("--mcp".into()); rest.push(get("mcp", "listen"));
+                    rest.push("--mcp-upstream".into()); rest.push(get("mcp", "upstream"));
+                }
+                if on("guard") {
+                    rest.push("--guard".into()); rest.push(get("guard", "listen"));
+                    rest.push("--guard-upstream".into()); rest.push(get("guard", "upstream"));
+                    let pk = get("guard", "pubkey");
+                    if !pk.is_empty() { rest.push("--guard-pubkey".into()); rest.push(pk); }
+                }
+                eprintln!("acp-agent: capabilities loaded from the control-plane config for {id}");
+            }
+        }
+    }
     let mut set: tokio::task::JoinSet<ExitCode> = tokio::task::JoinSet::new();
 
     // Firewall (content firewall + forward proxy)

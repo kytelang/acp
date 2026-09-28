@@ -944,3 +944,20 @@ pub fn agentConfigPanel(c: AgentConfig): Html {
             </div></div>
     </div>;
 }
+
+
+// Agent-config editor: save result + a display of the stored config.
+pub fn agentConfigResultPanel(res: DeployResult): Html {
+    return <div id="acresult" class="deploystatus">
+        {if (res.ok) { <span class="badge ok">saved</span> } else { <span class="badge bad">failed</span> }}
+        <span class="dim">{res.message}</span>
+    </div>;
+}
+
+pub fn agentConfigLoadedPanel(id: string, cfg: string): Html {
+    return <div id="acloaded">
+        {if (string.eql(cfg, "")) { <p class="hint">No stored config for that agent id (defaults apply until you save).</p> } else {
+            <div><p class="hint">Stored config for {id}:</p><pre class="mono" style="background:var(--panel);padding:.7rem;border-radius:8px;white-space:pre-wrap;overflow-x:auto;font-size:.8rem">{cfg}</pre></div>
+        }}
+    </div>;
+}

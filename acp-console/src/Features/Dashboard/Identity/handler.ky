@@ -121,3 +121,30 @@ pub struct ReviewVendorHandler impl RouteHandler {
         return await ds_response.patch(vendorsPanel(acp.vendorRows()));
     }
 }
+
+
+// Agent config editor: save the capability config (server-side), then show the stored config.
+pub struct AgentConfigSaveHandler impl RouteHandler {
+    acp: AcpClient,
+    init(acp: AcpClient) { self.acp = acp; }
+    async fn serve(self: AgentConfigSaveHandler, ctx: Context): Response {
+        let acp = self.acp.withTenant(json.stringField(ctx.request.body, "tenant"));
+        let auth = ctx.request.headers.get("authorization") ?? "";
+        let id = json.stringField(ctx.request.body, "acAgent");
+        let fwEnabled = string.eql(json.stringField(ctx.request.body, "acFwEnabled"), "true");
+        let mcpEnabled = string.eql(json.stringField(ctx.request.body, "acMcpEnabled"), "true");
+        let guardEnabled = string.eql(json.stringField(ctx.request.body, "acGuardEnabled"), "true");
+        let res = acp.setAgentConfig(id, fwEnabled, json.stringField(ctx.request.body, "acFwListen"), mcpEnabled, json.stringField(ctx.request.body, "acMcpListen"), json.stringField(ctx.request.body, "acMcpUpstream"), guardEnabled, json.stringField(ctx.request.body, "acGuardListen"), json.stringField(ctx.request.body, "acGuardUpstream"), json.stringField(ctx.request.body, "acGuardPubkey"), auth);
+        return await ds_response.patch(agentConfigResultPanel(res));
+    }
+}
+
+pub struct AgentConfigLoadHandler impl RouteHandler {
+    acp: AcpClient,
+    init(acp: AcpClient) { self.acp = acp; }
+    async fn serve(self: AgentConfigLoadHandler, ctx: Context): Response {
+        let acp = self.acp.withTenant(json.stringField(ctx.request.body, "tenant"));
+        let id = json.stringField(ctx.request.body, "acAgent");
+        return await ds_response.patch(agentConfigLoadedPanel(id, acp.agentConfigJson(id)));
+    }
+}

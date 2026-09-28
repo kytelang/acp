@@ -919,6 +919,38 @@ pub struct AcpClient {
         return AgentConfig(self.base, ver, hash, author, fw.enabled, fw.hasModel);
     }
 
+    // Store an agent capability configuration server-side (RegisterAgent). Booleans are the toggles;
+    // strings are the listen/upstream addresses.
+    pub fn setAgentConfig(self: AcpClient, id: string, fwEnabled: bool, fwListen: string, mcpEnabled: bool, mcpListen: string, mcpUpstream: string, guardEnabled: bool, guardListen: string, guardUpstream: string, guardPubkey: string, userAuth: string): DeployResult {
+        if (string.eql(id, "")) { return DeployResult(false, "enter an agent id"); }
+        let fw = fwEnabled ? "true" : "false";
+        let mc = mcpEnabled ? "true" : "false";
+        let gd = guardEnabled ? "true" : "false";
+        let body = "{\"config\":{"
+            + "\"firewall\":{\"enabled\":" + fw + ",\"listen\":" + self.jstr(fwListen) + "},"
+            + "\"mcp\":{\"enabled\":" + mc + ",\"listen\":" + self.jstr(mcpListen) + ",\"upstream\":" + self.jstr(mcpUpstream) + "},"
+            + "\"guard\":{\"enabled\":" + gd + ",\"listen\":" + self.jstr(guardListen) + ",\"upstream\":" + self.jstr(guardUpstream) + ",\"pubkey\":" + self.jstr(guardPubkey) + "}"
+            + "}}";
+        let hdrs = client.Http.emptyHeaders();
+        hdrs.set("Content-Type", "application/json"); hdrs.set("x-acp-tenant", self.tenant);
+        if (!string.eql(userAuth, "")) { hdrs.set("Authorization", userAuth); }
+        else { let tok = self.authToken("AppRegistrar"); if (!string.eql(tok, "")) { hdrs.set("Authorization", "Bearer " + tok); } }
+        let resp = client.Http.request("POST", self.base + "/agents/" + id + "/config", hdrs, body);
+        if (resp.status.toCode() != 200) { return DeployResult(false, "acp-server unreachable"); }
+        let v = json.parse(resp.body);
+        if (!(json.asBool(json.get(v, "ok")) ?? false)) { return DeployResult(false, json.asString(json.get(v, "error")) ?? "rejected"); }
+        return DeployResult(true, "saved config for " + id);
+    }
+
+    // The stored capability config for an agent, as pretty JSON for display.
+    pub fn agentConfigJson(self: AcpClient, id: string): string {
+        if (string.eql(id, "")) { return ""; }
+        let resp = self.tget(self.base + "/agents/" + id + "/config");
+        if (resp.status.toCode() != 200) { return ""; }
+        let cfg = json.get(json.parse(resp.body), "config");
+        return json.stringify(cfg);
+    }
+
     // Pending approvals (holds awaiting a human decision).
     // Resolve a step-up hold, carrying the Approver token (dev-token fallback) so it works with RBAC on.
     pub fn resolveApproval(self: AcpClient, id: string, approve: bool, userAuth: string): DeployResult {

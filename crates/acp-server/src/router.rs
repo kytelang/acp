@@ -66,6 +66,7 @@ pub(crate) fn build_router(state: Arc<AppState>) -> Router {
             .route("/agents", post(agent_register))
             .route("/agents/:id/deactivate", post(agent_deactivate))
             .route("/agents/:id/auto-assess", post(agent_auto_assess))
+        .route("/agents/:id/config", get(agent_config_get).post(agent_config_set))
             .route("/agents/verify", post(agent_verify))
             .route("/grc", get(grc_list).post(grc_create))
             .route("/grc/templates", get(grc_templates))

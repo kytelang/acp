@@ -42,6 +42,20 @@ The HTTP transport adds a concurrency cap: a burst beyond the limit is shed with
 `Retry-after`, so it cannot be exhausted, and it can stamp an enforcement attestation header for the
 [guard](06-guard.md) to check.
 
+## Server-driven capabilities
+
+An agent's capabilities do not have to be spelled out on the command line. Configure them from the
+console **Agent config** page (which capabilities to run, on which addresses, and their upstreams);
+the control plane stores the config per agent. Then start the agent with only its identity:
+
+```sh
+acp-agent run --control-plane http://<control-plane>:8787 --agent-id <id> --agent-token <token>
+```
+
+With no capability flags, `run` fetches the stored config and enables what it says (for example the
+forward-proxy firewall on the configured address). Capability flags on the command line still win, for
+hosts that need a local override.
+
 ## Central policy over HTTP
 
 A remote proxy does not need a local policy file. With `--control-plane <url>` (which adds
