@@ -729,7 +729,7 @@ async fn main() {
             }
         };
         // Prefer a PKCS#11 HSM signer when configured (ACP_PKCS11_MODULE).
-        let signer: Box<dyn acp_core::sign::Signer + Send> = match acp_hsm::signer_from_env() {
+        let signer: Box<dyn acp_core::sign::Signer + Send> = match acp_core::hsm::signer_from_env() {
             Some(Ok(hsm)) => { tracing::info!("meta-ledger signing with a PKCS#11 HSM"); hsm }
             Some(Err(e)) => { tracing::error!("HSM signer requested but failed: {e}"); return None; }
             None => signer,

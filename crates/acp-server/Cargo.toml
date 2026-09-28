@@ -7,10 +7,9 @@ description = "Agent Control Plane: control service - approval inbox, policy end
 
 [dependencies]
 getrandom.workspace = true
-acp-hsm = { path = "../acp-hsm" }
 tracing.workspace = true
 reqwest.workspace = true
-acp-core = { path = "../acp-core" }
+acp-core = { path = "../acp-core", features = ["hsm"] }
 tokio-rustls = "0.26"
 rustls = "0.23"
 rustls-pemfile = "2"

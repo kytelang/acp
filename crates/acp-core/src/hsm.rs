@@ -1,6 +1,6 @@
 //! PKCS#11 HSM signing backend (decision H0.3 hardening).
 //!
-//! Fills the `acp_core::sign::Signer` seam with a hardware/soft-HSM backend over PKCS#11 (via
+//! Fills the `crate::sign::Signer` seam with a hardware/soft-HSM backend over PKCS#11 (via
 //! `cryptoki`), so the evidence signing key can live in a YubiHSM / Thales / SoftHSM instead of a
 //! file. Uses Ed25519 (EdDSA) to match the ledger's existing verification, and produces a raw
 //! 64-byte signature and raw 32-byte public key so a record signed by the HSM verifies with the
@@ -10,7 +10,7 @@
 //! the ledger's `Box<dyn Signer + Send>` needs a dedicated signing thread + channel wrapper; that
 //! wrapper is the remaining deploy-time wiring. The signer itself is complete and testable.
 
-use acp_core::sign::Signer;
+use crate::sign::Signer;
 use cryptoki::context::{CInitializeArgs, Pkcs11};
 use cryptoki::mechanism::eddsa::{EddsaParams, EddsaSignatureScheme};
 use cryptoki::mechanism::Mechanism;

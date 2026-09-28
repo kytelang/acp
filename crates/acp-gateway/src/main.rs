@@ -53,7 +53,7 @@ struct GwState {
     content_scan: Option<String>,
     content_fw: Option<acp_core::content::ContentPolicy>,
     content_ml: Option<std::sync::Arc<acp_core::content::LinearScorer>>,
-    budget_pg: Option<tokio::sync::Mutex<acp_pgstate::PgState>>,
+    budget_pg: Option<tokio::sync::Mutex<acp_core::pgstate::PgState>>,
     sem: std::sync::Arc<tokio::sync::Semaphore>,
     budget_state: Option<String>,
     metrics: Metrics,
@@ -164,7 +164,7 @@ async fn main() -> std::process::ExitCode {
         Some(acp_core::content::ContentPolicy { block_injection: true, block_secrets: fw_block_secrets, redact_pii: true, denied_topics: fw_deny_topics, block_toxicity: fw_block_toxicity })
     } else { None };
     let budget_pg = match budget_pg_conn.as_ref() {
-        Some(conn) => match acp_pgstate::PgState::connect(conn).await {
+        Some(conn) => match acp_core::pgstate::PgState::connect(conn).await {
             Ok(s) => { tracing::info!("shared budgets via Postgres ({conn})"); Some(tokio::sync::Mutex::new(s)) }
             Err(e) => { tracing::error!("cannot connect --budget-pg: {e}"); return std::process::ExitCode::from(1); }
         },
@@ -363,7 +363,7 @@ fn open_ledger(path: &str) -> Option<acp_core::ledger::Ledger> {
         }
     };
     // Prefer a PKCS#11 HSM signer when configured (ACP_PKCS11_MODULE) for evidence signing.
-    let signer: Box<dyn acp_core::sign::Signer + Send> = match acp_hsm::signer_from_env() {
+    let signer: Box<dyn acp_core::sign::Signer + Send> = match acp_core::hsm::signer_from_env() {
         Some(Ok(hsm)) => { tracing::info!("gateway signing evidence with a PKCS#11 HSM"); hsm }
         Some(Err(e)) => { tracing::error!("HSM signer requested but failed: {e}"); return None; }
         None => signer,

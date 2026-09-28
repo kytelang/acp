@@ -59,19 +59,19 @@ jobs:
         run: |
           psql -h localhost -U postgres -d acp -c "CREATE ROLE acp_app LOGIN PASSWORD 'apppw' NOSUPERUSER;"
           psql -h localhost -U postgres -d acp -c "GRANT ALL ON SCHEMA public TO acp_app; ALTER DEFAULT PRIVILEGES IN SCHEMA public GRANT ALL ON TABLES TO acp_app;"
-      - name: acp-cpstore (config-driven store) against Postgres
+      - name: control-plane store (acp_server::store) against Postgres
         env:
           ACP_CP_PG_URL: postgres://postgres:postgres@localhost/acp
-        run: cargo test -p acp-cpstore
-      - name: acp-pgstate (shared budgets/pins) against Postgres
+        run: cargo test -p acp-server store::
+      - name: shared budgets/pins (acp_core::pgstate) against Postgres
         env:
           ACP_PG_TEST: host=localhost user=postgres password=postgres dbname=acp
-        run: cargo test -p acp-pgstate
-      - name: acp-pgstore (tenant RLS) against Postgres, non-superuser + bypass guard
+        run: cargo test -p acp-core --features postgres pgstate::
+      - name: tenant RLS (acp_core::pgstore) against Postgres, non-superuser + bypass guard
         env:
           ACP_PG_TEST_URL: host=localhost user=acp_app password=apppw dbname=acp
           ACP_PG_SUPER_URL: host=localhost user=postgres password=postgres dbname=acp
-        run: cargo test -p acp-pgstore
+        run: cargo test -p acp-core --features postgres pgstore::
 
   console-build:
     # B10: build the Kyte web console so a console build break fails a gate (release.yml builds it too,

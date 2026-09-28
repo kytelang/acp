@@ -28,6 +28,7 @@ version = "0.0.0"
 dependencies = [
  "base64 0.22.1",
  "cedar-policy",
+ "cryptoki",
  "ed25519-dalek",
  "getrandom 0.2.17",
  "hex",
@@ -38,6 +39,8 @@ dependencies = [
  "serde_json",
  "serde_yaml",
  "sha2 0.10.9",
+ "tokio",
+ "tokio-postgres",
  "tracing",
  "tracing-subscriber",
 ]
@@ -47,8 +50,6 @@ name = "acp-gateway"
 version = "0.0.0"
 dependencies = [
  "acp-core",
- "acp-hsm",
- "acp-pgstate",
  "anyhow",
  "axum",
  "futures-util",
@@ -71,14 +72,6 @@ dependencies = [
  "serde_json",
  "tokio",
  "tracing",
-]
-
-[[package]]
-name = "acp-hsm"
-version = "0.0.0"
-dependencies = [
- "acp-core",
- "cryptoki",
 ]
 
 [[package]]
@@ -107,31 +100,11 @@ dependencies = [
 ]
 
 [[package]]
-name = "acp-pgstate"
-version = "0.0.0"
-dependencies = [
- "acp-core",
- "tokio",
- "tokio-postgres",
-]
-
-[[package]]
-name = "acp-pgstore"
-version = "0.0.0"
-dependencies = [
- "serde_json",
- "tokio",
- "tokio-postgres",
-]
-
-[[package]]
 name = "acp-proxy"
 version = "0.0.0"
 dependencies = [
  "acp-core",
- "acp-hsm",
  "acp-jsonrpc",
- "acp-pgstate",
  "anyhow",
  "axum",
  "futures-util",
@@ -148,7 +121,6 @@ name = "acp-server"
 version = "0.0.0"
 dependencies = [
  "acp-core",
- "acp-hsm",
  "axum",
  "getrandom 0.2.17",
  "hex",

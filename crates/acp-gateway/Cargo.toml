@@ -5,10 +5,8 @@ edition = "2021"
 description = "Agent Control Plane: LLM gateway PEP governing direct model API calls (phase C)."
 
 [dependencies]
-acp-hsm = { path = "../acp-hsm" }
 tracing.workspace = true
-acp-core = { path = "../acp-core" }
-acp-pgstate = { path = "../acp-pgstate" }
+acp-core = { path = "../acp-core", features = ["hsm", "postgres"] }
 axum = { workspace = true }
 tokio = { workspace = true }
 reqwest.workspace = true

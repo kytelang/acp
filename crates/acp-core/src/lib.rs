@@ -50,6 +50,12 @@ pub mod metering;
 pub mod mlflow;
 pub mod notify;
 pub mod obs;
+#[cfg(feature = "hsm")]
+pub mod hsm;
+#[cfg(feature = "postgres")]
+pub mod pgstate;
+#[cfg(feature = "postgres")]
+pub mod pgstore;
 pub mod ledger;
 pub mod policy;
 pub mod registry;

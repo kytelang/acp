@@ -18,11 +18,9 @@ name = "mock-mcp-server"
 path = "src/bin/mock_mcp_server.rs"
 
 [dependencies]
-acp-hsm = { path = "../acp-hsm" }
 tracing.workspace = true
 hex.workspace = true
-acp-core = { path = "../acp-core" }
-acp-pgstate = { path = "../acp-pgstate" }
+acp-core = { path = "../acp-core", features = ["hsm", "postgres"] }
 acp-jsonrpc = { path = "../acp-jsonrpc" }
 tokio = { workspace = true }
 serde_json.workspace = true

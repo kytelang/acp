@@ -1,12 +1,12 @@
 //! Postgres-backed shared state for budgets and tool pins (pending.md P1 #3, deployment half).
 //!
-//! `acp_core::sharedstate` defines the in-process default; this is the shared implementation so
+//! `crate::sharedstate` defines the in-process default; this is the shared implementation so
 //! several gateway or proxy replicas see one budget and one set of pins. Budgets use a token bucket
 //! stored per key and refilled by elapsed time under a row lock (SELECT ... FOR UPDATE), so
 //! concurrent replicas cannot double-spend. Pins are check-and-set. Async (tokio-postgres), matching
 //! the gateway's async request path.
 
-use acp_core::toolintegrity::PinResult;
+use crate::toolintegrity::PinResult;
 use tokio_postgres::{Client, NoTls};
 
 pub struct PgState {

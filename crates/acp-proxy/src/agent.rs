@@ -297,7 +297,7 @@ async fn build_controller(o: &Opts) -> Result<Arc<Controller>, String> {
         tracing::info!("external content-scan hook enabled (offline flag)");
     }
     if let Some(conn) = o.pin_pg.as_ref() {
-        match acp_pgstate::PgState::connect(conn).await {
+        match acp_core::pgstate::PgState::connect(conn).await {
             Ok(pg) => { controller.set_pin_pg(pg).await; tracing::info!("shared tool pins via Postgres ({conn})"); }
             Err(e) => return Err(format!("cannot connect --pin-pg: {e}")),
         }

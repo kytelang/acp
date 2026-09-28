@@ -126,7 +126,7 @@ pub struct Controller {
     // scanned before forwarding; injection/denied-topic block the call, secrets are recorded.
     content: Mutex<Option<acp_core::content::ContentPolicy>>,
     content_ml: Mutex<Option<std::sync::Arc<acp_core::content::LinearScorer>>>,
-    pin_pg: tokio::sync::Mutex<Option<acp_pgstate::PgState>>,
+    pin_pg: tokio::sync::Mutex<Option<acp_core::pgstate::PgState>>,
     trajectory: Mutex<Option<acp_core::trajectory::TrajectoryMonitor>>,
     data_boundary: Mutex<Option<acp_core::databoundary::DataBoundaryPolicy>>,
     // Per-request human identity (phase B): when set, the HTTP transport verifies each request's
@@ -306,7 +306,7 @@ impl Controller {
 
     /// Enable shared tool-integrity pins via Postgres, so a rug-pull seen on one replica is caught
     /// on all of them (complements the in-process TOFU pins).
-    pub async fn set_pin_pg(&self, pg: acp_pgstate::PgState) {
+    pub async fn set_pin_pg(&self, pg: acp_core::pgstate::PgState) {
         *self.pin_pg.lock().await = Some(pg);
     }
 
