@@ -56,6 +56,57 @@ Two more binaries are optional or offline, not part of the core three:
   governs a coding agent's own shell, file and network powers by compiling one policy into the vendor's
   managed settings. See [chapter 7](07-native-compile.md).
 
+## Two enforcement layers: policy and rules
+
+Two things are often confused. They are different layers, and every enforcement point runs both.
+
+- **Policy is authorization.** It answers "is this agent *allowed* to take this action?". A policy rule
+  matches on the trusted facts of a request (`tool`, `agent`, `principal`, `resource`, `operation`,
+  argument values) and returns a verdict: `allow`, `deny`, `step_up` (human approval) or `shadow`
+  (record but do not block), plus obligations like redact or rate-limit. Policy is a single signed,
+  versioned document in the policy store ([chapter 2](02-policy.md)).
+- **The content firewall is detection.** It answers "does this text carry a threat, and which traffic
+  do I even inspect?". It has two parts: **interception rules** (host / SNI / path predicates that
+  decide which traffic the forward proxy intercepts and how) and a **content config** (block secrets,
+  denied topics, a trained injection model, toxicity, an external scan hook). It is not signed; PEPs
+  fetch it from the control plane ([chapter 10](10-content-firewall.md)).
+
+They are complementary, not duplicates: the firewall decides what traffic to see and screens the text
+for prompt-injection, secrets and denied topics; the policy decides whether the underlying action is
+authorized. A request can pass the firewall and still be denied by policy, or the reverse.
+
+| | Policy (authorization) | Content firewall (rules + config) |
+| --- | --- | --- |
+| Question | can this action happen? | what traffic do I inspect, and is the text a threat? |
+| Matches on | tool, agent, principal, resource, operation, args | host / SNI / path predicates; text content |
+| Outcome | allow / deny / step_up / shadow (+ obligations) | intercept action (block / inspect / dlp / pass); block / redact |
+| Direction | request only (a response is not "authorized") | request **and** response |
+| Signed? | yes (Ed25519, versioned) | no (fetched from the control plane) |
+
+## What an agent intercepts, and in both directions
+
+The `firewall` capability runs as a **forward proxy on the workstation** (optionally with the ACP CA
+for TLS interception), so a single agent intercepts the prompts that the machine's apps send to **many
+AI providers at once**: OpenAI, Anthropic, Azure OpenAI, Bedrock and so on. Which traffic it intercepts
+is decided by the interception rules, so "which provider" is a rule dimension, not a separate
+deployment. The `mcp` and `guard` capabilities are narrower: each governs a single tool server.
+
+Enforcement is **bidirectional**. On the request side ACP runs both the policy (authorization) and the
+content firewall (prompt-injection, secrets, denied topics). On the response side it runs the content
+firewall again on what comes back (tagged `response` or `tool_result`), catching injected instructions
+in a fetched document, secrets or PII leaking out, and system-prompt-leak patterns, and can block (swap
+in a safe error frame) or redact. Groundedness and hallucination checks are also response-side.
+Authorization applies only to requests; a response is screened, not "authorized".
+
+## How configuration is scoped
+
+Today the firewall config and interception rules are stored **per tenant**: every enforcement point in
+a tenant fetches the same content config and rules from the control plane, and the single deployed
+policy can still target a specific `agent:` or `app:` from within its own rules. An agent identifies
+itself with its registered id and enrolment token; its authorization policy is currently supplied
+locally (`--policy`), while its firewall config and interception rules are fetched from the control
+plane over `--control-plane`.
+
 ## Deploy where
 
 Two deployment surfaces, and it matters which is which.
