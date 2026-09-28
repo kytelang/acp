@@ -125,7 +125,10 @@ the concrete allow/deny outcome for a set of example requests, before you deploy
 the point: even a draft written by an LLM is shown as an exact allow/deny table you must confirm, and a
 draft that does not compile is reported, never deployed.
 
-> API: `POST /policy/author {text, tests?}` returns the draft and the matrix.
+> API: `POST /policy/author {text, tests?}` returns the draft and the matrix. Point the drafter at a
+> real LLM with `acp-server --author-llm-url <openai-compatible-chat-completions-url> --author-llm-key
+> <key> --author-llm-model <model>`; without it a deterministic pattern drafter is the offline fallback,
+> and either way the verification matrix runs before deploy.
 
 ## Compiling, testing and deploying
 

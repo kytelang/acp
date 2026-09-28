@@ -133,7 +133,9 @@ When an agent retrieves documents for RAG, ACP can enforce that it only receives
 human may see, so an assistant cannot become a way around document ACLs. `POST /retrieval/check` decides
 per candidate document against the verified principal and their groups; an unattributed caller is
 fail-closed. The proxy enforces this on the response path too: documents the acting principal may not
-see are filtered out of a retrieval tool result before it reaches the model.
+see are filtered out of a retrieval tool result before it reaches the model. Point the agent at the
+document-ACL export with `acp-agent mcp --retrieval-source <file|url>` (a SharePoint/Confluence/Drive
+export of `documents[].{acl,permissions,sharing}`).
 
 ## Multi-tenancy
 
