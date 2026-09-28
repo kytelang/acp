@@ -64,7 +64,7 @@ struct GwState {
 
 #[tokio::main]
 async fn main() -> std::process::ExitCode {
-    acp_obs::init("acp-gateway");
+    acp_core::obs::init("acp-gateway");
     let args: Vec<String> = std::env::args().collect();
     let mut addr = "127.0.0.1:8799".to_string();
     let (mut policy, mut upstream, mut upstream_key, mut env) = (None, None, None, "prod".to_string());

@@ -369,7 +369,7 @@ async fn build_controller(o: &Opts) -> Result<Arc<Controller>, String> {
 }
 
 pub async fn run(args: Vec<String>) -> ExitCode {
-    acp_obs::init("acp-proxy");
+    acp_core::obs::init("acp-proxy");
     let sub = args.get(1).map(String::as_str);
     let rest = if args.len() > 2 { &args[2..] } else { &[] };
 

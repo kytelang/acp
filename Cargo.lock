@@ -61,6 +61,8 @@ dependencies = [
  "serde_json",
  "serde_yaml",
  "sha2 0.10.9",
+ "tracing",
+ "tracing-subscriber",
 ]
 
 [[package]]
@@ -91,7 +93,6 @@ dependencies = [
  "acp-core",
  "acp-hsm",
  "acp-ledger",
- "acp-obs",
  "acp-pgstate",
  "acp-policy",
  "anyhow",
@@ -110,7 +111,6 @@ version = "0.0.0"
 dependencies = [
  "acp-core",
  "acp-ledger",
- "acp-obs",
  "anyhow",
  "axum",
  "hex",
@@ -134,7 +134,6 @@ version = "0.0.0"
 dependencies = [
  "acp-core",
  "acp-ledger",
- "acp-obs",
  "hex",
  "rcgen",
  "reqwest",
@@ -185,14 +184,6 @@ dependencies = [
 ]
 
 [[package]]
-name = "acp-obs"
-version = "0.0.0"
-dependencies = [
- "tracing",
- "tracing-subscriber",
-]
-
-[[package]]
 name = "acp-pgstate"
 version = "0.0.0"
 dependencies = [
@@ -232,7 +223,6 @@ dependencies = [
  "acp-hsm",
  "acp-jsonrpc",
  "acp-ledger",
- "acp-obs",
  "acp-pgstate",
  "acp-policy",
  "acp-registry",
@@ -269,7 +259,6 @@ dependencies = [
  "acp-hsm",
  "acp-ledger",
  "acp-mtls",
- "acp-obs",
  "acp-policy",
  "acp-registry",
  "axum",

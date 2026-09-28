@@ -116,7 +116,7 @@ async fn fetch_registry(client: &reqwest::Client, base: &str) -> Result<Endpoint
 }
 
 pub async fn run(args: Vec<String>) -> std::process::ExitCode {
-    acp_obs::init("acp-intercept");
+    acp_core::obs::init("acp-intercept");
     // Subcommand: generate a CA to install on managed devices for TLS interception.
     if args.get(1).map(String::as_str) == Some("gen-ca") {
         let cert_out = args.get(2).cloned().unwrap_or_else(|| "acp-ca.pem".into());

@@ -541,7 +541,7 @@ fn actor_of(p: &Option<acp_auth::Principal>) -> String {
 
 #[tokio::main]
 async fn main() {
-    acp_obs::init("acp-server");
+    acp_core::obs::init("acp-server");
     let args: Vec<String> = std::env::args().collect();
     let mut addr = "127.0.0.1:8787".to_string();
     let (mut approvals, mut policy_path, mut ledger) = (None, None, None);

@@ -50,7 +50,7 @@ fn now_ms() -> u64 {
 }
 
 pub async fn run(args: Vec<String>) -> std::process::ExitCode {
-    acp_obs::init("acp-guard");
+    acp_core::obs::init("acp-guard");
     let mut addr = "127.0.0.1:8801".to_string();
     let mut upstream: Option<String> = None;
     let mut pubkey_hex: Option<String> = None;
