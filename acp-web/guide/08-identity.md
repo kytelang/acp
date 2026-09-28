@@ -117,6 +117,21 @@ users with their group memberships. Both are gated on `Export` (a read-only admi
 user directory comes from `--scim-users <file>` (a JSON array of `{id, email, groups}`), defaulting to
 a demo directory (one operator per role) under the mocked-IdP dev setup.
 
+## Multi-agent delegation chains
+
+A `Delegation` binds one human to one agent. When an agent calls another agent on the human's behalf,
+the whole chain (user to agent A to agent B) is authorised together, and rights can only narrow along
+it: agent B can never exercise a scope that agent A did not hold. The full chain is recorded in the
+ledger, so "who authorised this" is answerable across hops. `POST /delegation/verify` returns a chain's
+effective scopes and whether it permits a given scope.
+
+## Permission-aware retrieval
+
+When an agent retrieves documents for RAG, ACP can enforce that it only receives documents the acting
+human may see, so an assistant cannot become a way around document ACLs. `POST /retrieval/check` decides
+per candidate document against the verified principal and their groups; an unattributed caller is
+fail-closed.
+
 ## Multi-tenancy
 
 The control plane is multi-tenant. Tenant-scoped records (GRC, apps, agents, models, vendors) and the

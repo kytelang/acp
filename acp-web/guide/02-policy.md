@@ -117,6 +117,16 @@ proposal before approving: it is a starting point, and you can tighten it furthe
 > policy from a local ledger, and `GET /policy/suggest` returns it (with the would-block check) from the
 > control plane. Deploy it with `POST /policy-store/deploy`, which signs and versions it.
 
+## Authoring a rule in plain English
+
+On the **Policy** page, the "Author from a description" card takes a rule in plain English (for example
+"No agent may delete from the database"), drafts the model-v2 DSL, and shows the verification matrix,
+the concrete allow/deny outcome for a set of example requests, before you deploy. The verification is
+the point: even a draft written by an LLM is shown as an exact allow/deny table you must confirm, and a
+draft that does not compile is reported, never deployed.
+
+> API: `POST /policy/author {text, tests?}` returns the draft and the matrix.
+
 ## Compiling, testing and deploying
 
 ```sh

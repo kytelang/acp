@@ -109,6 +109,21 @@ so injection, secrets, PII, denied topics and system-prompt-leak patterns are ca
 not just on the way in. Output findings surface in the console Violations view alongside input findings.
 Enable it with the same flags; the response path is on whenever the firewall is.
 
+## Agent-memory protection
+
+An agent's persistent memory or vector store is an injection vector: a poisoned tool result or document
+can plant instructions the agent acts on later. `POST /memory/write` scans content bound for memory with
+the same engine, blocks or flags planted instructions, and records the write in the fleet-evidence store
+so a later incident can be traced back to the write that seeded it.
+
+## Content credentials for generated media
+
+A transparency obligation can require generated content to carry a provenance stamp. `POST
+/credential/stamp` returns a signed content credential binding a hash of the content to its
+AI-generated disclosure, model and timestamp; a verifier checks it with the public key alone and
+detects any later tampering. This is a minimal, verifiable content-credential record (C2PA-style), not
+the full C2PA specification.
+
 ## Honest boundary
 
 The content firewall is deliberately lightweight: signatures and heuristics by default, plus an

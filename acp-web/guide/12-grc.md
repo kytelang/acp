@@ -200,6 +200,24 @@ report and coverage.
 
 > API: `GET /report/post-market`, `POST /report/post-market/snapshot`, `GET /report/post-market/history`.
 
+## Assurance and reporting capabilities
+
+Several governance capabilities produce signed records that appear in this view:
+
+- **Serious-incident cases (Art. 73).** Promote a detected issue to an incident case (`incident` record
+  kind) with a reporting deadline; the case draws its evidence from the ledger. `POST /incident/promote`.
+- **Fundamental-rights impact assessment (Art. 27).** The `fria` record kind, worked like an assessment.
+- **Model fairness testing.** Run fairness and quality tests against a model's labelled outcomes; the
+  demographic-parity and equal-opportunity gaps are stored as a signed record linked to the model.
+  `POST /models/:id/fairness`.
+- **Red-team a customer agent.** Run the attack corpus against a customer's own agent endpoint and file
+  the catch rate as signed evidence. `POST /redteam/target`.
+- **Public trust summary.** `GET /trust` returns a signed, verifiable summary of the controls in force,
+  for a customer to publish to their own clients.
+- **Auditor evidence pack.** `GET /audit/pack?from=&to=` returns a signed evidence pack for a time
+  window that an auditor verifies with the public key alone (`acp verify-pack`), no customer staff
+  involved.
+
 ## Oversight-quality monitoring
 
 Human oversight has to be effective, not just present (EU AI Act Article 14). Because the control plane

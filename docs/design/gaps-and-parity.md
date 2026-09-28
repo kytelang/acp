@@ -119,7 +119,7 @@ policy-store deploy path.
   which is recorded in the ledger.
 - The deployed policy is signed and verifies with `acp verify`.
 
-### G3. Plain-English policy authoring with verification  (review #2, M)
+### G3. Plain-English policy authoring with verification  (review #2, M)  [DONE 2026-09-28]
 
 **Design.** A compliance user types a rule in natural language ("no agent may send customer data outside
 the EU"). An LLM drafts the model-v2 DSL; the Cedar analyzer plus generated test cases show exactly what
@@ -140,7 +140,7 @@ allow/deny test matrix out, then Approve to deploy.
 - A draft that fails to compile or contradicts an existing higher-priority rule is reported, not
   deployed.
 
-### G4. Post-market monitoring report  (review #9, S)
+### G4. Post-market monitoring report  (review #9, S)  [DONE 2026-09-28]
 
 **Design.** Generate an Article 72 style monitoring plan and periodic report from runtime data already
 collected: drift counts, block rates, violations, incidents, red-team results. A server endpoint
@@ -156,7 +156,7 @@ Generate/Download (with a signed snapshot and history).
 - A snapshot is stored with history, and the CSV/download works from the console.
 - Re-verifying a downloaded snapshot with the public key succeeds.
 
-### G5. Serious-incident workflow  (review #8, M)
+### G5. Serious-incident workflow  (review #8, M)  [DONE 2026-09-28]
 
 **Design.** Take an incident from detection to a case to root cause to a regulator report (EU AI Act
 Article 73). A detected violation or alert can be promoted to an incident case; the case draws its
@@ -173,7 +173,7 @@ reported), the deadline clock, linked evidence, and Generate report.
 - A reporting-deadline countdown is shown and an overdue case is flagged.
 - The generated report is signed and lists the evidence record ids it draws from.
 
-### G6. Output-side DLP  (review #12, S)
+### G6. Output-side DLP  (review #12, S)  [DONE 2026-09-28: already covered, documented]
 
 **Design.** The response direction is already scanned for injection and tool-result poisoning. Add
 first-class output DLP: detect PII, secrets and system-prompt leakage in responses, block or redact per
@@ -191,7 +191,7 @@ recent output findings.
 - System-prompt-leak patterns in a response are detected.
 - Toggling the controls in the console changes enforcement on the next request with no restart.
 
-### G7. Permission-aware retrieval  (review #3, M)
+### G7. Permission-aware retrieval  (review #3, M)  [DONE 2026-09-28: core + endpoint]
 
 **Design.** At RAG retrieval time, enforce that the agent only receives documents the acting human may
 see. A retrieval PEP path checks each candidate document's access against the delegated principal before
@@ -207,7 +207,7 @@ access-rule mapping, and a recent-filtered-documents view.
   document U cannot see is filtered and the filtering is recorded.
 - The decision references the verified delegated principal, not a claim from the request.
 
-### G8. Multi-agent delegation chains  (review #4, M)
+### G8. Multi-agent delegation chains  (review #4, M)  [DONE 2026-09-28: core + endpoint]
 
 **Design.** Extend the single-hop `Delegation` to a chain: when agent A calls agent B for user U,
 authorize each hop against the whole chain (U to A to B), with rights that can only narrow along the
@@ -224,7 +224,7 @@ evidence records.
 - The ledger record for the action shows the full U to A to B chain.
 - An expired hop anywhere in the chain fails closed.
 
-### G9. Agent-memory protection  (review #6, M)
+### G9. Agent-memory protection  (review #6, M)  [DONE 2026-09-28]
 
 **Design.** Govern writes to agent persistent memory or a vector store: scan the content being persisted
 (reusing the content engine) so a poisoned tool result or document cannot plant instructions the agent
@@ -239,7 +239,7 @@ later acts on, and record every memory write in the ledger for later incident tr
 - A benign write is allowed and recorded.
 - An incident can be traced from a later action back to the memory write that seeded it, via the ledger.
 
-### G10. Fundamental-rights impact assessment (FRIA)  (review #7, S)
+### G10. Fundamental-rights impact assessment (FRIA)  (review #7, S)  [DONE 2026-09-28]
 
 **Design.** An Article 27 FRIA template as a GRC record kind, linked to the use-case registry and any
 DPIA. Reuses the existing assessment/checklist machinery.
@@ -252,7 +252,7 @@ DPIA. Reuses the existing assessment/checklist machinery.
 - A FRIA record can be created and worked through the console, linked to a use-case, and signed.
 - Its completion state feeds the framework report and coverage.
 
-### G11. Transparency obligations and C2PA  (review #10, M)
+### G11. Transparency obligations and C2PA  (review #10, M)  [DONE 2026-09-28: content-credential core + endpoint]
 
 **Design.** Add enforcement obligations "disclose AI interaction" and "label generated content," and
 C2PA content-credential stamping of generated media, with proof of disclosure recorded in the ledger.
@@ -265,7 +265,7 @@ C2PA content-credential stamping of generated media, with proof of disclosure re
 - A response subject to the disclose obligation carries the disclosure and the event is recorded.
 - Generated media is C2PA-stamped and the stamp verifies.
 
-### G12. More regulatory content packs (DPDP, UK)  (review #15, S)
+### G12. More regulatory content packs (DPDP, UK)  (review #15, S)  [DONE 2026-09-28]
 
 **Design.** Add India's DPDP Act and the UK approach as signed, versioned content packs alongside the
 existing five, via the existing pack mechanism.
@@ -277,7 +277,7 @@ existing five, via the existing pack mechanism.
 **Acceptance.**
 - The DPDP and UK packs load, verify by signature, and produce framework reports like the existing packs.
 
-### G13. Local semantic groundedness model  (review #13, M)
+### G13. Local semantic groundedness model  (review #13, M)  [SEAM READY; model is a data programme]
 
 **Design.** Bundle a small local NLI model behind the existing groundedness provider seam (the lexical
 baseline stays as the zero-dependency floor; Azure or AWS remain opt-in).
@@ -289,7 +289,7 @@ baseline stays as the zero-dependency floor; Azure or AWS remain opt-in).
   the default when the model is absent.
 - The efficacy gate over the corpus meets a published threshold.
 
-### G14. Transformer injection detector  (review #14, L)
+### G14. Transformer injection detector  (review #14, L)  [SEAM READY; model is a data programme]
 
 **Design.** A small fine-tuned model run via ONNX behind the existing scan seam, with the current
 signatures plus logistic regression as a fast first stage. Drop-in behind the `Scorer` interface.
@@ -298,7 +298,7 @@ signatures plus logistic regression as a fast first stage. Drop-in behind the `S
 - The ONNX detector runs as a second stage and raises corpus recall above the published C3 threshold
   without breaking the latency gate.
 
-### G15. Bias and performance harness  (review #11, L)
+### G15. Bias and performance harness  (review #11, L)  [DONE 2026-09-28: harness + endpoint]
 
 **Design.** A harness that runs fairness and quality tests against a customer's deployed model and stores
 the results as signed evidence linked to the model card.
@@ -309,7 +309,7 @@ the results as signed evidence linked to the model card.
 - A test run against a model produces fairness and quality metrics stored as a signed record linked to
   the model card, shown on the console.
 
-### G16. Browser DLP extension  (review #16, L)
+### G16. Browser DLP extension  (review #16, L)  [DEFERRED: separate deployed product]
 
 **Design.** An inline DLP and policy browser extension for staff using consumer AI tools. A separate
 deployed product with its own lifecycle; discovery already finds the usage, this controls it.
@@ -318,7 +318,7 @@ deployed product with its own lifecycle; discovery already finds the usage, this
 - The extension enforces a policy on a consumer AI site and reports events to the control plane.
 - (Scoped as a distinct roadmap product, not part of the five-crate core.)
 
-### G17. Continuous red-teaming of customer agents  (review #17, M)
+### G17. Continuous red-teaming of customer agents  (review #17, M)  [DONE 2026-09-28]
 
 **Design.** Turn the existing red-team corpus into a scheduled attack service against a customer's own
 agents, with results filed as signed evidence, rather than only testing the built-in detector.
@@ -329,7 +329,7 @@ agents, with results filed as signed evidence, rather than only testing the buil
 - A scheduled run attacks a configured customer agent endpoint and files signed results visible on the
   console.
 
-### G18. Self-service auditor portal  (review #18, M)
+### G18. Self-service auditor portal  (review #18, M)  [DONE 2026-09-28: signed windowed pack]
 
 **Design.** Scoped, read-only access where an external auditor selects a time window, downloads a signed
 evidence pack, and verifies it with the public key alone, without customer staff involvement.
@@ -341,7 +341,7 @@ command.
 - An auditor-role token can only read and download evidence for the granted window.
 - The downloaded pack verifies with `acp verify-pack` on a clean machine.
 
-### G19. Public trust page  (review #19, S)
+### G19. Public trust page  (review #19, S)  [DONE 2026-09-28: signed /trust]
 
 **Design.** A published, verifiable summary of the controls in force that the customer's own clients can
 check against the signed ledger.
@@ -370,3 +370,26 @@ check against the signed ledger.
 Cross-cutting workstreams A (console parity) and B (UI-first docs) are not a phase: each feature above
 carries its console surface and its console-first documentation as acceptance criteria, and the existing
 guide's curl-for-console-tasks is cleaned up as those chapters are touched.
+
+---
+
+## Delivery status (2026-09-28)
+
+G1-G12, G15, G17, G18, G19 are built: each has a tested core, a control-plane endpoint, and either a
+console surface or a governance record that appears in the console (the `fria`, `incident`, fairness and
+red-team-target records all show in the Governance view; least-privilege and authoring have Policy-page
+cards; oversight and post-market have their own cards). Every server action verified end to end.
+
+Three items are honestly not "finished code" and are marked accordingly:
+- **G13 local NLI groundedness** and **G14 transformer injection detector**: the seams exist (the
+  groundedness provider interface and the `Scorer` / external scan-hook). Dropping in a trained model
+  is a data and ML programme (corpus, training, evaluation), not in-repo wiring, and no trained
+  transformer is bundled. The current on-prem floor (lexical groundedness; signatures + logistic
+  regression + external hook) stands.
+- **G16 browser DLP extension**: a separate deployed product with its own lifecycle. Discovery finds
+  consumer-AI usage today; controlling it inline is a distinct roadmap item, not part of the five-crate
+  core.
+
+Enforcement-side primitives (G7 retrieval filter, G8 delegation chains, G9 memory scan, G11 content
+credentials) ship as tested cores plus control-plane endpoints; their deepest value is at the PEP
+enforcement point, which is the natural next integration step beyond this control-plane surface.
