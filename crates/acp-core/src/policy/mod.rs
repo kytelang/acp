@@ -1,5 +1,6 @@
 //! Policy authoring surface, its compiler to Cedar, and the Cedar evaluation engine.
 
+pub mod author;
 pub mod synth;
 pub mod compile;
 pub mod context;

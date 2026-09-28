@@ -50,6 +50,7 @@ pub mod metering;
 pub mod mlflow;
 pub mod notify;
 pub mod obs;
+pub mod credential;
 pub mod retrieval;
 pub mod fairness;
 pub mod oversight;
