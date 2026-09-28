@@ -35,17 +35,19 @@ fn yq(s: &str) -> String {
 /// by (tool, resource, operation), so the same observations always yield byte-identical output (a
 /// stable diff for review).
 pub fn synthesize_least_privilege(observed: &[ObservedAction]) -> String {
-    // Key on (tool, resource, operation); collapse to the least restrictive verdict actually seen
-    // (allow beats step_up). Denied observations are left to the default deny.
-    let mut keep: BTreeMap<(String, String, String), &'static str> = BTreeMap::new();
+    // Key on the tool: it uniquely determines the action, and its resource/operation are tool-derived,
+    // so keying on the tool alone is robust to taxonomy drift (a rule keyed on a stored resource that
+    // the live taxonomy later reclassifies would wrongly deny). Collapse to the least restrictive
+    // verdict actually seen (allow beats step_up); denied observations are left to the default deny.
+    // Finer narrowing (resource, operation, argument class) is a future refinement.
+    let mut keep: BTreeMap<String, &'static str> = BTreeMap::new();
     for a in observed {
         let permit = match a.verdict.as_str() {
             "allow" => "allow",
             "step_up" => "step_up",
             _ => continue, // deny (and anything else) is covered by default-deny
         };
-        let key = (a.tool.clone(), a.resource.clone(), a.operation.clone());
-        let cur = keep.entry(key).or_insert(permit);
+        let cur = keep.entry(a.tool.clone()).or_insert(permit);
         if permit == "allow" {
             *cur = "allow"; // allow wins over step_up for the same action
         }
@@ -63,13 +65,10 @@ pub fn synthesize_least_privilege(observed: &[ObservedAction]) -> String {
         return out;
     }
     let mut n = 0;
-    for ((tool, resource, operation), verdict) in &keep {
+    for (tool, verdict) in &keep {
         n += 1;
         out.push_str(&format!("  - id: allow-{n}\n"));
-        out.push_str(&format!(
-            "    when: {{ tool: {}, resource: {}, operation: {} }}\n",
-            yq(tool), yq(resource), yq(operation)
-        ));
+        out.push_str(&format!("    when: {{ tool: {} }}\n", yq(tool)));
         out.push_str(&format!("    verdict: {verdict}\n"));
     }
     out

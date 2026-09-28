@@ -1048,6 +1048,7 @@ async fn main() {
         .route("/policy-store", get(policy_store_current))
         .route("/policy-store/rules", get(policy_store_rules))
         .route("/policy-store/deploy", post(policy_store_deploy))
+        .route("/policy/suggest", get(policy_suggest))
         .route("/endpoints", get(endpoints_list))
         .route("/endpoints/register", post(endpoints_register))
         .route("/intercept/rules", get(intercept_rules))
@@ -1976,6 +1977,57 @@ async fn oversight_scan(State(st): State<Arc<AppState>>, headers: HeaderMap) -> 
         }
     }
     Json(serde_json::json!({"ok": true, "flagged": written.len(), "findings": written})).into_response()
+}
+
+/// G2: GET /policy/suggest - propose the least-privilege policy synthesised from the fleet-evidence
+/// the control plane has ingested, with a diff against the live policy and a would-block check. It
+/// deploys nothing: the console shows the diff and the operator posts the proposal to
+/// /policy-store/deploy (which signs and versions it) to accept.
+async fn policy_suggest(State(st): State<Arc<AppState>>, headers: HeaderMap) -> Response {
+    if let Err(r) = authorize(&st.auth, &headers, acp_core::auth::Capability::EditPolicy) { return r; }
+    let store = match &st.store { Some(s) => s, None => return Json(serde_json::json!({"ok": false, "error": "no --store configured"})).into_response() };
+    // Distil observed actions from the ingested decision records.
+    let recs = store.list_ingested(5000).await.unwrap_or_default();
+    let mut observed: Vec<acp_core::policy::synth::ObservedAction> = Vec::new();
+    for r in &recs {
+        if r.kind != "decision" { continue; }
+        if let Ok(v) = serde_json::from_str::<serde_json::Value>(&r.record) {
+            let tool = v["action"]["tool"].as_str().unwrap_or("").to_string();
+            if tool.is_empty() { continue; }
+            observed.push(acp_core::policy::synth::ObservedAction {
+                tool,
+                resource: v["action"]["resource"].as_str().unwrap_or("").to_string(),
+                operation: v["action"]["operation"].as_str().unwrap_or("").to_string(),
+                verdict: v["decision"]["verdict"].as_str().unwrap_or(&r.verdict).to_string(),
+            });
+        }
+    }
+    let proposed = acp_core::policy::synth::synthesize_least_privilege(&observed);
+    let current = st.policy.as_ref().map(|(_, body)| body.clone()).unwrap_or_default();
+    // Would-block: under the proposed policy, does any action that was observed-allowed get denied?
+    let mut would_block: Vec<String> = Vec::new();
+    if let Ok(engine) = acp_core::policy::PolicyEngine::from_yaml(&proposed) {
+        let tax = acp_core::impact::ImpactTaxonomy::default();
+        let rtax = acp_core::resource::ResourceTaxonomy::default();
+        let mut seen = std::collections::BTreeSet::new();
+        for a in observed.iter().filter(|a| a.verdict == "allow") {
+            if !seen.insert(a.tool.clone()) { continue; }
+            let ctx = acp_core::policy::context::build_context_identified_full(&a.tool, &serde_json::json!({}), "prod", "agent", "", "principal", &tax, &rtax);
+            if engine.evaluate(ctx).verdict == acp_core::types::Verdict::Deny {
+                would_block.push(a.tool.clone());
+            }
+        }
+    }
+    let proposed_rules = proposed.matches("\n  - id:").count();
+    Json(serde_json::json!({
+        "ok": true,
+        "proposed": proposed,
+        "current": current,
+        "observed_decisions": recs.iter().filter(|r| r.kind == "decision").count(),
+        "distinct_tools": observed.iter().map(|a| a.tool.clone()).collect::<std::collections::BTreeSet<_>>().len(),
+        "proposed_rules": proposed_rules,
+        "would_block": would_block,
+    })).into_response()
 }
 
 fn grc_doc(id: &str, kind: &str, subject: &str, title: &str, status: &str, body: &str) -> serde_json::Value {
