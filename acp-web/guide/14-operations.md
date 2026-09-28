@@ -423,7 +423,7 @@ backup, quiesce writers briefly or rely on the streaming WAL replication above.
 
 ### Schema migrations
 
-Both the control-plane store (`acp-cpstore`) and the shared Postgres state (`acp-pgstate`) run their
+Both the control-plane store (`acp_server::store`) and the shared Postgres state (`acp_core::pgstate`) run their
 schema migrations **automatically on connect**. There is no separate migrate step to run: start a newer
 binary against the existing database and it brings the schema forward. Migrations are additive
 (expand-only), so a newer schema stays readable by the version that created it. Because of this, always

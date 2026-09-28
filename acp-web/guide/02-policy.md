@@ -205,7 +205,7 @@ default-deny.
 ## Policy schema reference
 
 This section is the authoritative field list for the policy YAML, taken straight from the parser
-(`crates/acp-policy/src/dsl.rs`) and the compiler (`compile.rs`). If a field is not listed here, it is
+(`crates/acp-core/src/policy/dsl.rs`) and the compiler (`policy/compile.rs`). If a field is not listed here, it is
 not understood by the engine.
 
 ### A complete annotated example

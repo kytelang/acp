@@ -7,7 +7,7 @@ live in the store.
 
 ## What it is
 
-`acp-ledger` is a durable, append-only, RFC 6962-verifiable log over SQLite.
+The evidence ledger (`acp_core::ledger`) is a durable, append-only, RFC 6962-verifiable log over SQLite.
 
 - **Merkle log.** Each record is a leaf; the tree head is a single hash over all leaves. The head is
   signed with Ed25519 on every append (never per record), so a signature covers the whole history to

@@ -39,7 +39,7 @@ When authentication is disabled (the local and default developer setup) `acp-ser
 off: `authorize(...)` returns early and accepts the call, and the actor is recorded as `console`.
 
 When authentication is enabled, the RBAC-gated `acp-server` endpoints require a bearer token whose
-principal carries the right capability. Roles map to capabilities as follows (from `acp-auth`):
+principal carries the right capability. Roles map to capabilities as follows (from `acp_core::auth`):
 
 | Entra app role | Capability granted |
 | --- | --- |
@@ -464,7 +464,7 @@ signed grant; the console holds no key. On success the outcome shows the engaged
   with the policy, identity, firewall, GRC and kill-switch actions. In the default local (RBAC-off)
   setup no token is needed.
 - **Only three capabilities are enforced today:** `EditPolicy`, `Approve` and `BreakGlass`. The
-  `Export` and `SeeArgs` capabilities exist in `acp-auth` but no console-facing endpoint checks them.
+  `Export` and `SeeArgs` capabilities exist in `acp_core::auth` but no console-facing endpoint checks them.
 - **Dev tokens are for local use only:** the `GET /auth/dev-token` fallback issues a mock token and is
   only available when `acp-server`'s dev auth is enabled. In a real deployment the console shell
   performs an OIDC login and the user's real token is forwarded instead.
