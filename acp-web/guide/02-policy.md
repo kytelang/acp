@@ -73,12 +73,15 @@ Obligations attach conditions to an allow.
         max: 1000
         window_ms: 60000             # a token bucket per subject
       - kind: confirm                # require an interactive confirmation
+      - kind: disclose                # label the response as AI-generated (transparency)
 ```
 
 `redact` masks the named fields (and anything the classifier flags as PII or a secret) while leaving
 the evidence argument-hash over the original intact. `rate_limit` is enforced with a token bucket,
-shared across replicas when Postgres is configured (see [chapter 14](14-operations.md)). The three
-obligation kinds are `confirm`, `redact` and `rate_limit`.
+shared across replicas when Postgres is configured (see [chapter 14](14-operations.md)). `disclose`
+is the transparency obligation (EU AI Act Art. 50): the PEP annotates the response as AI-generated and,
+when an enforcement key is set, attaches a signed content credential (see [chapter 10](10-content-firewall.md)).
+The four obligation kinds are `confirm`, `redact`, `rate_limit` and `disclose`.
 
 ## Precedence and default-deny
 

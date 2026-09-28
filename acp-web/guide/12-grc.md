@@ -73,7 +73,7 @@ state rather than an asserted one. The signature proves the document was not alt
 does not prove that any "evidence" or "linked-decision" reference written inside the record points at a
 real ledger record: those references are author-supplied text today.
 
-There are seven kinds. Choose the kind for what you are actually recording.
+There are nine kinds. The seven core kinds are detailed next; the two EU AI Act kinds, `fria` and `incident`, are covered in the EU AI Act sections further down this chapter. Choose the kind for what you are actually recording.
 
 ### assessment
 
@@ -256,8 +256,8 @@ carries a **Kind** selector) or the control-plane API (`POST /grc`). Each record
 the control plane, stored in the control-plane database, and re-verified on read. The signature proves
 the document was not altered after signing; it does **not** prove that the "evidence" or
 "linked-decision" references inside it correspond to real ledger records, because those are free-text
-today. The seven record **kinds** (assessment, conformity, risk, model-card, use-case, attestation and
-aibom) and when to use each are explained with worked examples under
+today. The nine record **kinds** (assessment, conformity, risk, model-card, use-case, attestation,
+aibom, fria and incident) and when to use each are explained with worked examples under
 [What is a governance record](#what-is-a-governance-record) above.
 
 The static control library across the three frameworks is served by the control plane and shown on the

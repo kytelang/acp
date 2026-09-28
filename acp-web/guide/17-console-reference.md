@@ -44,23 +44,29 @@ principal carries the right capability. Roles map to capabilities as follows (fr
 | Entra app role | Capability granted |
 | --- | --- |
 | `PolicyAdmin` | `EditPolicy` |
+| `AppRegistrar` | `RegisterApp`, `RegisterAgent` |
+| `GrcAuthor` | `EditGrc` |
+| `FirewallAdmin` | `EditFirewall` |
 | `Approver` | `Approve` |
 | `Auditor` | `Export` |
 | `SecurityOfficer` | `SeeArgs` |
 | `BreakGlassOperator` | `BreakGlass` |
 
-Unknown roles grant nothing (fail-closed). Of these five capabilities, only three are actually
-enforced on the console-facing endpoints today: **`EditPolicy`**, **`Approve`** and **`BreakGlass`**.
-`Export` and `SeeArgs` are defined but not checked by any route the console calls.
+Unknown roles grant nothing (fail-closed). All nine capabilities are enforced on the console-facing
+endpoints. `Export` gates `GET /report/violations.csv` and the audit pack; `SeeArgs` gates the
+argument-detail read. The mapping is least-privilege by design: registering apps and agents no longer
+needs the same power as editing policy, and firewall and GRC each have their own capability.
 
 How the token is obtained: the console prefers a real token forwarded in the incoming
 `Authorization` header (injected by an identity-aware proxy or OIDC login placed in front of the
 console). When no such header is present, the console client falls back to fetching a short-lived
 token from `acp-server`'s mock endpoint `GET /auth/dev-token?role=...` for local use. It requests the
-`PolicyAdmin` role for policy, identity, endpoint, GRC and firewall actions, and the
-`BreakGlassOperator` role for the kill-switch. Read endpoints (the GET routes behind the tables) are
-not RBAC-gated; a separate report token can gate the report and metrics reads if `acp-server` is
-started with one.
+**per-action** role each endpoint actually needs, not one blanket admin role: `AppRegistrar` for team
+and agent registration, `FirewallAdmin` for firewall config and rules, `GrcAuthor` for governance
+records, `Approver` for approvals, `Auditor` for the audit pack, trust summary and CSV export,
+`PolicyAdmin` for policy and endpoint actions, and `BreakGlassOperator` for the kill-switch. Read
+endpoints (the GET routes behind the tables) are not RBAC-gated; a separate report token can gate the
+report and metrics reads if `acp-server` is started with one.
 
 ### Console route to server route map
 
@@ -68,19 +74,19 @@ started with one.
 | --- | --- | --- |
 | `POST /approve/{id}` | `POST /approvals/{id}/approve` | `Approve` |
 | `POST /deny/{id}` | `POST /approvals/{id}/deny` | `Approve` |
-| `POST /apps/register` | `POST /apps` | `EditPolicy` |
-| `POST /agents/register` | `POST /agents` | `EditPolicy` |
-| `POST /agents/{id}/deactivate` | `POST /agents/{id}/deactivate` | `EditPolicy` |
+| `POST /apps/register` | `POST /apps` | `RegisterApp` |
+| `POST /agents/register` | `POST /agents` | `RegisterAgent` |
+| `POST /agents/{id}/deactivate` | `POST /agents/{id}/deactivate` | `RegisterAgent` |
 | `POST /endpoints/register` | `POST /endpoints/register` | `EditPolicy` |
 | `POST /policy/deploy` | `POST /policy-store/deploy` | `EditPolicy` |
-| `POST /firewall/save` | `POST /firewall/config` | `EditPolicy` |
-| `POST /firewall/rule-add` | `POST /firewall/rules` | `EditPolicy` |
-| `POST /firewall/rules/{id}/delete` | `POST /firewall/rules/{id}/delete` | `EditPolicy` |
-| `POST /grc/create` | `POST /grc` | `EditPolicy` |
-| `POST /grc/{id}/to/{status}` | `POST /grc/{id}/status` | `EditPolicy` |
+| `POST /firewall/save` | `POST /firewall/config` | `EditFirewall` |
+| `POST /firewall/rule-add` | `POST /firewall/rules` | `EditFirewall` |
+| `POST /firewall/rules/{id}/delete` | `POST /firewall/rules/{id}/delete` | `EditFirewall` |
+| `POST /grc/create` | `POST /grc` | `EditGrc` |
+| `POST /grc/{id}/to/{status}` | `POST /grc/{id}/status` | `EditGrc` |
 | `POST /kill/engage` | `POST /break-glass/engage` | `BreakGlass` |
 | `POST /kill/clear` | `POST /break-glass/clear` | `BreakGlass` |
-| `GET /report/violations.csv` | `GET /report/violations.csv` | none (read) |
+| `GET /report/violations.csv` | `GET /report/violations.csv` | `Export` |
 | `GET /sse/metrics` | reads many GET endpoints | none (read) |
 
 ## The layout
@@ -193,7 +199,7 @@ teams (Team, Owner, Agents count, ID), refreshed over SSE from `GET /apps`.
 
 | Button | Console route | Server endpoint | Capability |
 | --- | --- | --- | --- |
-| **Register** | `POST /apps/register` | `POST /apps` | `EditPolicy` |
+| **Register** | `POST /apps/register` | `POST /apps` | `RegisterApp` |
 | **Close** | closes the popup | none | none |
 
 On success the outcome badge shows "registered" and the new app id. The teams table then picks up the
@@ -216,7 +222,7 @@ Status, Action), refreshed over SSE from `GET /agents` (with team names resolved
 
 | Button | Console route | Server endpoint | Capability |
 | --- | --- | --- | --- |
-| **Register** | `POST /agents/register` | `POST /agents` | `EditPolicy` |
+| **Register** | `POST /agents/register` | `POST /agents` | `RegisterAgent` |
 | **Close** | closes the popup | none | none |
 
 Registering returns a **one-time token** shown once in the outcome line, with the instruction to save
@@ -227,7 +233,7 @@ points.
 
 | Button | Console route | Server endpoint | Capability |
 | --- | --- | --- | --- |
-| **Deactivate** | `POST /agents/{id}/deactivate` | `POST /agents/{id}/deactivate` | `EditPolicy` |
+| **Deactivate** | `POST /agents/{id}/deactivate` | `POST /agents/{id}/deactivate` | `RegisterAgent` |
 
 A revoked agent shows a "revoked" status and no action button. See chapter 8 for the identity and
 registry model.
@@ -358,7 +364,7 @@ set the built-in engine runs exactly as before (offline default).
 
 | Button | Console route | Server endpoint | Capability |
 | --- | --- | --- | --- |
-| **Save firewall config** | `POST /firewall/save` | `POST /firewall/config` | `EditPolicy` |
+| **Save firewall config** | `POST /firewall/save` | `POST /firewall/config` | `EditFirewall` |
 
 The console assembles the JSON body (`enabled`, `block_secrets`, `deny_topics` array, `model`) and
 posts it; the status line refreshes with the saved config.
@@ -382,8 +388,8 @@ enrolled AI endpoints.
 
 | Button | Console route | Server endpoint | Capability |
 | --- | --- | --- | --- |
-| **Add rule** | `POST /firewall/rule-add` | `POST /firewall/rules` | `EditPolicy` |
-| **Delete** (per row) | `POST /firewall/rules/{id}/delete` | `POST /firewall/rules/{id}/delete` | `EditPolicy` |
+| **Add rule** | `POST /firewall/rule-add` | `POST /firewall/rules` | `EditFirewall` |
+| **Delete** (per row) | `POST /firewall/rules/{id}/delete` | `POST /firewall/rules/{id}/delete` | `EditFirewall` |
 
 The console builds the rule body from the selected match kind (the match kind becomes the JSON key,
 with `value` as its value), plus optional `path_prefix`, the `action`, and optional `classify`. The
@@ -412,16 +418,16 @@ Signed, ID, Advance) from `GET /grc`, refreshed over SSE.
 
 | Button | Console route | Server endpoint | Capability |
 | --- | --- | --- | --- |
-| **Create record** | `POST /grc/create` | `POST /grc` | `EditPolicy` |
+| **Create record** | `POST /grc/create` | `POST /grc` | `EditGrc` |
 | **Close** | closes the popup | none | none |
 
 **Per-record status controls (Advance column):** three buttons move a record through its lifecycle.
 
 | Button | Console route | Server endpoint | Capability |
 | --- | --- | --- | --- |
-| **Review** | `POST /grc/{id}/to/in-review` | `POST /grc/{id}/status` (status `in-review`) | `EditPolicy` |
-| **Approve** | `POST /grc/{id}/to/approved` | `POST /grc/{id}/status` (status `approved`) | `EditPolicy` |
-| **Close** | `POST /grc/{id}/to/closed` | `POST /grc/{id}/status` (status `closed`) | `EditPolicy` |
+| **Review** | `POST /grc/{id}/to/in-review` | `POST /grc/{id}/status` (status `in-review`) | `EditGrc` |
+| **Approve** | `POST /grc/{id}/to/approved` | `POST /grc/{id}/status` (status `approved`) | `EditGrc` |
+| **Close** | `POST /grc/{id}/to/closed` | `POST /grc/{id}/status` (status `closed`) | `EditGrc` |
 
 The status is re-signed server-side on each transition. What a governance record is, and how the GRC
 lifecycle fits the compliance frameworks, is covered in
@@ -463,8 +469,10 @@ signed grant; the console holds no key. On success the outcome shows the engaged
   bearer token when one is present, and otherwise falls back to an `Approver` dev token, consistent
   with the policy, identity, firewall, GRC and kill-switch actions. In the default local (RBAC-off)
   setup no token is needed.
-- **Only three capabilities are enforced today:** `EditPolicy`, `Approve` and `BreakGlass`. The
-  `Export` and `SeeArgs` capabilities exist in `acp_core::auth` but no console-facing endpoint checks them.
+- **All nine capabilities are enforced:** `EditPolicy`, `RegisterApp`, `RegisterAgent`, `EditGrc`,
+  `EditFirewall`, `Approve`, `Export`, `SeeArgs` and `BreakGlass` in `acp_core::auth` are each checked
+  by the routes above. The console requests the least-privilege role for each action rather than one
+  blanket admin role.
 - **Dev tokens are for local use only:** the `GET /auth/dev-token` fallback issues a mock token and is
   only available when `acp-server`'s dev auth is enabled. In a real deployment the console shell
   performs an OIDC login and the user's real token is forwarded instead.

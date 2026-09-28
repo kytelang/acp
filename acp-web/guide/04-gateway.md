@@ -79,8 +79,10 @@ non-allow decision, so the console liveness, alerts and violation views cover mo
 | `--budget-pg <dsn>` | shared token/cost budgets via Postgres |
 | `--content-firewall` | enable the signature content firewall on prompts |
 | `--content-ml <model.json>` | also load the trained ML classifier |
-| `--scan-url <url>` | send each prompt/response part to an external scanner hook ([chapter 10](10-content-firewall.md)) |
-| `--block-on-scanner-error` | fail closed if the external scanner is unreachable or replies off-contract |
+| `--content-scan <url>` | send each prompt/response to an external scanner hook ([chapter 10](10-content-firewall.md)); the gateway fails closed if it errors |
+| `--upstream-key <key>` | the brokered upstream model key the gateway holds, so a caller cannot reach the model off-ACP |
+| `--groundedness-threshold <f>` | block a response whose claims are not grounded in its context below this score |
+| `--block-secrets` / `--block-toxicity` / `--deny-topic <t>` | content-firewall toggles on the prompt/response |
 | `--entra-tenant`, `--entra-audience` | Entra identity for the human principal |
 | `--report-url <server>` | report a heartbeat and non-allow events to the control plane |
 | `--report-token <tok>` | the shared token the control-plane reporting routes require (`ACP_REPORT_TOKEN`) |

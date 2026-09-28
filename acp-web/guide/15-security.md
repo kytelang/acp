@@ -82,7 +82,7 @@ recall at least 0.90 with a benign FPR at most 0.10; PII precision at least 0.90
 0.80. These are for the signature engine alone; loading an ML model (the content firewall's `model`
 field) raises recall further. A `content_scan_latency_is_reported` test measures the content-scan path:
 on the development machine it runs at roughly 70 microseconds per scan (signature engine, over the
-213-example corpus), and CI guards it under 2 ms/scan. A separate `content_scan_throughput_and_percentiles`
+263-example corpus), and CI guards it under 2 ms/scan. A separate `content_scan_throughput_and_percentiles`
 load benchmark (ignored by default; run with `cargo test -p acp-core --release -- --ignored --nocapture`)
 drives the scan path across 8 concurrent workers: on the development machine it sustains roughly 690,000
 scans/sec with p50 6.5 us, p95 14 us and p99 25 us. Grow the corpus as new attack families appear and keep these numbers in

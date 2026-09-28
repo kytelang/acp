@@ -2,7 +2,7 @@
 
 A labelled corpus for the content-firewall efficacy gate (gap C3).
 
-- **Size:** 213 examples: 86 `injection`, 37 `pii`, 90 `benign`.
+- **Size:** 263 examples: 111 `injection`, 42 `pii`, 110 `benign`.
 - **Provenance:** hand-authored by the ACP team. The `injection` examples are drawn from the
   first-party prompt-injection signature set (`acp_core::content::injection_res`); the `pii` examples
   use common email, US SSN and payment-card formats; the `benign` examples are ordinary operational
