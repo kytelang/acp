@@ -1,0 +1,43 @@
+# Varman control-plane configuration.
+#
+# acp-server reads this file automatically when it is named `server.yaml` in the working directory,
+# or when passed with `--config <path>`. Every key is optional; command-line flags override the file.
+# Keys are snake_case (the field name), so `--policy` is `policy_path`, `--store` is `store_url`, etc.
+
+# Listen address for the control-plane HTTP API.
+addr: 127.0.0.1:8787
+
+# Storage. store_url selects the backend (sqlite / postgres / mysql); ledger is the signed evidence log.
+store_url: "sqlite://./acp/store.db?mode=rwc"
+ledger: ./acp/evidence.db
+policy_store: ./acp/pstore
+
+# Signing key for control-plane records (created on first run if absent).
+cp_key: ./acp/acp-cp.key
+
+# Optional policy loaded at start.
+policy_path: ./acp/policy.yaml
+
+# Human-approval inbox and its SLA-escalation window (ms); 0 disables escalation.
+approvals: ./acp/approvals.db
+approval_sla_ms: 300000
+
+# RBAC. dev_auth is the local mock issuer (requires ACP_ALLOW_DEV_AUTH=1 in the environment). For a
+# real deployment set entra_tenant + entra_audience, or the oidc_* trio, instead.
+dev_auth: true
+# entra_tenant: "00000000-0000-0000-0000-000000000000"
+# entra_audience: "api://acp"
+
+# Periodic signed framework-report snapshots.
+snapshot_interval_ms: 0
+snapshot_frameworks:
+  - eu-ai-act
+  - nist-ai-rmf
+
+# Optional integrations (all off by default):
+# webhook_url: "https://hooks.example.com/acp"
+# webhook_secret: "env:ACP_WEBHOOK_SECRET"
+# slack_webhook_url: "https://hooks.slack.com/services/..."
+# model_scanner_url: "https://scanner.internal/scan"
+# model_scan_block: true
+# break_glass_key: "env:ACP_BREAK_GLASS_SEED"   # 32-byte hex, or env:/file: reference

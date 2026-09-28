@@ -76,6 +76,29 @@ systemctl status acp-server acp-gateway
 
 ## 3. Configure
 
+### server.yaml
+
+Rather than a long `ExecStart` line, put the control-plane settings in a `server.yaml`. `acp-server`
+loads it automatically when the file is named `server.yaml` in its working directory, or when pointed
+at it with `--config <path>`. Every key is optional and command-line flags override the file, so you
+can keep a base file and override one value on the command line. Keys are the snake_case field names
+(`--policy` is `policy_path`, `--store` is `store_url`, and so on). A worked sample with comments is at
+`docs/samples/server.yaml`; a minimal one:
+
+```yaml
+addr: 127.0.0.1:8787
+store_url: "sqlite://./acp/store.db?mode=rwc"
+ledger: ./acp/evidence.db
+policy_path: ./acp/policy.yaml
+approvals: ./acp/approvals.db
+approval_sla_ms: 300000
+# real deployments set entra_tenant + entra_audience (or the oidc_* trio) instead of dev_auth
+entra_tenant: "<tenant>"
+entra_audience: "api://acp"
+```
+
+The rest of this section describes the individual settings; each is a `server.yaml` key as well as a flag.
+
 ### Policy
 
 Edit `/etc/acp/policy.yaml` (or your workstation policy). See [chapter 2](02-policy.md) for the full

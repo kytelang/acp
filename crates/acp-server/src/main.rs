@@ -29,7 +29,7 @@ use common::*;
 #[tokio::main]
 async fn main() {
     acp_core::obs::init("acp-server");
-    let Config { addr, approvals, policy_path, ledger, meta_ledger, registry, policy_store, break_glass_file, enrollment, store_url, cp_key, tls_ca, tls_cert, tls_key, break_glass_seed, oidc_jwks, oidc_issuer, oidc_audience, dev_auth, entra_tenant, entra_audience, report_token, scim_users_path, model_scanner_url, model_scan_block, webhook_url, webhook_secret, packs_feed_url, threat_feed_url, ticket_poll_url, slack_webhook_url, mlflow_url, retrieval_source, author_llm_url, author_llm_key, author_llm_model, snapshot_interval_ms, snapshot_frameworks, approval_sla_ms, node_id, lease_ttl_ms, entra_preflight, entra_test_token } = crate::config::Config::from_args();
+    let Config { addr, approvals, policy_path, ledger, meta_ledger, registry, policy_store, break_glass_file, enrollment, store_url, cp_key, tls_ca, tls_cert, tls_key, break_glass_seed, oidc_jwks, oidc_issuer, oidc_audience, dev_auth, entra_tenant, entra_audience, report_token, scim_users_path, model_scanner_url, model_scan_block, webhook_url, webhook_secret, packs_feed_url, threat_feed_url, ticket_poll_url, slack_webhook_url, mlflow_url, retrieval_source, author_llm_url, author_llm_key, author_llm_model, snapshot_interval_ms, snapshot_frameworks, approval_sla_ms, node_id, lease_ttl_ms, entra_preflight, entra_test_token, break_glass_key: _ } = crate::config::Config::from_args();
 
     // R7: real-Entra cutover preflight. Verifies the identity setup without starting the full server:
     // fetch the JWKS from the derived Entra/OIDC endpoint, confirm it parses and has keys, and (if a
