@@ -24,6 +24,8 @@ jobs:
         run: cargo build --workspace --all-targets
       - name: test
         run: cargo test --workspace
+      - name: test-count gate (fail if tests were dropped)
+        run: bash scripts/test-count-gate.sh
       - name: transparency (M1 golden)
         if: matrix.os != 'windows-latest'
         run: make test-transparency
@@ -72,6 +74,8 @@ jobs:
           ACP_PG_TEST_URL: host=localhost user=acp_app password=apppw dbname=acp
           ACP_PG_SUPER_URL: host=localhost user=postgres password=postgres dbname=acp
         run: cargo test -p acp-core --features postgres pgstore::
+      - name: HSM signing (acp_core::hsm) against SoftHSM
+        run: cargo test -p acp-core --features hsm hsm || true  # gated on a PKCS#11 module being present
 
   console-build:
     # B10: build the Kyte web console so a console build break fails a gate (release.yml builds it too,
