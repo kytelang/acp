@@ -1064,6 +1064,9 @@ async fn main() {
         .route("/grc/templates", get(grc_templates))
         .route("/redteam/run", post(redteam_run))
         .route("/redteam/runs", get(redteam_runs))
+        .route("/oversight", get(oversight_get))
+        .route("/oversight/config", post(oversight_config_post))
+        .route("/oversight/scan", post(oversight_scan))
         .route("/grc/assess", post(grc_assess))
         .route("/grc/risk", post(grc_risk))
         .route("/grc/model-card", post(grc_model_card))
@@ -1885,6 +1888,95 @@ async fn agent_deactivate(State(st): State<Arc<AppState>>, headers: HeaderMap, P
 }
 
 const GRC_KINDS: &[&str] = &["assessment", "conformity", "risk", "model-card", "use-case", "attestation", "aibom"];
+
+/// G1: load the per-tenant oversight thresholds from control_state, or the defaults.
+async fn load_oversight_config(st: &Arc<AppState>, tenant: &str) -> acp_core::oversight::OversightConfig {
+    if let Some(store) = &st.store {
+        if let Ok(Some(v)) = store.get_state(&format!("oversight:config:{tenant}")).await {
+            if let Ok(cfg) = serde_json::from_str(&v) { return cfg; }
+        }
+    }
+    acp_core::oversight::OversightConfig::default()
+}
+
+/// Read the resolved decisions from the approvals store (sync rusqlite), newest first.
+fn oversight_decisions(st: &Arc<AppState>) -> Vec<acp_core::oversight::Decision> {
+    match &st.approvals {
+        Some(p) => match acp_core::approvals::ApprovalStore::open(p) {
+            Ok(store) => store.list_resolved(5000).unwrap_or_default(),
+            Err(_) => Vec::new(),
+        },
+        None => Vec::new(),
+    }
+}
+
+/// G1: GET /oversight - the oversight-quality profile of every approver (EU AI Act Art. 14). Read-only.
+async fn oversight_get(State(st): State<Arc<AppState>>, headers: HeaderMap) -> Response {
+    let principal = match authorize(&st.auth, &headers, acp_core::auth::Capability::Export) { Ok(p) => p, Err(r) => return r };
+    let tenant = tenant_of(&headers, &principal);
+    let cfg = load_oversight_config(&st, &tenant).await;
+    let profiles = acp_core::oversight::analyze(&oversight_decisions(&st), &cfg);
+    let flagged = profiles.iter().filter(|p| p.flagged).count();
+    Json(serde_json::json!({"config": cfg, "approvers": profiles, "flagged": flagged})).into_response()
+}
+
+/// G1: POST /oversight/config - update the thresholds; the change is written to the meta-audit log.
+async fn oversight_config_post(State(st): State<Arc<AppState>>, headers: HeaderMap, Json(body): Json<serde_json::Value>) -> Response {
+    let principal = match authorize(&st.auth, &headers, acp_core::auth::Capability::EditGrc) { Ok(p) => p, Err(r) => return r };
+    let store = match &st.store { Some(s) => s, None => return Json(serde_json::json!({"ok": false, "error": "no --store configured"})).into_response() };
+    let tenant = tenant_of(&headers, &principal);
+    let before = load_oversight_config(&st, &tenant).await;
+    // Start from the current config; override only the fields present in the body.
+    let mut cfg = before.clone();
+    if let Some(v) = body.get("min_decisions").and_then(|v| v.as_u64()) { cfg.min_decisions = v as u32; }
+    if let Some(v) = body.get("approve_rate").and_then(|v| v.as_f64()) { cfg.approve_rate = v; }
+    if let Some(v) = body.get("fast_ms").and_then(|v| v.as_u64()) { cfg.fast_ms = v; }
+    if let Some(v) = body.get("fast_fraction").and_then(|v| v.as_f64()) { cfg.fast_fraction = v; }
+    if let Some(v) = body.get("bulk_window_ms").and_then(|v| v.as_u64()) { cfg.bulk_window_ms = v; }
+    if let Some(v) = body.get("bulk_count").and_then(|v| v.as_u64()) { cfg.bulk_count = v as u32; }
+    let cfg_json = serde_json::to_string(&cfg).unwrap_or_default();
+    if let Err(e) = store.put_state(&format!("oversight:config:{tenant}"), &cfg_json, now_ms() as i64).await {
+        return Json(serde_json::json!({"ok": false, "error": e})).into_response();
+    }
+    // Audit the config change in the meta-audit log (a governance-configuration change).
+    if let Some(meta) = st.meta.as_ref() {
+        let actor_s = actor_of(&principal);
+        if let Ok(ev) = acp_core::metaaudit::MetaEvent::new(acp_core::metaaudit::MetaKind::RbacChange, actor_s.as_str(), "oversight thresholds updated", now_ms()) {
+            let ev = ev.transition(Some(&serde_json::to_string(&before).unwrap_or_default()), Some(&cfg_json));
+            let mut l = meta.lock().unwrap();
+            let id = format!("meta-{}", l.size() + 1);
+            let _ = l.append(&id, "meta", &ev.to_record(), None);
+        }
+    }
+    Json(serde_json::json!({"ok": true, "config": cfg})).into_response()
+}
+
+/// G1: POST /oversight/scan - analyse and write a signed governance finding per flagged approver.
+async fn oversight_scan(State(st): State<Arc<AppState>>, headers: HeaderMap) -> Response {
+    let principal = match authorize(&st.auth, &headers, acp_core::auth::Capability::EditGrc) { Ok(p) => p, Err(r) => return r };
+    let operator = actor_of(&principal);
+    let store = match &st.store { Some(s) => s, None => return Json(serde_json::json!({"ok": false, "error": "no --store configured"})).into_response() };
+    let tenant = tenant_of(&headers, &principal);
+    let cfg = load_oversight_config(&st, &tenant).await;
+    let profiles = acp_core::oversight::analyze(&oversight_decisions(&st), &cfg);
+    let mut written = Vec::new();
+    for p in profiles.iter().filter(|p| p.flagged) {
+        let doc_body = serde_json::to_string(p).unwrap_or_default();
+        let subject = "human-oversight";
+        let title = format!("Oversight weakness: {}", p.approver);
+        let status = "flagged";
+        let id = format!("grc-{}", rand_hex(6));
+        let doc = grc_doc(&id, "attestation", subject, &title, status, &doc_body);
+        let signer = tenant_signer(&st.cp_key, &tenant);
+        let sig = acp_core::sign::Signer::sign(&signer, &acp_core::canonical::canonical_bytes(&doc));
+        let pubkey_hex = hex::encode(acp_core::sign::Signer::public_key(&signer));
+        let sig_hex = hex::encode(sig);
+        if store.add_grc(&id, "attestation", subject, &title, status, &doc_body, &operator, now_ms() as i64, &pubkey_hex, &sig_hex, "[]", "{}", "", 0, status, &tenant).await.is_ok() {
+            written.push(serde_json::json!({"id": id, "approver": p.approver, "reasons": p.reasons}));
+        }
+    }
+    Json(serde_json::json!({"ok": true, "flagged": written.len(), "findings": written})).into_response()
+}
 
 fn grc_doc(id: &str, kind: &str, subject: &str, title: &str, status: &str, body: &str) -> serde_json::Value {
     serde_json::json!({"id": id, "kind": kind, "subject": subject, "title": title, "status": status, "body": body})
