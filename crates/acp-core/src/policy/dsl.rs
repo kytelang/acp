@@ -9,7 +9,12 @@ pub struct Policy {
     pub version: u32,
     #[serde(default = "default_allow")]
     pub default: Verdict,
-    #[serde(default)]
+    /// Global enforcement mode. `enforce` (the default) blocks on deny and holds on step_up.
+    /// `observe` (a.k.a. shadow / dry-run) evaluates every rule and records the would-be verdict as
+    /// evidence, but lets the action proceed, so a team can roll ACP into a production path and watch
+    /// what it *would* do before turning on blocking. The manifest key may be `enforcement_mode` or
+    /// the shorter `mode`.
+    #[serde(default, alias = "enforcement_mode")]
     pub mode: Option<String>,
     #[serde(default)]
     pub metadata: Option<Meta>,
@@ -127,6 +132,13 @@ pub fn parse_str(src: &str) -> Result<Policy, serde_yaml::Error> {
 /// Compile-time validation (decision D9): reject constructs that are unsound or unsupported in
 /// v0, so an author cannot ship a policy that silently misbehaves.
 pub fn validate(policy: &Policy) -> Result<(), String> {
+    if let Some(m) = &policy.mode {
+        if m != "enforce" && m != "observe" {
+            return Err(format!(
+                "unknown enforcement_mode '{m}'; expected 'enforce' or 'observe'"
+            ));
+        }
+    }
     for rule in &policy.rules {
         if rule.id.trim().is_empty() {
             return Err("a rule has an empty id".into());

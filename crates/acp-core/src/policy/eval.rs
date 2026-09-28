@@ -28,6 +28,9 @@ pub struct PolicyEngine {
     pset: PolicySet,
     hash: String,
     default: Verdict,
+    /// Global observe (shadow / dry-run) mode: downgrade blocking verdicts to `shadow` so the
+    /// action proceeds while the intended verdict is still recorded as evidence (M-observe).
+    observe: bool,
 }
 
 impl PolicyEngine {
@@ -43,6 +46,7 @@ impl PolicyEngine {
             pset,
             hash,
             default: policy.default,
+            observe: policy.mode.as_deref() == Some("observe"),
         })
     }
 
@@ -53,6 +57,11 @@ impl PolicyEngine {
 
     pub fn default_verdict(&self) -> Verdict {
         self.default
+    }
+
+    /// True when the manifest set `enforcement_mode: observe` (dry-run).
+    pub fn is_observe(&self) -> bool {
+        self.observe
     }
 
     /// Evaluate a context JSON value into a four-way outcome.
@@ -103,13 +112,35 @@ impl PolicyEngine {
             });
         }
 
-        chosen.unwrap_or(PolicyOutcome {
+        let outcome = chosen.unwrap_or(PolicyOutcome {
             verdict: self.default,
             rule_id: None,
             approvers: vec![],
             reason: None,
             obligations: vec![],
-        })
+        });
+        self.apply_observe(outcome)
+    }
+
+    /// In observe mode, a deny or step_up is recorded but not enforced: the effective verdict becomes
+    /// `shadow` (evaluated, would-block, action proceeds) and the reason is annotated with the verdict
+    /// that would have applied under enforce. Allow and shadow pass through unchanged. Fail-closed
+    /// system errors are NOT downgraded: observe relaxes policy decisions, not internal safety.
+    fn apply_observe(&self, mut o: PolicyOutcome) -> PolicyOutcome {
+        if !self.observe {
+            return o;
+        }
+        let would = match o.verdict {
+            Verdict::Deny => "would deny",
+            Verdict::StepUp => "would step_up",
+            _ => return o,
+        };
+        o.reason = Some(match o.reason.take() {
+            Some(r) => format!("observe mode: {would} ({r})"),
+            None => format!("observe mode: {would}"),
+        });
+        o.verdict = Verdict::Shadow;
+        o
     }
 }
 
@@ -187,6 +218,43 @@ mod tests {
         assert_eq!(e.evaluate(ctx("get_secret", "a", "unattributed")).verdict, Verdict::Deny);
         // A verified human (alice) is allowed.
         assert_eq!(e.evaluate(ctx("get_secret", "a", "alice")).verdict, Verdict::Allow);
+    }
+
+    #[test]
+    fn observe_mode_downgrades_blocks_to_shadow_but_records_the_intended_verdict() {
+        // Same rules, one enforce and one observe. In observe the deny is evaluated and recorded
+        // (as shadow, with the intended verdict in the reason) but does not block.
+        let rules = "rules:
+  - id: no-db-delete
+    when: { resource: database, operation: delete }
+    verdict: deny
+    reason: no deletes
+  - id: refund-approval
+    when: { tool: pay.refund }
+    verdict: step_up
+";
+        let enforce = PolicyEngine::from_yaml(&format!("version: 1\ndefault: allow\n{rules}")).unwrap();
+        assert!(!enforce.is_observe());
+        assert_eq!(enforce.evaluate(ctx("db.delete_row", "a", "")).verdict, Verdict::Deny);
+        assert_eq!(enforce.evaluate(ctx("pay.refund", "a", "")).verdict, Verdict::StepUp);
+
+        let observe = PolicyEngine::from_yaml(&format!("version: 1\ndefault: allow\nenforcement_mode: observe\n{rules}")).unwrap();
+        assert!(observe.is_observe());
+        let d = observe.evaluate(ctx("db.delete_row", "a", ""));
+        assert_eq!(d.verdict, Verdict::Shadow, "deny is downgraded to shadow under observe");
+        assert_eq!(d.rule_id.as_deref(), Some("no-db-delete"), "the rule is still attributed");
+        assert!(d.reason.as_deref().unwrap().contains("would deny"), "reason records the intended verdict: {:?}", d.reason);
+        let s = observe.evaluate(ctx("pay.refund", "a", ""));
+        assert_eq!(s.verdict, Verdict::Shadow);
+        assert!(s.reason.as_deref().unwrap().contains("would step_up"));
+        // an allow is untouched by observe mode.
+        assert_eq!(observe.evaluate(ctx("db.query", "a", "")).verdict, Verdict::Allow);
+    }
+
+    #[test]
+    fn unknown_enforcement_mode_is_rejected() {
+        let src = "version: 1\ndefault: allow\nenforcement_mode: whatever\nrules: []\n";
+        assert!(PolicyEngine::from_yaml(src).is_err());
     }
 
     #[test]

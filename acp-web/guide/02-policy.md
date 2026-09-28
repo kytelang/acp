@@ -103,6 +103,35 @@ tools that would newly block under default-deny, and tells you whether it is saf
 says READY and you have added explicit allow rules for the would-block set, switch `default` to
 `deny`.
 
+## Enforcement mode: observe before you enforce
+
+`shadow` above shadows a single rule. To roll ACP into a production path with **zero risk of blocking
+anything** while you build confidence, set a manifest-wide enforcement mode instead:
+
+```yaml
+version: 1
+enforcement_mode: observe   # observe | enforce (default enforce); "mode" is accepted as a short alias
+default: deny
+rules:
+  - id: no-external-egress
+    when: { resource: external_network, operation: egress }
+    verdict: deny
+```
+
+In `observe` mode every rule (and every downstream check: content firewall, delegation, memory-write,
+trajectory, data-boundary and rate-limit or confirm obligations) is still evaluated and the intended
+verdict is recorded in the signed evidence, but a would-be `deny` or `step_up` is **downgraded to
+`shadow`, so the action proceeds**. The evidence reason records what would have happened, for example
+`observe mode: would deny (content firewall: prompt-injection)`, and these show up as `shadow` in the
+governance report's verdict split, so you can watch exactly what enforcing would do before it bites.
+When the shadow count is what you expect, switch to `enforcement_mode: enforce` (or drop the line) to
+turn on blocking. One safety carve-out: a tool quarantined by tool-integrity (its definition changed
+since it was pinned) is still hard-blocked in observe mode, because ACP can no longer trust what it does.
+
+This is the difference from `default: allow`: `default: allow` lets *unmatched* actions through but
+still enforces your explicit `deny` rules; `observe` enforces nothing, so you can deploy a strict
+default-deny manifest and see the full would-block set before a single call is stopped.
+
 ## Least-privilege policy from observed traffic
 
 You do not have to write the allow-list by hand. Once agents have run through a PEP (shadow mode is

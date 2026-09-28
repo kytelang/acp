@@ -975,6 +975,28 @@ impl Controller {
                     }
                 }
             }
+            // Global observe (dry-run) mode: any layer above (policy, content firewall, delegation,
+            // memory, trajectory, data boundary, obligations) may have set a blocking verdict. In
+            // observe we record it but do not enforce: downgrade deny/step_up to shadow so the action
+            // proceeds, preserving the intended verdict in the reason. Tool-integrity quarantine is a
+            // hard safety block and is deliberately not relaxed (it returns earlier). The policy engine
+            // may have already annotated the reason; do not double-prefix.
+            if eng.is_observe() {
+                let would = match a.outcome.verdict {
+                    Verdict::Deny => Some("would deny"),
+                    Verdict::StepUp => Some("would step_up"),
+                    _ => None,
+                };
+                if let Some(w) = would {
+                    a.outcome.reason = Some(match a.outcome.reason.take() {
+                        Some(r) if r.starts_with("observe mode:") => r,
+                        Some(r) => format!("observe mode: {w} ({r})"),
+                        None => format!("observe mode: {w}"),
+                    });
+                    a.outcome.verdict = Verdict::Shadow;
+                    a.enforce = policy::enforce_for(Verdict::Shadow, &tc, &a.outcome, a.impact);
+                }
+            }
             let verdict_s = match a.outcome.verdict {
                 Verdict::Allow => "allow",
                 Verdict::Deny => "deny",
@@ -1382,6 +1404,29 @@ mod obligation_tests {
         assert!(matches!(c.decide_frame(&db_call(json!({}))), FrameAction::Forward));
         // Second call exceeds the budget and is denied.
         assert!(matches!(c.decide_frame(&db_call(json!({}))), FrameAction::Reply(_)));
+    }
+
+    #[test]
+    fn observe_mode_forwards_what_would_be_denied() {
+        // Enforce blocks a deny (Reply); observe forwards the same call (dry-run).
+        let rules = "rules:\n  - id: no-read\n    when: { resource: database, operation: read }\n    verdict: deny\n";
+        let enforce = controller_with(&format!("version: 1\ndefault: allow\n{rules}"));
+        assert!(matches!(enforce.decide_frame(&db_call(json!({}))), FrameAction::Reply(_)),
+            "enforce mode blocks a deny");
+        let observe = controller_with(&format!("version: 1\ndefault: allow\nenforcement_mode: observe\n{rules}"));
+        assert!(matches!(observe.decide_frame(&db_call(json!({}))), FrameAction::Forward),
+            "observe mode forwards what would be denied");
+    }
+
+    #[test]
+    fn observe_mode_relaxes_a_pep_layer_deny() {
+        // rate_limit is a PEP-layer deny applied AFTER policy eval; observe must relax it too, proving
+        // the downgrade sits at the enforcement choke point, not only in the policy engine.
+        let rules = "rules:\n  - id: cap\n    when: { resource: database, operation: read }\n    verdict: allow\n    obligations:\n      - kind: rate_limit\n        max: 1\n        window_ms: 60000\n";
+        let c = controller_with(&format!("version: 1\ndefault: allow\nenforcement_mode: observe\n{rules}"));
+        assert!(matches!(c.decide_frame(&db_call(json!({}))), FrameAction::Forward));
+        assert!(matches!(c.decide_frame(&db_call(json!({}))), FrameAction::Forward),
+            "observe forwards even a rate-limit (PEP-layer) deny");
     }
 
     #[test]
