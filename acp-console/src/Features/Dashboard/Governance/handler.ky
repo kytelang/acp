@@ -223,6 +223,20 @@ pub struct FrameworkCsvHandler impl RouteHandler {
     }
 }
 
+// #5: forward the signed JSON-LD compliance pack for a same-origin download (Art. 12 export).
+pub struct FrameworkPackHandler impl RouteHandler {
+    acp: AcpClient,
+    init(acp: AcpClient) { self.acp = acp; }
+    async fn serve(self: FrameworkPackHandler, ctx: Context): Response {
+        let acp = self.acp.withTenant(json.stringField(ctx.request.body, "tenant"));
+        let name = ctx.param("name");
+        let pack = acp.frameworkPack(name);
+        return response.Response.ok(pack)
+            .setHeader("content-type", "application/ld+json")
+            .setHeader("content-disposition", "attachment; filename=\"" + name + "-compliance-pack.jsonld\"");
+    }
+}
+
 // B5: load the built-in signed threat pack (verified server-side), then patch the firewall status.
 pub struct LoadThreatPackHandler impl RouteHandler {
     acp: AcpClient,

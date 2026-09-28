@@ -15,7 +15,8 @@ the public key. It never contacts or trusts the server.
 
 ```sh
 acp verify <ledger.db>          # verify a ledger, public key only
-acp verify-pack <pack.json>     # verify a downloaded evidence pack on a clean machine
+acp verify-pack <pack.json>     # verify a downloaded pack on a clean machine: a Merkle evidence
+                                #   pack (acp export) or a signed audit / compliance pack
 ```
 
 Exit 0 if the evidence verifies, non-zero if it was tampered with. See [chapter 9](09-evidence.md) and

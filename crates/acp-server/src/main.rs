@@ -1051,6 +1051,7 @@ async fn main() {
         .route("/report/violations", get(report_violations))
         .route("/report/framework/:name", get(report_framework))
         .route("/report/framework/:name/csv", get(report_framework_csv))
+        .route("/report/framework/:name/pack", get(report_framework_pack))
         .route("/report/framework/:name/snapshot", post(report_framework_snapshot))
         .route("/report/framework/:name/history", get(report_framework_history))
         .route("/report/post-market", get(report_post_market))
@@ -3488,6 +3489,61 @@ async fn report_framework_csv(State(st): State<Arc<AppState>>, headers: HeaderMa
     out.push_str(&format!("summary,breaches_total,{bt}
 "));
     ([(axum::http::header::CONTENT_TYPE, "text/csv"), (axum::http::header::CONTENT_DISPOSITION, "attachment; filename=\"framework-report.csv\"")], out).into_response()
+}
+
+/// One-click regulator export (EU AI Act Art. 12 record-keeping): the framework conformance report as a
+/// signed, self-verifying JSON-LD compliance pack. Every figure is drawn from the signed ledger and
+/// GRC records, wrapped in a linked-data envelope and signed with the control-plane key, so a regulator
+/// verifies it offline with the public key alone (the same {body, pubkey_hex, sig_hex} shape that
+/// `acp verify-pack` checks). Auditor scope (Export).
+async fn report_framework_pack(State(st): State<Arc<AppState>>, headers: HeaderMap, Path(name): Path<String>) -> Response {
+    if let Err(r) = authorize(&st.auth, &headers, acp_core::auth::Capability::Export) { return r; }
+    if st.store.is_none() { return Json(serde_json::json!({"ok": false, "error": "no --store configured"})).into_response(); }
+    let tenant = tenant_of(&headers, &None);
+    let report = framework_report_value(&st, &tenant, &name).await;
+    let (label, article) = framework_label(&name);
+    // JSON-LD envelope: a ComplianceReport that conformsTo the framework, carrying the report body.
+    let body = serde_json::json!({
+        "@context": {
+            "@vocab": "https://schema.org/",
+            "acp": "https://varman.ai/ns/compliance#",
+            "conformsTo": "http://purl.org/dc/terms/conformsTo",
+            "generatedAtTime": "http://www.w3.org/ns/prov#generatedAtTime"
+        },
+        "@type": "acp:ComplianceReport",
+        "name": format!("{label} conformance report"),
+        "conformsTo": label,
+        "acp:article": article,
+        "acp:tenant": tenant,
+        "generatedAtTime": now_ms(),
+        "acp:report": report,
+    });
+    let signer = enroll_signer(&st.cp_key);
+    let sig = acp_core::sign::Signer::sign(&signer, &acp_core::canonical::canonical_bytes(&body));
+    let pack = serde_json::json!({
+        "body": body,
+        "pubkey_hex": hex::encode(acp_core::sign::Signer::public_key(&signer)),
+        "sig_hex": hex::encode(sig),
+    });
+    let fname = format!("{name}-compliance-pack.jsonld");
+    (
+        [
+            (axum::http::header::CONTENT_TYPE, "application/ld+json".to_string()),
+            (axum::http::header::CONTENT_DISPOSITION, format!("attachment; filename=\"{fname}\"")),
+        ],
+        serde_json::to_string_pretty(&pack).unwrap_or_else(|_| pack.to_string()),
+    ).into_response()
+}
+
+/// Human framework label + the record-keeping article it satisfies, for the export envelope.
+fn framework_label(slug: &str) -> (&'static str, &'static str) {
+    match slug {
+        "eu-ai-act" => ("EU AI Act", "Art. 12 (record-keeping)"),
+        "nist-ai-rmf" => ("NIST AI RMF", "Measure/Govern"),
+        "iso-42001" => ("ISO/IEC 42001", "Clause 9 (performance evaluation)"),
+        "soc-2" => ("SOC 2", "CC (common criteria)"),
+        _ => ("Framework", "record-keeping"),
+    }
 }
 
 /// T6: capture the current framework report as a signed-in-time snapshot (history). Gated on Export.

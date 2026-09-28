@@ -132,3 +132,47 @@ pub fn sign_sth<S: Signer + ?Sized>(signer: &S, sth: &SignedTreeHead) -> Vec<u8>
 pub fn verify_sth(public_key: &[u8], sth: &SignedTreeHead, sig: &[u8]) -> bool {
     verify_ed25519(public_key, &sth_bytes(sth), sig)
 }
+
+/// Verify a detached-signature pack `{body, pubkey_hex, sig_hex}`: an Ed25519 signature over the
+/// canonical bytes of `body`, checkable with the embedded public key alone. This is the offline
+/// verification behind the signed audit pack (`GET /audit/pack`) and the framework compliance pack
+/// (`GET /report/framework/:name/pack`), and what `acp verify-pack` runs on those artifacts.
+pub fn verify_detached_pack(pack: &serde_json::Value) -> Result<(), String> {
+    let body = pack.get("body").ok_or("missing body")?;
+    let pk_hex = pack.get("pubkey_hex").and_then(|v| v.as_str()).ok_or("missing pubkey_hex")?;
+    let sig_hex = pack.get("sig_hex").and_then(|v| v.as_str()).ok_or("missing sig_hex")?;
+    let pk = hex::decode(pk_hex).map_err(|e| format!("bad pubkey_hex: {e}"))?;
+    let sig = hex::decode(sig_hex).map_err(|e| format!("bad sig_hex: {e}"))?;
+    let msg = crate::canonical::canonical_bytes(body);
+    if verify_ed25519(&pk, &msg, &sig) {
+        Ok(())
+    } else {
+        Err("signature does not verify against the embedded public key".into())
+    }
+}
+
+#[cfg(test)]
+mod detached_pack_tests {
+    use super::*;
+
+    #[test]
+    fn detached_pack_round_trips_and_is_tamper_evident() {
+        let signer = Ed25519Signer::generate();
+        let body = serde_json::json!({"@type": "acp:ComplianceReport", "conformsTo": "EU AI Act", "coverage": 0.4});
+        let sig = Signer::sign(&signer, &crate::canonical::canonical_bytes(&body));
+        let pack = serde_json::json!({
+            "body": body,
+            "pubkey_hex": hex::encode(Signer::public_key(&signer)),
+            "sig_hex": hex::encode(sig),
+        });
+        assert!(verify_detached_pack(&pack).is_ok(), "a freshly signed pack verifies");
+
+        // Tamper the body: verification must fail (the signature no longer matches).
+        let mut bad = pack.clone();
+        bad["body"]["coverage"] = serde_json::json!(0.99);
+        assert!(verify_detached_pack(&bad).is_err(), "a tampered body must not verify");
+
+        // Missing fields are rejected, not panicked.
+        assert!(verify_detached_pack(&serde_json::json!({"body": {}})).is_err());
+    }
+}

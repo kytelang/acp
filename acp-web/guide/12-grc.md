@@ -217,6 +217,13 @@ Several governance capabilities produce signed records that appear in this view:
 - **Auditor evidence pack.** `GET /audit/pack?from=&to=` returns a signed evidence pack for a time
   window that an auditor verifies with the public key alone (`acp verify-pack`), no customer staff
   involved.
+- **One-click regulator compliance pack (Art. 12 record-keeping).** From the console **Reports** page,
+  the Regulator report card offers **Signed pack (JSON-LD)** next to the CSV and print options.
+  `GET /report/framework/:name/pack` returns the framework conformance report (controls satisfied,
+  linked-evidence verification, breach summary, coverage) wrapped in a signed JSON-LD envelope
+  (`@type: acp:ComplianceReport`, `conformsTo` the framework). Every figure is drawn from the signed
+  ledger and GRC records, and the whole document is signed with the control-plane key, so a regulator
+  verifies it offline with `acp verify-pack` and the public key alone. It is Export-gated (Auditor).
 
 ## Oversight-quality monitoring
 

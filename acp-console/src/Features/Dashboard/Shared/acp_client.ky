@@ -753,6 +753,14 @@ pub struct AcpClient {
         return resp.body;
     }
 
+    // #5: fetch the signed JSON-LD compliance pack (EU AI Act Art. 12 record-keeping), Export-gated,
+    // for a same-origin download. Offline-verifiable with `acp verify-pack`.
+    pub fn frameworkPack(self: AcpClient, name: string): string {
+        let body = self.getWithRole("/report/framework/" + name + "/pack", "Auditor");
+        if (string.eql(body, "")) { return "{\"error\":\"unavailable\"}"; }
+        return body;
+    }
+
     // G2: risk-register rows (GRC records of kind "risk" with parsed score/band).
     pub fn riskRows(self: AcpClient): list.List<RiskRow> {
         let rows = list.List<RiskRow>();

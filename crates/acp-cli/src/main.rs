@@ -258,6 +258,23 @@ fn cmd_verify_pack(path: &str) -> ExitCode {
             return ExitCode::from(1);
         }
     };
+    // Two pack shapes verify offline with the public key alone:
+    //  - Merkle evidence packs from `acp export` ({public_key, records, sth}); and
+    //  - detached-signature packs ({body, pubkey_hex, sig_hex}) as produced by the signed audit pack
+    //    (GET /audit/pack) and the framework compliance pack (GET /report/framework/:name/pack),
+    //    a plain Ed25519 signature over the canonical bytes of `body`.
+    if pack.get("sig_hex").is_some() {
+        return match acp_core::sign::verify_detached_pack(&pack) {
+            Ok(()) => {
+                println!("OK: signed pack verifies (detached Ed25519 over the canonical body)");
+                ExitCode::SUCCESS
+            }
+            Err(e) => {
+                eprintln!("FAIL: {e}");
+                ExitCode::from(1)
+            }
+        };
+    }
     match acp_core::ledger::verify_pack(&pack) {
         Ok(()) => {
             println!("OK: export pack verifies standalone");
