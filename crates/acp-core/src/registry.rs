@@ -340,3 +340,90 @@ mod tests {
         assert_eq!(r.principals().len(), 0);
     }
 }
+
+/// Multi-agent delegation chains (gap G8).
+///
+/// When agent A calls agent B on behalf of user U, the call must be authorised against the whole chain
+/// U -> A -> B, and rights can only narrow along it: B can never exercise a scope A did not hold, and A
+/// never one U did not hold. This is the pure chain check; the full chain is recorded in the ledger.
+pub mod chain {
+    use std::collections::BTreeSet;
+
+    /// One hop: who is acting and the scopes granted to them at this hop.
+    #[derive(Debug, Clone, PartialEq, Eq)]
+    pub struct Hop {
+        pub actor: String,
+        pub scopes: BTreeSet<String>,
+    }
+
+    impl Hop {
+        pub fn new(actor: &str, scopes: &[&str]) -> Self {
+            Hop { actor: actor.into(), scopes: scopes.iter().map(|s| s.to_string()).collect() }
+        }
+    }
+
+    #[derive(Debug, Clone, PartialEq, Eq)]
+    pub enum ChainError {
+        Empty,
+        /// A hop widened scopes beyond the previous hop; carries the offending actor and the widened scopes.
+        Widened { actor: String, extra: Vec<String> },
+    }
+
+    /// Verify a delegation chain narrows monotonically and return the effective scopes (the last hop's,
+    /// which by the narrowing rule are a subset of every earlier hop). The first hop (the human) sets
+    /// the ceiling.
+    pub fn effective_scopes(chain: &[Hop]) -> Result<BTreeSet<String>, ChainError> {
+        if chain.is_empty() {
+            return Err(ChainError::Empty);
+        }
+        for w in chain.windows(2) {
+            let extra: Vec<String> = w[1].scopes.difference(&w[0].scopes).cloned().collect();
+            if !extra.is_empty() {
+                return Err(ChainError::Widened { actor: w[1].actor.clone(), extra });
+            }
+        }
+        Ok(chain.last().unwrap().scopes.clone())
+    }
+
+    /// Would the chain permit `scope`? True only if it narrows validly and the effective set contains it.
+    pub fn permits(chain: &[Hop], scope: &str) -> bool {
+        matches!(effective_scopes(chain), Ok(s) if s.contains(scope))
+    }
+
+    #[cfg(test)]
+    mod tests {
+        use super::*;
+
+        #[test]
+        fn narrowing_chain_permits_only_the_intersection() {
+            // U grants {read,write,delete}; A narrows to {read,write}; B to {read}.
+            let chain = vec![
+                Hop::new("user:u", &["read", "write", "delete"]),
+                Hop::new("agent:a", &["read", "write"]),
+                Hop::new("agent:b", &["read"]),
+            ];
+            let eff = effective_scopes(&chain).unwrap();
+            assert!(permits(&chain, "read"));
+            assert!(!permits(&chain, "write"), "B was narrowed to read only");
+            assert!(!permits(&chain, "delete"));
+            assert_eq!(eff.len(), 1);
+        }
+
+        #[test]
+        fn a_hop_cannot_widen_beyond_its_delegator() {
+            // B tries to claim delete, which A never held -> rejected.
+            let chain = vec![
+                Hop::new("user:u", &["read", "write"]),
+                Hop::new("agent:a", &["read"]),
+                Hop::new("agent:b", &["read", "delete"]),
+            ];
+            match effective_scopes(&chain) {
+                Err(ChainError::Widened { actor, extra }) => {
+                    assert_eq!(actor, "agent:b");
+                    assert_eq!(extra, vec!["delete".to_string()]);
+                }
+                other => panic!("expected Widened, got {other:?}"),
+            }
+        }
+    }
+}
