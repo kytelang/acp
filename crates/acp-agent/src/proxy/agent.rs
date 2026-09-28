@@ -323,7 +323,18 @@ async fn build_controller(o: &Opts) -> Result<Arc<Controller>, String> {
     // agents; the OAuth-token subject for remote agents once wired). It is proxy-supplied and
     // trusted, never asserted by the agent. Absent -> "unattributed" so the gap is governable.
     let principal = o.principal.clone().unwrap_or_else(|| "unattributed".to_string());
-    let groups = o.principal_groups.clone();
+    // Group-based policy: resolve the principal's directory groups automatically from the control
+    // plane (its IdP-provisioned SCIM directory), unless they were declared explicitly. A declared
+    // --principal-groups always wins, for air-gapped setups with no control plane.
+    let mut groups = o.principal_groups.clone();
+    if groups.is_empty() && principal != "unattributed" {
+        if let Some(base) = &o.registry_url {
+            groups = fetch_principal_groups(base, &principal).await;
+            if !groups.is_empty() {
+                tracing::info!("resolved {} directory group(s) for principal {principal} from the control plane", groups.len());
+            }
+        }
+    }
     if let Some(base) = &o.registry_url {
         // Verify against the control-plane database (DB-registered agents, no registry file).
         let (aid, tok) = match (&o.agent_id, &o.agent_token) {
@@ -568,5 +579,30 @@ pub async fn run(args: Vec<String>) -> ExitCode {
             }
         }
         _ => ExitCode::SUCCESS,
+    }
+}
+
+
+/// Fetch a human principal's directory groups from the control plane's SCIM directory, for
+/// group-based policy. Best-effort: any error yields no groups (the group rules simply do not match).
+async fn fetch_principal_groups(base: &str, principal: &str) -> Vec<String> {
+    let base = base.trim_end_matches('/');
+    match reqwest::Client::new()
+        .get(format!("{base}/principal/groups"))
+        .query(&[("id", principal)])
+        .send()
+        .await
+    {
+        Ok(resp) => resp
+            .json::<serde_json::Value>()
+            .await
+            .ok()
+            .and_then(|v| {
+                v.get("groups").and_then(|g| g.as_array()).map(|a| {
+                    a.iter().filter_map(|x| x.as_str().map(String::from)).collect::<Vec<_>>()
+                })
+            })
+            .unwrap_or_default(),
+        Err(_) => Vec::new(),
     }
 }

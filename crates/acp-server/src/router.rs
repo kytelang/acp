@@ -107,6 +107,7 @@ pub(crate) fn build_router(state: Arc<AppState>) -> Router {
             .route("/leader", get(leader_status))
             .route("/tenants", get(tenants_list))
             .route("/scim/v2/Users", get(scim_users))
+        .route("/principal/groups", get(principal_groups))
             .route("/scim/v2/Groups", get(scim_groups))
             .route("/auth/dev-token", get(dev_token))
         .with_state(state)

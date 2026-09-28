@@ -73,8 +73,8 @@ Move a person between groups in the IdP and their governance changes automatical
 edit in Varman. The match is exact set-membership against the trusted `principal_scopes` the
 enforcement point receives from the verified identity (never argument content), so an agent cannot
 spoof a group. The gateway fills `principal_scopes` from the verified bearer token's roles; a
-workstation proxy takes them from its declared `--principal-groups` (the same way it declares
-`--principal`). This is the recommended way to scale one policy across a large organisation: keep the
+workstation proxy resolves them automatically from the control plane's IdP-provisioned directory
+(`GET /principal/groups`), with `--principal-groups` as an explicit override for air-gapped setups. This is the recommended way to scale one policy across a large organisation: keep the
 firewall config and policy org-wide, and let `group` rules express the per-team differences.
 
 ## Verdicts

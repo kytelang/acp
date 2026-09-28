@@ -2,11 +2,12 @@
 use crate::state::AppState;
 use crate::common::*;
 use axum::{
-    extract::{Path, State},
+    extract::{Path, Query, State},
     http::HeaderMap,
     response::{IntoResponse, Response},
     Json,
 };
+use std::collections::HashMap as StdHashMap;
 use std::sync::Arc;
 
 pub(crate) async fn vendor_register(State(st): State<Arc<AppState>>, headers: HeaderMap, Json(body): Json<serde_json::Value>) -> Response {
@@ -222,5 +223,23 @@ pub(crate) async fn scim_users(State(st): State<Arc<AppState>>, headers: HeaderM
         "totalResults": resources.len(), "itemsPerPage": resources.len(), "startIndex": 1,
         "Resources": resources,
     })).into_response()
+}
+
+/// Resolve a human principal's directory groups from the IdP-provisioned SCIM directory, so a
+/// workstation proxy can populate `principal_scopes` for group-based policy automatically, without a
+/// local flag. Looks the principal up by id or email (case-insensitive). Returns group names only.
+pub(crate) async fn principal_groups(State(st): State<Arc<AppState>>, Query(q): Query<StdHashMap<String, String>>) -> Response {
+    if let Err(r) = authorize_report(&st, &axum::http::HeaderMap::new()) { return r; }
+    let who = q.get("id").map(|s| s.trim().to_lowercase()).unwrap_or_default();
+    let groups = if who.is_empty() {
+        Vec::new()
+    } else {
+        st.scim_users
+            .iter()
+            .find(|(id, email, _)| id.to_lowercase() == who || email.to_lowercase() == who)
+            .map(|(_, _, g)| g.clone())
+            .unwrap_or_default()
+    };
+    Json(serde_json::json!({"principal": who, "groups": groups})).into_response()
 }
 
