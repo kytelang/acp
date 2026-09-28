@@ -409,6 +409,31 @@ pub struct AcpClient {
     }
 
     // R1: the tenants that have data, for the switcher options.
+    pub fn groupsList(self: AcpClient): list.List<string> {
+        let out = list.List<string>();
+        let resp = self.tget(self.base + "/groups");
+        if (resp.status.toCode() != 200) { return out; }
+        let gv = json.get(json.parse(resp.body), "groups");
+        let arr = json.asArray(gv);
+        if (arr == undefined) { return out; }
+        let i = 0;
+        while (i < arr.size()) { let g = json.asString(json.at(gv, i)) ?? ""; if (!string.eql(g, "")) { out.push(g); } i = i + 1; }
+        return out;
+    }
+
+    pub fn registerGroup(self: AcpClient, name: string, userAuth: string): DeployResult {
+        if (string.eql(name, "")) { return DeployResult(false, "enter a group name"); }
+        let hdrs = client.Http.emptyHeaders();
+        hdrs.set("Content-Type", "application/json"); hdrs.set("x-acp-tenant", self.tenant);
+        if (!string.eql(userAuth, "")) { hdrs.set("Authorization", userAuth); }
+        else { let tok = self.authToken("AppRegistrar"); if (!string.eql(tok, "")) { hdrs.set("Authorization", "Bearer " + tok); } }
+        let resp = client.Http.request("POST", self.base + "/groups", hdrs, "{\"name\":" + self.jstr(name) + "}");
+        if (resp.status.toCode() != 200) { return DeployResult(false, "acp-server unreachable"); }
+        let v = json.parse(resp.body);
+        if (!(json.asBool(json.get(v, "ok")) ?? false)) { return DeployResult(false, json.asString(json.get(v, "error")) ?? "rejected"); }
+        return DeployResult(true, "registered group " + name);
+    }
+
     pub fn tenantsList(self: AcpClient): list.List<string> {
         let out = list.List<string>();
         let resp = self.tget(self.base + "/tenants");
@@ -921,8 +946,8 @@ pub struct AcpClient {
 
     // Store an agent capability configuration server-side (RegisterAgent). Booleans are the toggles;
     // strings are the listen/upstream addresses.
-    pub fn setAgentConfig(self: AcpClient, id: string, fwEnabled: bool, fwListen: string, mcpEnabled: bool, mcpListen: string, mcpUpstream: string, guardEnabled: bool, guardListen: string, guardUpstream: string, guardPubkey: string, userAuth: string): DeployResult {
-        if (string.eql(id, "")) { return DeployResult(false, "enter an agent id"); }
+    pub fn setAgentConfig(self: AcpClient, group: string, fwEnabled: bool, fwListen: string, mcpEnabled: bool, mcpListen: string, mcpUpstream: string, guardEnabled: bool, guardListen: string, guardUpstream: string, guardPubkey: string, userAuth: string): DeployResult {
+        if (string.eql(group, "")) { return DeployResult(false, "enter a group name"); }
         let fw = fwEnabled ? "true" : "false";
         let mc = mcpEnabled ? "true" : "false";
         let gd = guardEnabled ? "true" : "false";
@@ -935,17 +960,17 @@ pub struct AcpClient {
         hdrs.set("Content-Type", "application/json"); hdrs.set("x-acp-tenant", self.tenant);
         if (!string.eql(userAuth, "")) { hdrs.set("Authorization", userAuth); }
         else { let tok = self.authToken("AppRegistrar"); if (!string.eql(tok, "")) { hdrs.set("Authorization", "Bearer " + tok); } }
-        let resp = client.Http.request("POST", self.base + "/agents/" + id + "/config", hdrs, body);
+        let resp = client.Http.request("POST", self.base + "/agent-config/" + group, hdrs, body);
         if (resp.status.toCode() != 200) { return DeployResult(false, "acp-server unreachable"); }
         let v = json.parse(resp.body);
         if (!(json.asBool(json.get(v, "ok")) ?? false)) { return DeployResult(false, json.asString(json.get(v, "error")) ?? "rejected"); }
-        return DeployResult(true, "saved config for " + id);
+        return DeployResult(true, "saved config for group " + group);
     }
 
     // The stored capability config for an agent, as pretty JSON for display.
-    pub fn agentConfigJson(self: AcpClient, id: string): string {
-        if (string.eql(id, "")) { return ""; }
-        let resp = self.tget(self.base + "/agents/" + id + "/config");
+    pub fn agentConfigJson(self: AcpClient, group: string): string {
+        if (string.eql(group, "")) { return ""; }
+        let resp = self.tget(self.base + "/agent-config/" + group);
         if (resp.status.toCode() != 200) { return ""; }
         let cfg = json.get(json.parse(resp.body), "config");
         return json.stringify(cfg);

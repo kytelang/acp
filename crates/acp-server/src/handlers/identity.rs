@@ -254,27 +254,59 @@ fn default_agent_config() -> serde_json::Value {
     })
 }
 
-/// GET /agents/:id/config: the stored capability config for an agent (defaults if none saved yet).
-pub(crate) async fn agent_config_get(State(st): State<Arc<AppState>>, Path(id): Path<String>) -> Response {
-    let store = match &st.store { Some(s) => s, None => return Json(serde_json::json!({"id": id, "config": default_agent_config()})).into_response() };
+/// GET /agent-config/:group: the stored capability config for a directory group (defaults if none
+/// saved yet). Config is keyed by group so it scales across a large fleet: a workstation resolves its
+/// user's group and fetches that group's config, rather than a config per machine.
+pub(crate) async fn agent_config_get(State(st): State<Arc<AppState>>, Path(group): Path<String>) -> Response {
+    let store = match &st.store { Some(s) => s, None => return Json(serde_json::json!({"group": group, "config": default_agent_config()})).into_response() };
     let cfg = store
-        .get_state(&format!("agentcfg:{id}"))
+        .get_state(&format!("agentcfg:group:{group}"))
         .await
         .ok()
         .flatten()
         .and_then(|raw| serde_json::from_str::<serde_json::Value>(&raw).ok())
         .unwrap_or_else(default_agent_config);
-    Json(serde_json::json!({"id": id, "config": cfg})).into_response()
+    Json(serde_json::json!({"group": group, "config": cfg})).into_response()
 }
 
-/// POST /agents/:id/config: store an agent's capability config (RegisterAgent scope). Body is the
-/// config object, or {config: {...}}.
-pub(crate) async fn agent_config_set(State(st): State<Arc<AppState>>, headers: HeaderMap, Path(id): Path<String>, Json(body): Json<serde_json::Value>) -> Response {
+/// POST /agent-config/:group: store the capability config for a directory group (RegisterAgent scope).
+/// Body is the config object, or {config: {...}}.
+pub(crate) async fn agent_config_set(State(st): State<Arc<AppState>>, headers: HeaderMap, Path(group): Path<String>, Json(body): Json<serde_json::Value>) -> Response {
     if let Err(r) = authorize(&st.auth, &headers, acp_core::auth::Capability::RegisterAgent) { return r; }
     let store = match &st.store { Some(s) => s, None => return Json(serde_json::json!({"ok": false, "error": "no --store configured"})).into_response() };
+    if group.trim().is_empty() { return Json(serde_json::json!({"ok": false, "error": "group is required"})).into_response(); }
     let cfg = body.get("config").cloned().unwrap_or(body);
-    match store.put_state(&format!("agentcfg:{id}"), &cfg.to_string(), now_ms() as i64).await {
-        Ok(()) => Json(serde_json::json!({"ok": true, "id": id})).into_response(),
+    match store.put_state(&format!("agentcfg:group:{group}"), &cfg.to_string(), now_ms() as i64).await {
+        Ok(()) => Json(serde_json::json!({"ok": true, "group": group})).into_response(),
+        Err(e) => Json(serde_json::json!({"ok": false, "error": e})).into_response(),
+    }
+}
+
+
+/// GET /groups: the registered directory groups (created from the console), for the Agent config
+/// dropdown. Union with any groups already seen in the SCIM directory so real IdP groups are offered.
+pub(crate) async fn groups_list(State(st): State<Arc<AppState>>) -> Response {
+    let mut names: std::collections::BTreeSet<String> = std::collections::BTreeSet::new();
+    for (_, email_or_id, groups) in &st.scim_users {
+        let _ = email_or_id;
+        for g in groups { names.insert(g.clone()); }
+    }
+    if let Some(store) = &st.store {
+        if let Ok(rows) = store.list_state_prefix("groupreg:").await {
+            for (_, v) in rows { if !v.trim().is_empty() { names.insert(v); } }
+        }
+    }
+    Json(serde_json::json!({"groups": names.into_iter().collect::<Vec<_>>()})).into_response()
+}
+
+/// POST /groups {name}: register a directory group name (RegisterAgent scope).
+pub(crate) async fn group_register(State(st): State<Arc<AppState>>, headers: HeaderMap, Json(body): Json<serde_json::Value>) -> Response {
+    if let Err(r) = authorize(&st.auth, &headers, acp_core::auth::Capability::RegisterAgent) { return r; }
+    let store = match &st.store { Some(s) => s, None => return Json(serde_json::json!({"ok": false, "error": "no --store configured"})).into_response() };
+    let name = body.get("name").and_then(|v| v.as_str()).unwrap_or("").trim().to_string();
+    if name.is_empty() { return Json(serde_json::json!({"ok": false, "error": "group name is required"})).into_response(); }
+    match store.put_state(&format!("groupreg:{name}"), &name, now_ms() as i64).await {
+        Ok(()) => Json(serde_json::json!({"ok": true, "name": name})).into_response(),
         Err(e) => Json(serde_json::json!({"ok": false, "error": e})).into_response(),
     }
 }

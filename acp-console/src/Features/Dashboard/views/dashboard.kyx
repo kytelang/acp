@@ -954,10 +954,41 @@ pub fn agentConfigResultPanel(res: DeployResult): Html {
     </div>;
 }
 
-pub fn agentConfigLoadedPanel(id: string, cfg: string): Html {
+pub fn agentConfigLoadedPanel(grp: string, cfg: string): Html {
     return <div id="acloaded">
         {if (string.eql(cfg, "")) { <p class="hint">No stored config for that agent id (defaults apply until you save).</p> } else {
-            <div><p class="hint">Stored config for {id}:</p><pre class="mono" style="background:var(--panel);padding:.7rem;border-radius:8px;white-space:pre-wrap;overflow-x:auto;font-size:.8rem">{cfg}</pre></div>
+            <div><p class="hint">Stored config for group {grp}:</p><pre class="mono" style="background:var(--panel);padding:.7rem;border-radius:8px;white-space:pre-wrap;overflow-x:auto;font-size:.8rem">{cfg}</pre></div>
         }}
+    </div>;
+}
+
+
+// Group dropdown for the agent-config editor, populated from registered/known groups (SSE-patched;
+// datastar re-applies the bound acGroup signal after each patch, so the selection persists).
+pub fn groupSelectPanel(groups: list.List<string>): Html {
+    return <select id="ac-group-sel" data-bind="acGroup">
+        <option value="">select a group...</option>
+        {for (i in 0..groups.size()) {
+            let g = groups.get(i) ?? "";
+            <option value={g}>{g}</option>
+        }}
+    </select>;
+}
+
+// The registered groups, shown under the registration form.
+pub fn groupListPanel(groups: list.List<string>): Html {
+    return <div id="grouplist">
+        {if (groups.size() == 0) {
+            <p class="hint">No groups yet. Register one above; groups already seen in the directory are also offered.</p>
+        } else {
+            <div class="polrow">{for (i in 0..groups.size()) { <span class="badge ver">{groups.get(i) ?? ""}</span> }}</div>
+        }}
+    </div>;
+}
+
+pub fn groupRegisterResultPanel(res: DeployResult): Html {
+    return <div id="groupregresult" class="deploystatus">
+        {if (res.ok) { <span class="badge ok">registered</span> } else { <span class="badge bad">failed</span> }}
+        <span class="dim">{res.message}</span>
     </div>;
 }

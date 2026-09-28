@@ -145,7 +145,7 @@
     .modal input[type=file]{display:none}
   </style>
 </head>
-<body data-signals="{view: 'overview', tenant: 'default', endpoint: '', disposition: 'govern', appName: '', appOwner: '', agentAppId: '', agentName: '', agentOwner: '', agentDeps: '', modelName: '', modelProvider: '', modelVersion: '', vendorName: '', vendorResidency: 'eu', vendorSubs: '0', vendorCerts: '', vendorIncidents: '0', grcKind: 'assessment', grcSubject: '', grcTitle: '', grcStatus: 'open', grcBody: '{}', grcLinks: '', riskSubject: '', riskTitle: '', riskLikelihood: 'high', riskImpact: 'high', riskTreatment: 'mitigate', mcSubject: '', mcTitle: '', mcModelId: '', mcUseCaseId: '', mcRiskId: '', asSubject: '', asTitle: '', asAssignee: '', as_prohibited_practice: 'false', as_safety_component: 'false', as_biometric_identification: 'false', as_critical_infrastructure: 'false', as_employment_or_education: 'false', as_essential_services: 'false', as_law_enforcement: 'false', as_interacts_with_humans: 'false', as_generates_content: 'false', modal: '', policyTab: 'deployed', authorText: '', incidentSubject: '', incidentTitle: '', redteamTargetUrl: '', fairnessModelId: '', fairnessRows: '', ovApproveRate: '0.95', ovFastMs: '5000', auditFrom: '0', auditTo: '',  fwEnabled: 'false', fwBlockSecrets: 'false', fwDenyTopics: '', fwModel: '', fwScanUrl: '', fwBlockOnScannerError: 'false', fwBlockToxicity: 'false', frMatchKind: 'host_contains', frMatchValue: '', frPath: '', frAction: 'block', frClassify: '', author: 'operator', epReason: 'sanctioned', mode: 'lockdown_all', scope: 'global', killReason: 'incident', ttl_ms: '3600000', reason: '', acAgent: '', acFwEnabled: 'true', acFwListen: '127.0.0.1:8080', acMcpEnabled: 'false', acMcpListen: '127.0.0.1:8090', acMcpUpstream: '', acGuardEnabled: 'false', acGuardListen: '127.0.0.1:8091', acGuardUpstream: '', acGuardPubkey: ''}">
+<body data-signals="{view: 'overview', tenant: 'default', endpoint: '', disposition: 'govern', appName: '', appOwner: '', agentAppId: '', agentName: '', agentOwner: '', agentDeps: '', modelName: '', modelProvider: '', modelVersion: '', vendorName: '', vendorResidency: 'eu', vendorSubs: '0', vendorCerts: '', vendorIncidents: '0', grcKind: 'assessment', grcSubject: '', grcTitle: '', grcStatus: 'open', grcBody: '{}', grcLinks: '', riskSubject: '', riskTitle: '', riskLikelihood: 'high', riskImpact: 'high', riskTreatment: 'mitigate', mcSubject: '', mcTitle: '', mcModelId: '', mcUseCaseId: '', mcRiskId: '', asSubject: '', asTitle: '', asAssignee: '', as_prohibited_practice: 'false', as_safety_component: 'false', as_biometric_identification: 'false', as_critical_infrastructure: 'false', as_employment_or_education: 'false', as_essential_services: 'false', as_law_enforcement: 'false', as_interacts_with_humans: 'false', as_generates_content: 'false', modal: '', policyTab: 'deployed', authorText: '', incidentSubject: '', incidentTitle: '', redteamTargetUrl: '', fairnessModelId: '', fairnessRows: '', ovApproveRate: '0.95', ovFastMs: '5000', auditFrom: '0', auditTo: '',  fwEnabled: 'false', fwBlockSecrets: 'false', fwDenyTopics: '', fwModel: '', fwScanUrl: '', fwBlockOnScannerError: 'false', fwBlockToxicity: 'false', frMatchKind: 'host_contains', frMatchValue: '', frPath: '', frAction: 'block', frClassify: '', author: 'operator', epReason: 'sanctioned', mode: 'lockdown_all', scope: 'global', killReason: 'incident', ttl_ms: '3600000', reason: '', acGroup: '', acNewGroup: '', acFwEnabled: 'true', acFwListen: '127.0.0.1:8080', acMcpEnabled: 'false', acMcpListen: '127.0.0.1:8090', acMcpUpstream: '', acGuardEnabled: 'false', acGuardListen: '127.0.0.1:8091', acGuardUpstream: '', acGuardPubkey: ''}">
   <div class="navbar">
     <div class="brand">
       <img class="logo" src="/varman-logo.svg" alt="Varman" />
@@ -407,10 +407,19 @@ rules:
           </div></div>
         </section>
         <section class="view" data-show="$view === 'agentconfig'">
-          <div class="card"><div class="card-h"><span class="ic">&#9881;</span> Configure an agent<span class="sub">capabilities and addresses this agent runs; stored server-side and fetched by <span class="mono">acp-agent run</span></span></div>
+          <div class="card"><div class="card-h"><span class="ic">&#128101;</span> Groups<span class="sub">register a directory group, then configure it below; groups from the IdP directory are also offered</span></div>
+            <div class="card-b">
+              <div class="row" style="align-items:end">
+                <label class="fld" style="flex:2">New group name <input type="text" data-bind="acNewGroup" placeholder="engineering" /></label>
+                <button class="btn primary" data-on:click="@post('/group/register')">Register group</button>
+                <div id="groupregresult" class="deploystatus"></div>
+              </div>
+              <div id="grouplist" style="margin-top:.6rem"><p class="empty">&#8230;</p></div>
+            </div></div>
+          <div class="card"><div class="card-h"><span class="ic">&#9881;</span> Configure an agent<span class="sub">capabilities for a directory group; a workstation fetches its user group config on <span class="mono">acp-agent run</span></span></div>
             <div class="card-b deploy">
               <div class="row">
-                <label class="fld" style="flex:2">Agent id <input type="text" data-bind="acAgent" placeholder="agt-..." /></label>
+                <label class="fld" style="flex:2">Group <select id="ac-group-sel" data-bind="acGroup"><option value="">select a group&#8230;</option></select></label>
                 <button class="btn" data-on:click="@post('/agent/config/load')">Load current</button>
               </div>
               <div id="acloaded"></div>

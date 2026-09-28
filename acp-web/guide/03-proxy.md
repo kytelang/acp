@@ -45,14 +45,17 @@ The HTTP transport adds a concurrency cap: a burst beyond the limit is shed with
 ## Server-driven capabilities
 
 An agent's capabilities do not have to be spelled out on the command line. Configure them from the
-console **Agent config** page (which capabilities to run, on which addresses, and their upstreams);
-the control plane stores the config per agent. Then start the agent with only its identity:
+console **Agent config** page, keyed by **directory group**: register a group, then set which
+capabilities that group runs, on which addresses, and their upstreams. The control plane stores one
+config per group, so it scales across a fleet without a config per machine. Then start the agent with
+only its identity:
 
 ```sh
-acp-agent run --control-plane http://<control-plane>:8787 --agent-id <id> --agent-token <token>
+acp-agent run --control-plane http://<control-plane>:8787 --principal <user@corp>
 ```
 
-With no capability flags, `run` fetches the stored config and enables what it says (for example the
+With no capability flags, `run` resolves the user's group (from `--principal`, via the control plane,
+or `--principal-groups`), fetches that group's config, and enables what it says (for example the
 forward-proxy firewall on the configured address). Capability flags on the command line still win, for
 hosts that need a local override.
 

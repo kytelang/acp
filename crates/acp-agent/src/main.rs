@@ -25,11 +25,11 @@ fn flag(args: &[String], name: &str) -> Option<String> {
 /// Run several capabilities at once from one config: enable each with its listen address, all sharing
 /// one --control-plane. This is the "one workstation service, multiple capabilities by configuration"
 /// mode. Each enabled capability runs concurrently until it exits.
-/// Fetch an agent's stored capability config from the control plane (best-effort).
-async fn fetch_agent_config(base: &str, agent_id: &str) -> Option<serde_json::Value> {
+/// Fetch a group's stored capability config from the control plane (best-effort).
+async fn fetch_agent_config(base: &str, group: &str) -> Option<serde_json::Value> {
     let base = base.trim_end_matches('/');
     let v: serde_json::Value = reqwest::Client::new()
-        .get(format!("{base}/agents/{agent_id}/config"))
+        .get(format!("{base}/agent-config/{group}"))
         .send()
         .await
         .ok()?
@@ -37,6 +37,25 @@ async fn fetch_agent_config(base: &str, agent_id: &str) -> Option<serde_json::Va
         .await
         .ok()?;
     v.get("config").cloned()
+}
+
+/// Resolve a principal's directory groups from the control plane (best-effort), for group-keyed config.
+async fn fetch_groups_for(base: &str, principal: &str) -> Vec<String> {
+    let base = base.trim_end_matches('/');
+    match reqwest::Client::new()
+        .get(format!("{base}/principal/groups"))
+        .query(&[("id", principal)])
+        .send()
+        .await
+    {
+        Ok(resp) => resp
+            .json::<serde_json::Value>()
+            .await
+            .ok()
+            .and_then(|v| v.get("groups").and_then(|g| g.as_array()).map(|a| a.iter().filter_map(|x| x.as_str().map(String::from)).collect::<Vec<_>>()))
+            .unwrap_or_default(),
+        Err(_) => Vec::new(),
+    }
 }
 
 async fn run_multi(rest: Vec<String>) -> ExitCode {
@@ -48,8 +67,19 @@ async fn run_multi(rest: Vec<String>) -> ExitCode {
     let mut rest = rest;
     let has_caps = flag(&rest, "--firewall").is_some() || flag(&rest, "--guard").is_some() || flag(&rest, "--mcp").is_some();
     if !has_caps {
-        if let (Some(base), Some(id)) = (cp.clone(), flag(&rest, "--agent-id")) {
-            if let Some(cfg) = fetch_agent_config(&base, &id).await {
+        if let Some(base) = cp.clone() {
+            // Group-keyed config: use the user's directory group (declared with --principal-groups, or
+            // resolved from --principal via the control plane). The first group with a config wins.
+            let groups: Vec<String> = if let Some(g) = flag(&rest, "--principal-groups") {
+                g.split(',').map(|s| s.trim().to_string()).filter(|s| !s.is_empty()).collect()
+            } else if let Some(p) = flag(&rest, "--principal") {
+                fetch_groups_for(&base, &p).await
+            } else {
+                Vec::new()
+            };
+            let group = groups.into_iter().next().unwrap_or_default();
+            if !group.is_empty() {
+              if let Some(cfg) = fetch_agent_config(&base, &group).await {
                 let get = |cap: &str, k: &str| cfg.get(cap).and_then(|c| c.get(k)).and_then(|v| v.as_str()).unwrap_or("").to_string();
                 let on = |cap: &str| cfg.get(cap).and_then(|c| c.get("enabled")).and_then(|v| v.as_bool()).unwrap_or(false);
                 if on("firewall") {
@@ -65,7 +95,8 @@ async fn run_multi(rest: Vec<String>) -> ExitCode {
                     let pk = get("guard", "pubkey");
                     if !pk.is_empty() { rest.push("--guard-pubkey".into()); rest.push(pk); }
                 }
-                eprintln!("acp-agent: capabilities loaded from the control-plane config for {id}");
+                eprintln!("acp-agent: capabilities loaded from the control-plane config for group {group}");
+              }
             }
         }
     }
