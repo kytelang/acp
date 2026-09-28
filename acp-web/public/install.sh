@@ -182,7 +182,7 @@ if [ -n "$added_profile" ]; then
 else
   say "Add $BIN to your PATH:  export PATH=\"$BIN:\$PATH\""
 fi
-say "Verify evidence independently:  acp-verify <ledger.db>"
+say "Verify evidence independently:  <ledger.db>"
 if [ -n "${SERVICE_MSG:-}" ]; then
   say "$SERVICE_MSG"
   say "Point your agents/browser HTTP(S) proxy at $LISTEN. Enrol endpoints from the console AI Endpoints page; the service picks them up on its next refresh."

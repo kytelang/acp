@@ -8,14 +8,14 @@ offline or generation tools.
 
 ## What runs on the command line
 
-### acp-verify (the one durable tool)
+### acp verify (independent evidence verification)
 
 Independent, offline verification of the evidence, run by an auditor on their own machine with only
 the public key. It never contacts or trusts the server.
 
 ```sh
-acp-verify <ledger.db>          # verify a ledger, public key only
-acp-verify --pack <pack.json>   # verify a downloaded evidence pack on a clean machine
+acp verify <ledger.db>          # verify a ledger, public key only
+acp verify-pack <pack.json>     # verify a downloaded evidence pack on a clean machine
 ```
 
 Exit 0 if the evidence verifies, non-zero if it was tampered with. See [chapter 9](09-evidence.md) and
@@ -69,5 +69,5 @@ each agent against the database ([chapter 8](08-identity.md)).
 
 Everything else can move to the server because the server is trusted to *do* it. Verification cannot:
 if an auditor checks the ledger through the console, they are trusting the server, which is the one
-thing the tamper-evidence design refuses to require. So `acp-verify` runs on the auditor's machine,
+thing the tamper-evidence design refuses to require. So `acp verify` runs on the auditor's machine,
 with the public key alone, and that is the only management-free command that must exist.

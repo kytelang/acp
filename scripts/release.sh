@@ -7,7 +7,7 @@ set -euo pipefail
 VERSION="${1:?usage: release.sh <version> [target]}"
 TARGET="${2:-$(rustc -vV | sed -n 's/host: //p')}"
 OUT="dist/acp-${VERSION}-${TARGET}"
-BINS=(acp-cli acp-agent acp-gateway acp-server acp-verify)
+BINS=(acp-cli acp-agent acp-gateway acp-server)
 
 echo "== building release binaries for ${TARGET} =="
 for b in "${BINS[@]}"; do cargo build --release -p "$b" --target "$TARGET" 2>/dev/null || cargo build --release -p "$b"; done

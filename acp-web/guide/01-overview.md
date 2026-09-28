@@ -51,7 +51,7 @@ Two more binaries are optional or offline, not part of the core three:
 
 - **`acp-gateway`** (optional, server-side) governs **direct model API calls**. It holds the upstream
   key, so a caller cannot reach the model off-ACP (credential brokering). See [chapter 4](04-gateway.md).
-- **`acp-cli`** (invoked as `acp`) and **`acp-verify`** are offline tooling for policy, identity,
+- **`acp-cli`** (invoked as `acp`) is the offline tooling for policy, identity,
   evidence, discovery, red-team and the GRC surface. See [chapter 13](13-cli.md). `acp native-compile`
   governs a coding agent's own shell, file and network powers by compiling one policy into the vendor's
   managed settings. See [chapter 7](07-native-compile.md).
@@ -72,7 +72,7 @@ Two deployment surfaces, and it matters which is which.
 - `acp-agent mcp`, launched per session in front of a local MCP server.
 - `acp-agent firewall` (also deployable as a shared egress gateway) and `acp-agent guard`, or
   `acp-agent run` to enable several capabilities at once.
-- `acp` / `acp-verify`, the offline tooling, for authoring and testing policy, verifying and exporting
+- `acp`, the offline tooling, for authoring and testing policy, verifying and exporting
   evidence, red-teaming, and compiling coding-agent settings.
 
 You register agents, AI endpoints, policy and governance records through the console or the

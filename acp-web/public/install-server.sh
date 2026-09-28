@@ -79,7 +79,7 @@ install -d -m 0750 -o "$SVCUSER" -g "$SVCUSER" "$DATA"
 
 # ---- binaries -------------------------------------------------------------
 for b in "$SRC"/bin/*; do install -m 0755 "$b" "$PREFIX/bin/"; done
-for b in acp acp-server acp-gateway acp-agent acp-verify; do
+for b in acp acp-server acp-gateway acp-agent; do
   [ -f "$PREFIX/bin/$b" ] && ln -sf "$PREFIX/bin/$b" "/usr/local/bin/$b"
 done
 [ -f "$SRC/models/injection-lr.json" ] && install -m 0644 "$SRC/models/injection-lr.json" "$ETC/injection-lr.json"
@@ -227,5 +227,5 @@ say "  config   : $ETC (policy.yaml, server.env, gateway.env, ledger.kek)"
 say "  data     : $DATA (evidence.db, approvals.db, control.db)"
 say "  services : systemctl status acp-server acp-console   (API 127.0.0.1:8787, console 127.0.0.1:8080)"
 say ""
-say "Verify the evidence ledger:  acp-verify $DATA/evidence.db"
+say "Verify the evidence ledger:  $DATA/evidence.db"
 say "Full runbook:                https://acpdocs.web.app/guide/16-setup"

@@ -27,7 +27,7 @@ Two more binaries are optional or offline, not part of the core three:
 | Component | Binary | Runs on | What it does |
 | --- | --- | --- | --- |
 | LLM gateway (optional) | `acp-gateway` | **server** (service) | governs direct model API calls, holding the upstream key |
-| CLI and verifier | `acp` / `acp-verify` | **workstation / CI** | offline tooling: author and test policy, verify and export evidence, red-team, compile agent settings |
+| CLI and verifier | `acp` | **workstation / CI** | offline tooling: author and test policy, `acp verify` / `acp verify-pack` for evidence, red-team, compile agent settings |
 
 The rule of thumb: the **control plane and console are services you run on a server** (plus the optional
 gateway); the **agent runs on developer machines**, and the **CLI/verifier are for CI and offline work**.
@@ -53,7 +53,7 @@ the control-plane API and stored centrally. Chapter 16 is the step-by-step runbo
 | 10 | [The content firewall](10-content-firewall.md) | injection detection, PII / secrets, obfuscation, red-team, groundedness |
 | 11 | [Sequence, boundary, break-glass](11-containment.md) | trajectory governance, the data boundary, the kill-switch |
 | 12 | [Discovery, enrolment and GRC](12-grc.md) | shadow-AI discovery, coverage, the framework reports and GRC surface |
-| 13 | [Command-line tools](13-cli.md) | acp-verify and the CI/offline helpers; what moved to the console and API |
+| 13 | [Command-line tools](13-cli.md) | `acp verify` and the CI/offline helpers; what moved to the console and API |
 | 14 | [Operations and deployment](14-operations.md) | the server, the console, helm, Postgres, logging, backup, production readiness |
 | 15 | [Security and verification](15-security.md) | the trust model, the threat model, how to verify the claims yourself |
 | 16 | [Setting it all up (runbook)](16-setup.md) | the end-to-end install and configuration runbook, plus the checks that prove it works |

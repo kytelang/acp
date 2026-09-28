@@ -11,7 +11,7 @@ Varman has two kinds of component.
 
 - **The workstation agent**, run on a developer machine: `acp-agent`, one binary whose capability is
   configuration (`mcp` to wrap a local MCP server, `firewall` for a forward proxy, `guard` for a
-  tool-server sidecar). `acp-verify` (independent evidence verification) and the `acp` CLI are the
+  tool-server sidecar). The `acp` CLI (with `acp verify` for independent evidence verification) is the
   offline tools alongside it.
 - **Services**, run on a server: `acp-server` (the control plane) and `acp-console` (the web UI), plus
   the optional `acp-gateway` (the LLM gateway). These run continuously, as systemd units.
@@ -32,8 +32,8 @@ powershell -c "irm https://acpdocs.web.app/install.ps1 | iex"
 ```
 
 This installs the workstation binary into `~/.acp/bin` (or `%USERPROFILE%\.acp\bin`) and adds it to
-your PATH: `acp-agent` (the single workstation service), plus `acp-verify` (independent evidence
-verification) and the `acp` CLI. For the MCP capability, `acp-agent mcp stdio` is launched on demand by
+your PATH: `acp-agent` (the single workstation service) and the `acp` CLI (with `acp verify` for
+independent evidence verification). For the MCP capability, `acp-agent mcp stdio` is launched on demand by
 the agent host (it wraps a tool server over stdio). If you set **`ACP_SERVER`** (your control-plane
 URL), the installer also configures **`acp-agent firewall` as a background service** (a launchd
 LaunchAgent on macOS, a `systemd --user` unit on Linux) that listens on `127.0.0.1:8890` (override with
@@ -215,7 +215,7 @@ exception.
 
 ## 7. Check you are getting the expected results
 
-This is how you prove the system works, not just that it started. `acp-verify` runs anywhere; the
+This is how you prove the system works, not just that it started. `acp verify` runs anywhere; the
 other checks below run on the server (where the interim admin CLI lives) or are shown in the console.
 
 ```sh
@@ -223,10 +223,10 @@ other checks below run on the server (where the interim admin CLI lives) or are 
 #    fail-closed checks (a tampered ledger fails, an invalid token is rejected).
 bash demo/vertical/run.sh          # expect: 10/10 PASS
 
-# 2. Verify the evidence ledger independently, with the public key alone. acp-verify is the one tool
+# 2. Verify the evidence ledger independently, with the public key alone. `acp verify` needs only
 #    an outside auditor runs; it never contacts or trusts the server.
-acp-verify /var/lib/acp/evidence.db          # expect: OK ... verifies
-acp-verify --pack pack.json                  # verify a downloaded evidence pack on a clean machine
+acp verify /var/lib/acp/evidence.db          # expect: OK ... verifies
+acp verify-pack pack.json                    # verify a downloaded evidence pack on a clean machine
 
 # 3. Prove the content firewall on an obfuscation corpus.
 acp redteam models/injection-lr.json --min-catch 0.9
@@ -330,6 +330,6 @@ call that did not come through the proxy (see [chapter 6](06-guard.md)).
   enforce and verify. The `acp` CLI is for verification, testing and offline work.
 - **Where did the `acp approve` / `acp app` / `acp risk` commands go?** They are retired from the CLI.
   Run one to see its console or API pointer. Management lives in the console and the control-plane API.
-- **Can an auditor check the evidence without trusting our server?** Yes. `acp verify` (or `acp-verify`)
+- **Can an auditor check the evidence without trusting our server?** Yes. `acp verify`
   and `acp verify-pack` need only the public key inside the ledger or pack, and never contact the
   server.
