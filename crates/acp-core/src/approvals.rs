@@ -196,6 +196,23 @@ impl ApprovalStore {
         Ok(ids)
     }
 
+    /// G1: resolved decisions (approved or denied) with approver + timing, newest first, for
+    /// oversight-quality analysis. Skips rows with no approver or no resolution time.
+    pub fn list_resolved(&self, limit: usize) -> Result<Vec<crate::oversight::Decision>, String> {
+        let mut stmt = self.conn.prepare(
+            "SELECT approver, state, created_ms, resolved_ms FROM approvals              WHERE state IN ('approved','denied') AND approver IS NOT NULL AND resolved_ms IS NOT NULL              ORDER BY resolved_ms DESC LIMIT ?",
+        ).map_err(|e| e.to_string())?;
+        let rows = stmt.query_map(params![limit as i64], |r| {
+            Ok(crate::oversight::Decision {
+                approver: r.get::<_, String>(0)?,
+                approved: r.get::<_, String>(1)? == "approved",
+                created_ms: r.get::<_, i64>(2)? as u64,
+                resolved_ms: r.get::<_, i64>(3)? as u64,
+            })
+        }).map_err(|e| e.to_string())?;
+        rows.collect::<Result<Vec<_>, _>>().map_err(|e| e.to_string())
+    }
+
     pub fn list_pending(&self) -> Result<Vec<ApprovalView>, String> {
         let mut stmt = self
             .conn
