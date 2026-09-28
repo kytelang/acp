@@ -909,3 +909,38 @@ pub fn tenantSwitcher(tenants: list.List<string>, current: string): Html {
         </select>
     </div>;
 }
+
+
+// Agent configuration: what every workstation agent pulls from this control plane, and how to connect
+// one. The config is org-wide (per-tenant); per-user differences come from the policy group rules.
+pub fn agentConfigPanel(c: AgentConfig): Html {
+    return <div id="agentconfig">
+        <div class="card"><div class="card-h">Connect a workstation<span class="sub">one URL; policy, firewall, rules and groups are all fetched from the control plane</span></div>
+            <div class="card-b">
+                <p class="hint">Enrol an agent on the Agents page to get its id and one-time token, then run the workstation agent. The single{" "}<span class="mono">--control-plane</span>{" "}URL expands into every fetch it needs.</p>
+                <pre class="mono" style="background:var(--panel);padding:.8rem;border-radius:8px;white-space:pre-wrap;overflow-x:auto;font-size:.82rem">{`acp-agent run --control-plane ${c.base} --firewall 127.0.0.1:8080 --agent-id AGENT_ID --agent-token TOKEN --principal USER@CORP`}</pre>
+                <p class="hint">Replace AGENT_ID and TOKEN with the values from enrolling the agent, and USER@CORP with the workstation user. Directory groups are resolved automatically from the control plane, so{" "}<span class="mono">group</span>{" "}policy rules apply without per-user setup.</p>
+            </div></div>
+        <div class="card"><div class="card-h">Signed policy agents enforce<span class="sub">fetched from GET /policy-store/signed and signature-verified before enforcing</span></div>
+            <div class="card-b">
+                <div class="row" style="gap:1.5rem;flex-wrap:wrap;align-items:center">
+                    <div><div class="rep-k">Version</div><div><span class="badge ver">{c.policyVersion}</span></div></div>
+                    <div><div class="rep-k">Deployed by</div><div class="strong">{string.eql(c.policyAuthor, "") ? "unknown" : c.policyAuthor}</div></div>
+                    <div style="min-width:240px"><div class="rep-k">Hash</div><div class="mono dim" style="font-size:.72rem;word-break:break-all">{string.eql(c.policyHash, "") ? "no policy deployed" : c.policyHash}</div></div>
+                </div>
+                <p class="hint" style="margin-top:.8rem">Deploy or change it on the{" "}<b>Policy</b>{" "}page. Every agent re-fetches within 30 seconds; an agent may pin the signing key with{" "}<span class="mono">--policy-pubkey</span>{" "}so only this key is trusted.</p>
+            </div></div>
+        <div class="card"><div class="card-h">What every agent fetches<span class="sub">org-wide config; per-user differences come from policy group rules</span></div>
+            <div class="card-b">
+                <table class="tbl">
+                    <thead><tr><th>Config</th><th>Endpoint</th><th>Notes</th></tr></thead>
+                    <tbody>
+                        <tr><td class="strong">Authorization policy</td><td class="mono dim">GET /policy-store/signed</td><td>signed, signature-verified, refreshed every 30s</td></tr>
+                        <tr><td class="strong">Content firewall</td><td class="mono dim">GET /firewall/config</td><td>{c.firewallEnabled ? <span class="badge ok">enabled</span> : <span class="badge bad">disabled</span>}{" "}{c.firewallModel ? <span class="badge ver">ML model</span> : <span class="dim">signatures only</span>}</td></tr>
+                        <tr><td class="strong">Interception rules</td><td class="mono dim">GET /firewall/rules</td><td>which traffic to intercept and how</td></tr>
+                        <tr><td class="strong">Principal groups</td><td class="mono dim">GET /principal/groups</td><td>from the IdP directory; drives group-based policy</td></tr>
+                    </tbody>
+                </table>
+            </div></div>
+    </div>;
+}

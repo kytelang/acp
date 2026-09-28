@@ -174,6 +174,7 @@
         <div class="nav-l">Policy</div>
         <div class="nav-i" data-class-active="$view === 'policy'" data-on:click="$view = 'policy'"><span class="ic">&#128271;</span> Policy</div>
         <div class="nav-i" data-class-active="$view === 'firewall'" data-on:click="$view = 'firewall'"><span class="ic">&#129521;</span> Content firewall</div>
+        <div class="nav-i" data-class-active="$view === 'agentconfig'" data-on:click="$view = 'agentconfig'"><span class="ic">&#128187;</span> Agent config</div>
         <div class="nav-l">Compliance</div>
         <div class="nav-i" data-class-active="$view === 'grc'" data-on:click="$view = 'grc'"><span class="ic">&#128209;</span> Governance</div>
         <div class="nav-l">Emergency</div>
@@ -186,7 +187,7 @@
 
     <div class="main">
       <div class="content" data-on-intersect="@get('/sse/metrics')">
-        <h1 class="page-title" data-text="$view === 'overview' ? 'Governance overview' : $view === 'approvals' ? 'Pending approvals' : $view === 'evidence' ? 'Evidence timeline' : $view === 'violations' ? 'Violations and breaches' : $view === 'apps' ? 'Teams' : $view === 'agents' ? 'Registered agents' : $view === 'models' ? 'Model registry' : $view === 'policy' ? 'Policy' : $view === 'firewall' ? 'Content firewall' : $view === 'oversight' ? 'Oversight quality' : $view === 'reports' ? 'Governance report' : $view === 'health' ? 'Control-plane integrity' : $view === 'monitors' ? 'Runtime monitors' : $view === 'endpoints' ? 'AI endpoints' : $view === 'grc' ? 'Governance records' : 'Emergency kill-switch'">Governance overview</h1>
+        <h1 class="page-title" data-text="$view === 'overview' ? 'Governance overview' : $view === 'approvals' ? 'Pending approvals' : $view === 'evidence' ? 'Evidence timeline' : $view === 'violations' ? 'Violations and breaches' : $view === 'apps' ? 'Teams' : $view === 'agents' ? 'Registered agents' : $view === 'models' ? 'Model registry' : $view === 'policy' ? 'Policy' : $view === 'firewall' ? 'Content firewall' : $view === 'agentconfig' ? 'Agent configuration' : $view === 'oversight' ? 'Oversight quality' : $view === 'reports' ? 'Governance report' : $view === 'health' ? 'Control-plane integrity' : $view === 'monitors' ? 'Runtime monitors' : $view === 'endpoints' ? 'AI endpoints' : $view === 'grc' ? 'Governance records' : 'Emergency kill-switch'">Governance overview</h1>
         <div id="tenant" style="margin:-1rem 0 1rem;font-size:.8rem;opacity:.7"></div>
         <section class="view" data-show="$view === 'overview'">
           <div class="card"><div class="card-h"><span class="ic">&#128202;</span> Posture &amp; activity</div>
@@ -404,6 +405,9 @@ rules:
               <button class="btn primary" data-on:click="@post('/firewall/rule-add')">Add rule</button>
             </div>
           </div></div>
+        </section>
+        <section class="view" data-show="$view === 'agentconfig'">
+          <div id="agentconfig"><p class="empty">connecting to acp-server&#8230;</p></div>
         </section>
         <section class="view" data-show="$view === 'endpoints'">
           <div class="card"><div class="card-h"><span class="ic">&#127760;</span> Registered AI endpoints<span class="sub">agents and providers under governance</span><button class="btn primary card-cta" data-on:click="$modal = 'endpoint'">+ Register endpoint</button></div>

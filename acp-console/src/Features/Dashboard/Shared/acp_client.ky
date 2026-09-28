@@ -378,6 +378,19 @@ pub struct LineageRow {
     init(dataClass: string, tool: string, count: long) { self.dataClass = dataClass; self.tool = tool; self.count = count; }
 }
 
+pub struct AgentConfig {
+    pub base: string,
+    pub policyVersion: string,
+    pub policyHash: string,
+    pub policyAuthor: string,
+    pub firewallEnabled: bool,
+    pub firewallModel: bool,
+    init(base: string, policyVersion: string, policyHash: string, policyAuthor: string, firewallEnabled: bool, firewallModel: bool) {
+        self.base = base; self.policyVersion = policyVersion; self.policyHash = policyHash;
+        self.policyAuthor = policyAuthor; self.firewallEnabled = firewallEnabled; self.firewallModel = firewallModel;
+    }
+}
+
 pub struct AcpClient {
     base: string,
     pub tenant: string,
@@ -893,6 +906,17 @@ pub struct AcpClient {
         let resp = self.tget(self.base + "/policy-store");
         if (resp.status.toCode() != 200) { return "unknown"; }
         return json.asString(json.get(json.parse(resp.body), "author")) ?? "unknown";
+    }
+
+    // Agent configuration summary: what every workstation agent pulls from this control plane.
+    pub fn agentConfig(self: AcpClient): AgentConfig {
+        let ver = self.policyVersion();
+        let author = self.policyAuthor();
+        let hash = "";
+        let resp = self.tget(self.base + "/policy-store");
+        if (resp.status.toCode() == 200) { hash = json.asString(json.get(json.parse(resp.body), "hash")) ?? ""; }
+        let fw = self.firewallStatus();
+        return AgentConfig(self.base, ver, hash, author, fw.enabled, fw.hasModel);
     }
 
     // Pending approvals (holds awaiting a human decision).
