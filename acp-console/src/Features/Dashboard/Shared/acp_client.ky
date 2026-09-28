@@ -1536,6 +1536,21 @@ pub struct AcpClient {
         return DeployResult(true, "deactivated " + id);
     }
 
+    // #2: auto risk-tiering. Derive the EU AI Act tier from the agent's domain + tool bindings and file
+    // a signed assessment record (GrcAuthor). Returns the proposed tier.
+    pub fn autoAssessAgent(self: AcpClient, id: string, userAuth: string): DeployResult {
+        let hdrs = client.Http.emptyHeaders();
+        hdrs.set("Content-Type", "application/json"); hdrs.set("x-acp-tenant", self.tenant);
+        if (!string.eql(userAuth, "")) { hdrs.set("Authorization", userAuth); }
+        else { let tok = self.authToken("GrcAuthor"); if (!string.eql(tok, "")) { hdrs.set("Authorization", "Bearer " + tok); } }
+        let resp = client.Http.request("POST", self.base + "/agents/" + id + "/auto-assess", hdrs, "{}");
+        if (resp.status.toCode() != 200) { return DeployResult(false, "acp-server unreachable"); }
+        let v = json.parse(resp.body);
+        if (!(json.asBool(json.get(v, "ok")) ?? false)) { return DeployResult(false, json.asString(json.get(v, "error")) ?? "rejected"); }
+        let tier = json.asString(json.get(v, "tier")) ?? "";
+        return DeployResult(true, "assessed " + id + ": tier " + tier);
+    }
+
     // B2: advance a GRC record status via the control plane (re-signed server-side).
     pub fn updateGrcStatus(self: AcpClient, id: string, status: string, userAuth: string): DeployResult {
         let body = "{\"status\":" + self.jstr(status) + "}";

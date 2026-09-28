@@ -1080,6 +1080,7 @@ async fn main() {
         .route("/apps", post(app_register))
         .route("/agents", post(agent_register))
         .route("/agents/:id/deactivate", post(agent_deactivate))
+        .route("/agents/:id/auto-assess", post(agent_auto_assess))
         .route("/agents/verify", post(agent_verify))
         .route("/grc", get(grc_list).post(grc_create))
         .route("/grc/templates", get(grc_templates))
@@ -2689,6 +2690,59 @@ async fn grc_assess(State(st): State<Arc<AppState>>, headers: HeaderMap, Json(bo
     let sig_hex = hex::encode(sig);
     match store.add_grc(&id, "assessment", &subject, &title, &status, &doc_body, &operator, now as i64, &pubkey_hex, &sig_hex, "[]", &answers_json, &assignee, due_ms, &stage, &tenant).await {
         Ok(()) => Json(serde_json::json!({"ok": true, "id": id, "tier": assessment.tier.as_str(), "controls": assessment.obligations.len()})).into_response(),
+        Err(e) => Json(serde_json::json!({"ok": false, "error": e})).into_response(),
+    }
+}
+
+/// #2: auto risk-tiering from an agent's tool bindings. Derives the EU AI Act screening from the
+/// agent's business `domain` and registered `tools` (read from its registration metadata, overridable
+/// in the body), runs the same tiering as the questionnaire, and files a signed `assessment` GRC record
+/// pre-filled with the proposed tier and obligation checklist. An operator still reviews and advances
+/// it, so auto-tiering can only propose, never silently approve. EditGrc scope.
+async fn agent_auto_assess(State(st): State<Arc<AppState>>, headers: HeaderMap, Path(agent_id): Path<String>, Json(body): Json<serde_json::Value>) -> Response {
+    let principal = match authorize(&st.auth, &headers, acp_core::auth::Capability::EditGrc) { Ok(p) => p, Err(r) => return r };
+    let operator = actor_of(&principal);
+    let store = match &st.store { Some(s) => s, None => return Json(serde_json::json!({"ok": false, "error": "no --store configured"})).into_response() };
+    let tenant = tenant_of(&headers, &principal);
+    let agents = store.list_agents(&tenant).await.unwrap_or_default();
+    let agent = match agents.iter().find(|a| a.id == agent_id) {
+        Some(a) => a,
+        None => return Json(serde_json::json!({"ok": false, "error": format!("unknown agent '{agent_id}'")})).into_response(),
+    };
+    // Registration metadata may be an object, or (defensively) a JSON string wrapping one.
+    let meta: serde_json::Value = serde_json::from_str(&agent.metadata_json).unwrap_or(serde_json::Value::Null);
+    let meta = match &meta { serde_json::Value::String(inner) => serde_json::from_str(inner).unwrap_or(serde_json::Value::Null), other => other.clone() };
+    let pick_str = |k: &str| body.get(k).and_then(|v| v.as_str()).or_else(|| meta.get(k).and_then(|v| v.as_str())).unwrap_or("").to_string();
+    let domain = pick_str("domain");
+    let tools: Vec<String> = body.get("tools").and_then(|v| v.as_array())
+        .or_else(|| meta.get("tools").and_then(|v| v.as_array()))
+        .map(|a| a.iter().filter_map(|x| x.as_str().map(String::from)).collect())
+        .unwrap_or_default();
+    if domain.is_empty() && tools.is_empty() {
+        return Json(serde_json::json!({"ok": false, "error": "no domain or tools to assess; set them in the agent metadata or the request body"})).into_response();
+    }
+    let (screening, signals) = acp_core::assessment::screen_from_signals(&domain, &tools);
+    let now = now_ms();
+    let assessment = acp_core::assessment::assess(&agent.name, &screening, now);
+    let checklist: Vec<serde_json::Value> = assessment.obligations.iter().map(|o| serde_json::json!({
+        "framework": o.framework, "control_id": o.control_id, "title": o.title, "done": false,
+    })).collect();
+    let doc_body = serde_json::json!({
+        "tier": assessment.tier.as_str(),
+        "reasons": assessment.reasons,
+        "checklist": checklist,
+        "auto": {"source_agent": agent_id, "domain": domain, "tools": tools, "signals": signals},
+    }).to_string();
+    let answers_json = serde_json::to_string(&screening).unwrap_or_else(|_| "{}".to_string());
+    let title = format!("Auto risk assessment: {}", agent.name);
+    let gid = format!("grc-{}", rand_hex(6));
+    let doc = grc_doc(&gid, "assessment", &agent.name, &title, "open", &doc_body);
+    let signer = tenant_signer(&st.cp_key, &tenant);
+    let sig = acp_core::sign::Signer::sign(&signer, &acp_core::canonical::canonical_bytes(&doc));
+    let pubkey_hex = hex::encode(acp_core::sign::Signer::public_key(&signer));
+    let sig_hex = hex::encode(sig);
+    match store.add_grc(&gid, "assessment", &agent.name, &title, "open", &doc_body, &operator, now as i64, &pubkey_hex, &sig_hex, "[]", &answers_json, "", 0, "draft", &tenant).await {
+        Ok(()) => Json(serde_json::json!({"ok": true, "id": gid, "agent": agent_id, "tier": assessment.tier.as_str(), "controls": assessment.obligations.len(), "signals": assessment.reasons})).into_response(),
         Err(e) => Json(serde_json::json!({"ok": false, "error": e})).into_response(),
     }
 }

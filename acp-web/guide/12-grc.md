@@ -300,6 +300,23 @@ Rather than hand-authoring an assessment, use the guided wizard so the tier and 
 
 The screening questionnaire itself is served at `GET /grc/templates`, so a client can render the same wizard from the control plane's own definition.
 
+### Auto risk-tiering from an agent's tool bindings
+
+You do not have to answer the questionnaire by hand for a registered agent. On the **Agents** page each
+row has an **Auto-assess** action (`POST /agents/:id/auto-assess`). It reads the agent's business
+`domain` and its registered `tools` from the registration metadata (both overridable in the request
+body), derives the screening from them, and runs the same deterministic tiering as the wizard, then
+files a signed `assessment` record pre-filled with the proposed tier and control checklist.
+
+The mapping is conservative and can only *raise* a flag: a tool binding like `resume.parse` or
+`candidate.rank` (or a `hiring` domain) trips **employment or education**, so the agent tiers **High**
+and pulls the Art. 9 to 15 obligation set; `credit.score` or `loan.underwrite` trips **essential
+services**; `face`/`biometric` trips **biometric identification**; a `chat`/`support` tool trips the
+transparency duty (**Limited**). Every flag records which signal raised it, in the record's
+`auto.signals`. Because it only proposes, an operator still reviews, works the checklist and advances
+the record, exactly as with a hand-run assessment: auto-tiering removes the guesswork of the first
+draft, it does not sign off on itself.
+
 ### How to work an assessment or conformity checklist (step by step)
 
 1. In the **Governance** table, open the **Controls** cell for the record (click the `k/m controls` disclosure).

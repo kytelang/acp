@@ -128,6 +128,50 @@ fn obligations_for(tier: RiskTier) -> Vec<Obligation> {
 }
 
 /// Run the full assessment for a named system.
+/// Auto-derive a `Screening` from an agent's business domain and its tool bindings, so a risk tier can
+/// be proposed at registration instead of only from an operator-answered questionnaire (blueprint
+/// Module A). This is deliberately conservative: it can only RAISE a flag, an operator still reviews and
+/// signs the assessment. Matching is case-insensitive substring over the domain label and each tool
+/// name (a tool binding may be `db.write`, `credit.score`, `mcp:tool:execute_bank_transfer`, ...).
+/// Returns the derived screening plus a human-readable list of which signal raised which flag.
+pub fn screen_from_signals(domain: &str, tools: &[String]) -> (Screening, Vec<String>) {
+    let hay: Vec<String> = std::iter::once(domain.to_string())
+        .chain(tools.iter().cloned())
+        .map(|s| s.to_lowercase())
+        .collect();
+    let any = |needles: &[&str]| -> Option<String> {
+        for h in &hay {
+            for n in needles {
+                if h.contains(n) {
+                    return Some(h.clone());
+                }
+            }
+        }
+        None
+    };
+    let mut sc = Screening::default();
+    let mut signals: Vec<String> = Vec::new();
+    let mut set = |flag: &mut bool, hit: Option<String>, label: &str| {
+        if let Some(h) = hit {
+            *flag = true;
+            signals.push(format!("{label} (matched \"{h}\")"));
+        }
+    };
+    // Unacceptable (Art. 5).
+    set(&mut sc.prohibited_practice, any(&["social_scor", "social scor", "mass_surveillance", "manipulat", "untargeted_scrap"]), "prohibited practice");
+    // High-risk (Annex III) domains and telltale tool bindings.
+    set(&mut sc.safety_component, any(&["medical", "clinical", "diagnos", "automotive", "aviation", "safety"]), "safety component / Annex III use");
+    set(&mut sc.biometric_identification, any(&["biometric", "face", "facial", "fingerprint", "iris", "voiceprint"]), "biometric identification");
+    set(&mut sc.critical_infrastructure, any(&["scada", "plc", "grid", "infrastructure", "water_", "power_"]), "critical infrastructure");
+    set(&mut sc.employment_or_education, any(&["hr", "hiring", "recruit", "resume", "cv_", "candidate", "applicant", "grading", "admission"]), "employment or education decisions");
+    set(&mut sc.essential_services, any(&["credit", "loan", "underwrit", "lending", "benefit", "insurance", "welfare"]), "access to essential services");
+    set(&mut sc.law_enforcement, any(&["law_enforce", "police", "forensic", "predictive_polic"]), "law enforcement");
+    // Transparency duties.
+    set(&mut sc.interacts_with_humans, any(&["chat", "chatbot", "assistant", "reply", "respond", "message", "support"]), "interacts directly with people");
+    set(&mut sc.generates_content, any(&["generate", "image_gen", "text_to", "tts", "synthesi", "deepfake", "render"]), "generates or manipulates content");
+    (sc, signals)
+}
+
 pub fn assess(system: &str, screening: &Screening, now_ms: u64) -> Assessment {
     let (tier, reasons) = classify_tier(screening);
     Assessment {
@@ -166,6 +210,39 @@ pub fn verify(signed: &SignedAssessment) -> bool {
 
 #[cfg(test)]
 mod tests {
+    use super::{screen_from_signals, classify_tier, RiskTier};
+
+    #[test]
+    fn tool_bindings_auto_tier_to_high_risk() {
+        // An HR agent that reads resumes -> employment decisions -> High.
+        let (sc, sig) = screen_from_signals("hiring", &["resume.parse".into(), "candidate.rank".into()]);
+        assert!(sc.employment_or_education);
+        assert_eq!(classify_tier(&sc).0, RiskTier::High);
+        assert!(sig.iter().any(|s| s.contains("employment")), "signals explain the flag: {sig:?}");
+
+        // A credit-scoring tool -> essential services -> High.
+        let (sc2, _) = screen_from_signals("lending", &["credit.score".into(), "loan.underwrite".into()]);
+        assert!(sc2.essential_services);
+        assert_eq!(classify_tier(&sc2).0, RiskTier::High);
+    }
+
+    #[test]
+    fn transparency_only_signals_are_limited_risk() {
+        let (sc, _) = screen_from_signals("support", &["chat.reply".into()]);
+        assert!(sc.interacts_with_humans && !sc.employment_or_education);
+        assert_eq!(classify_tier(&sc).0, RiskTier::Limited);
+    }
+
+    #[test]
+    fn benign_tools_stay_minimal() {
+        let (sc, sig) = screen_from_signals("analytics", &["report.render_pdf".into(), "db.query".into()]);
+        // "render" trips the generate-content transparency flag; a pure query/analytics agent otherwise
+        // has no high-risk trigger. Assert it never escalates to High from benign data tooling.
+        assert!(!sc.employment_or_education && !sc.essential_services && !sc.biometric_identification);
+        assert_ne!(classify_tier(&sc).0, RiskTier::High);
+        let _ = sig;
+    }
+
     use super::*;
     use crate::sign::Ed25519Signer;
 

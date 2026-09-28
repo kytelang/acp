@@ -63,6 +63,20 @@ pub struct DeactivateAgentHandler impl RouteHandler {
     }
 }
 
+// #2: auto risk-tiering. Derive the EU AI Act tier from an agent's tool bindings and file a signed
+// assessment; patch the governance-records panel so the new assessment appears.
+pub struct AutoAssessAgentHandler impl RouteHandler {
+    acp: AcpClient,
+    init(acp: AcpClient) { self.acp = acp; }
+    async fn serve(self: AutoAssessAgentHandler, ctx: Context): Response {
+        let acp = self.acp.withTenant(json.stringField(ctx.request.body, "tenant"));
+        let auth = ctx.request.headers.get("authorization") ?? "";
+        let id = ctx.param("id");
+        let _ = acp.autoAssessAgent(id, auth);
+        return await ds_response.patch(grcPanel(acp.grcRows()));
+    }
+}
+
 // A3: register a model in the registry (B3 admission scan runs server-side).
 pub struct RegisterModelHandler impl RouteHandler {
     acp: AcpClient,

@@ -177,7 +177,7 @@ pub fn agentsPanel(rows: list.List<AgentRow>): Html {
                             <td>{string.eql(r.owner, "") ? <span class="dim">-</span> : <span>{r.owner}</span>}</td>
                             <td class="mono dim">{string.eql(r.meta, "{}") ? "-" : r.meta}</td>
                             <td>{if (r.active) { <span class="badge ok">active</span> } else { <span class="badge bad">revoked</span> }}</td>
-                            <td>{if (r.active) { <button class="btn no" data-on:click={"@post('/agents/" + r.id + "/deactivate')"}>Deactivate</button> } else { <span class="dim">-</span> }}</td>
+                            <td><span class="actcol"><button class="btn" data-on:click={"@post('/agents/" + r.id + "/auto-assess')"}>Auto-assess</button>{if (r.active) { <button class="btn no" data-on:click={"@post('/agents/" + r.id + "/deactivate')"}>Deactivate</button> } else { <span class="dim">-</span> }}</span></td>
                         </tr>
                     }}
                 </tbody>
