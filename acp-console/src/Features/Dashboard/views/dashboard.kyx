@@ -605,6 +605,12 @@ pub fn postMarketPanel(pm: PostMarket): Html {
     </div>;
 }
 
+pub fn authorResultPanel(res: DeployResult): Html {
+    return <div id="authorresult">
+        {if (res.ok) { <pre class="mono" style="background:var(--panel);padding:.7rem;border-radius:8px;white-space:pre-wrap;font-size:.8rem">{res.message}</pre> } else { <span class="badge bad">{res.message}</span> }}
+    </div>;
+}
+
 pub fn suggestResultPanel(res: DeployResult): Html {
     return <div id="suggestresult">
         {if (res.ok) { <span class="badge ok">{res.message}</span> } else { <span class="badge bad">{res.message}</span> }}

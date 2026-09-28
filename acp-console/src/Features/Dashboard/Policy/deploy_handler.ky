@@ -1,4 +1,5 @@
 import web.routing;
+import serde.json;
 import web.response;
 import ds_response;
 import Features.Dashboard.Shared.acp_client;
@@ -32,5 +33,19 @@ pub struct SuggestApproveHandler impl RouteHandler {
         let auth = ctx.request.headers.get("authorization") ?? "";
         let res = self.acp.approveSuggestion(auth);
         return await ds_response.patch(suggestResultPanel(res));
+    }
+}
+
+// POST /policy/author-draft (G3): draft a policy from the operator's English description and show the
+// draft plus the verification matrix (what it allows/blocks). Deploy stays a separate signed step.
+pub struct AuthorHandler impl RouteHandler {
+    acp: AcpClient,
+    init(acp: AcpClient) { self.acp = acp; }
+
+    async fn serve(self: AuthorHandler, ctx: Context): Response {
+        let auth = ctx.request.headers.get("authorization") ?? "";
+        let text = json.stringField(ctx.request.body, "authorText");
+        let res = self.acp.authorPolicy(text, auth);
+        return await ds_response.patch(authorResultPanel(res));
     }
 }

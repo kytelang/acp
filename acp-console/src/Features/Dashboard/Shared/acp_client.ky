@@ -968,6 +968,33 @@ pub struct AcpClient {
             wb);
     }
 
+    // G3: draft a policy from an English description and return the draft + verification matrix as a
+    // display struct. The caller reviews before deploying via the existing signed deploy path.
+    pub fn authorPolicy(self: AcpClient, text: string, userAuth: string): DeployResult {
+        let hdrs = client.Http.emptyHeaders();
+        hdrs.set("Content-Type", "application/json"); hdrs.set("x-acp-tenant", self.tenant);
+        if (!string.eql(userAuth, "")) { hdrs.set("Authorization", userAuth); }
+        else { let tok = self.authToken("PolicyAdmin"); if (!string.eql(tok, "")) { hdrs.set("Authorization", "Bearer " + tok); } }
+        let bodyReq = "{\"text\":" + self.jstr(text) + "}";
+        let resp = client.Http.request("POST", self.base + "/policy/author", hdrs, bodyReq);
+        if (resp.status.toCode() != 200) { return DeployResult(false, "acp-server unreachable"); }
+        let v = json.parse(resp.body);
+        if (!(json.asBool(json.get(v, "ok")) ?? false)) { return DeployResult(false, json.asString(json.get(v, "error")) ?? "could not draft"); }
+        let draft = json.asString(json.get(v, "draft")) ?? "";
+        let mArr = json.asArray(json.get(v, "matrix"));
+        let matrix = "";
+        if (mArr != undefined) {
+            let i = 0;
+            while (i < mArr.size()) {
+                let m = json.at(json.get(v, "matrix"), i);
+                let line = (json.asString(json.get(m, "tool")) ?? "") + " -> " + (json.asString(json.get(m, "verdict")) ?? "");
+                matrix = string.eql(matrix, "") ? line : matrix + "  |  " + line;
+                i = i + 1;
+            }
+        }
+        return DeployResult(true, "DRAFT:\n" + draft + "\nMATRIX: " + matrix);
+    }
+
     // G2: approve the current proposal: fetch it and deploy it via the signed policy-store path.
     pub fn approveSuggestion(self: AcpClient, userAuth: string): DeployResult {
         let info = self.policySuggest();

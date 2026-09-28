@@ -127,7 +127,7 @@
     .modal input[type=file]{display:none}
   </style>
 </head>
-<body data-signals="{view: 'overview', tenant: 'default', endpoint: '', disposition: 'govern', appName: '', appOwner: '', agentAppId: '', agentName: '', agentOwner: '', agentDeps: '', modelName: '', modelProvider: '', modelVersion: '', vendorName: '', vendorResidency: 'eu', vendorSubs: '0', vendorCerts: '', vendorIncidents: '0', grcKind: 'assessment', grcSubject: '', grcTitle: '', grcStatus: 'open', grcBody: '{}', grcLinks: '', riskSubject: '', riskTitle: '', riskLikelihood: 'high', riskImpact: 'high', riskTreatment: 'mitigate', mcSubject: '', mcTitle: '', mcModelId: '', mcUseCaseId: '', mcRiskId: '', asSubject: '', asTitle: '', asAssignee: '', as_prohibited_practice: 'false', as_safety_component: 'false', as_biometric_identification: 'false', as_critical_infrastructure: 'false', as_employment_or_education: 'false', as_essential_services: 'false', as_law_enforcement: 'false', as_interacts_with_humans: 'false', as_generates_content: 'false', modal: '', policyTab: 'deployed', fwEnabled: 'false', fwBlockSecrets: 'false', fwDenyTopics: '', fwModel: '', fwScanUrl: '', fwBlockOnScannerError: 'false', fwBlockToxicity: 'false', frMatchKind: 'host_contains', frMatchValue: '', frPath: '', frAction: 'block', frClassify: '', author: 'operator', epReason: 'sanctioned', mode: 'lockdown_all', scope: 'global', killReason: 'incident', ttl_ms: '3600000', reason: ''}">
+<body data-signals="{view: 'overview', tenant: 'default', endpoint: '', disposition: 'govern', appName: '', appOwner: '', agentAppId: '', agentName: '', agentOwner: '', agentDeps: '', modelName: '', modelProvider: '', modelVersion: '', vendorName: '', vendorResidency: 'eu', vendorSubs: '0', vendorCerts: '', vendorIncidents: '0', grcKind: 'assessment', grcSubject: '', grcTitle: '', grcStatus: 'open', grcBody: '{}', grcLinks: '', riskSubject: '', riskTitle: '', riskLikelihood: 'high', riskImpact: 'high', riskTreatment: 'mitigate', mcSubject: '', mcTitle: '', mcModelId: '', mcUseCaseId: '', mcRiskId: '', asSubject: '', asTitle: '', asAssignee: '', as_prohibited_practice: 'false', as_safety_component: 'false', as_biometric_identification: 'false', as_critical_infrastructure: 'false', as_employment_or_education: 'false', as_essential_services: 'false', as_law_enforcement: 'false', as_interacts_with_humans: 'false', as_generates_content: 'false', modal: '', policyTab: 'deployed', authorText: '', fwEnabled: 'false', fwBlockSecrets: 'false', fwDenyTopics: '', fwModel: '', fwScanUrl: '', fwBlockOnScannerError: 'false', fwBlockToxicity: 'false', frMatchKind: 'host_contains', frMatchValue: '', frPath: '', frAction: 'block', frClassify: '', author: 'operator', epReason: 'sanctioned', mode: 'lockdown_all', scope: 'global', killReason: 'incident', ttl_ms: '3600000', reason: ''}">
   <div class="navbar">
     <div class="brand">
       <img class="logo" src="/varman-logo.svg" alt="Varman" />
@@ -255,6 +255,13 @@
           <div class="card">
             <div class="card-h"><span class="ic">&#129520;</span> Suggested least-privilege policy<span class="sub">a default-deny allow-list synthesised from observed traffic (G2). Review, then approve to deploy it signed.</span></div>
             <div class="card-b"><div id="policysuggest"><p class="empty">connecting to acp-server&#8230;</p></div></div>
+          </div>
+          <div class="card"><div class="card-h"><span class="ic">&#128172;</span> Author from a description<span class="sub">describe a rule in plain English; ACP drafts the DSL and shows what it allows/blocks before you deploy (G3).</span></div>
+            <div class="card-b">
+              <textarea data-bind="authorText" rows="2" style="width:100%" placeholder="No agent may delete from the database"></textarea>
+              <div style="margin-top:.6rem"><button class="btn" data-on:click="@post('/policy/author-draft')">Draft and verify</button></div>
+              <div id="authorresult" style="margin-top:.6rem"></div>
+            </div>
           </div>
           <div class="card">
             <div class="card-h"><span class="ic">&#128271;</span> Policy<span class="sub" id="policy"><span class="empty">&#8230;</span></span></div>
