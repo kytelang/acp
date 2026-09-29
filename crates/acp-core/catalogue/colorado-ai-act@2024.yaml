@@ -1,0 +1,171 @@
+# Colorado AI Act, SB 24-205: consumer protections for high-risk artificial intelligence systems.
+# Framework type: statutory_conformity (duties on developers and deployers of high-risk systems that
+# make, or are a substantial factor in, consequential decisions). Nodes are faithful paraphrases with a
+# citation, never verbatim statutory text.
+slug: colorado-ai-act
+label: Colorado AI Act (SB 24-205)
+version: "2024"
+framework_type: statutory_conformity
+effective_date: "2026-06-30"
+record_keeping_reference: "6-1-1703 (risk management policy and programme)"
+source: "Colorado SB 24-205"
+manifest:
+  - "6-1-1701"
+  - "6-1-1702"
+  - "6-1-1703"
+controls:
+  # --- 6-1-1701: definitions and scope ---
+  - id: def-1701-1
+    title: "High-risk AI system definition"
+    description: "Identify systems that, when deployed, make or are a substantial factor in making a consequential decision, applying the statutory exclusions for narrow procedural or ancillary functions."
+    required_evidence: "classification record identifying high-risk status with justification"
+    path: ["6-1-1701", "Definitions"]
+    reference: "6-1-1701(9)"
+    obligation_type: govern
+    roles: []
+    applicability: "always"
+    assessment_method: artefact
+    crosswalk: ["eu-ai-act:Art. 6"]
+    citation: "Colorado SB 24-205, 6-1-1701 (definitions), high-risk artificial intelligence system"
+  - id: def-1701-2
+    title: "Consequential decision scope"
+    description: "Determine whether the decision has a material legal or similarly significant effect on a consumer in areas such as education, employment, financial service, government service, health care, housing, insurance or legal service."
+    required_evidence: "use-case registry entry mapping the decision to a consequential-decision domain"
+    path: ["6-1-1701", "Definitions"]
+    reference: "6-1-1701(3)"
+    obligation_type: govern
+    roles: []
+    applicability: "always"
+    assessment_method: artefact
+    citation: "Colorado SB 24-205, 6-1-1701 (definitions), consequential decision"
+  - id: def-1701-3
+    title: "Algorithmic discrimination scope"
+    description: "Recognise algorithmic discrimination as any unlawful differential treatment or impact that disfavours an individual or group on the basis of a protected classification under state or federal law."
+    required_evidence: "documented understanding of algorithmic discrimination scope; protected-class mapping"
+    path: ["6-1-1701", "Definitions"]
+    reference: "6-1-1701(1)"
+    obligation_type: govern
+    roles: []
+    applicability: "always"
+    assessment_method: artefact
+    citation: "Colorado SB 24-205, 6-1-1701 (definitions), algorithmic discrimination"
+  # --- 6-1-1702: developer duties ---
+  - id: dev-1702-1
+    title: "Reasonable care to avoid algorithmic discrimination"
+    description: "A developer must use reasonable care to protect consumers from any known or reasonably foreseeable risk of algorithmic discrimination arising from the intended and contracted uses of the high-risk system."
+    required_evidence: "reasonable-care programme documentation; risk analysis of foreseeable discrimination"
+    path: ["6-1-1702", "Developer duties"]
+    reference: "6-1-1702(1)"
+    obligation_type: govern
+    roles: [developer]
+    applicability: "role=developer"
+    assessment_method: artefact
+    crosswalk: ["eu-ai-act:Art. 9"]
+    citation: "Colorado SB 24-205, 6-1-1702 (developer duty of care)"
+  - id: dev-1702-2
+    title: "Documentation and disclosures to deployers"
+    description: "A developer must make available to deployers the information and documentation needed to complete an impact assessment, including intended uses, known limitations, training-data summary, evaluation and bias-mitigation measures, and how the system should be used and monitored."
+    required_evidence: "developer-to-deployer documentation package"
+    path: ["6-1-1702", "Developer duties"]
+    reference: "6-1-1702(2)"
+    obligation_type: document
+    roles: [developer]
+    applicability: "role=developer"
+    assessment_method: artefact
+    crosswalk: ["eu-ai-act:Art. 13"]
+    citation: "Colorado SB 24-205, 6-1-1702 (developer documentation)"
+  - id: dev-1702-3
+    title: "Public statement on high-risk systems"
+    description: "A developer must publish and keep current a public statement summarising the types of high-risk systems it has developed or substantially modified and how it manages known or foreseeable risks of algorithmic discrimination."
+    required_evidence: "published public statement with revision history"
+    path: ["6-1-1702", "Developer duties"]
+    reference: "6-1-1702(4)"
+    obligation_type: transparency
+    roles: [developer]
+    applicability: "role=developer"
+    assessment_method: artefact
+    citation: "Colorado SB 24-205, 6-1-1702 (developer public statement)"
+  - id: dev-1702-4
+    title: "Disclosure of known discrimination to the Attorney General"
+    description: "A developer must disclose to the Attorney General and to known deployers any known or reasonably foreseeable risk of algorithmic discrimination, within the statutory timeframe after discovery."
+    required_evidence: "disclosure workflow with timestamps; notification records"
+    path: ["6-1-1702", "Developer duties"]
+    reference: "6-1-1702(5)"
+    obligation_type: process
+    roles: [developer]
+    applicability: "role=developer"
+    assessment_method: ledger
+    crosswalk: ["eu-ai-act:Art. 73"]
+    citation: "Colorado SB 24-205, 6-1-1702 (developer disclosure to Attorney General)"
+  # --- 6-1-1703: deployer duties ---
+  - id: dep-1703-1
+    title: "Risk management policy and programme"
+    description: "A deployer must implement and maintain a risk management policy and programme for the high-risk system that is reasonable in light of guidance and a recognised risk-management framework such as the NIST AI Risk Management Framework or ISO/IEC 42001."
+    required_evidence: "signed risk management policy in force; programme documentation aligned to a recognised framework"
+    path: ["6-1-1703", "Deployer duties"]
+    reference: "6-1-1703(2)"
+    obligation_type: process
+    roles: [deployer]
+    applicability: "role=deployer"
+    assessment_method: artefact
+    crosswalk: ["nist-ai-rmf:GOVERN-1.1"]
+    citation: "Colorado SB 24-205, 6-1-1703 (deployer risk management policy and programme)"
+  - id: dep-1703-2
+    title: "Impact assessment of the high-risk system"
+    description: "A deployer must complete an impact assessment before deployment and at least annually, covering purpose, benefits, known risks of algorithmic discrimination and mitigation, data categories, performance metrics and post-deployment monitoring."
+    required_evidence: "completed impact assessment; annual review record"
+    path: ["6-1-1703", "Deployer duties"]
+    reference: "6-1-1703(3)"
+    obligation_type: document
+    roles: [deployer]
+    applicability: "role=deployer"
+    assessment_method: artefact
+    crosswalk: ["eu-ai-act:Art. 27"]
+    citation: "Colorado SB 24-205, 6-1-1703 (deployer impact assessment)"
+  - id: dep-1703-3
+    title: "Consumer notice before a consequential decision"
+    description: "A deployer must notify a consumer when a high-risk system is used to make, or is a substantial factor in making, a consequential decision about that consumer, and describe the system and its purpose."
+    required_evidence: "consumer-facing notice; delivery records"
+    path: ["6-1-1703", "Deployer duties"]
+    reference: "6-1-1703(4)"
+    obligation_type: transparency
+    roles: [deployer]
+    applicability: "role=deployer"
+    assessment_method: artefact
+    crosswalk: ["eu-ai-act:Art. 50(1)"]
+    citation: "Colorado SB 24-205, 6-1-1703 (deployer consumer notice)"
+  - id: dep-1703-4
+    title: "Right to correct data and to appeal"
+    description: "When a consequential decision is adverse to a consumer, a deployer must give the consumer an opportunity to correct inaccurate personal data and, where technically feasible, to appeal for human review."
+    required_evidence: "correction and appeal workflow; human-review records"
+    path: ["6-1-1703", "Deployer duties"]
+    reference: "6-1-1703(4)(b)"
+    obligation_type: process
+    roles: [deployer]
+    applicability: "role=deployer"
+    assessment_method: ledger
+    crosswalk: ["eu-ai-act:Art. 14"]
+    citation: "Colorado SB 24-205, 6-1-1703 (consumer right to correct and appeal)"
+  - id: dep-1703-5
+    title: "Public statement on deployed high-risk systems"
+    description: "A deployer must publish and keep current a public statement summarising the types of high-risk systems it deploys and how it manages known or foreseeable risks of algorithmic discrimination."
+    required_evidence: "published public statement with revision history"
+    path: ["6-1-1703", "Deployer duties"]
+    reference: "6-1-1703(5)"
+    obligation_type: transparency
+    roles: [deployer]
+    applicability: "role=deployer"
+    assessment_method: artefact
+    citation: "Colorado SB 24-205, 6-1-1703 (deployer public statement)"
+  - id: dep-1703-6
+    title: "Disclosure of discrimination to the Attorney General"
+    description: "A deployer that discovers the high-risk system has caused algorithmic discrimination must notify the Attorney General within the statutory timeframe after discovery."
+    required_evidence: "disclosure workflow with timestamps; notification records"
+    path: ["6-1-1703", "Deployer duties"]
+    reference: "6-1-1703(7)"
+    obligation_type: process
+    roles: [deployer]
+    applicability: "role=deployer"
+    assessment_method: ledger
+    crosswalk: ["eu-ai-act:Art. 73"]
+    citation: "Colorado SB 24-205, 6-1-1703 (deployer disclosure to Attorney General)"

@@ -1,0 +1,770 @@
+# AICPA SOC 2 Trust Services Criteria (2017, revised 2022).
+# Framework type: standard (control-based attestation against the Trust Services Criteria).
+# Nodes are faithful paraphrases with a citation, never verbatim TSC text (the TSC is copyrighted).
+slug: soc-2
+label: SOC 2
+version: "2017"
+framework_type: standard
+effective_date: "2017-04-15"
+record_keeping_reference: "CC (common criteria)"
+source: "AICPA Trust Services Criteria (2017, rev. 2022)"
+manifest:
+  - "CC1"
+  - "CC2"
+  - "CC3"
+  - "CC4"
+  - "CC5"
+  - "CC6"
+  - "CC7"
+  - "CC8"
+  - "CC9"
+  - "A1"
+  - "C1"
+  - "PI1"
+  - "P1"
+controls:
+  # --- Common Criteria: CC1 Control Environment ---
+  - id: cc1.1
+    title: "Commitment to integrity and ethical values"
+    description: "The entity demonstrates a commitment to integrity and ethical values as the foundation of its control environment."
+    required_evidence: "code of conduct and ethics policy for the control plane team; signed acknowledgements; disciplinary process records"
+    path: ["Common Criteria", "CC1"]
+    reference: "CC1.1"
+    obligation_type: govern
+    roles: [governance]
+    applicability: "always"
+    assessment_method: attestation
+    crosswalk: ["iso-27001:A.5.1"]
+    citation: "AICPA TSC 2017 (rev. 2022), CC1.1"
+  - id: cc1.2
+    title: "Board oversight independence"
+    description: "Those charged with governance operate independently of management and exercise oversight of the design and operation of internal control."
+    required_evidence: "governance charter; minutes showing oversight of security and AI control plane risk; independence declarations"
+    path: ["Common Criteria", "CC1"]
+    reference: "CC1.2"
+    obligation_type: oversight
+    roles: [governance]
+    applicability: "always"
+    assessment_method: attestation
+    crosswalk: ["iso-27001:A.5.1"]
+    citation: "AICPA TSC 2017 (rev. 2022), CC1.2"
+  - id: cc1.3
+    title: "Management structures and reporting lines"
+    description: "Management establishes structures, reporting lines and appropriate authorities and responsibilities in pursuit of the entity's objectives."
+    required_evidence: "organisation chart; role and responsibility definitions for control plane operations; delegation of authority matrix"
+    path: ["Common Criteria", "CC1"]
+    reference: "CC1.3"
+    obligation_type: govern
+    roles: [governance]
+    applicability: "always"
+    assessment_method: attestation
+    crosswalk: ["iso-27001:A.5.2"]
+    citation: "AICPA TSC 2017 (rev. 2022), CC1.3"
+  - id: cc1.4
+    title: "Commitment to competence"
+    description: "The entity demonstrates a commitment to attract, develop and retain competent individuals in alignment with its objectives."
+    required_evidence: "job descriptions; training records; competency assessments for staff operating the AI control plane"
+    path: ["Common Criteria", "CC1"]
+    reference: "CC1.4"
+    obligation_type: process
+    roles: [governance]
+    applicability: "always"
+    assessment_method: attestation
+    crosswalk: ["iso-27001:A.6.3"]
+    citation: "AICPA TSC 2017 (rev. 2022), CC1.4"
+  - id: cc1.5
+    title: "Accountability for internal control"
+    description: "The entity holds individuals accountable for their internal control responsibilities in pursuit of its objectives."
+    required_evidence: "performance objectives tied to control duties; accountability records; incentive and remediation evidence"
+    path: ["Common Criteria", "CC1"]
+    reference: "CC1.5"
+    obligation_type: oversight
+    roles: [governance]
+    applicability: "always"
+    assessment_method: attestation
+    crosswalk: ["iso-27001:A.5.4"]
+    citation: "AICPA TSC 2017 (rev. 2022), CC1.5"
+  # --- Common Criteria: CC2 Communication and Information ---
+  - id: cc2.1
+    title: "Quality information for internal control"
+    description: "The entity obtains or generates and uses relevant, quality information to support the functioning of internal control."
+    required_evidence: "data flow inventory; logging and telemetry from the control plane; information quality checks"
+    path: ["Common Criteria", "CC2"]
+    reference: "CC2.1"
+    obligation_type: document
+    roles: [governance, operator]
+    applicability: "always"
+    assessment_method: artefact
+    crosswalk: ["iso-27001:A.5.9"]
+    citation: "AICPA TSC 2017 (rev. 2022), CC2.1"
+  - id: cc2.2
+    title: "Internal communication of control responsibilities"
+    description: "The entity communicates information internally, including objectives and responsibilities for internal control, to support its functioning."
+    required_evidence: "published security and policy documents; onboarding communications; internal reporting channels for control issues"
+    path: ["Common Criteria", "CC2"]
+    reference: "CC2.2"
+    obligation_type: transparency
+    roles: [governance]
+    applicability: "always"
+    assessment_method: attestation
+    crosswalk: ["iso-27001:A.5.1"]
+    citation: "AICPA TSC 2017 (rev. 2022), CC2.2"
+  - id: cc2.3
+    title: "External communication with relevant parties"
+    description: "The entity communicates with external parties on matters affecting the functioning of internal control."
+    required_evidence: "customer-facing security commitments; incident notification procedures; vendor and regulator communication records"
+    path: ["Common Criteria", "CC2"]
+    reference: "CC2.3"
+    obligation_type: transparency
+    roles: [governance]
+    applicability: "always"
+    assessment_method: attestation
+    crosswalk: ["iso-27001:A.5.5"]
+    citation: "AICPA TSC 2017 (rev. 2022), CC2.3"
+  # --- Common Criteria: CC3 Risk Assessment ---
+  - id: cc3.1
+    title: "Objectives specified to assess risk"
+    description: "The entity specifies objectives with sufficient clarity to enable the identification and assessment of risks relating to those objectives."
+    required_evidence: "documented security and availability objectives; risk assessment scope covering the AI control plane"
+    path: ["Common Criteria", "CC3"]
+    reference: "CC3.1"
+    obligation_type: govern
+    roles: [governance]
+    applicability: "always"
+    assessment_method: artefact
+    crosswalk: ["iso-27001:6.1.1"]
+    citation: "AICPA TSC 2017 (rev. 2022), CC3.1"
+  - id: cc3.2
+    title: "Identification and analysis of risk"
+    description: "The entity identifies risks to the achievement of its objectives and analyses them as a basis for determining how the risks should be managed."
+    required_evidence: "risk register with likelihood and impact ratings; threat model for policy enforcement and agent governance"
+    path: ["Common Criteria", "CC3"]
+    reference: "CC3.2"
+    obligation_type: process
+    roles: [governance]
+    applicability: "always"
+    assessment_method: artefact
+    crosswalk: ["iso-27001:6.1.2"]
+    citation: "AICPA TSC 2017 (rev. 2022), CC3.2"
+  - id: cc3.3
+    title: "Consideration of fraud risk"
+    description: "The entity considers the potential for fraud in assessing risks to the achievement of its objectives."
+    required_evidence: "fraud and abuse risk analysis; controls against privilege misuse and log tampering in the control plane"
+    path: ["Common Criteria", "CC3"]
+    reference: "CC3.3"
+    obligation_type: process
+    roles: [governance]
+    applicability: "always"
+    assessment_method: artefact
+    crosswalk: ["iso-27001:6.1.2"]
+    citation: "AICPA TSC 2017 (rev. 2022), CC3.3"
+  - id: cc3.4
+    title: "Assessment of change that affects control"
+    description: "The entity identifies and assesses changes that could significantly affect the system of internal control."
+    required_evidence: "change impact assessments; review of new agents, models and integrations for control impact"
+    path: ["Common Criteria", "CC3"]
+    reference: "CC3.4"
+    obligation_type: process
+    roles: [governance, operator]
+    applicability: "always"
+    assessment_method: artefact
+    crosswalk: ["iso-27001:6.3"]
+    citation: "AICPA TSC 2017 (rev. 2022), CC3.4"
+  # --- Common Criteria: CC4 Monitoring Activities ---
+  - id: cc4.1
+    title: "Ongoing and separate evaluations"
+    description: "The entity selects, develops and performs ongoing and separate evaluations to ascertain whether the components of internal control are present and functioning."
+    required_evidence: "continuous monitoring dashboards; internal audit schedule; control self-assessment results"
+    path: ["Common Criteria", "CC4"]
+    reference: "CC4.1"
+    obligation_type: oversight
+    roles: [governance, operator]
+    applicability: "always"
+    assessment_method: test
+    crosswalk: ["iso-27001:9.1"]
+    citation: "AICPA TSC 2017 (rev. 2022), CC4.1"
+  - id: cc4.2
+    title: "Evaluation and communication of deficiencies"
+    description: "The entity evaluates and communicates internal control deficiencies in a timely manner to those responsible for taking corrective action."
+    required_evidence: "deficiency tracking log; remediation plans with owners and dates; escalation to governance"
+    path: ["Common Criteria", "CC4"]
+    reference: "CC4.2"
+    obligation_type: process
+    roles: [governance, operator]
+    applicability: "always"
+    assessment_method: ledger
+    crosswalk: ["iso-27001:10.1"]
+    citation: "AICPA TSC 2017 (rev. 2022), CC4.2"
+  # --- Common Criteria: CC5 Control Activities ---
+  - id: cc5.1
+    title: "Control activities that mitigate risk"
+    description: "The entity selects and develops control activities that contribute to the mitigation of risks to the achievement of objectives to acceptable levels."
+    required_evidence: "control matrix mapping risks to control activities across the control plane"
+    path: ["Common Criteria", "CC5"]
+    reference: "CC5.1"
+    obligation_type: process
+    roles: [governance, operator]
+    applicability: "always"
+    assessment_method: artefact
+    crosswalk: ["iso-27001:6.1.3"]
+    citation: "AICPA TSC 2017 (rev. 2022), CC5.1"
+  - id: cc5.2
+    title: "Technology general controls"
+    description: "The entity selects and develops general control activities over technology to support the achievement of objectives."
+    required_evidence: "documented technology controls for infrastructure, deployment pipelines and policy engines"
+    path: ["Common Criteria", "CC5"]
+    reference: "CC5.2"
+    obligation_type: technical
+    roles: [operator]
+    applicability: "always"
+    assessment_method: test
+    crosswalk: ["iso-27001:A.8.9"]
+    citation: "AICPA TSC 2017 (rev. 2022), CC5.2"
+  - id: cc5.3
+    title: "Deployment through policies and procedures"
+    description: "The entity deploys control activities through policies that establish expectations and procedures that put those policies into action."
+    required_evidence: "published policies and standard operating procedures; evidence procedures are followed in practice"
+    path: ["Common Criteria", "CC5"]
+    reference: "CC5.3"
+    obligation_type: document
+    roles: [governance, operator]
+    applicability: "always"
+    assessment_method: attestation
+    crosswalk: ["iso-27001:A.5.37"]
+    citation: "AICPA TSC 2017 (rev. 2022), CC5.3"
+  # --- Common Criteria: CC6 Logical and Physical Access Controls ---
+  - id: cc6.1
+    title: "Logical access security"
+    description: "The entity implements logical access security software, infrastructure and architectures over protected information assets to meet its objectives."
+    required_evidence: "identity provider configuration; RBAC policy for the control plane; encryption-at-rest and in-transit settings"
+    path: ["Common Criteria", "CC6"]
+    reference: "CC6.1"
+    obligation_type: technical
+    roles: [operator]
+    applicability: "always"
+    assessment_method: test
+    crosswalk: ["iso-27001:A.8.3"]
+    citation: "AICPA TSC 2017 (rev. 2022), CC6.1"
+  - id: cc6.2
+    title: "Registration and authorisation of users"
+    description: "Prior to granting access, the entity registers and authorises new users and, upon termination or change of need, removes access in a timely manner."
+    required_evidence: "provisioning and de-provisioning tickets; joiner-mover-leaver workflow logs; access approval records"
+    path: ["Common Criteria", "CC6"]
+    reference: "CC6.2"
+    obligation_type: process
+    roles: [operator]
+    applicability: "always"
+    assessment_method: ledger
+    crosswalk: ["iso-27001:A.5.16"]
+    citation: "AICPA TSC 2017 (rev. 2022), CC6.2"
+  - id: cc6.3
+    title: "Role-based access and least privilege"
+    description: "The entity authorises, modifies and removes access to data and systems based on roles, responsibilities and the principles of least privilege and segregation of duties."
+    required_evidence: "role definitions; periodic access reviews; segregation-of-duties matrix for agent and policy administration"
+    path: ["Common Criteria", "CC6"]
+    reference: "CC6.3"
+    obligation_type: technical
+    roles: [operator]
+    applicability: "always"
+    assessment_method: test
+    crosswalk: ["iso-27001:A.5.15"]
+    citation: "AICPA TSC 2017 (rev. 2022), CC6.3"
+  - id: cc6.4
+    title: "Physical access to facilities and assets"
+    description: "The entity restricts physical access to facilities and protected information assets to authorised personnel."
+    required_evidence: "data centre access logs or cloud provider attestation; badge and visitor records; facility access reviews"
+    path: ["Common Criteria", "CC6"]
+    reference: "CC6.4"
+    obligation_type: process
+    roles: [operator]
+    applicability: "always"
+    assessment_method: attestation
+    crosswalk: ["iso-27001:A.7.2"]
+    citation: "AICPA TSC 2017 (rev. 2022), CC6.4"
+  - id: cc6.5
+    title: "Disposal of assets and data"
+    description: "The entity discontinues logical and physical protections over assets only after the ability to read or recover data has been removed, on disposal or reuse."
+    required_evidence: "secure media disposal records; cryptographic erasure logs; certificates of destruction"
+    path: ["Common Criteria", "CC6"]
+    reference: "CC6.5"
+    obligation_type: process
+    roles: [operator]
+    applicability: "always"
+    assessment_method: ledger
+    crosswalk: ["iso-27001:A.7.14"]
+    citation: "AICPA TSC 2017 (rev. 2022), CC6.5"
+  - id: cc6.6
+    title: "Protection against external threats"
+    description: "The entity implements controls to protect against threats from sources outside its system boundaries."
+    required_evidence: "firewall and network policy; TLS configuration; intrusion detection; hardened control plane endpoints"
+    path: ["Common Criteria", "CC6"]
+    reference: "CC6.6"
+    obligation_type: technical
+    roles: [operator]
+    applicability: "always"
+    assessment_method: test
+    crosswalk: ["iso-27001:A.8.20"]
+    citation: "AICPA TSC 2017 (rev. 2022), CC6.6"
+  - id: cc6.7
+    title: "Restriction of information in transit and movement"
+    description: "The entity restricts the transmission, movement and removal of information to authorised users and processes and protects it during transit."
+    required_evidence: "data loss prevention controls; encrypted transport for policy and telemetry data; egress restrictions"
+    path: ["Common Criteria", "CC6"]
+    reference: "CC6.7"
+    obligation_type: technical
+    roles: [operator]
+    applicability: "always"
+    assessment_method: test
+    crosswalk: ["iso-27001:A.8.12"]
+    citation: "AICPA TSC 2017 (rev. 2022), CC6.7"
+  - id: cc6.8
+    title: "Prevention and detection of unauthorised software"
+    description: "The entity implements controls to prevent or detect and act upon the introduction of unauthorised or malicious software."
+    required_evidence: "code signing and artefact integrity checks; allowlisting; malware detection; supply chain verification for agents"
+    path: ["Common Criteria", "CC6"]
+    reference: "CC6.8"
+    obligation_type: technical
+    roles: [operator]
+    applicability: "always"
+    assessment_method: test
+    crosswalk: ["iso-27001:A.8.19"]
+    citation: "AICPA TSC 2017 (rev. 2022), CC6.8"
+  # --- Common Criteria: CC7 System Operations ---
+  - id: cc7.1
+    title: "Detection of vulnerabilities and misconfiguration"
+    description: "The entity uses detection and monitoring procedures to identify configuration changes that introduce new vulnerabilities and susceptibilities to newly discovered vulnerabilities."
+    required_evidence: "vulnerability scan reports; configuration baseline monitoring; patch management records"
+    path: ["Common Criteria", "CC7"]
+    reference: "CC7.1"
+    obligation_type: technical
+    roles: [operator]
+    applicability: "always"
+    assessment_method: test
+    crosswalk: ["iso-27001:A.8.8"]
+    citation: "AICPA TSC 2017 (rev. 2022), CC7.1"
+  - id: cc7.2
+    title: "Monitoring for anomalies and security events"
+    description: "The entity monitors system components and the operation of controls for anomalies indicative of malicious acts, natural disasters and errors, and evaluates them against thresholds."
+    required_evidence: "SIEM alerting; audit log analysis; anomaly detection over control plane and agent activity"
+    path: ["Common Criteria", "CC7"]
+    reference: "CC7.2"
+    obligation_type: technical
+    roles: [operator]
+    applicability: "always"
+    assessment_method: test
+    crosswalk: ["iso-27001:A.8.16"]
+    citation: "AICPA TSC 2017 (rev. 2022), CC7.2"
+  - id: cc7.3
+    title: "Evaluation of security events"
+    description: "The entity evaluates security events to determine whether they could or did result in a failure to meet objectives and, if so, takes action."
+    required_evidence: "incident triage records; severity classification; impact analysis of detected events"
+    path: ["Common Criteria", "CC7"]
+    reference: "CC7.3"
+    obligation_type: process
+    roles: [operator]
+    applicability: "always"
+    assessment_method: ledger
+    crosswalk: ["iso-27001:A.5.25"]
+    citation: "AICPA TSC 2017 (rev. 2022), CC7.3"
+  - id: cc7.4
+    title: "Incident response programme"
+    description: "The entity responds to identified security incidents by executing a defined incident response programme to understand, contain, remediate and communicate them."
+    required_evidence: "incident response plan; post-incident reports; containment and recovery evidence; breach notification records"
+    path: ["Common Criteria", "CC7"]
+    reference: "CC7.4"
+    obligation_type: process
+    roles: [operator, governance]
+    applicability: "always"
+    assessment_method: ledger
+    crosswalk: ["iso-27001:A.5.26"]
+    citation: "AICPA TSC 2017 (rev. 2022), CC7.4"
+  - id: cc7.5
+    title: "Recovery from identified incidents"
+    description: "The entity identifies, develops and implements activities to recover from identified security incidents and restore normal operations."
+    required_evidence: "recovery runbooks; restoration test results; lessons-learned and control improvement records"
+    path: ["Common Criteria", "CC7"]
+    reference: "CC7.5"
+    obligation_type: process
+    roles: [operator]
+    applicability: "always"
+    assessment_method: test
+    crosswalk: ["iso-27001:A.5.29"]
+    citation: "AICPA TSC 2017 (rev. 2022), CC7.5"
+  # --- Common Criteria: CC8 Change Management ---
+  - id: cc8.1
+    title: "Change management for infrastructure and software"
+    description: "The entity authorises, designs, develops, tests, approves and implements changes to infrastructure, data, software and procedures to meet its objectives."
+    required_evidence: "change tickets with approvals; test and code review evidence; separation of development and production for control plane releases"
+    path: ["Common Criteria", "CC8"]
+    reference: "CC8.1"
+    obligation_type: process
+    roles: [operator]
+    applicability: "always"
+    assessment_method: ledger
+    crosswalk: ["iso-27001:A.8.32"]
+    citation: "AICPA TSC 2017 (rev. 2022), CC8.1"
+  # --- Common Criteria: CC9 Risk Mitigation ---
+  - id: cc9.1
+    title: "Risk mitigation for business disruptions"
+    description: "The entity identifies, selects and develops risk mitigation activities for risks arising from potential business disruptions."
+    required_evidence: "business continuity plan; insurance and contingency arrangements; disruption risk mitigation measures"
+    path: ["Common Criteria", "CC9"]
+    reference: "CC9.1"
+    obligation_type: process
+    roles: [governance]
+    applicability: "always"
+    assessment_method: artefact
+    crosswalk: ["iso-27001:A.5.30"]
+    citation: "AICPA TSC 2017 (rev. 2022), CC9.1"
+  - id: cc9.2
+    title: "Management of vendor and partner risk"
+    description: "The entity assesses and manages risks associated with vendors and business partners that support the delivery of its services."
+    required_evidence: "vendor risk assessments; subprocessor inventory; contractual security requirements; ongoing vendor monitoring"
+    path: ["Common Criteria", "CC9"]
+    reference: "CC9.2"
+    obligation_type: process
+    roles: [governance, operator]
+    applicability: "always"
+    assessment_method: ledger
+    crosswalk: ["iso-27001:A.5.19"]
+    citation: "AICPA TSC 2017 (rev. 2022), CC9.2"
+  # --- Additional category: Availability (A1) ---
+  - id: a1.1
+    title: "Capacity management for availability"
+    description: "The entity maintains, monitors and evaluates current processing capacity and use of system components to manage demand and enable additional capacity to meet its availability objectives."
+    required_evidence: "capacity and utilisation dashboards; scaling policy; forecasting records for the control plane"
+    path: ["Additional Criteria", "Availability", "A1"]
+    reference: "A1.1"
+    obligation_type: technical
+    roles: [operator]
+    applicability: "conditional"
+    assessment_method: test
+    crosswalk: ["iso-27001:A.8.6"]
+    citation: "AICPA TSC 2017 (rev. 2022), A1.1"
+  - id: a1.2
+    title: "Environmental protections, backup and recovery infrastructure"
+    description: "The entity designs, implements, operates and monitors environmental protections, backup processes and recovery infrastructure to meet its availability objectives."
+    required_evidence: "backup schedules and restore tests; redundancy and failover configuration; environmental protection attestations"
+    path: ["Additional Criteria", "Availability", "A1"]
+    reference: "A1.2"
+    obligation_type: technical
+    roles: [operator]
+    applicability: "conditional"
+    assessment_method: test
+    crosswalk: ["iso-27001:A.8.13"]
+    citation: "AICPA TSC 2017 (rev. 2022), A1.2"
+  - id: a1.3
+    title: "Testing of recovery plans"
+    description: "The entity tests recovery plan procedures supporting system recovery to meet its availability objectives."
+    required_evidence: "disaster recovery test reports; documented recovery time and point objectives; remediation of test findings"
+    path: ["Additional Criteria", "Availability", "A1"]
+    reference: "A1.3"
+    obligation_type: test
+    roles: [operator]
+    applicability: "conditional"
+    assessment_method: test
+    crosswalk: ["iso-27001:A.5.30"]
+    citation: "AICPA TSC 2017 (rev. 2022), A1.3"
+  # --- Additional category: Confidentiality (C1) ---
+  - id: c1.1
+    title: "Identification and protection of confidential information"
+    description: "The entity identifies and maintains confidential information to meet its confidentiality objectives."
+    required_evidence: "data classification scheme; inventory of confidential data in the control plane; handling and protection controls"
+    path: ["Additional Criteria", "Confidentiality", "C1"]
+    reference: "C1.1"
+    obligation_type: technical
+    roles: [operator]
+    applicability: "conditional"
+    assessment_method: artefact
+    crosswalk: ["iso-27001:A.5.12"]
+    citation: "AICPA TSC 2017 (rev. 2022), C1.1"
+  - id: c1.2
+    title: "Disposal of confidential information"
+    description: "The entity disposes of confidential information to meet its confidentiality objectives once retention needs have ended."
+    required_evidence: "retention schedule; secure deletion and destruction records for confidential data"
+    path: ["Additional Criteria", "Confidentiality", "C1"]
+    reference: "C1.2"
+    obligation_type: process
+    roles: [operator]
+    applicability: "conditional"
+    assessment_method: ledger
+    crosswalk: ["iso-27001:A.8.10"]
+    citation: "AICPA TSC 2017 (rev. 2022), C1.2"
+  # --- Additional category: Processing Integrity (PI1) ---
+  - id: pi1.1
+    title: "Quality information about processing objectives"
+    description: "The entity obtains or generates, uses and communicates relevant, quality information about the objectives and definitions of processing to support its use of products and services."
+    required_evidence: "documentation of processing specifications; data definitions; published processing descriptions for control plane outputs"
+    path: ["Additional Criteria", "Processing Integrity", "PI1"]
+    reference: "PI1.1"
+    obligation_type: document
+    roles: [operator]
+    applicability: "conditional"
+    assessment_method: artefact
+    crosswalk: ["iso-27001:A.5.9"]
+    citation: "AICPA TSC 2017 (rev. 2022), PI1.1"
+  - id: pi1.2
+    title: "Completeness and accuracy of inputs"
+    description: "The entity implements policies and procedures over system inputs, including controls over completeness and accuracy, to meet its processing integrity objectives."
+    required_evidence: "input validation controls; schema and boundary checks on requests to the policy engine; rejection and error handling logs"
+    path: ["Additional Criteria", "Processing Integrity", "PI1"]
+    reference: "PI1.2"
+    obligation_type: technical
+    roles: [operator]
+    applicability: "conditional"
+    assessment_method: test
+    crosswalk: ["iso-27001:A.8.26"]
+    citation: "AICPA TSC 2017 (rev. 2022), PI1.2"
+  - id: pi1.3
+    title: "Accuracy and completeness of processing"
+    description: "The entity implements policies and procedures over system processing to result in products and services that meet its processing integrity objectives."
+    required_evidence: "processing controls and reconciliations; deterministic policy evaluation tests; audit trail of decisions"
+    path: ["Additional Criteria", "Processing Integrity", "PI1"]
+    reference: "PI1.3"
+    obligation_type: technical
+    roles: [operator]
+    applicability: "conditional"
+    assessment_method: test
+    crosswalk: ["iso-27001:A.8.26"]
+    citation: "AICPA TSC 2017 (rev. 2022), PI1.3"
+  - id: pi1.4
+    title: "Accuracy and completeness of outputs"
+    description: "The entity implements policies and procedures to make products, services and related output available to meet its processing integrity objectives, delivered to the correct parties."
+    required_evidence: "output validation and delivery controls; verification that policy decisions reach the intended enforcement point; reconciliation of outputs"
+    path: ["Additional Criteria", "Processing Integrity", "PI1"]
+    reference: "PI1.4"
+    obligation_type: technical
+    roles: [operator]
+    applicability: "conditional"
+    assessment_method: test
+    crosswalk: ["iso-27001:A.8.26"]
+    citation: "AICPA TSC 2017 (rev. 2022), PI1.4"
+  - id: pi1.5
+    title: "Storage of inputs and outputs"
+    description: "The entity implements policies and procedures to store inputs, items in processing and outputs completely, accurately and in a timely manner to meet its processing integrity objectives."
+    required_evidence: "durable storage of decision records and audit logs; integrity checks on stored data; retention aligned with processing needs"
+    path: ["Additional Criteria", "Processing Integrity", "PI1"]
+    reference: "PI1.5"
+    obligation_type: technical
+    roles: [operator]
+    applicability: "conditional"
+    assessment_method: test
+    crosswalk: ["iso-27001:A.8.10"]
+    citation: "AICPA TSC 2017 (rev. 2022), PI1.5"
+  # --- Additional category: Privacy (P1-P8) ---
+  - id: p1.1
+    title: "Notice of privacy practices"
+    description: "The entity provides notice to data subjects about its privacy practices to meet its privacy objectives, and the notice is updated and communicated in a timely manner."
+    required_evidence: "published privacy notice; version history; evidence notice is provided at or before collection"
+    path: ["Additional Criteria", "Privacy", "P1"]
+    reference: "P1.1"
+    obligation_type: transparency
+    roles: [governance]
+    applicability: "conditional"
+    assessment_method: attestation
+    crosswalk: ["iso-27701:7.3.2"]
+    citation: "AICPA TSC 2017 (rev. 2022), P1.1"
+  - id: p2.1
+    title: "Choice and consent"
+    description: "The entity communicates choices available regarding the collection, use, retention, disclosure and disposal of personal information and obtains consent, if required, to meet its privacy objectives."
+    required_evidence: "consent capture and withdrawal records; documented choices offered to data subjects; consent audit trail"
+    path: ["Additional Criteria", "Privacy", "P2"]
+    reference: "P2.1"
+    obligation_type: process
+    roles: [governance, operator]
+    applicability: "conditional"
+    assessment_method: ledger
+    crosswalk: ["iso-27701:7.2.4"]
+    citation: "AICPA TSC 2017 (rev. 2022), P2.1"
+  - id: p3.1
+    title: "Collection consistent with objectives"
+    description: "Personal information is collected consistent with the entity's privacy objectives and limited to that which is necessary."
+    required_evidence: "data minimisation controls; documented collection purposes; inventory of personal data collected by the control plane"
+    path: ["Additional Criteria", "Privacy", "P3"]
+    reference: "P3.1"
+    obligation_type: process
+    roles: [governance, operator]
+    applicability: "conditional"
+    assessment_method: artefact
+    crosswalk: ["iso-27701:7.4.1"]
+    citation: "AICPA TSC 2017 (rev. 2022), P3.1"
+  - id: p3.2
+    title: "Explicit consent for sensitive information"
+    description: "For information collected from other than the data subject, and for sensitive personal information, the entity obtains explicit consent where required to meet its privacy objectives."
+    required_evidence: "explicit consent records for sensitive data; source documentation for indirectly collected personal information"
+    path: ["Additional Criteria", "Privacy", "P3"]
+    reference: "P3.2"
+    obligation_type: process
+    roles: [governance]
+    applicability: "conditional"
+    assessment_method: ledger
+    crosswalk: ["iso-27701:7.2.4"]
+    citation: "AICPA TSC 2017 (rev. 2022), P3.2"
+  - id: p4.1
+    title: "Use of personal information limited to purposes"
+    description: "The entity limits the use of personal information to the purposes identified in its notice and for which consent has been obtained, to meet its privacy objectives."
+    required_evidence: "purpose limitation controls; access restrictions tying use to declared purposes; usage monitoring"
+    path: ["Additional Criteria", "Privacy", "P4"]
+    reference: "P4.1"
+    obligation_type: process
+    roles: [operator]
+    applicability: "conditional"
+    assessment_method: test
+    crosswalk: ["iso-27701:7.4.1"]
+    citation: "AICPA TSC 2017 (rev. 2022), P4.1"
+  - id: p4.2
+    title: "Retention of personal information"
+    description: "The entity retains personal information consistent with its privacy objectives and for no longer than needed for the identified purposes."
+    required_evidence: "retention schedule for personal data; automated retention enforcement; deletion records"
+    path: ["Additional Criteria", "Privacy", "P4"]
+    reference: "P4.2"
+    obligation_type: process
+    roles: [operator]
+    applicability: "conditional"
+    assessment_method: ledger
+    crosswalk: ["iso-27701:7.4.7"]
+    citation: "AICPA TSC 2017 (rev. 2022), P4.2"
+  - id: p4.3
+    title: "Disposal of personal information"
+    description: "The entity securely disposes of personal information to meet its privacy objectives once retention needs have ended."
+    required_evidence: "secure disposal procedures for personal data; certificates or logs of destruction"
+    path: ["Additional Criteria", "Privacy", "P4"]
+    reference: "P4.3"
+    obligation_type: process
+    roles: [operator]
+    applicability: "conditional"
+    assessment_method: ledger
+    crosswalk: ["iso-27701:7.4.8"]
+    citation: "AICPA TSC 2017 (rev. 2022), P4.3"
+  - id: p5.1
+    title: "Access by data subjects to their information"
+    description: "The entity grants identified and authenticated data subjects the ability to access their personal information for review and, where appropriate, update, to meet its privacy objectives."
+    required_evidence: "data subject access request workflow; authentication of requesters; access request fulfilment records"
+    path: ["Additional Criteria", "Privacy", "P5"]
+    reference: "P5.1"
+    obligation_type: process
+    roles: [operator]
+    applicability: "conditional"
+    assessment_method: ledger
+    crosswalk: ["iso-27701:7.3.8"]
+    citation: "AICPA TSC 2017 (rev. 2022), P5.1"
+  - id: p5.2
+    title: "Correction, amendment or deletion on request"
+    description: "The entity corrects, amends or appends personal information based on data subjects' requests, or denies such requests with a reason, to meet its privacy objectives."
+    required_evidence: "correction and deletion request records; decision rationale for denials; notification of corrections to third parties"
+    path: ["Additional Criteria", "Privacy", "P5"]
+    reference: "P5.2"
+    obligation_type: process
+    roles: [operator]
+    applicability: "conditional"
+    assessment_method: ledger
+    crosswalk: ["iso-27701:7.3.6"]
+    citation: "AICPA TSC 2017 (rev. 2022), P5.2"
+  - id: p6.1
+    title: "Consent for disclosure to third parties"
+    description: "The entity discloses personal information to third parties only for identified purposes and with the implicit or explicit consent of the data subject, to meet its privacy objectives."
+    required_evidence: "disclosure authorisation records; consent basis for each disclosure category; disclosure log"
+    path: ["Additional Criteria", "Privacy", "P6"]
+    reference: "P6.1"
+    obligation_type: process
+    roles: [governance, operator]
+    applicability: "conditional"
+    assessment_method: ledger
+    crosswalk: ["iso-27701:7.5.1"]
+    citation: "AICPA TSC 2017 (rev. 2022), P6.1"
+  - id: p6.2
+    title: "Record of authorised disclosures"
+    description: "The entity creates and retains a record of authorised disclosures of personal information to meet its privacy objectives."
+    required_evidence: "disclosure ledger with recipient, purpose and date; retention of disclosure records"
+    path: ["Additional Criteria", "Privacy", "P6"]
+    reference: "P6.2"
+    obligation_type: record-keeping
+    roles: [operator]
+    applicability: "conditional"
+    assessment_method: ledger
+    crosswalk: ["iso-27701:7.5.1"]
+    citation: "AICPA TSC 2017 (rev. 2022), P6.2"
+  - id: p6.3
+    title: "Record of unauthorised disclosures"
+    description: "The entity creates and retains a record of detected or reported unauthorised disclosures of personal information to meet its privacy objectives."
+    required_evidence: "log of unauthorised disclosure incidents; breach records tied to personal data"
+    path: ["Additional Criteria", "Privacy", "P6"]
+    reference: "P6.3"
+    obligation_type: record-keeping
+    roles: [operator]
+    applicability: "conditional"
+    assessment_method: ledger
+    crosswalk: ["iso-27701:6.13"]
+    citation: "AICPA TSC 2017 (rev. 2022), P6.3"
+  - id: p6.4
+    title: "Third parties handle personal information as agreed"
+    description: "The entity obtains commitments from third parties who receive personal information that they will protect it consistently with the entity's privacy objectives."
+    required_evidence: "data processing agreements; third-party privacy commitments; subprocessor obligations"
+    path: ["Additional Criteria", "Privacy", "P6"]
+    reference: "P6.4"
+    obligation_type: process
+    roles: [governance]
+    applicability: "conditional"
+    assessment_method: attestation
+    crosswalk: ["iso-27701:7.5.1"]
+    citation: "AICPA TSC 2017 (rev. 2022), P6.4"
+  - id: p6.5
+    title: "Notification of third-party unauthorised disclosure"
+    description: "The entity obtains commitments from third parties to notify it of any actual or suspected unauthorised disclosures of personal information they hold, to meet its privacy objectives."
+    required_evidence: "contractual breach-notification clauses; records of notifications received from third parties"
+    path: ["Additional Criteria", "Privacy", "P6"]
+    reference: "P6.5"
+    obligation_type: process
+    roles: [governance]
+    applicability: "conditional"
+    assessment_method: attestation
+    crosswalk: ["iso-27701:7.5.1"]
+    citation: "AICPA TSC 2017 (rev. 2022), P6.5"
+  - id: p6.6
+    title: "Notification to affected parties of breaches"
+    description: "The entity notifies data subjects, regulators and others of breaches and incidents affecting personal information as required, to meet its privacy objectives."
+    required_evidence: "breach notification procedure; notification records with timelines; regulatory reporting evidence"
+    path: ["Additional Criteria", "Privacy", "P6"]
+    reference: "P6.6"
+    obligation_type: process
+    roles: [governance]
+    applicability: "conditional"
+    assessment_method: ledger
+    crosswalk: ["iso-27701:6.13.1"]
+    citation: "AICPA TSC 2017 (rev. 2022), P6.6"
+  - id: p6.7
+    title: "Accounting of personal information held and disclosed"
+    description: "The entity provides data subjects, on request, with an accounting of the personal information held and its disclosure to third parties, to meet its privacy objectives."
+    required_evidence: "accounting-of-disclosures capability; records provided to data subjects on request"
+    path: ["Additional Criteria", "Privacy", "P6"]
+    reference: "P6.7"
+    obligation_type: record-keeping
+    roles: [operator]
+    applicability: "conditional"
+    assessment_method: ledger
+    crosswalk: ["iso-27701:7.3.8"]
+    citation: "AICPA TSC 2017 (rev. 2022), P6.7"
+  - id: p7.1
+    title: "Data quality and accuracy of personal information"
+    description: "The entity collects and maintains accurate, complete and relevant personal information for the identified purposes, to meet its privacy objectives."
+    required_evidence: "data quality controls; validation and correction processes; periodic review of personal data accuracy"
+    path: ["Additional Criteria", "Privacy", "P7"]
+    reference: "P7.1"
+    obligation_type: process
+    roles: [operator]
+    applicability: "conditional"
+    assessment_method: test
+    crosswalk: ["iso-27701:7.4.3"]
+    citation: "AICPA TSC 2017 (rev. 2022), P7.1"
+  - id: p8.1
+    title: "Monitoring, complaints and dispute resolution"
+    description: "The entity implements a process for receiving, addressing, resolving and communicating the resolution of enquiries, complaints and disputes from data subjects, and monitors compliance to meet its privacy objectives."
+    required_evidence: "privacy complaint handling procedure; complaint and resolution log; compliance monitoring and corrective action records"
+    path: ["Additional Criteria", "Privacy", "P8"]
+    reference: "P8.1"
+    obligation_type: process
+    roles: [governance, operator]
+    applicability: "conditional"
+    assessment_method: ledger
+    crosswalk: ["iso-27701:7.3.9"]
+    citation: "AICPA TSC 2017 (rev. 2022), P8.1"

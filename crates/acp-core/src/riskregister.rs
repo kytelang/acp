@@ -207,7 +207,7 @@ mod tests {
             impact: i,
             treatment: Treatment::Mitigate,
             status: s,
-            linked_controls: vec!["eu-ai-act-art-14".into()],
+            linked_controls: vec!["eu-ai-act:art-14".into()],
             linked_decisions: vec!["dec-1".into()],
             notes: String::new(),
         }

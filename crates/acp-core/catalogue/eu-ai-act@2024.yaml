@@ -1,0 +1,692 @@
+# EU AI Act, Regulation (EU) 2024/1689.
+# Framework type: statutory conformity (pass/fail against binding legal obligations, Annex IV technical
+# documentation). Nodes are faithful paraphrases with a citation, never verbatim regulation text.
+slug: eu-ai-act
+label: EU AI Act
+version: "2024"
+framework_type: statutory_conformity
+effective_date: "2024-08-01"
+record_keeping_reference: "Art. 12 (record-keeping)"
+source: "Regulation (EU) 2024/1689"
+manifest:
+  - "Art. 5"
+  - "Art. 6"
+  - "Annex III"
+  - "Art. 8"
+  - "Art. 9"
+  - "Art. 10"
+  - "Art. 11"
+  - "Annex IV"
+  - "Art. 12"
+  - "Art. 13"
+  - "Art. 14"
+  - "Art. 15"
+  - "Art. 16"
+  - "Art. 17"
+  - "Art. 18"
+  - "Art. 19"
+  - "Art. 20"
+  - "Art. 21"
+  - "Art. 22"
+  - "Art. 23"
+  - "Art. 24"
+  - "Art. 25"
+  - "Art. 26"
+  - "Art. 27"
+  - "Art. 43"
+  - "Art. 47"
+  - "Art. 48"
+  - "Art. 49"
+  - "Art. 50"
+  - "Art. 53"
+  - "Art. 55"
+  - "Art. 72"
+  - "Art. 73"
+controls:
+  # --- Chapter II: prohibited practices (Art. 5) ---
+  - id: art-5-a
+    title: "Prohibited: subliminal or manipulative techniques"
+    description: "Do not place, put into service or use AI that deploys subliminal, purposefully manipulative or deceptive techniques that materially distort behaviour and cause or are likely to cause significant harm."
+    required_evidence: "attestation the system uses no manipulative or deceptive techniques; design review record"
+    path: ["Chapter II", "Article 5"]
+    reference: "Art. 5(1)(a)"
+    obligation_type: prohibition
+    roles: [provider, deployer]
+    assessment_method: attestation
+    citation: "Regulation (EU) 2024/1689, Art. 5(1)(a)"
+  - id: art-5-b
+    title: "Prohibited: exploiting vulnerabilities"
+    description: "Do not exploit vulnerabilities due to age, disability or a specific social or economic situation to materially distort behaviour in a way that causes or is likely to cause significant harm."
+    required_evidence: "attestation and design review that no vulnerable-group exploitation exists"
+    path: ["Chapter II", "Article 5"]
+    reference: "Art. 5(1)(b)"
+    obligation_type: prohibition
+    roles: [provider, deployer]
+    assessment_method: attestation
+    citation: "Regulation (EU) 2024/1689, Art. 5(1)(b)"
+  - id: art-5-c
+    title: "Prohibited: social scoring"
+    description: "Do not use AI for social scoring of natural persons leading to detrimental or unfavourable treatment that is unjustified or disproportionate."
+    required_evidence: "attestation no social scoring is performed"
+    path: ["Chapter II", "Article 5"]
+    reference: "Art. 5(1)(c)"
+    obligation_type: prohibition
+    roles: [provider, deployer]
+    assessment_method: attestation
+    citation: "Regulation (EU) 2024/1689, Art. 5(1)(c)"
+  - id: art-5-d
+    title: "Prohibited: individual crime-risk prediction from profiling"
+    description: "Do not use AI to assess or predict the risk of a natural person committing a crime based solely on profiling or personality traits, save for supporting a human assessment grounded in objective facts."
+    required_evidence: "attestation no profiling-only crime prediction is performed"
+    path: ["Chapter II", "Article 5"]
+    reference: "Art. 5(1)(d)"
+    obligation_type: prohibition
+    roles: [provider, deployer]
+    assessment_method: attestation
+    citation: "Regulation (EU) 2024/1689, Art. 5(1)(d)"
+  - id: art-5-e
+    title: "Prohibited: untargeted facial-image scraping"
+    description: "Do not create or expand facial-recognition databases through untargeted scraping of facial images from the internet or CCTV."
+    required_evidence: "attestation no untargeted facial-image scraping is performed"
+    path: ["Chapter II", "Article 5"]
+    reference: "Art. 5(1)(e)"
+    obligation_type: prohibition
+    roles: [provider, deployer]
+    assessment_method: attestation
+    citation: "Regulation (EU) 2024/1689, Art. 5(1)(e)"
+  - id: art-5-f
+    title: "Prohibited: emotion inference at work or in education"
+    description: "Do not use AI to infer emotions of a person in the workplace or education institutions, except for medical or safety reasons."
+    required_evidence: "attestation no workplace or education emotion inference is performed"
+    path: ["Chapter II", "Article 5"]
+    reference: "Art. 5(1)(f)"
+    obligation_type: prohibition
+    roles: [provider, deployer]
+    assessment_method: attestation
+    citation: "Regulation (EU) 2024/1689, Art. 5(1)(f)"
+  - id: art-5-g
+    title: "Prohibited: biometric categorisation for sensitive traits"
+    description: "Do not use biometric categorisation that infers race, political opinions, trade-union membership, religious or philosophical beliefs, sex life or sexual orientation, save for lawful labelling or filtering of lawfully acquired datasets."
+    required_evidence: "attestation no sensitive-trait biometric categorisation is performed"
+    path: ["Chapter II", "Article 5"]
+    reference: "Art. 5(1)(g)"
+    obligation_type: prohibition
+    roles: [provider, deployer]
+    assessment_method: attestation
+    citation: "Regulation (EU) 2024/1689, Art. 5(1)(g)"
+  - id: art-5-h
+    title: "Prohibited: real-time remote biometric identification in public (law enforcement)"
+    description: "Do not use real-time remote biometric identification in publicly accessible spaces for law enforcement, save for the narrowly defined exceptions and authorisations set out in the Act."
+    required_evidence: "attestation, and where an exception is relied on, the judicial or administrative authorisation record"
+    path: ["Chapter II", "Article 5"]
+    reference: "Art. 5(1)(h)"
+    obligation_type: prohibition
+    roles: [deployer]
+    citation: "Regulation (EU) 2024/1689, Art. 5(1)(h)"
+    assessment_method: attestation
+  # --- Chapter III Section 1: high-risk classification (Art. 6 + Annex III) ---
+  - id: art-6
+    title: "High-risk classification rules"
+    description: "Determine whether the system is high-risk: a safety component or product under Annex I, or an Annex III use case, applying the Art. 6(3) derogation only with a documented justification."
+    required_evidence: "classification record with justification; risk tiering assessment"
+    path: ["Chapter III", "Section 1", "Article 6"]
+    reference: "Art. 6"
+    obligation_type: govern
+    roles: [provider]
+    assessment_method: artefact
+    citation: "Regulation (EU) 2024/1689, Art. 6"
+  - id: annex-iii-1
+    title: "Annex III(1): biometrics"
+    description: "High-risk use: remote biometric identification, biometric categorisation by sensitive attributes, and emotion recognition."
+    required_evidence: "use-case registry entry classifying the biometric use"
+    path: ["Annex III"]
+    reference: "Annex III(1)"
+    obligation_type: govern
+    roles: [provider, deployer]
+    applicability: "risk_tier in [high]"
+    assessment_method: artefact
+    citation: "Regulation (EU) 2024/1689, Annex III(1)"
+  - id: annex-iii-2
+    title: "Annex III(2): critical infrastructure"
+    description: "High-risk use: safety components in the management and operation of critical digital infrastructure, road traffic, and supply of water, gas, heating and electricity."
+    required_evidence: "use-case registry entry; safety-component classification"
+    path: ["Annex III"]
+    reference: "Annex III(2)"
+    obligation_type: govern
+    roles: [provider, deployer]
+    applicability: "risk_tier in [high]"
+    assessment_method: artefact
+    citation: "Regulation (EU) 2024/1689, Annex III(2)"
+  - id: annex-iii-3
+    title: "Annex III(3): education and vocational training"
+    description: "High-risk use: admission or assignment, evaluation of learning outcomes, assessment of the appropriate level of education, and monitoring for prohibited behaviour during tests."
+    required_evidence: "use-case registry entry classifying the education use"
+    path: ["Annex III"]
+    reference: "Annex III(3)"
+    obligation_type: govern
+    roles: [provider, deployer]
+    applicability: "risk_tier in [high]"
+    assessment_method: artefact
+    citation: "Regulation (EU) 2024/1689, Annex III(3)"
+  - id: annex-iii-4
+    title: "Annex III(4): employment and worker management"
+    description: "High-risk use: recruitment or selection, and decisions on terms, promotion, termination, task allocation and monitoring of workers."
+    required_evidence: "use-case registry entry classifying the employment use"
+    path: ["Annex III"]
+    reference: "Annex III(4)"
+    obligation_type: govern
+    roles: [provider, deployer]
+    applicability: "risk_tier in [high]"
+    assessment_method: artefact
+    citation: "Regulation (EU) 2024/1689, Annex III(4)"
+  - id: annex-iii-5
+    title: "Annex III(5): essential private and public services"
+    description: "High-risk use: eligibility for public assistance, creditworthiness and credit scoring, risk assessment and pricing in life and health insurance, and emergency-service dispatch."
+    required_evidence: "use-case registry entry classifying the essential-services use"
+    path: ["Annex III"]
+    reference: "Annex III(5)"
+    obligation_type: govern
+    roles: [provider, deployer]
+    applicability: "risk_tier in [high]"
+    assessment_method: artefact
+    citation: "Regulation (EU) 2024/1689, Annex III(5)"
+  - id: annex-iii-6
+    title: "Annex III(6): law enforcement"
+    description: "High-risk use: victim-risk assessment, polygraphs, evidence-reliability evaluation, offending-risk assessment, and profiling in the course of detection, investigation or prosecution."
+    required_evidence: "use-case registry entry classifying the law-enforcement use"
+    path: ["Annex III"]
+    reference: "Annex III(6)"
+    obligation_type: govern
+    roles: [provider, deployer]
+    applicability: "risk_tier in [high]"
+    assessment_method: artefact
+    citation: "Regulation (EU) 2024/1689, Annex III(6)"
+  - id: annex-iii-7
+    title: "Annex III(7): migration, asylum and border control"
+    description: "High-risk use: polygraphs, risk assessment of irregular migration or health and security risks, examination of applications for asylum, visa and residence, and detection or identification in this context."
+    required_evidence: "use-case registry entry classifying the migration or border use"
+    path: ["Annex III"]
+    reference: "Annex III(7)"
+    obligation_type: govern
+    roles: [provider, deployer]
+    applicability: "risk_tier in [high]"
+    assessment_method: artefact
+    citation: "Regulation (EU) 2024/1689, Annex III(7)"
+  - id: annex-iii-8
+    title: "Annex III(8): administration of justice and democratic processes"
+    description: "High-risk use: assisting a judicial authority in researching and interpreting facts and law, and influencing the outcome of elections or referenda or voting behaviour."
+    required_evidence: "use-case registry entry classifying the justice or democratic-process use"
+    path: ["Annex III"]
+    reference: "Annex III(8)"
+    obligation_type: govern
+    roles: [provider, deployer]
+    applicability: "risk_tier in [high]"
+    assessment_method: artefact
+    citation: "Regulation (EU) 2024/1689, Annex III(8)"
+  # --- Chapter III Section 2: requirements for high-risk systems (Art. 8-15) ---
+  - id: art-8
+    title: "Compliance with the high-risk requirements"
+    description: "Ensure high-risk systems comply with the Section 2 requirements, taking account of the intended purpose and the state of the art."
+    required_evidence: "conformity assessment record cross-referencing each Section 2 requirement"
+    path: ["Chapter III", "Section 2", "Article 8"]
+    reference: "Art. 8"
+    obligation_type: govern
+    roles: [provider]
+    applicability: "risk_tier in [high]"
+    assessment_method: artefact
+    citation: "Regulation (EU) 2024/1689, Art. 8"
+  - id: art-9
+    title: "Risk management system"
+    description: "Establish, implement, document and maintain a continuous, iterative risk management system across the lifecycle, identifying and evaluating risks and adopting mitigations."
+    required_evidence: "risk register entries with treatment and periodic review"
+    path: ["Chapter III", "Section 2", "Article 9"]
+    reference: "Art. 9"
+    obligation_type: process
+    roles: [provider]
+    applicability: "risk_tier in [high]"
+    assessment_method: artefact
+    crosswalk: ["nist-ai-rmf:MANAGE-1.1", "iso-42001:6.1", "iso-23894:6.4"]
+    citation: "Regulation (EU) 2024/1689, Art. 9"
+  - id: art-10
+    title: "Data and data governance"
+    description: "Train, validate and test on data sets that meet quality criteria, with governance covering design choices, collection, preparation, bias examination and mitigation, and relevance."
+    required_evidence: "data governance records; dataset documentation; bias examination results"
+    path: ["Chapter III", "Section 2", "Article 10"]
+    reference: "Art. 10"
+    obligation_type: document
+    roles: [provider]
+    applicability: "risk_tier in [high]"
+    assessment_method: artefact
+    crosswalk: ["gdpr:art-5", "iso-42001:B.7"]
+    citation: "Regulation (EU) 2024/1689, Art. 10"
+  - id: art-11
+    title: "Technical documentation"
+    description: "Draw up and keep up to date the technical documentation demonstrating conformity, containing at least the Annex IV elements, before placing on the market."
+    required_evidence: "technical documentation file covering the Annex IV headings"
+    path: ["Chapter III", "Section 2", "Article 11"]
+    reference: "Art. 11"
+    obligation_type: document
+    roles: [provider]
+    applicability: "risk_tier in [high]"
+    assessment_method: artefact
+    citation: "Regulation (EU) 2024/1689, Art. 11 and Annex IV"
+  - id: annex-iv-1
+    title: "Annex IV(1): general description of the system"
+    description: "Technical documentation: a general description including intended purpose, provider, versions, how it interacts with hardware or software, and forms of distribution."
+    required_evidence: "technical documentation section 1"
+    path: ["Annex IV"]
+    reference: "Annex IV(1)"
+    obligation_type: document
+    roles: [provider]
+    applicability: "risk_tier in [high]"
+    assessment_method: artefact
+    citation: "Regulation (EU) 2024/1689, Annex IV(1)"
+  - id: annex-iv-2
+    title: "Annex IV(2): detailed description of elements and development"
+    description: "Technical documentation: methods and development steps, design specifications, system architecture, data requirements, human oversight measures, and validation and testing."
+    required_evidence: "technical documentation section 2"
+    path: ["Annex IV"]
+    reference: "Annex IV(2)"
+    obligation_type: document
+    roles: [provider]
+    applicability: "risk_tier in [high]"
+    assessment_method: artefact
+    citation: "Regulation (EU) 2024/1689, Annex IV(2)"
+  - id: annex-iv-3
+    title: "Annex IV(3): monitoring, functioning and control"
+    description: "Technical documentation: capabilities and limitations, expected accuracy, foreseeable risks, and the human oversight measures and technical facilitation of interpreting output."
+    required_evidence: "technical documentation section 3"
+    path: ["Annex IV"]
+    reference: "Annex IV(3)"
+    obligation_type: document
+    roles: [provider]
+    applicability: "risk_tier in [high]"
+    assessment_method: artefact
+    citation: "Regulation (EU) 2024/1689, Annex IV(3)"
+  - id: annex-iv-4
+    title: "Annex IV(4): performance metrics and appropriateness"
+    description: "Technical documentation: a description of the appropriateness of the performance metrics for the specific system."
+    required_evidence: "technical documentation section 4"
+    path: ["Annex IV"]
+    reference: "Annex IV(4)"
+    obligation_type: document
+    roles: [provider]
+    applicability: "risk_tier in [high]"
+    assessment_method: artefact
+    citation: "Regulation (EU) 2024/1689, Annex IV(4)"
+  - id: annex-iv-5
+    title: "Annex IV(5): risk management system"
+    description: "Technical documentation: a description of the risk management system in accordance with Article 9."
+    required_evidence: "technical documentation section 5 cross-referencing the risk register"
+    path: ["Annex IV"]
+    reference: "Annex IV(5)"
+    obligation_type: document
+    roles: [provider]
+    applicability: "risk_tier in [high]"
+    assessment_method: artefact
+    citation: "Regulation (EU) 2024/1689, Annex IV(5)"
+  - id: annex-iv-6
+    title: "Annex IV(6): lifecycle changes"
+    description: "Technical documentation: a description of relevant changes made through the lifecycle of the system."
+    required_evidence: "technical documentation section 6; change log"
+    path: ["Annex IV"]
+    reference: "Annex IV(6)"
+    obligation_type: document
+    roles: [provider]
+    applicability: "risk_tier in [high]"
+    assessment_method: artefact
+    citation: "Regulation (EU) 2024/1689, Annex IV(6)"
+  - id: annex-iv-7
+    title: "Annex IV(7): standards and specifications applied"
+    description: "Technical documentation: the list of harmonised standards applied, or a description of solutions adopted to meet the requirements."
+    required_evidence: "technical documentation section 7"
+    path: ["Annex IV"]
+    reference: "Annex IV(7)"
+    obligation_type: document
+    roles: [provider]
+    applicability: "risk_tier in [high]"
+    assessment_method: artefact
+    citation: "Regulation (EU) 2024/1689, Annex IV(7)"
+  - id: annex-iv-8
+    title: "Annex IV(8): EU declaration of conformity"
+    description: "Technical documentation: a copy of the EU declaration of conformity."
+    required_evidence: "signed EU declaration of conformity"
+    path: ["Annex IV"]
+    reference: "Annex IV(8)"
+    obligation_type: document
+    roles: [provider]
+    applicability: "risk_tier in [high]"
+    assessment_method: artefact
+    citation: "Regulation (EU) 2024/1689, Annex IV(8)"
+  - id: annex-iv-9
+    title: "Annex IV(9): post-market monitoring plan"
+    description: "Technical documentation: a detailed description of the system in place to evaluate performance in the post-market phase, per Article 72."
+    required_evidence: "post-market monitoring plan"
+    path: ["Annex IV"]
+    reference: "Annex IV(9)"
+    obligation_type: document
+    roles: [provider]
+    applicability: "risk_tier in [high]"
+    assessment_method: artefact
+    citation: "Regulation (EU) 2024/1689, Annex IV(9)"
+  - id: art-12
+    title: "Record-keeping (logging)"
+    description: "Design high-risk systems for the automatic recording of events (logs) over their lifetime, appropriate to the intended purpose."
+    required_evidence: "tamper-evident ledger of decisions and events over the lifecycle"
+    path: ["Chapter III", "Section 2", "Article 12"]
+    reference: "Art. 12"
+    obligation_type: record-keeping
+    roles: [provider]
+    applicability: "risk_tier in [high]"
+    assessment_method: ledger
+    crosswalk: ["gdpr:art-30", "nist-ai-rmf:MEASURE-2.7", "soc-2:cc7.2"]
+    citation: "Regulation (EU) 2024/1689, Art. 12"
+  - id: art-13
+    title: "Transparency and provision of information to deployers"
+    description: "Design for sufficient transparency so deployers can interpret and use output; provide instructions for use with the required content."
+    required_evidence: "instructions for use; user-facing transparency notice"
+    path: ["Chapter III", "Section 2", "Article 13"]
+    reference: "Art. 13"
+    obligation_type: transparency
+    roles: [provider]
+    applicability: "risk_tier in [high]"
+    assessment_method: artefact
+    crosswalk: ["uk-ai:transparency", "nist-ai-rmf:MAP-3.3"]
+    citation: "Regulation (EU) 2024/1689, Art. 13"
+  - id: art-14
+    title: "Human oversight"
+    description: "Design high-risk systems so they can be effectively overseen by natural persons, including the ability to intervene, override, or stop the system."
+    required_evidence: "approvals, step-up and kill-switch records; oversight design documentation"
+    path: ["Chapter III", "Section 2", "Article 14"]
+    reference: "Art. 14"
+    obligation_type: oversight
+    roles: [provider, deployer]
+    applicability: "risk_tier in [high]"
+    assessment_method: ledger
+    crosswalk: ["nist-ai-rmf:MANAGE-2.3", "uk-ai:accountability", "iso-42001:B.9"]
+    citation: "Regulation (EU) 2024/1689, Art. 14"
+  - id: art-15
+    title: "Accuracy, robustness and cybersecurity"
+    description: "Achieve an appropriate level of accuracy, robustness and cybersecurity, consistent through the lifecycle, and resilient against errors and adversarial manipulation."
+    required_evidence: "content firewall, tool-integrity and coverage evidence; accuracy and robustness test results"
+    path: ["Chapter III", "Section 2", "Article 15"]
+    reference: "Art. 15"
+    obligation_type: technical
+    roles: [provider]
+    applicability: "risk_tier in [high]"
+    assessment_method: test
+    crosswalk: ["iso-27001:A.8.7", "soc-2:cc7.2", "nist-ai-rmf:MEASURE-2.5"]
+    citation: "Regulation (EU) 2024/1689, Art. 15"
+  # --- Chapter III Section 3: obligations of providers and other actors (Art. 16-25) ---
+  - id: art-16
+    title: "Obligations of providers of high-risk systems"
+    description: "Comply with the provider obligations: conformity, quality management, documentation, registration, corrective actions, CE marking and cooperation."
+    required_evidence: "provider obligations checklist mapped to each sub-duty"
+    path: ["Chapter III", "Section 3", "Article 16"]
+    reference: "Art. 16"
+    obligation_type: govern
+    roles: [provider]
+    applicability: "risk_tier in [high]"
+    assessment_method: artefact
+    citation: "Regulation (EU) 2024/1689, Art. 16"
+  - id: art-17
+    title: "Quality management system"
+    description: "Put a documented quality management system in place covering strategy for compliance, design and testing procedures, data management, risk management, post-market monitoring, and accountability."
+    required_evidence: "signed policy in force; quality management system documentation"
+    path: ["Chapter III", "Section 3", "Article 17"]
+    reference: "Art. 17"
+    obligation_type: process
+    roles: [provider]
+    applicability: "risk_tier in [high]"
+    assessment_method: artefact
+    crosswalk: ["iso-42001:8.1", "iso-27001:A.5.1"]
+    citation: "Regulation (EU) 2024/1689, Art. 17"
+  - id: art-18
+    title: "Documentation keeping"
+    description: "Keep the technical documentation, quality management documentation, approvals and the EU declaration of conformity at the disposal of authorities for ten years."
+    required_evidence: "retained documentation set with retention metadata"
+    path: ["Chapter III", "Section 3", "Article 18"]
+    reference: "Art. 18"
+    obligation_type: record-keeping
+    roles: [provider]
+    applicability: "risk_tier in [high]"
+    assessment_method: artefact
+    citation: "Regulation (EU) 2024/1689, Art. 18"
+  - id: art-19
+    title: "Automatically generated logs"
+    description: "Keep the logs automatically generated by the high-risk system that are under the provider's control, for an appropriate period."
+    required_evidence: "retained system logs; ledger export"
+    path: ["Chapter III", "Section 3", "Article 19"]
+    reference: "Art. 19"
+    obligation_type: record-keeping
+    roles: [provider]
+    applicability: "risk_tier in [high]"
+    assessment_method: ledger
+    citation: "Regulation (EU) 2024/1689, Art. 19"
+  - id: art-20
+    title: "Corrective actions and duty of information"
+    description: "Take immediate corrective action for a non-conforming system, withdraw or recall it as appropriate, and inform distributors, deployers and authorities."
+    required_evidence: "corrective-action records; incident and notification workflow"
+    path: ["Chapter III", "Section 3", "Article 20"]
+    reference: "Art. 20"
+    obligation_type: process
+    roles: [provider]
+    applicability: "risk_tier in [high]"
+    assessment_method: artefact
+    citation: "Regulation (EU) 2024/1689, Art. 20"
+  - id: art-21
+    title: "Cooperation with competent authorities"
+    description: "On a reasoned request, provide authorities the information and documentation to demonstrate conformity, and access to logs under the provider's control."
+    required_evidence: "documented process for authority requests; access to ledger"
+    path: ["Chapter III", "Section 3", "Article 21"]
+    reference: "Art. 21"
+    obligation_type: process
+    roles: [provider]
+    applicability: "risk_tier in [high]"
+    assessment_method: attestation
+    citation: "Regulation (EU) 2024/1689, Art. 21"
+  - id: art-22
+    title: "Authorised representatives of providers"
+    description: "A provider established outside the Union appoints an authorised representative in the Union with a written mandate to carry out the listed tasks."
+    required_evidence: "written mandate; representative details"
+    path: ["Chapter III", "Section 3", "Article 22"]
+    reference: "Art. 22"
+    obligation_type: govern
+    roles: [provider]
+    applicability: "role=provider"
+    assessment_method: attestation
+    citation: "Regulation (EU) 2024/1689, Art. 22"
+  - id: art-23
+    title: "Obligations of importers"
+    description: "Before placing on the market, verify the conformity assessment, technical documentation, CE marking and declaration of conformity, and cooperate with authorities."
+    required_evidence: "importer verification checklist"
+    path: ["Chapter III", "Section 3", "Article 23"]
+    reference: "Art. 23"
+    obligation_type: process
+    roles: [importer]
+    applicability: "role=importer"
+    assessment_method: attestation
+    citation: "Regulation (EU) 2024/1689, Art. 23"
+  - id: art-24
+    title: "Obligations of distributors"
+    description: "Verify CE marking, declaration of conformity and instructions before making available, and act where a system is not in conformity."
+    required_evidence: "distributor verification checklist"
+    path: ["Chapter III", "Section 3", "Article 24"]
+    reference: "Art. 24"
+    obligation_type: process
+    roles: [distributor]
+    applicability: "role=distributor"
+    assessment_method: attestation
+    citation: "Regulation (EU) 2024/1689, Art. 24"
+  - id: art-25
+    title: "Responsibilities along the value chain"
+    description: "Recognise when a deployer, distributor or importer becomes a provider (substantial modification or high-risk repurposing) and assumes the provider obligations."
+    required_evidence: "value-chain role determination record"
+    path: ["Chapter III", "Section 3", "Article 25"]
+    reference: "Art. 25"
+    obligation_type: govern
+    roles: [provider, deployer, importer, distributor]
+    applicability: "risk_tier in [high]"
+    assessment_method: artefact
+    citation: "Regulation (EU) 2024/1689, Art. 25"
+  - id: art-26
+    title: "Obligations of deployers of high-risk systems"
+    description: "Use the system per instructions, assign competent human oversight, monitor operation, keep logs, and inform the provider or authority of risks and serious incidents."
+    required_evidence: "deployer oversight assignment; monitoring and log-retention records"
+    path: ["Chapter III", "Section 3", "Article 26"]
+    reference: "Art. 26"
+    obligation_type: process
+    roles: [deployer]
+    applicability: "risk_tier in [high] and role=deployer"
+    assessment_method: artefact
+    crosswalk: ["uk-ai:accountability"]
+    citation: "Regulation (EU) 2024/1689, Art. 26"
+  - id: art-27
+    title: "Fundamental rights impact assessment (FRIA)"
+    description: "Deployers that are public bodies or provide public services, and certain private deployers, perform a fundamental rights impact assessment before first use."
+    required_evidence: "completed FRIA record for the use case"
+    path: ["Chapter III", "Section 3", "Article 27"]
+    reference: "Art. 27"
+    obligation_type: process
+    roles: [deployer]
+    applicability: "risk_tier in [high] and role=deployer"
+    assessment_method: artefact
+    crosswalk: ["gdpr:art-35"]
+    citation: "Regulation (EU) 2024/1689, Art. 27"
+  # --- Chapter III Section 5: conformity assessment, certificates, registration (Art. 43-49) ---
+  - id: art-43
+    title: "Conformity assessment"
+    description: "Undergo the applicable conformity assessment procedure before placing on the market, internal control or notified-body involvement per the Annex."
+    required_evidence: "conformity assessment record; notified-body certificate where required"
+    path: ["Chapter III", "Section 5", "Article 43"]
+    reference: "Art. 43"
+    obligation_type: process
+    roles: [provider]
+    applicability: "risk_tier in [high]"
+    assessment_method: artefact
+    citation: "Regulation (EU) 2024/1689, Art. 43"
+  - id: art-47
+    title: "EU declaration of conformity"
+    description: "Draw up a written, machine-readable EU declaration of conformity, keep it for ten years, and provide it to authorities on request."
+    required_evidence: "signed EU declaration of conformity"
+    path: ["Chapter III", "Section 5", "Article 47"]
+    reference: "Art. 47"
+    obligation_type: document
+    roles: [provider]
+    applicability: "risk_tier in [high]"
+    assessment_method: artefact
+    citation: "Regulation (EU) 2024/1689, Art. 47"
+  - id: art-48
+    title: "CE marking"
+    description: "Affix the CE marking to the high-risk system, or its packaging and documentation, to indicate conformity."
+    required_evidence: "CE marking record"
+    path: ["Chapter III", "Section 5", "Article 48"]
+    reference: "Art. 48"
+    obligation_type: document
+    roles: [provider]
+    applicability: "risk_tier in [high]"
+    assessment_method: attestation
+    citation: "Regulation (EU) 2024/1689, Art. 48"
+  - id: art-49
+    title: "Registration in the EU database"
+    description: "Register the high-risk system (and, for public-body deployers, the deployment) in the EU database before placing on the market or putting into service."
+    required_evidence: "EU database registration reference"
+    path: ["Chapter III", "Section 5", "Article 49"]
+    reference: "Art. 49"
+    obligation_type: govern
+    roles: [provider, deployer]
+    applicability: "risk_tier in [high]"
+    assessment_method: attestation
+    citation: "Regulation (EU) 2024/1689, Art. 49 and Art. 71"
+  # --- Chapter IV: transparency obligations (Art. 50) ---
+  - id: art-50-1
+    title: "Transparency: AI interacting with people"
+    description: "Inform natural persons that they are interacting with an AI system, unless it is obvious from the context."
+    required_evidence: "user-facing AI-interaction disclosure"
+    path: ["Chapter IV", "Article 50"]
+    reference: "Art. 50(1)"
+    obligation_type: transparency
+    roles: [provider, deployer]
+    applicability: "risk_tier in [high, limited]"
+    assessment_method: artefact
+    citation: "Regulation (EU) 2024/1689, Art. 50(1)"
+  - id: art-50-2
+    title: "Transparency: marking synthetic content"
+    description: "Mark AI-generated or manipulated audio, image, video or text as artificially generated in a machine-readable way."
+    required_evidence: "content-marking mechanism evidence"
+    path: ["Chapter IV", "Article 50"]
+    reference: "Art. 50(2)"
+    obligation_type: transparency
+    roles: [provider]
+    applicability: "risk_tier in [high, limited]"
+    assessment_method: test
+    citation: "Regulation (EU) 2024/1689, Art. 50(2)"
+  - id: art-50-3
+    title: "Transparency: emotion recognition and biometric categorisation"
+    description: "Deployers of emotion-recognition or biometric-categorisation systems inform the exposed natural persons of their operation."
+    required_evidence: "notice to affected persons"
+    path: ["Chapter IV", "Article 50"]
+    reference: "Art. 50(3)"
+    obligation_type: transparency
+    roles: [deployer]
+    applicability: "risk_tier in [high, limited] and role=deployer"
+    assessment_method: artefact
+    citation: "Regulation (EU) 2024/1689, Art. 50(3)"
+  - id: art-50-4
+    title: "Transparency: deepfake and public-interest text disclosure"
+    description: "Deployers disclose that image, audio or video content constituting a deep fake, and certain AI-generated public-interest text, has been artificially generated or manipulated."
+    required_evidence: "deepfake and public-interest disclosure evidence"
+    path: ["Chapter IV", "Article 50"]
+    reference: "Art. 50(4)"
+    obligation_type: transparency
+    roles: [deployer]
+    applicability: "risk_tier in [high, limited] and role=deployer"
+    assessment_method: artefact
+    citation: "Regulation (EU) 2024/1689, Art. 50(4)"
+  # --- Chapter V: general-purpose AI models (Art. 53, 55) ---
+  - id: art-53
+    title: "Obligations of GPAI model providers"
+    description: "Providers of general-purpose AI models keep technical documentation, provide information to downstream providers, put a copyright policy in place, and publish a training-content summary."
+    required_evidence: "GPAI technical documentation; downstream information package; copyright policy; training-data summary"
+    path: ["Chapter V", "Section 2", "Article 53"]
+    reference: "Art. 53"
+    obligation_type: document
+    roles: [provider]
+    applicability: "asset_type=gpai"
+    assessment_method: artefact
+    citation: "Regulation (EU) 2024/1689, Art. 53"
+  - id: art-55
+    title: "Obligations of GPAI models with systemic risk"
+    description: "Providers of GPAI models with systemic risk perform model evaluations and adversarial testing, assess and mitigate systemic risks, track and report serious incidents, and ensure cybersecurity."
+    required_evidence: "model evaluation and red-team results; systemic-risk assessment; incident tracking; cybersecurity measures"
+    path: ["Chapter V", "Section 3", "Article 55"]
+    reference: "Art. 55"
+    obligation_type: process
+    roles: [provider]
+    applicability: "asset_type=gpai_systemic"
+    assessment_method: test
+    citation: "Regulation (EU) 2024/1689, Art. 55"
+  # --- Chapter IX: post-market monitoring and incident reporting (Art. 72, 73) ---
+  - id: art-72
+    title: "Post-market monitoring"
+    description: "Establish and document a post-market monitoring system proportionate to the risks, collecting and analysing performance data across the system's lifetime."
+    required_evidence: "post-market monitoring report assembled from runtime violation, drift and red-team data"
+    path: ["Chapter IX", "Article 72"]
+    reference: "Art. 72"
+    obligation_type: process
+    roles: [provider]
+    applicability: "risk_tier in [high]"
+    assessment_method: ledger
+    crosswalk: ["nist-ai-rmf:MEASURE-2.7"]
+    citation: "Regulation (EU) 2024/1689, Art. 72"
+  - id: art-73
+    title: "Reporting of serious incidents"
+    description: "Report serious incidents to the relevant market surveillance authority within the deadlines, and cooperate on investigation and corrective action."
+    required_evidence: "serious-incident workflow with timestamps; tamper-evident ledger"
+    path: ["Chapter IX", "Article 73"]
+    reference: "Art. 73"
+    obligation_type: process
+    roles: [provider, deployer]
+    applicability: "risk_tier in [high]"
+    assessment_method: ledger
+    citation: "Regulation (EU) 2024/1689, Art. 73"

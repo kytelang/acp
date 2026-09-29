@@ -370,14 +370,16 @@ pub(crate) async fn report_framework_pack(State(st): State<Arc<AppState>>, heade
     ).into_response()
 }
 
-/// Human framework label + the record-keeping article it satisfies, for the export envelope.
-pub(crate) fn framework_label(slug: &str) -> (&'static str, &'static str) {
-    match slug {
-        "eu-ai-act" => ("EU AI Act", "Art. 12 (record-keeping)"),
-        "nist-ai-rmf" => ("NIST AI RMF", "Measure/Govern"),
-        "iso-42001" => ("ISO/IEC 42001", "Clause 9 (performance evaluation)"),
-        "soc-2" => ("SOC 2", "CC (common criteria)"),
-        _ => ("Framework", "record-keeping"),
+/// Human framework label + the record-keeping (or equivalent) reference it satisfies, for the export
+/// envelope. Both are read from the catalogue framework metadata (`acp_core::controls::framework`),
+/// so every framework in the catalogue has a proper label and reference with no per-slug match here.
+pub(crate) fn framework_label(slug: &str) -> (String, String) {
+    match acp_core::controls::framework(slug) {
+        Some(f) => {
+            let article = if f.record_keeping_reference.is_empty() { "record-keeping".to_string() } else { f.record_keeping_reference };
+            (f.label, article)
+        }
+        None => ("Framework".to_string(), "record-keeping".to_string()),
     }
 }
 

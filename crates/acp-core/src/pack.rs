@@ -1,8 +1,8 @@
 //! Signed control packs (A4): a versioned, signed bundle of a control library and its framework
 //! mappings, so an organisation can load continuously-updated compliance content into the control
-//! plane and verify its provenance. The three built-in packs (EU AI Act, NIST AI RMF, ISO 42001)
-//! are derived from `crate::controls`, so a loaded pack's controls are exactly the ones the
-//! assessment engine (`crate::assessment`) draws on.
+//! plane and verify its provenance. There is one built-in pack per framework in the catalogue
+//! (`crate::controls`), derived from it, so a loaded pack's controls are exactly the ones the
+//! assessment engine (`crate::assessment`) and the reports draw on.
 
 use crate::controls::Control;
 use crate::sign::{verify_ed25519, Signer};
@@ -69,25 +69,18 @@ pub fn verify(signed: &SignedPack) -> bool {
     verify_ed25519(&pk, &bytes, &sig)
 }
 
-/// The built-in packs, one per framework, derived from the control library. Loading these makes the
-/// assessment engine's controls available in the control plane as verifiable, versioned content.
+/// The built-in packs, one per framework in the catalogue, derived from the control library. Loading
+/// these makes the catalogue's controls available in the control plane as verifiable, versioned
+/// content. The pack version tracks the framework's catalogue version (for example the EU AI Act pack
+/// is versioned "2024"), so a report can pin the framework version it was assessed against.
 pub fn builtin_packs(generated_ms: u64) -> Vec<ControlPack> {
-    let frameworks = [
-        ("eu-ai-act", "EU AI Act"),
-        ("nist-ai-rmf", "NIST AI RMF"),
-        ("iso-42001", "ISO/IEC 42001"),
-        ("soc2", "SOC 2"),
-        ("gdpr", "GDPR"),
-        ("dpdp", "India DPDP Act"),
-        ("uk-ai", "UK AI principles"),
-    ];
-    frameworks
-        .iter()
-        .map(|(fw, _label)| ControlPack {
-            id: format!("pack-{fw}"),
-            version: "2026.09".to_string(),
-            frameworks: vec![fw.to_string()],
-            controls: crate::controls::for_framework(fw),
+    crate::controls::frameworks()
+        .into_iter()
+        .map(|fw| ControlPack {
+            id: format!("pack-{}", fw.slug),
+            version: fw.version.clone(),
+            frameworks: vec![fw.slug.clone()],
+            controls: crate::controls::for_framework(&fw.slug),
             generated_ms,
         })
         .collect()
@@ -99,9 +92,10 @@ mod tests {
     use crate::sign::Ed25519Signer;
 
     #[test]
-    fn builtin_packs_cover_three_frameworks_and_verify() {
+    fn builtin_packs_cover_every_framework_and_verify() {
         let packs = builtin_packs(1000);
-        assert_eq!(packs.len(), 7);
+        assert_eq!(packs.len(), crate::controls::frameworks().len());
+        assert!(packs.len() >= 12, "one pack per catalogue framework");
         let signer = Ed25519Signer::from_seed(&[7u8; 32]);
         for p in &packs {
             assert!(!p.controls.is_empty(), "{} has controls", p.id);

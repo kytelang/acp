@@ -1,0 +1,239 @@
+# India Digital Personal Data Protection Act, 2023.
+# Framework type: statutory conformity (pass/fail against binding legal obligations for the processing of
+# digital personal data). Nodes are faithful paraphrases with a citation, never verbatim statutory text.
+slug: dpdp-2023
+label: India DPDP Act 2023
+version: "2023"
+framework_type: statutory_conformity
+effective_date: "2023-08-11"
+record_keeping_reference: "s8 (data fiduciary obligations)"
+source: "Digital Personal Data Protection Act, 2023 (India)"
+manifest:
+  - "s4"
+  - "s5"
+  - "s6"
+  - "s7"
+  - "s8"
+  - "s9"
+  - "s10"
+  - "s11"
+  - "s12"
+  - "s13"
+  - "s14"
+  - "s16"
+controls:
+  # --- Grounds for processing (s4) ---
+  - id: s4
+    title: "Grounds for processing personal data"
+    description: "Process personal data only for a lawful purpose for which the data principal has given consent, or for a legitimate use permitted under the Act."
+    required_evidence: "record of lawful purpose and ground for each processing activity"
+    path: ["Chapter II", "Section 4"]
+    reference: "s4"
+    obligation_type: govern
+    roles: [controller]
+    applicability: "always"
+    assessment_method: artefact
+    crosswalk: ["gdpr:art-6", "eu-ai-act:art-10"]
+    citation: "Digital Personal Data Protection Act, 2023, s4"
+  # --- Notice (s5) ---
+  - id: s5
+    title: "Notice to the data principal"
+    description: "Before or when seeking consent, give the data principal a clear notice describing the personal data to be processed, the purpose, how to exercise rights and how to complain to the Board."
+    required_evidence: "consent notice text covering data, purpose, rights and grievance route; available in English and scheduled languages"
+    path: ["Chapter II", "Section 5"]
+    reference: "s5"
+    obligation_type: transparency
+    roles: [controller]
+    applicability: "always"
+    assessment_method: artefact
+    crosswalk: ["gdpr:art-13"]
+    citation: "Digital Personal Data Protection Act, 2023, s5"
+  # --- Consent (s6) ---
+  - id: s6
+    title: "Consent"
+    description: "Obtain consent that is free, specific, informed, unconditional and unambiguous with a clear affirmative action, limited to the data necessary for the stated purpose, and provide an easy means to withdraw it."
+    required_evidence: "consent records with timestamps; withdrawal mechanism; consent manager registration where used"
+    path: ["Chapter II", "Section 6"]
+    reference: "s6"
+    obligation_type: process
+    roles: [controller]
+    applicability: "always"
+    assessment_method: ledger
+    crosswalk: ["gdpr:art-6"]
+    citation: "Digital Personal Data Protection Act, 2023, s6"
+  # --- Legitimate uses (s7) ---
+  - id: s7
+    title: "Certain legitimate uses"
+    description: "Process personal data for the specified legitimate uses without consent, such as a voluntarily provided purpose, State provision of benefits, legal obligations, medical emergencies and employment purposes."
+    required_evidence: "record identifying the specific legitimate use relied on for each such processing activity"
+    path: ["Chapter II", "Section 7"]
+    reference: "s7"
+    obligation_type: govern
+    roles: [controller]
+    applicability: "always"
+    assessment_method: artefact
+    crosswalk: ["gdpr:art-6"]
+    citation: "Digital Personal Data Protection Act, 2023, s7"
+  # --- Data fiduciary obligations (s8) ---
+  - id: s8
+    title: "General obligations of the data fiduciary"
+    description: "The data fiduciary is responsible for compliance including when a data processor acts on its behalf, and must process data only for permitted purposes."
+    required_evidence: "accountability documentation showing the fiduciary demonstrably complies for its own and processor processing"
+    path: ["Chapter II", "Section 8"]
+    reference: "s8"
+    obligation_type: govern
+    roles: [controller]
+    applicability: "always"
+    assessment_method: artefact
+    crosswalk: ["gdpr:art-24", "gdpr:art-5-2"]
+    citation: "Digital Personal Data Protection Act, 2023, s8"
+  - id: s8-3
+    title: "Completeness, accuracy and consistency of data"
+    description: "Ensure the completeness, accuracy and consistency of personal data where it is used to make a decision affecting the data principal or is disclosed to another data fiduciary."
+    required_evidence: "data-quality controls; accuracy checks for decision and disclosure data"
+    path: ["Chapter II", "Section 8"]
+    reference: "s8(3)"
+    obligation_type: technical
+    roles: [controller]
+    applicability: "always"
+    assessment_method: test
+    crosswalk: ["gdpr:art-5-1-d"]
+    citation: "Digital Personal Data Protection Act, 2023, s8(3)"
+  - id: s8-4
+    title: "Reasonable security safeguards"
+    description: "Implement appropriate technical and organisational measures and reasonable security safeguards to prevent a personal data breach."
+    required_evidence: "security control set; encryption, access control and monitoring evidence"
+    path: ["Chapter II", "Section 8"]
+    reference: "s8(4)"
+    obligation_type: technical
+    roles: [controller, processor]
+    applicability: "always"
+    assessment_method: test
+    crosswalk: ["gdpr:art-32", "iso-27001:A.8.7"]
+    citation: "Digital Personal Data Protection Act, 2023, s8(4)"
+  - id: s8-5
+    title: "Personal data breach intimation"
+    description: "In the event of a personal data breach, give intimation to the Board and to each affected data principal in the manner prescribed."
+    required_evidence: "breach-notification workflow with timestamps; tamper-evident breach ledger"
+    path: ["Chapter II", "Section 8"]
+    reference: "s8(5)"
+    obligation_type: process
+    roles: [controller]
+    applicability: "always"
+    assessment_method: ledger
+    crosswalk: ["gdpr:art-33", "gdpr:art-34"]
+    citation: "Digital Personal Data Protection Act, 2023, s8(5)"
+  - id: s8-7
+    title: "Erasure on withdrawal or end of purpose"
+    description: "Erase personal data, and cause its processor to erase it, when the data principal withdraws consent or as soon as the specified purpose is no longer served, unless retention is required by law."
+    required_evidence: "retention schedule; erasure workflow and deletion confirmation records"
+    path: ["Chapter II", "Section 8"]
+    reference: "s8(7)"
+    obligation_type: process
+    roles: [controller]
+    applicability: "always"
+    assessment_method: process
+    crosswalk: ["gdpr:art-5-1-e", "gdpr:art-17"]
+    citation: "Digital Personal Data Protection Act, 2023, s8(7)"
+  - id: s8-10
+    title: "Grievance redressal and contact"
+    description: "Publish the contact details of a Data Protection Officer or a person able to answer questions, and establish an effective mechanism to redress data-principal grievances."
+    required_evidence: "published DPO or contact details; documented grievance-handling mechanism"
+    path: ["Chapter II", "Section 8"]
+    reference: "s8(10)"
+    obligation_type: process
+    roles: [controller]
+    applicability: "always"
+    assessment_method: artefact
+    crosswalk: ["gdpr:art-12"]
+    citation: "Digital Personal Data Protection Act, 2023, s8(10)"
+  # --- Children's and disability data (s9) ---
+  - id: s9
+    title: "Processing personal data of children and persons with disability"
+    description: "Obtain verifiable consent of a parent or lawful guardian before processing a child's data, and do not undertake tracking, behavioural monitoring or targeted advertising directed at children or processing likely to cause harm."
+    required_evidence: "age-verification and parental-consent mechanism; controls barring child tracking and targeted advertising"
+    path: ["Chapter II", "Section 9"]
+    reference: "s9"
+    obligation_type: process
+    roles: [controller]
+    applicability: "always"
+    assessment_method: test
+    crosswalk: ["gdpr:art-9"]
+    citation: "Digital Personal Data Protection Act, 2023, s9"
+  # --- Significant data fiduciary (s10) ---
+  - id: s10
+    title: "Additional obligations of a significant data fiduciary"
+    description: "A data fiduciary notified as significant must appoint a Data Protection Officer based in India, appoint an independent data auditor, and carry out periodic data-protection impact assessment and audit."
+    required_evidence: "DPO appointment; independent audit reports; periodic DPIA records"
+    path: ["Chapter II", "Section 10"]
+    reference: "s10"
+    obligation_type: govern
+    roles: [controller]
+    applicability: "always"
+    assessment_method: artefact
+    crosswalk: ["gdpr:art-35", "eu-ai-act:art-27"]
+    citation: "Digital Personal Data Protection Act, 2023, s10"
+  # --- Right to access information (s11) ---
+  - id: s11
+    title: "Right to access information about personal data"
+    description: "On request, provide the data principal a summary of the personal data being processed, the processing activities, and the identities of other fiduciaries and processors with whom it has been shared."
+    required_evidence: "access-request workflow; access response records"
+    path: ["Chapter III", "Section 11"]
+    reference: "s11"
+    obligation_type: process
+    roles: [controller]
+    applicability: "always"
+    assessment_method: process
+    crosswalk: ["gdpr:art-15", "gdpr:art-22"]
+    citation: "Digital Personal Data Protection Act, 2023, s11"
+  # --- Right to correction and erasure (s12) ---
+  - id: s12
+    title: "Right to correction, completion, updating and erasure"
+    description: "On request, correct inaccurate or misleading personal data, complete and update it, and erase personal data that is no longer necessary for the purpose, unless retention is required by law."
+    required_evidence: "correction and erasure request workflow; records of actions taken"
+    path: ["Chapter III", "Section 12"]
+    reference: "s12"
+    obligation_type: process
+    roles: [controller]
+    applicability: "always"
+    assessment_method: process
+    crosswalk: ["gdpr:art-16", "gdpr:art-17"]
+    citation: "Digital Personal Data Protection Act, 2023, s12"
+  # --- Right of grievance redressal (s13) ---
+  - id: s13
+    title: "Right of grievance redressal"
+    description: "Give the data principal a readily available means of grievance redressal in respect of any act or omission regarding their rights, and respond within the prescribed period before the principal may approach the Board."
+    required_evidence: "grievance-redressal channel; response-time tracking records"
+    path: ["Chapter III", "Section 13"]
+    reference: "s13"
+    obligation_type: process
+    roles: [controller]
+    applicability: "always"
+    assessment_method: process
+    crosswalk: ["gdpr:art-12"]
+    citation: "Digital Personal Data Protection Act, 2023, s13"
+  # --- Right to nominate (s14) ---
+  - id: s14
+    title: "Right to nominate"
+    description: "Allow the data principal to nominate another individual to exercise their rights under the Act in the event of death or incapacity."
+    required_evidence: "nomination mechanism; records of nominations"
+    path: ["Chapter III", "Section 14"]
+    reference: "s14"
+    obligation_type: process
+    roles: [controller]
+    applicability: "always"
+    assessment_method: artefact
+    citation: "Digital Personal Data Protection Act, 2023, s14"
+  # --- Cross-border transfer (s16) ---
+  - id: s16
+    title: "Processing of personal data outside India"
+    description: "Transfer of personal data for processing to a country outside India is permitted except to any country the Central Government restricts by notification, and does not relax stricter sector-specific limits."
+    required_evidence: "transfer register; check against the restricted-country notification; sector-limit assessment"
+    path: ["Chapter IV", "Section 16"]
+    reference: "s16"
+    obligation_type: govern
+    roles: [controller, processor]
+    applicability: "always"
+    assessment_method: artefact
+    crosswalk: ["gdpr:art-44"]
+    citation: "Digital Personal Data Protection Act, 2023, s16"

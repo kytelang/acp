@@ -1,0 +1,110 @@
+# NYC Local Law 144 of 2021 (automated employment decision tools), with the DCWP final rules.
+# Framework type: sectoral (employment; applies to employers and employment agencies using an AEDT to
+# screen candidates or employees for a position in New York City). Nodes are faithful paraphrases with a
+# citation, never verbatim text of the law or rules.
+slug: nyc-ll144
+label: NYC Local Law 144
+version: "2023"
+framework_type: sectoral
+effective_date: "2023-07-05"
+record_keeping_reference: "Bias audit publication"
+source: "NYC Local Law 144 of 2021; DCWP final rules"
+manifest:
+  - "bias-audit"
+  - "publication"
+  - "notice"
+controls:
+  # --- Bias audit ---
+  - id: bias-audit
+    title: "Annual independent bias audit"
+    description: "Before using an automated employment decision tool, and within one year of the audit, the tool must undergo an impartial bias audit conducted by an independent auditor that computes selection or scoring rates and impact ratios across sex, race and ethnicity categories, and their intersections."
+    required_evidence: "independent bias audit report with selection rates and impact ratios"
+    path: ["Local Law 144", "Bias audit"]
+    reference: "bias-audit"
+    obligation_type: process
+    roles: [deployer]
+    applicability: "role=deployer"
+    assessment_method: artefact
+    crosswalk: ["eu-ai-act:Art. 10"]
+    citation: "NYC Local Law 144 of 2021; DCWP final rules (bias audit requirement)"
+  - id: bias-audit-independence
+    title: "Auditor independence"
+    description: "The bias audit must be performed by an independent auditor that was not involved in using, developing or distributing the tool and has no financial interest that would compromise impartiality."
+    required_evidence: "auditor independence attestation; engagement scope"
+    path: ["Local Law 144", "Bias audit"]
+    reference: "bias-audit-independence"
+    obligation_type: govern
+    roles: [deployer]
+    applicability: "role=deployer"
+    assessment_method: attestation
+    citation: "NYC Local Law 144 of 2021; DCWP final rules (independent auditor)"
+  # --- Publication ---
+  - id: publication-summary
+    title: "Publication of bias audit summary results"
+    description: "A summary of the most recent bias audit results, including the source and explanation of the data, the selection or scoring rates and the impact ratios, together with the distribution date of the tool, must be published on the employer or agency website."
+    required_evidence: "published audit summary with distribution date"
+    path: ["Local Law 144", "Publication"]
+    reference: "publication-summary"
+    obligation_type: transparency
+    roles: [deployer]
+    applicability: "role=deployer"
+    assessment_method: artefact
+    citation: "NYC Local Law 144 of 2021; DCWP final rules (publication of results)"
+  - id: publication-retention
+    title: "Availability of published results"
+    description: "The published summary of results must remain publicly available until at least six months after the tool is no longer used for an employment decision."
+    required_evidence: "publication record with availability window"
+    path: ["Local Law 144", "Publication"]
+    reference: "publication-retention"
+    obligation_type: record-keeping
+    roles: [deployer]
+    applicability: "role=deployer"
+    assessment_method: ledger
+    citation: "NYC Local Law 144 of 2021; DCWP final rules (availability of results)"
+  # --- Candidate notice ---
+  - id: notice-candidate
+    title: "Ten business-day candidate notice"
+    description: "Candidates and employees who reside in New York City must be notified at least ten business days before an automated employment decision tool is used, that such a tool will be used to assess them."
+    required_evidence: "candidate notice template; delivery records with timestamps"
+    path: ["Local Law 144", "Notice"]
+    reference: "notice-candidate"
+    obligation_type: transparency
+    roles: [deployer]
+    applicability: "role=deployer"
+    assessment_method: ledger
+    crosswalk: ["eu-ai-act:Art. 50(1)"]
+    citation: "NYC Local Law 144 of 2021; DCWP final rules (candidate notice)"
+  - id: notice-qualifications
+    title: "Notice of job qualifications and characteristics"
+    description: "The notice must state the job qualifications and characteristics that the automated employment decision tool will use in the assessment."
+    required_evidence: "notice content listing job qualifications and characteristics"
+    path: ["Local Law 144", "Notice"]
+    reference: "notice-qualifications"
+    obligation_type: transparency
+    roles: [deployer]
+    applicability: "role=deployer"
+    assessment_method: artefact
+    citation: "NYC Local Law 144 of 2021; DCWP final rules (qualifications and characteristics)"
+  - id: notice-datatype
+    title: "Notice of data collected and data source"
+    description: "On request, the employer or agency must disclose the type of data collected for the tool, the source of that data and its data retention policy, within the statutory timeframe."
+    required_evidence: "data-type and source disclosure record"
+    path: ["Local Law 144", "Notice"]
+    reference: "notice-datatype"
+    obligation_type: transparency
+    roles: [deployer]
+    applicability: "role=deployer"
+    assessment_method: artefact
+    citation: "NYC Local Law 144 of 2021; DCWP final rules (data type and source disclosure)"
+  - id: notice-alternative
+    title: "Alternative process and accommodation notice"
+    description: "The notice must explain how a candidate or employee may request an alternative selection process or a reasonable accommodation under other laws, where such a process is available."
+    required_evidence: "notice content describing alternative process and accommodation route"
+    path: ["Local Law 144", "Notice"]
+    reference: "notice-alternative"
+    obligation_type: process
+    roles: [deployer]
+    applicability: "role=deployer"
+    assessment_method: artefact
+    crosswalk: ["eu-ai-act:Art. 14"]
+    citation: "NYC Local Law 144 of 2021; DCWP final rules (alternative process and accommodation)"

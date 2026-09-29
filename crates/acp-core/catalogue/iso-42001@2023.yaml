@@ -1,0 +1,843 @@
+# ISO/IEC 42001:2023, Artificial intelligence management system (AIMS).
+# Framework type: management-system standard. Clauses 4 to 10 are the management-system requirements;
+# Annex A (A.2 to A.10) is the reference set of controls. Nodes are faithful paraphrases with a citation,
+# never verbatim standard text.
+slug: iso-42001
+label: ISO/IEC 42001
+version: "2023"
+framework_type: standard
+effective_date: "2023-12-01"
+record_keeping_reference: "Clause 9 (performance evaluation)"
+source: "ISO/IEC 42001:2023"
+manifest:
+  - "4"
+  - "5"
+  - "6"
+  - "7"
+  - "8"
+  - "9"
+  - "10"
+  - "A.2"
+  - "A.3"
+  - "A.4"
+  - "A.5"
+  - "A.6"
+  - "A.7"
+  - "A.8"
+  - "A.9"
+  - "A.10"
+controls:
+  # --- Clause 4: Context of the organization ---
+  - id: clause-4.1
+    title: "Understanding the organization and its context"
+    description: "Determine the external and internal issues relevant to the organization's purpose that affect the ability of the AI management system to achieve its intended results, including the organization's role in the AI lifecycle. ISO/IEC 42001:2023, 4.1."
+    required_evidence: "documented context analysis recording internal and external issues and the organization's AI roles"
+    path: ["Clause 4", "4.1"]
+    reference: "4.1"
+    obligation_type: govern
+    roles: [provider]
+    applicability: "always"
+    assessment_method: artefact
+    citation: "ISO/IEC 42001:2023, 4.1"
+  - id: clause-4.2
+    title: "Understanding the needs and expectations of interested parties"
+    description: "Identify the interested parties relevant to the AI management system and their relevant requirements, including legal, regulatory and contractual expectations. ISO/IEC 42001:2023, 4.2."
+    required_evidence: "interested-parties register with their AI-related requirements"
+    path: ["Clause 4", "4.2"]
+    reference: "4.2"
+    obligation_type: govern
+    roles: [provider]
+    applicability: "always"
+    assessment_method: artefact
+    citation: "ISO/IEC 42001:2023, 4.2"
+  - id: clause-4.3
+    title: "Determining the scope of the AI management system"
+    description: "Define the boundaries and applicability of the AI management system, considering the issues, requirements and interfaces identified, and keep the scope as documented information. ISO/IEC 42001:2023, 4.3."
+    required_evidence: "documented AIMS scope statement"
+    path: ["Clause 4", "4.3"]
+    reference: "4.3"
+    obligation_type: document
+    roles: [provider]
+    applicability: "always"
+    assessment_method: artefact
+    citation: "ISO/IEC 42001:2023, 4.3"
+  - id: clause-4.4
+    title: "AI management system"
+    description: "Establish, implement, maintain and continually improve an AI management system, including the processes needed and their interactions, in line with the requirements of the standard. ISO/IEC 42001:2023, 4.4."
+    required_evidence: "AIMS process map and governing documentation showing establishment and maintenance"
+    path: ["Clause 4", "4.4"]
+    reference: "4.4"
+    obligation_type: govern
+    roles: [provider]
+    applicability: "always"
+    assessment_method: artefact
+    citation: "ISO/IEC 42001:2023, 4.4"
+  # --- Clause 5: Leadership ---
+  - id: clause-5.1
+    title: "Leadership and commitment"
+    description: "Top management demonstrates leadership and commitment to the AI management system by ensuring policy and objectives are set, resources are available, and the system is integrated into business processes. ISO/IEC 42001:2023, 5.1."
+    required_evidence: "management commitment record; evidence of resourcing and integration decisions"
+    path: ["Clause 5", "5.1"]
+    reference: "5.1"
+    obligation_type: govern
+    roles: [provider]
+    applicability: "always"
+    assessment_method: attestation
+    citation: "ISO/IEC 42001:2023, 5.1"
+  - id: clause-5.2
+    title: "AI policy"
+    description: "Top management establishes an AI policy appropriate to the organization's purpose, providing a framework for objectives and a commitment to meet requirements and to continual improvement, and makes it available and communicated. ISO/IEC 42001:2023, 5.2."
+    required_evidence: "signed AI policy in force; communication and availability record"
+    path: ["Clause 5", "5.2"]
+    reference: "5.2"
+    obligation_type: document
+    roles: [provider]
+    applicability: "always"
+    assessment_method: artefact
+    crosswalk: ["eu-ai-act:art-17"]
+    citation: "ISO/IEC 42001:2023, 5.2"
+  - id: clause-5.3
+    title: "Roles, responsibilities and authorities"
+    description: "Top management assigns and communicates responsibilities and authorities for roles relevant to the AI management system, including for conformance reporting. ISO/IEC 42001:2023, 5.3."
+    required_evidence: "RACI or role-assignment matrix for AIMS roles"
+    path: ["Clause 5", "5.3"]
+    reference: "5.3"
+    obligation_type: govern
+    roles: [provider]
+    applicability: "always"
+    assessment_method: artefact
+    citation: "ISO/IEC 42001:2023, 5.3"
+  # --- Clause 6: Planning ---
+  - id: clause-6.1
+    title: "Actions to address risks and opportunities"
+    description: "Plan actions to address the risks and opportunities arising from the context and interested-party requirements, and integrate and evaluate these actions within the AI management system. ISO/IEC 42001:2023, 6.1.1."
+    required_evidence: "planning record linking risks and opportunities to actions and their evaluation"
+    path: ["Clause 6", "6.1"]
+    reference: "6.1"
+    obligation_type: process
+    roles: [provider]
+    applicability: "always"
+    assessment_method: artefact
+    crosswalk: ["eu-ai-act:art-9", "nist-ai-rmf:MANAGE-1.1"]
+    citation: "ISO/IEC 42001:2023, 6.1.1"
+  - id: clause-6.1.2
+    title: "AI risk assessment"
+    description: "Define and apply an AI risk assessment process that establishes risk criteria, identifies risks to the achievement of objectives, and analyses and evaluates them consistently and repeatably. ISO/IEC 42001:2023, 6.1.2."
+    required_evidence: "documented AI risk assessment process and risk register entries"
+    path: ["Clause 6", "6.1", "6.1.2"]
+    reference: "6.1.2"
+    obligation_type: process
+    roles: [provider]
+    applicability: "always"
+    assessment_method: artefact
+    crosswalk: ["eu-ai-act:art-9", "iso-23894:6.4"]
+    citation: "ISO/IEC 42001:2023, 6.1.2"
+  - id: clause-6.1.3
+    title: "AI risk treatment"
+    description: "Define and apply an AI risk treatment process that selects treatment options and controls, compares them against Annex A, produces a Statement of Applicability, and formulates a treatment plan with residual-risk acceptance. ISO/IEC 42001:2023, 6.1.3."
+    required_evidence: "risk treatment plan; Statement of Applicability referencing Annex A controls; residual-risk approvals"
+    path: ["Clause 6", "6.1", "6.1.3"]
+    reference: "6.1.3"
+    obligation_type: process
+    roles: [provider]
+    applicability: "always"
+    assessment_method: artefact
+    citation: "ISO/IEC 42001:2023, 6.1.3"
+  - id: clause-6.1.4
+    title: "AI system impact assessment"
+    description: "Define and apply a process to assess the potential consequences of AI systems for individuals, groups and society throughout the lifecycle. ISO/IEC 42001:2023, 6.1.4."
+    required_evidence: "documented AI system impact assessment process"
+    path: ["Clause 6", "6.1", "6.1.4"]
+    reference: "6.1.4"
+    obligation_type: process
+    roles: [provider]
+    applicability: "always"
+    assessment_method: artefact
+    crosswalk: ["eu-ai-act:art-27"]
+    citation: "ISO/IEC 42001:2023, 6.1.4"
+  - id: clause-6.2
+    title: "AI objectives and planning to achieve them"
+    description: "Establish measurable AI objectives at relevant functions and levels, consistent with the AI policy, and plan how to achieve them including resources, responsibility, timing and evaluation. ISO/IEC 42001:2023, 6.2."
+    required_evidence: "documented AI objectives with owners, timelines and measurement approach"
+    path: ["Clause 6", "6.2"]
+    reference: "6.2"
+    obligation_type: govern
+    roles: [provider]
+    applicability: "always"
+    assessment_method: artefact
+    citation: "ISO/IEC 42001:2023, 6.2"
+  - id: clause-6.3
+    title: "Planning of changes"
+    description: "When the organization determines the need to change the AI management system, carry out the changes in a planned manner. ISO/IEC 42001:2023, 6.3."
+    required_evidence: "change-management records for the AI management system"
+    path: ["Clause 6", "6.3"]
+    reference: "6.3"
+    obligation_type: process
+    roles: [provider]
+    applicability: "always"
+    assessment_method: artefact
+    citation: "ISO/IEC 42001:2023, 6.3"
+  # --- Clause 7: Support ---
+  - id: clause-7.1
+    title: "Resources"
+    description: "Determine and provide the resources needed to establish, implement, maintain and continually improve the AI management system. ISO/IEC 42001:2023, 7.1."
+    required_evidence: "resource plan and allocation records for the AIMS"
+    path: ["Clause 7", "7.1"]
+    reference: "7.1"
+    obligation_type: govern
+    roles: [provider]
+    applicability: "always"
+    assessment_method: artefact
+    citation: "ISO/IEC 42001:2023, 7.1"
+  - id: clause-7.2
+    title: "Competence"
+    description: "Determine the necessary competence of persons doing work affecting AI performance, ensure competence through education, training or experience, and retain evidence. ISO/IEC 42001:2023, 7.2."
+    required_evidence: "competence requirements, training records and evidence of competence"
+    path: ["Clause 7", "7.2"]
+    reference: "7.2"
+    obligation_type: document
+    roles: [provider]
+    applicability: "always"
+    assessment_method: artefact
+    citation: "ISO/IEC 42001:2023, 7.2"
+  - id: clause-7.3
+    title: "Awareness"
+    description: "Ensure persons doing work under the organization's control are aware of the AI policy, their contribution to the AIMS, and the implications of not conforming. ISO/IEC 42001:2023, 7.3."
+    required_evidence: "awareness communications and acknowledgement records"
+    path: ["Clause 7", "7.3"]
+    reference: "7.3"
+    obligation_type: process
+    roles: [provider]
+    applicability: "always"
+    assessment_method: attestation
+    citation: "ISO/IEC 42001:2023, 7.3"
+  - id: clause-7.4
+    title: "Communication"
+    description: "Determine the internal and external communications relevant to the AI management system, including what, when, with whom and how to communicate. ISO/IEC 42001:2023, 7.4."
+    required_evidence: "communication plan covering internal and external AIMS communications"
+    path: ["Clause 7", "7.4"]
+    reference: "7.4"
+    obligation_type: process
+    roles: [provider]
+    applicability: "always"
+    assessment_method: artefact
+    citation: "ISO/IEC 42001:2023, 7.4"
+  - id: clause-7.5
+    title: "Documented information"
+    description: "The AI management system includes the documented information required by the standard and that determined necessary for its effectiveness. ISO/IEC 42001:2023, 7.5.1."
+    required_evidence: "index of AIMS documented information"
+    path: ["Clause 7", "7.5"]
+    reference: "7.5"
+    obligation_type: document
+    roles: [provider]
+    applicability: "always"
+    assessment_method: artefact
+    citation: "ISO/IEC 42001:2023, 7.5.1"
+  - id: clause-7.5.2
+    title: "Creating and updating documented information"
+    description: "When creating and updating documented information, ensure appropriate identification, format and media, and review and approval for suitability and adequacy. ISO/IEC 42001:2023, 7.5.2."
+    required_evidence: "document control metadata showing identification, review and approval"
+    path: ["Clause 7", "7.5", "7.5.2"]
+    reference: "7.5.2"
+    obligation_type: document
+    roles: [provider]
+    applicability: "always"
+    assessment_method: artefact
+    citation: "ISO/IEC 42001:2023, 7.5.2"
+  - id: clause-7.5.3
+    title: "Control of documented information"
+    description: "Control documented information so it is available and suitable where needed and adequately protected, covering distribution, access, storage, version control and retention. ISO/IEC 42001:2023, 7.5.3."
+    required_evidence: "access control, versioning and retention configuration for AIMS records"
+    path: ["Clause 7", "7.5", "7.5.3"]
+    reference: "7.5.3"
+    obligation_type: record-keeping
+    roles: [provider]
+    applicability: "always"
+    assessment_method: artefact
+    citation: "ISO/IEC 42001:2023, 7.5.3"
+  # --- Clause 8: Operation ---
+  - id: clause-8.1
+    title: "Operational planning and control"
+    description: "Plan, implement and control the processes needed to meet requirements and to implement the actions from Clause 6, controlling planned changes and reviewing unintended changes. ISO/IEC 42001:2023, 8.1."
+    required_evidence: "operational process controls and change-control records for AI systems"
+    path: ["Clause 8", "8.1"]
+    reference: "8.1"
+    obligation_type: process
+    roles: [provider]
+    applicability: "always"
+    assessment_method: artefact
+    crosswalk: ["eu-ai-act:art-17"]
+    citation: "ISO/IEC 42001:2023, 8.1"
+  - id: clause-8.2
+    title: "AI risk assessment (operational)"
+    description: "Perform AI risk assessments at planned intervals and when significant changes occur, and retain the results as documented information. ISO/IEC 42001:2023, 8.2."
+    required_evidence: "periodic and change-triggered AI risk assessment results"
+    path: ["Clause 8", "8.2"]
+    reference: "8.2"
+    obligation_type: process
+    roles: [provider]
+    applicability: "always"
+    assessment_method: artefact
+    crosswalk: ["eu-ai-act:art-9"]
+    citation: "ISO/IEC 42001:2023, 8.2"
+  - id: clause-8.3
+    title: "AI risk treatment (operational)"
+    description: "Implement the AI risk treatment plan and retain the results of risk treatment as documented information. ISO/IEC 42001:2023, 8.3."
+    required_evidence: "records showing implementation of risk treatment controls"
+    path: ["Clause 8", "8.3"]
+    reference: "8.3"
+    obligation_type: process
+    roles: [provider]
+    applicability: "always"
+    assessment_method: artefact
+    citation: "ISO/IEC 42001:2023, 8.3"
+  - id: clause-8.4
+    title: "AI system impact assessment (operational)"
+    description: "Perform AI system impact assessments in accordance with the defined process and retain the results as documented information. ISO/IEC 42001:2023, 8.4."
+    required_evidence: "completed AI system impact assessment records"
+    path: ["Clause 8", "8.4"]
+    reference: "8.4"
+    obligation_type: process
+    roles: [provider]
+    applicability: "always"
+    assessment_method: artefact
+    crosswalk: ["eu-ai-act:art-27"]
+    citation: "ISO/IEC 42001:2023, 8.4"
+  # --- Clause 9: Performance evaluation ---
+  - id: clause-9.1
+    title: "Monitoring, measurement, analysis and evaluation"
+    description: "Determine what to monitor and measure, the methods, and when results are analysed and evaluated, and retain the evidence of results and of the effectiveness of the AI management system. ISO/IEC 42001:2023, 9.1."
+    required_evidence: "monitoring metrics, methods and analysis results with retained evidence"
+    path: ["Clause 9", "9.1"]
+    reference: "9.1"
+    obligation_type: process
+    roles: [provider]
+    applicability: "always"
+    assessment_method: ledger
+    crosswalk: ["nist-ai-rmf:MEASURE-2.7", "eu-ai-act:art-72"]
+    citation: "ISO/IEC 42001:2023, 9.1"
+  - id: clause-9.2
+    title: "Internal audit"
+    description: "Conduct internal audits at planned intervals to determine whether the AI management system conforms to the organization's requirements and to the standard and is effectively implemented. ISO/IEC 42001:2023, 9.2.1."
+    required_evidence: "internal audit reports and findings"
+    path: ["Clause 9", "9.2"]
+    reference: "9.2"
+    obligation_type: process
+    roles: [provider]
+    applicability: "always"
+    assessment_method: artefact
+    citation: "ISO/IEC 42001:2023, 9.2.1"
+  - id: clause-9.2.2
+    title: "Internal audit programme"
+    description: "Plan, establish, implement and maintain an audit programme defining frequency, methods, responsibilities and reporting, and select auditors ensuring objectivity and impartiality. ISO/IEC 42001:2023, 9.2.2."
+    required_evidence: "documented internal audit programme"
+    path: ["Clause 9", "9.2", "9.2.2"]
+    reference: "9.2.2"
+    obligation_type: process
+    roles: [provider]
+    applicability: "always"
+    assessment_method: artefact
+    citation: "ISO/IEC 42001:2023, 9.2.2"
+  - id: clause-9.3
+    title: "Management review"
+    description: "Top management reviews the AI management system at planned intervals to ensure its continuing suitability, adequacy and effectiveness. ISO/IEC 42001:2023, 9.3.1."
+    required_evidence: "management review meeting records"
+    path: ["Clause 9", "9.3"]
+    reference: "9.3"
+    obligation_type: govern
+    roles: [provider]
+    applicability: "always"
+    assessment_method: artefact
+    citation: "ISO/IEC 42001:2023, 9.3.1"
+  - id: clause-9.3.2
+    title: "Management review inputs"
+    description: "The management review considers the status of prior actions, changes in issues, performance information, feedback from interested parties, risk assessment results, and improvement opportunities. ISO/IEC 42001:2023, 9.3.2."
+    required_evidence: "management review input pack covering the required topics"
+    path: ["Clause 9", "9.3", "9.3.2"]
+    reference: "9.3.2"
+    obligation_type: govern
+    roles: [provider]
+    applicability: "always"
+    assessment_method: artefact
+    citation: "ISO/IEC 42001:2023, 9.3.2"
+  - id: clause-9.3.3
+    title: "Management review results"
+    description: "The results of the management review include decisions on continual improvement opportunities and any need for changes to the AI management system, and are retained as documented information. ISO/IEC 42001:2023, 9.3.3."
+    required_evidence: "documented management review outputs and decisions"
+    path: ["Clause 9", "9.3", "9.3.3"]
+    reference: "9.3.3"
+    obligation_type: govern
+    roles: [provider]
+    applicability: "always"
+    assessment_method: artefact
+    citation: "ISO/IEC 42001:2023, 9.3.3"
+  # --- Clause 10: Improvement ---
+  - id: clause-10.1
+    title: "Continual improvement"
+    description: "Continually improve the suitability, adequacy and effectiveness of the AI management system. ISO/IEC 42001:2023, 10.1."
+    required_evidence: "improvement register and evidence of implemented improvements"
+    path: ["Clause 10", "10.1"]
+    reference: "10.1"
+    obligation_type: process
+    roles: [provider]
+    applicability: "always"
+    assessment_method: artefact
+    citation: "ISO/IEC 42001:2023, 10.1"
+  - id: clause-10.2
+    title: "Nonconformity and corrective action"
+    description: "React to nonconformities, evaluate the need to eliminate their causes, implement corrective action, review effectiveness, and retain evidence of the nonconformity and actions taken. ISO/IEC 42001:2023, 10.2."
+    required_evidence: "nonconformity and corrective-action records"
+    path: ["Clause 10", "10.2"]
+    reference: "10.2"
+    obligation_type: process
+    roles: [provider]
+    applicability: "always"
+    assessment_method: artefact
+    crosswalk: ["eu-ai-act:art-20"]
+    citation: "ISO/IEC 42001:2023, 10.2"
+  # --- Annex A: reference controls ---
+  # A.2 Policies related to AI
+  - id: annex-a.2.2
+    title: "AI policy"
+    description: "The organization documents and approves a policy for the development or use of AI systems. ISO/IEC 42001:2023, Annex A, A.2.2."
+    required_evidence: "approved AI policy document"
+    path: ["Annex A", "A.2"]
+    reference: "A.2.2"
+    obligation_type: document
+    roles: [provider]
+    applicability: "always"
+    assessment_method: artefact
+    crosswalk: ["eu-ai-act:art-17"]
+    citation: "ISO/IEC 42001:2023, Annex A, A.2.2"
+  - id: annex-a.2.3
+    title: "Alignment with other organizational policies"
+    description: "The organization determines where the AI policy relates to other policies and aligns them accordingly. ISO/IEC 42001:2023, Annex A, A.2.3."
+    required_evidence: "mapping of the AI policy to related organizational policies"
+    path: ["Annex A", "A.2"]
+    reference: "A.2.3"
+    obligation_type: govern
+    roles: [provider]
+    applicability: "always"
+    assessment_method: artefact
+    citation: "ISO/IEC 42001:2023, Annex A, A.2.3"
+  - id: annex-a.2.4
+    title: "Review of the AI policy"
+    description: "The AI policy is reviewed at planned intervals, or when changes occur, to ensure its continuing suitability, adequacy and effectiveness. ISO/IEC 42001:2023, Annex A, A.2.4."
+    required_evidence: "AI policy review records with review dates"
+    path: ["Annex A", "A.2"]
+    reference: "A.2.4"
+    obligation_type: process
+    roles: [provider]
+    applicability: "always"
+    assessment_method: artefact
+    citation: "ISO/IEC 42001:2023, Annex A, A.2.4"
+  # A.3 Internal organization
+  - id: annex-a.3.2
+    title: "AI roles and responsibilities"
+    description: "Roles and responsibilities for AI are defined and allocated according to the organization's needs. ISO/IEC 42001:2023, Annex A, A.3.2."
+    required_evidence: "documented AI role and responsibility allocation"
+    path: ["Annex A", "A.3"]
+    reference: "A.3.2"
+    obligation_type: govern
+    roles: [provider]
+    applicability: "always"
+    assessment_method: artefact
+    crosswalk: ["eu-ai-act:art-14"]
+    citation: "ISO/IEC 42001:2023, Annex A, A.3.2"
+  - id: annex-a.3.3
+    title: "Reporting of concerns"
+    description: "The organization defines and puts in place a process for personnel to report concerns about AI systems throughout their lifecycle. ISO/IEC 42001:2023, Annex A, A.3.3."
+    required_evidence: "concern-reporting channel and handling procedure"
+    path: ["Annex A", "A.3"]
+    reference: "A.3.3"
+    obligation_type: process
+    roles: [provider]
+    applicability: "always"
+    assessment_method: artefact
+    citation: "ISO/IEC 42001:2023, Annex A, A.3.3"
+  # A.4 Resources for AI systems
+  - id: annex-a.4.2
+    title: "Resource documentation"
+    description: "The organization identifies and documents the relevant resources required for the AI systems it develops, provides or uses. ISO/IEC 42001:2023, Annex A, A.4.2."
+    required_evidence: "documented inventory of AI system resources"
+    path: ["Annex A", "A.4"]
+    reference: "A.4.2"
+    obligation_type: document
+    roles: [provider]
+    applicability: "always"
+    assessment_method: artefact
+    citation: "ISO/IEC 42001:2023, Annex A, A.4.2"
+  - id: annex-a.4.3
+    title: "Data resources"
+    description: "The organization documents information about the data resources used for the AI systems, as part of the resource documentation. ISO/IEC 42001:2023, Annex A, A.4.3."
+    required_evidence: "documentation of data resources used by AI systems"
+    path: ["Annex A", "A.4"]
+    reference: "A.4.3"
+    obligation_type: document
+    roles: [provider]
+    applicability: "always"
+    assessment_method: artefact
+    crosswalk: ["eu-ai-act:art-10"]
+    citation: "ISO/IEC 42001:2023, Annex A, A.4.3"
+  - id: annex-a.4.4
+    title: "Tooling resources"
+    description: "The organization documents information about the tooling resources used for the AI systems. ISO/IEC 42001:2023, Annex A, A.4.4."
+    required_evidence: "documentation of tools and frameworks used for AI systems"
+    path: ["Annex A", "A.4"]
+    reference: "A.4.4"
+    obligation_type: document
+    roles: [provider]
+    applicability: "always"
+    assessment_method: artefact
+    citation: "ISO/IEC 42001:2023, Annex A, A.4.4"
+  - id: annex-a.4.5
+    title: "System and computing resources"
+    description: "The organization documents information about the system and computing resources used for the AI systems. ISO/IEC 42001:2023, Annex A, A.4.5."
+    required_evidence: "documentation of compute and infrastructure resources"
+    path: ["Annex A", "A.4"]
+    reference: "A.4.5"
+    obligation_type: document
+    roles: [provider]
+    applicability: "always"
+    assessment_method: artefact
+    citation: "ISO/IEC 42001:2023, Annex A, A.4.5"
+  - id: annex-a.4.6
+    title: "Human resources"
+    description: "The organization documents information about the human resources and their competences used for developing, operating and overseeing the AI systems. ISO/IEC 42001:2023, Annex A, A.4.6."
+    required_evidence: "documentation of human resources and competences for AI systems"
+    path: ["Annex A", "A.4"]
+    reference: "A.4.6"
+    obligation_type: document
+    roles: [provider]
+    applicability: "always"
+    assessment_method: artefact
+    crosswalk: ["eu-ai-act:art-14"]
+    citation: "ISO/IEC 42001:2023, Annex A, A.4.6"
+  # A.5 Assessing impacts of AI systems
+  - id: annex-a.5.2
+    title: "AI system impact assessment process"
+    description: "The organization establishes a process to assess the potential consequences for individuals, groups and society of the AI systems throughout their lifecycle. ISO/IEC 42001:2023, Annex A, A.5.2."
+    required_evidence: "documented AI system impact assessment process"
+    path: ["Annex A", "A.5"]
+    reference: "A.5.2"
+    obligation_type: process
+    roles: [provider]
+    applicability: "always"
+    assessment_method: artefact
+    crosswalk: ["eu-ai-act:art-27"]
+    citation: "ISO/IEC 42001:2023, Annex A, A.5.2"
+  - id: annex-a.5.3
+    title: "Documentation of AI system impact assessments"
+    description: "The organization documents the results of the AI system impact assessments and retains them for a defined period. ISO/IEC 42001:2023, Annex A, A.5.3."
+    required_evidence: "retained AI system impact assessment records"
+    path: ["Annex A", "A.5"]
+    reference: "A.5.3"
+    obligation_type: record-keeping
+    roles: [provider]
+    applicability: "always"
+    assessment_method: artefact
+    citation: "ISO/IEC 42001:2023, Annex A, A.5.3"
+  - id: annex-a.5.4
+    title: "Assessing AI system impact on individuals or groups of individuals"
+    description: "The assessment considers the potential impacts of the AI system on individuals or groups of individuals throughout its lifecycle. ISO/IEC 42001:2023, Annex A, A.5.4."
+    required_evidence: "impact assessment section covering effects on individuals and groups"
+    path: ["Annex A", "A.5"]
+    reference: "A.5.4"
+    obligation_type: process
+    roles: [provider]
+    applicability: "always"
+    assessment_method: artefact
+    crosswalk: ["gdpr:art-35"]
+    citation: "ISO/IEC 42001:2023, Annex A, A.5.4"
+  - id: annex-a.5.5
+    title: "Assessing societal impacts of AI systems"
+    description: "The assessment considers the potential societal impacts of the AI system throughout its lifecycle. ISO/IEC 42001:2023, Annex A, A.5.5."
+    required_evidence: "impact assessment section covering societal effects"
+    path: ["Annex A", "A.5"]
+    reference: "A.5.5"
+    obligation_type: process
+    roles: [provider]
+    applicability: "always"
+    assessment_method: artefact
+    citation: "ISO/IEC 42001:2023, Annex A, A.5.5"
+  # A.6 AI system life cycle
+  - id: annex-a.6.1.2
+    title: "Objectives for responsible development of AI systems"
+    description: "The organization identifies and documents objectives to guide the responsible development of AI systems. ISO/IEC 42001:2023, Annex A, A.6.1.2."
+    required_evidence: "documented responsible-development objectives"
+    path: ["Annex A", "A.6", "A.6.1"]
+    reference: "A.6.1.2"
+    obligation_type: govern
+    roles: [provider]
+    applicability: "always"
+    assessment_method: artefact
+    citation: "ISO/IEC 42001:2023, Annex A, A.6.1.2"
+  - id: annex-a.6.1.3
+    title: "Processes for responsible AI system design and development"
+    description: "The organization defines and documents the processes for the responsible design and development of AI systems. ISO/IEC 42001:2023, Annex A, A.6.1.3."
+    required_evidence: "documented responsible design and development processes"
+    path: ["Annex A", "A.6", "A.6.1"]
+    reference: "A.6.1.3"
+    obligation_type: process
+    roles: [provider]
+    applicability: "always"
+    assessment_method: artefact
+    citation: "ISO/IEC 42001:2023, Annex A, A.6.1.3"
+  - id: annex-a.6.2.2
+    title: "AI system requirements and specification"
+    description: "The organization specifies and documents the requirements for new AI systems or material enhancements to existing systems. ISO/IEC 42001:2023, Annex A, A.6.2.2."
+    required_evidence: "documented AI system requirements and specifications"
+    path: ["Annex A", "A.6", "A.6.2"]
+    reference: "A.6.2.2"
+    obligation_type: document
+    roles: [provider]
+    applicability: "always"
+    assessment_method: artefact
+    citation: "ISO/IEC 42001:2023, Annex A, A.6.2.2"
+  - id: annex-a.6.2.3
+    title: "Documentation of AI system design and development"
+    description: "The organization documents the AI system design and development based on the organizational objectives, requirements and defined criteria. ISO/IEC 42001:2023, Annex A, A.6.2.3."
+    required_evidence: "AI system design and development documentation"
+    path: ["Annex A", "A.6", "A.6.2"]
+    reference: "A.6.2.3"
+    obligation_type: document
+    roles: [provider]
+    applicability: "always"
+    assessment_method: artefact
+    crosswalk: ["eu-ai-act:annex-iv-2"]
+    citation: "ISO/IEC 42001:2023, Annex A, A.6.2.3"
+  - id: annex-a.6.2.4
+    title: "AI system verification and validation"
+    description: "The organization defines and uses verification and validation measures for AI systems, and specifies criteria for their acceptance. ISO/IEC 42001:2023, Annex A, A.6.2.4."
+    required_evidence: "verification and validation test plans, criteria and results"
+    path: ["Annex A", "A.6", "A.6.2"]
+    reference: "A.6.2.4"
+    obligation_type: technical
+    roles: [provider]
+    applicability: "always"
+    assessment_method: test
+    crosswalk: ["eu-ai-act:art-15"]
+    citation: "ISO/IEC 42001:2023, Annex A, A.6.2.4"
+  - id: annex-a.6.2.5
+    title: "AI system deployment"
+    description: "The organization documents a deployment plan and ensures deployment requirements are met before an AI system is put into use. ISO/IEC 42001:2023, Annex A, A.6.2.5."
+    required_evidence: "deployment plan and pre-deployment checklist records"
+    path: ["Annex A", "A.6", "A.6.2"]
+    reference: "A.6.2.5"
+    obligation_type: process
+    roles: [provider]
+    applicability: "always"
+    assessment_method: artefact
+    citation: "ISO/IEC 42001:2023, Annex A, A.6.2.5"
+  - id: annex-a.6.2.6
+    title: "AI system operation and monitoring"
+    description: "The organization defines and documents the elements needed for the ongoing operation and monitoring of AI systems. ISO/IEC 42001:2023, Annex A, A.6.2.6."
+    required_evidence: "operational monitoring plan and runtime monitoring evidence"
+    path: ["Annex A", "A.6", "A.6.2"]
+    reference: "A.6.2.6"
+    obligation_type: process
+    roles: [provider]
+    applicability: "always"
+    assessment_method: ledger
+    crosswalk: ["eu-ai-act:art-72", "nist-ai-rmf:MEASURE-2.7"]
+    citation: "ISO/IEC 42001:2023, Annex A, A.6.2.6"
+  - id: annex-a.6.2.7
+    title: "AI system technical documentation"
+    description: "The organization determines and provides the technical documentation needed for each category of interested party. ISO/IEC 42001:2023, Annex A, A.6.2.7."
+    required_evidence: "AI system technical documentation set"
+    path: ["Annex A", "A.6", "A.6.2"]
+    reference: "A.6.2.7"
+    obligation_type: document
+    roles: [provider]
+    applicability: "always"
+    assessment_method: artefact
+    crosswalk: ["eu-ai-act:art-11"]
+    citation: "ISO/IEC 42001:2023, Annex A, A.6.2.7"
+  - id: annex-a.6.2.8
+    title: "AI system recording of event logs"
+    description: "The organization determines at which phases of the lifecycle record-keeping of event logs should be enabled and how such logs are kept. ISO/IEC 42001:2023, Annex A, A.6.2.8."
+    required_evidence: "tamper-evident event-log ledger over the AI system lifecycle"
+    path: ["Annex A", "A.6", "A.6.2"]
+    reference: "A.6.2.8"
+    obligation_type: record-keeping
+    roles: [provider]
+    applicability: "always"
+    assessment_method: ledger
+    crosswalk: ["eu-ai-act:art-12", "soc-2:cc7.2"]
+    citation: "ISO/IEC 42001:2023, Annex A, A.6.2.8"
+  # A.7 Data for AI systems
+  - id: annex-a.7.2
+    title: "Data for development and enhancement of AI systems"
+    description: "The organization defines and documents the requirements for the data used in developing and enhancing AI systems. ISO/IEC 42001:2023, Annex A, A.7.2."
+    required_evidence: "documented data requirements for development and enhancement"
+    path: ["Annex A", "A.7"]
+    reference: "A.7.2"
+    obligation_type: document
+    roles: [provider]
+    applicability: "always"
+    assessment_method: artefact
+    crosswalk: ["eu-ai-act:art-10"]
+    citation: "ISO/IEC 42001:2023, Annex A, A.7.2"
+  - id: annex-a.7.3
+    title: "Acquisition of data"
+    description: "The organization determines and documents details about the acquisition and selection of the data used for AI systems. ISO/IEC 42001:2023, Annex A, A.7.3."
+    required_evidence: "data acquisition and selection records"
+    path: ["Annex A", "A.7"]
+    reference: "A.7.3"
+    obligation_type: document
+    roles: [provider]
+    applicability: "always"
+    assessment_method: artefact
+    citation: "ISO/IEC 42001:2023, Annex A, A.7.3"
+  - id: annex-a.7.4
+    title: "Quality of data for AI systems"
+    description: "The organization defines and documents requirements for the quality of data and ensures the data meets them for the AI systems. ISO/IEC 42001:2023, Annex A, A.7.4."
+    required_evidence: "data quality criteria and quality assessment results"
+    path: ["Annex A", "A.7"]
+    reference: "A.7.4"
+    obligation_type: process
+    roles: [provider]
+    applicability: "always"
+    assessment_method: test
+    crosswalk: ["eu-ai-act:art-10"]
+    citation: "ISO/IEC 42001:2023, Annex A, A.7.4"
+  - id: annex-a.7.5
+    title: "Data provenance"
+    description: "The organization defines and documents a process for recording the provenance of data used in AI systems over their lifecycle. ISO/IEC 42001:2023, Annex A, A.7.5."
+    required_evidence: "data provenance records and lineage tracking"
+    path: ["Annex A", "A.7"]
+    reference: "A.7.5"
+    obligation_type: record-keeping
+    roles: [provider]
+    applicability: "always"
+    assessment_method: artefact
+    citation: "ISO/IEC 42001:2023, Annex A, A.7.5"
+  - id: annex-a.7.6
+    title: "Data preparation"
+    description: "The organization defines and documents the criteria and methods for preparing the data used in AI systems. ISO/IEC 42001:2023, Annex A, A.7.6."
+    required_evidence: "documented data preparation criteria and methods"
+    path: ["Annex A", "A.7"]
+    reference: "A.7.6"
+    obligation_type: process
+    roles: [provider]
+    applicability: "always"
+    assessment_method: artefact
+    citation: "ISO/IEC 42001:2023, Annex A, A.7.6"
+  # A.8 Information for interested parties of AI systems
+  - id: annex-a.8.2
+    title: "System documentation and information for users"
+    description: "The organization determines and provides the information that users need to use the AI system, including its intended purpose and limitations. ISO/IEC 42001:2023, Annex A, A.8.2."
+    required_evidence: "user documentation and instructions for use"
+    path: ["Annex A", "A.8"]
+    reference: "A.8.2"
+    obligation_type: transparency
+    roles: [provider]
+    applicability: "always"
+    assessment_method: artefact
+    crosswalk: ["eu-ai-act:art-13"]
+    citation: "ISO/IEC 42001:2023, Annex A, A.8.2"
+  - id: annex-a.8.3
+    title: "External reporting"
+    description: "The organization provides the ability for interested parties to report adverse impacts of the AI system. ISO/IEC 42001:2023, Annex A, A.8.3."
+    required_evidence: "external reporting channel for adverse impacts"
+    path: ["Annex A", "A.8"]
+    reference: "A.8.3"
+    obligation_type: transparency
+    roles: [provider]
+    applicability: "always"
+    assessment_method: artefact
+    citation: "ISO/IEC 42001:2023, Annex A, A.8.3"
+  - id: annex-a.8.4
+    title: "Communication of incidents"
+    description: "The organization defines and documents a plan for communicating incidents to the relevant users of the AI system. ISO/IEC 42001:2023, Annex A, A.8.4."
+    required_evidence: "incident communication plan and notification records"
+    path: ["Annex A", "A.8"]
+    reference: "A.8.4"
+    obligation_type: process
+    roles: [provider]
+    applicability: "always"
+    assessment_method: ledger
+    crosswalk: ["eu-ai-act:art-73"]
+    citation: "ISO/IEC 42001:2023, Annex A, A.8.4"
+  - id: annex-a.8.5
+    title: "Information for interested parties"
+    description: "The organization determines and documents the information about the AI system to be made available to interested parties, and their obligations. ISO/IEC 42001:2023, Annex A, A.8.5."
+    required_evidence: "documented information package for interested parties"
+    path: ["Annex A", "A.8"]
+    reference: "A.8.5"
+    obligation_type: transparency
+    roles: [provider]
+    applicability: "always"
+    assessment_method: artefact
+    citation: "ISO/IEC 42001:2023, Annex A, A.8.5"
+  # A.9 Use of AI systems
+  - id: annex-a.9.2
+    title: "Processes for responsible use of AI systems"
+    description: "The organization defines and documents the processes for the responsible use of AI systems. ISO/IEC 42001:2023, Annex A, A.9.2."
+    required_evidence: "documented responsible-use processes"
+    path: ["Annex A", "A.9"]
+    reference: "A.9.2"
+    obligation_type: process
+    roles: [deployer]
+    applicability: "always"
+    assessment_method: artefact
+    crosswalk: ["eu-ai-act:art-26"]
+    citation: "ISO/IEC 42001:2023, Annex A, A.9.2"
+  - id: annex-a.9.3
+    title: "Objectives for responsible use of AI systems"
+    description: "The organization identifies and documents objectives to guide the responsible use of AI systems. ISO/IEC 42001:2023, Annex A, A.9.3."
+    required_evidence: "documented responsible-use objectives"
+    path: ["Annex A", "A.9"]
+    reference: "A.9.3"
+    obligation_type: govern
+    roles: [deployer]
+    applicability: "always"
+    assessment_method: artefact
+    citation: "ISO/IEC 42001:2023, Annex A, A.9.3"
+  - id: annex-a.9.4
+    title: "Intended use of the AI system"
+    description: "The organization ensures the AI system is used according to the intended uses and the accompanying documentation. ISO/IEC 42001:2023, Annex A, A.9.4."
+    required_evidence: "records confirming use within the intended purpose and instructions"
+    path: ["Annex A", "A.9"]
+    reference: "A.9.4"
+    obligation_type: oversight
+    roles: [deployer]
+    applicability: "always"
+    assessment_method: attestation
+    crosswalk: ["eu-ai-act:art-26"]
+    citation: "ISO/IEC 42001:2023, Annex A, A.9.4"
+  # A.10 Third-party and customer relationships
+  - id: annex-a.10.2
+    title: "Allocating responsibilities"
+    description: "The organization ensures responsibilities within the AI system lifecycle are allocated between the organization, its suppliers, partners and customers. ISO/IEC 42001:2023, Annex A, A.10.2."
+    required_evidence: "documented allocation of responsibilities across the value chain"
+    path: ["Annex A", "A.10"]
+    reference: "A.10.2"
+    obligation_type: govern
+    roles: [provider]
+    applicability: "always"
+    assessment_method: artefact
+    crosswalk: ["eu-ai-act:art-25"]
+    citation: "ISO/IEC 42001:2023, Annex A, A.10.2"
+  - id: annex-a.10.3
+    title: "Suppliers"
+    description: "The organization establishes a process to ensure that its use of suppliers' services, products or materials aligns with its responsible approach to AI. ISO/IEC 42001:2023, Annex A, A.10.3."
+    required_evidence: "supplier due-diligence and contractual controls for AI"
+    path: ["Annex A", "A.10"]
+    reference: "A.10.3"
+    obligation_type: process
+    roles: [provider]
+    applicability: "always"
+    assessment_method: artefact
+    citation: "ISO/IEC 42001:2023, Annex A, A.10.3"
+  - id: annex-a.10.4
+    title: "Customers"
+    description: "The organization ensures that its responsible approach to AI considers the expectations and needs of its customers. ISO/IEC 42001:2023, Annex A, A.10.4."
+    required_evidence: "records reflecting customer expectations in AI provision"
+    path: ["Annex A", "A.10"]
+    reference: "A.10.4"
+    obligation_type: process
+    roles: [provider]
+    applicability: "always"
+    assessment_method: artefact
+    citation: "ISO/IEC 42001:2023, Annex A, A.10.4"

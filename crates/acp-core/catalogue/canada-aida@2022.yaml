@@ -1,0 +1,103 @@
+# Canada Artificial Intelligence and Data Act (AIDA), part of Bill C-27 as introduced in 2022.
+# Framework type: statutory_conformity, but PROPOSED: the Bill did not pass before Parliament was
+# prorogued, so treat these as proposed duties on the person responsible for a high-impact system.
+# Nodes are faithful paraphrases with a citation, never verbatim Bill text.
+slug: canada-aida
+label: Canada AIDA
+version: "2022"
+framework_type: statutory_conformity
+effective_date: ""
+record_keeping_reference: "Record-keeping obligations"
+source: "Artificial Intelligence and Data Act (Bill C-27, as introduced 2022)"
+manifest:
+  - "s7"
+  - "s8"
+  - "s9"
+  - "s10"
+  - "s11"
+  - "s12"
+controls:
+  - id: s7
+    title: "Anonymised data governance"
+    description: "A person who carries out a regulated activity and processes or makes available anonymised data must establish measures governing how that data is anonymised and how it is used and managed."
+    required_evidence: "data anonymisation and governance measures documentation"
+    path: ["AIDA", "Section 7"]
+    reference: "s7"
+    obligation_type: document
+    roles: [provider]
+    applicability: "role=provider"
+    assessment_method: artefact
+    crosswalk: ["gdpr:art-5"]
+    citation: "Artificial Intelligence and Data Act (Bill C-27, 2022), section 7 (anonymised data)"
+  - id: s8
+    title: "Assessment of high-impact status"
+    description: "The person responsible for an artificial intelligence system must assess, in accordance with the regulations, whether it is a high-impact system."
+    required_evidence: "high-impact assessment record with justification"
+    path: ["AIDA", "Section 8"]
+    reference: "s8"
+    obligation_type: govern
+    roles: [provider]
+    applicability: "role=provider"
+    assessment_method: artefact
+    crosswalk: ["eu-ai-act:Art. 6"]
+    citation: "Artificial Intelligence and Data Act (Bill C-27, 2022), section 8 (assessment)"
+  - id: s9
+    title: "Risk mitigation measures"
+    description: "The person responsible for a high-impact system must establish measures to identify, assess and mitigate the risks of harm or biased output that could result from its use, in accordance with the regulations."
+    required_evidence: "risk register; mitigation measures documentation"
+    path: ["AIDA", "Section 9"]
+    reference: "s9"
+    obligation_type: process
+    roles: [provider]
+    applicability: "role=provider"
+    assessment_method: artefact
+    crosswalk: ["eu-ai-act:Art. 9"]
+    citation: "Artificial Intelligence and Data Act (Bill C-27, 2022), section 9 (risk mitigation)"
+  - id: s9-monitoring
+    title: "Monitoring of mitigation measures"
+    description: "The person responsible for a high-impact system must establish measures to monitor compliance with the mitigation measures and their effectiveness once the system is in operation."
+    required_evidence: "operational monitoring records; effectiveness review"
+    path: ["AIDA", "Section 9"]
+    reference: "s9(monitoring)"
+    obligation_type: process
+    roles: [provider]
+    applicability: "role=provider"
+    assessment_method: ledger
+    crosswalk: ["eu-ai-act:Art. 72"]
+    citation: "Artificial Intelligence and Data Act (Bill C-27, 2022), section 9 (monitoring)"
+  - id: s10
+    title: "Record-keeping obligations"
+    description: "The person responsible must keep records, in accordance with the regulations, describing the measures established for anonymised data, risk assessment and mitigation, and monitoring."
+    required_evidence: "tamper-evident ledger of measures and monitoring records"
+    path: ["AIDA", "Section 10"]
+    reference: "s10"
+    obligation_type: record-keeping
+    roles: [provider]
+    applicability: "role=provider"
+    assessment_method: ledger
+    crosswalk: ["eu-ai-act:Art. 12"]
+    citation: "Artificial Intelligence and Data Act (Bill C-27, 2022), section 10 (record-keeping)"
+  - id: s11
+    title: "Plain-language public description"
+    description: "The person who manages or makes available a high-impact system must publish, on a publicly available website, a plain-language description of the system covering its intended use, the type of content it generates or decisions it makes, and the mitigation measures established."
+    required_evidence: "published plain-language description with revision history"
+    path: ["AIDA", "Section 11"]
+    reference: "s11"
+    obligation_type: transparency
+    roles: [provider]
+    applicability: "role=provider"
+    assessment_method: artefact
+    crosswalk: ["eu-ai-act:Art. 13"]
+    citation: "Artificial Intelligence and Data Act (Bill C-27, 2022), section 11 (public description)"
+  - id: s12
+    title: "Notification of material harm"
+    description: "If the use of a high-impact system results or is likely to result in material harm, the person responsible must notify the Minister as soon as feasible, in accordance with the regulations."
+    required_evidence: "material-harm notification workflow with timestamps"
+    path: ["AIDA", "Section 12"]
+    reference: "s12"
+    obligation_type: process
+    roles: [provider]
+    applicability: "role=provider"
+    assessment_method: ledger
+    crosswalk: ["eu-ai-act:Art. 73"]
+    citation: "Artificial Intelligence and Data Act (Bill C-27, 2022), section 12 (notification of harm)"

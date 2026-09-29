@@ -4,7 +4,8 @@ use serde_json::Value;
 use std::process::ExitCode;
 
 /// GRC projection (phase F): read the tamper-evident ledger and print an evidence-backed compliance
-/// report mapping the signed decisions to EU AI Act / NIST AI RMF / ISO 42001 controls.
+/// report mapping the signed decisions to the canonical catalogue controls (EU AI Act, NIST AI RMF,
+/// ISO 42001, SOC 2 and more; see `acp_core::controls`).
 ///   acp grc-report <ledger.db>
 pub(crate) fn cmd_grc_report(rest: &[String]) -> ExitCode {
     use acp_core::grc::{report, EvidenceSummary};
@@ -40,9 +41,9 @@ pub(crate) fn cmd_grc_report(rest: &[String]) -> ExitCode {
     println!("ACP evidence-backed compliance report  (ledger: {ledger})");
     println!("  {} decisions | {} denies | {} step-ups | {} kill-switch | {} redactions | signed ledger\n",
         s.total_decisions, s.denies, s.step_ups, s.kill_switch_events, s.redactions);
-    let mut fw = "";
+    let mut fw = String::new();
     for c in report(&s) {
-        if c.framework != fw { println!("[{}]", c.framework); fw = c.framework; }
+        if c.framework != fw { println!("[{}]", c.framework); fw = c.framework.clone(); }
         let mark = match c.status.as_str() { "satisfied" => "PASS", "partial" => "PART", _ => "GAP " };
         println!("  {mark}  {:11} {:32} {}", c.control_id, c.title, c.rationale);
     }
@@ -230,7 +231,7 @@ pub(crate) fn cmd_risk(rest: &[String]) -> ExitCode {
 }
 
 /// List the built-in control library (all frameworks, or one).
-///   acp controls [eu-ai-act|nist-ai-rmf|iso-42001]
+///   acp controls [<framework-slug>]   e.g. eu-ai-act, nist-ai-rmf, iso-42001, iso-27001, soc-2, gdpr
 #[allow(dead_code)]
 pub(crate) fn cmd_controls(rest: &[String]) -> ExitCode {
     let controls = match rest.first() {

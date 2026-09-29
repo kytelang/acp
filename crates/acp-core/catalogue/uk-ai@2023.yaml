@@ -1,0 +1,255 @@
+# UK pro-innovation AI regulation white paper (2023): five cross-sector principles.
+# Framework type: principles_based (regulator expectations, not binding pass/fail law). Each principle is
+# decomposed into concrete sub-nodes so a principles-based report carries real evidence points.
+# Nodes are faithful paraphrases with a citation, never verbatim white-paper text.
+slug: uk-ai
+label: UK AI principles
+version: "2023"
+framework_type: principles_based
+effective_date: "2023-03-29"
+record_keeping_reference: "Accountability and governance"
+source: "UK pro-innovation AI regulation white paper (2023)"
+manifest:
+  - "P1"
+  - "P2"
+  - "P3"
+  - "P4"
+  - "P5"
+controls:
+  # --- Principle 1: safety, security and robustness ---
+  - id: p1-1
+    title: "Continuous safety risk assessment"
+    description: "Identify, assess and keep under review the safety risks a system may pose across its lifecycle, proportionate to the context of use."
+    required_evidence: "risk register entries with periodic review dates"
+    path: ["Principle 1", "Safety"]
+    reference: "P1.1"
+    obligation_type: process
+    roles: []
+    applicability: "always"
+    assessment_method: artefact
+    crosswalk: ["eu-ai-act:Art. 9"]
+    citation: "UK AI white paper (2023), Principle 1 (safety, security, robustness)"
+  - id: p1-2
+    title: "Technical robustness and reliability"
+    description: "Test that the system performs reliably and as intended under expected and foreseeable conditions, and remains resilient to errors and faults."
+    required_evidence: "robustness and reliability test results"
+    path: ["Principle 1", "Safety"]
+    reference: "P1.2"
+    obligation_type: technical
+    roles: []
+    applicability: "always"
+    assessment_method: test
+    crosswalk: ["eu-ai-act:Art. 15"]
+    citation: "UK AI white paper (2023), Principle 1 (safety, security, robustness)"
+  - id: p1-3
+    title: "Security against adversarial manipulation"
+    description: "Protect the system and its data against unauthorised access, tampering and adversarial manipulation throughout operation."
+    required_evidence: "security controls evidence; adversarial test results"
+    path: ["Principle 1", "Safety"]
+    reference: "P1.3"
+    obligation_type: technical
+    roles: []
+    applicability: "always"
+    assessment_method: test
+    crosswalk: ["iso-27001:A.8.7"]
+    citation: "UK AI white paper (2023), Principle 1 (safety, security, robustness)"
+  - id: p1-4
+    title: "Ongoing monitoring in operation"
+    description: "Monitor the system in operation so that emerging safety and security issues are detected and addressed in a timely way."
+    required_evidence: "operational monitoring records; incident log"
+    path: ["Principle 1", "Safety"]
+    reference: "P1.4"
+    obligation_type: process
+    roles: []
+    applicability: "always"
+    assessment_method: ledger
+    citation: "UK AI white paper (2023), Principle 1 (safety, security, robustness)"
+  # --- Principle 2: appropriate transparency and explainability ---
+  - id: p2-1
+    title: "Disclosure of AI use"
+    description: "Make it appropriately clear to affected parties when and how an AI system is being used in a decision or interaction."
+    required_evidence: "user-facing AI-use disclosure"
+    path: ["Principle 2", "Transparency"]
+    reference: "P2.1"
+    obligation_type: transparency
+    roles: []
+    applicability: "always"
+    assessment_method: artefact
+    crosswalk: ["eu-ai-act:Art. 50(1)"]
+    citation: "UK AI white paper (2023), Principle 2 (appropriate transparency and explainability)"
+  - id: p2-2
+    title: "Explainability of outputs"
+    description: "Provide explanations of system outputs appropriate to the audience and the significance of the decision."
+    required_evidence: "explanation artefacts; model documentation"
+    path: ["Principle 2", "Transparency"]
+    reference: "P2.2"
+    obligation_type: transparency
+    roles: []
+    applicability: "always"
+    assessment_method: artefact
+    crosswalk: ["eu-ai-act:Art. 13"]
+    citation: "UK AI white paper (2023), Principle 2 (appropriate transparency and explainability)"
+  - id: p2-3
+    title: "Information about capabilities and limitations"
+    description: "Communicate the intended purpose, capabilities and known limitations of the system to those who rely on it."
+    required_evidence: "system documentation covering purpose, capabilities and limitations"
+    path: ["Principle 2", "Transparency"]
+    reference: "P2.3"
+    obligation_type: document
+    roles: []
+    applicability: "always"
+    assessment_method: artefact
+    citation: "UK AI white paper (2023), Principle 2 (appropriate transparency and explainability)"
+  - id: p2-4
+    title: "Traceability of data and design decisions"
+    description: "Keep records of the data, models and design choices sufficient to trace how the system behaves and why."
+    required_evidence: "traceability records; design decision log"
+    path: ["Principle 2", "Transparency"]
+    reference: "P2.4"
+    obligation_type: record-keeping
+    roles: []
+    applicability: "always"
+    assessment_method: ledger
+    citation: "UK AI white paper (2023), Principle 2 (appropriate transparency and explainability)"
+  # --- Principle 3: fairness ---
+  - id: p3-1
+    title: "Compliance with relevant law and rights"
+    description: "Ensure the system does not undermine the legal rights of individuals or organisations, including data protection and equality law."
+    required_evidence: "legal and rights compliance review"
+    path: ["Principle 3", "Fairness"]
+    reference: "P3.1"
+    obligation_type: govern
+    roles: []
+    applicability: "always"
+    assessment_method: artefact
+    crosswalk: ["gdpr:art-5"]
+    citation: "UK AI white paper (2023), Principle 3 (fairness)"
+  - id: p3-2
+    title: "Bias detection and mitigation"
+    description: "Examine the system for discriminatory outcomes across protected groups and take steps to mitigate identified bias."
+    required_evidence: "bias examination results; mitigation records"
+    path: ["Principle 3", "Fairness"]
+    reference: "P3.2"
+    obligation_type: technical
+    roles: []
+    applicability: "always"
+    assessment_method: test
+    crosswalk: ["eu-ai-act:Art. 10"]
+    citation: "UK AI white paper (2023), Principle 3 (fairness)"
+  - id: p3-3
+    title: "Fairness metrics appropriate to context"
+    description: "Define and apply fairness measures that are appropriate to the use case and justify the choice made."
+    required_evidence: "documented fairness metrics with justification"
+    path: ["Principle 3", "Fairness"]
+    reference: "P3.3"
+    obligation_type: document
+    roles: []
+    applicability: "always"
+    assessment_method: artefact
+    citation: "UK AI white paper (2023), Principle 3 (fairness)"
+  - id: p3-4
+    title: "Consistent and justifiable outcomes"
+    description: "Ensure comparable cases are treated consistently and that differences in outcome can be justified."
+    required_evidence: "outcome consistency review; sampled decision analysis"
+    path: ["Principle 3", "Fairness"]
+    reference: "P3.4"
+    obligation_type: process
+    roles: []
+    applicability: "always"
+    assessment_method: artefact
+    citation: "UK AI white paper (2023), Principle 3 (fairness)"
+  # --- Principle 4: accountability and governance ---
+  - id: p4-1
+    title: "Clear allocation of responsibility"
+    description: "Assign clear accountability for the governance and outcomes of the system to identified people or roles."
+    required_evidence: "responsibility assignment record; governance roles"
+    path: ["Principle 4", "Accountability"]
+    reference: "P4.1"
+    obligation_type: govern
+    roles: []
+    applicability: "always"
+    assessment_method: attestation
+    crosswalk: ["iso-42001:5.3"]
+    citation: "UK AI white paper (2023), Principle 4 (accountability and governance)"
+  - id: p4-2
+    title: "Governance processes across the lifecycle"
+    description: "Put governance and oversight processes in place that operate through the design, deployment and operation of the system."
+    required_evidence: "signed governance policy in force"
+    path: ["Principle 4", "Accountability"]
+    reference: "P4.2"
+    obligation_type: govern
+    roles: []
+    applicability: "always"
+    assessment_method: artefact
+    crosswalk: ["iso-42001:8.1"]
+    citation: "UK AI white paper (2023), Principle 4 (accountability and governance)"
+  - id: p4-3
+    title: "Risk management and internal controls"
+    description: "Maintain risk management and internal control measures proportionate to the risks the system presents."
+    required_evidence: "risk management framework; control evidence"
+    path: ["Principle 4", "Accountability"]
+    reference: "P4.3"
+    obligation_type: process
+    roles: []
+    applicability: "always"
+    assessment_method: artefact
+    crosswalk: ["iso-23894:6.4"]
+    citation: "UK AI white paper (2023), Principle 4 (accountability and governance)"
+  - id: p4-4
+    title: "Record-keeping and auditability"
+    description: "Keep records of governance decisions and system activity sufficient to support internal and external audit."
+    required_evidence: "tamper-evident ledger of governance decisions and activity"
+    path: ["Principle 4", "Accountability"]
+    reference: "P4.4"
+    obligation_type: record-keeping
+    roles: []
+    applicability: "always"
+    assessment_method: ledger
+    crosswalk: ["eu-ai-act:Art. 12"]
+    citation: "UK AI white paper (2023), Principle 4 (accountability and governance)"
+  # --- Principle 5: contestability and redress ---
+  - id: p5-1
+    title: "Route to contest a decision"
+    description: "Provide affected parties a clear and accessible route to contest or challenge a decision made or supported by the system."
+    required_evidence: "documented contestability channel; user-facing notice"
+    path: ["Principle 5", "Contestability"]
+    reference: "P5.1"
+    obligation_type: process
+    roles: []
+    applicability: "always"
+    assessment_method: artefact
+    citation: "UK AI white paper (2023), Principle 5 (contestability and redress)"
+  - id: p5-2
+    title: "Human review of contested outcomes"
+    description: "Ensure a competent person can review a contested outcome and, where appropriate, override or correct it."
+    required_evidence: "human review records; override log"
+    path: ["Principle 5", "Contestability"]
+    reference: "P5.2"
+    obligation_type: oversight
+    roles: []
+    applicability: "always"
+    assessment_method: ledger
+    crosswalk: ["eu-ai-act:Art. 14"]
+    citation: "UK AI white paper (2023), Principle 5 (contestability and redress)"
+  - id: p5-3
+    title: "Timely and effective redress"
+    description: "Offer a means of redress that resolves valid complaints within a reasonable time and corrects harm where it has occurred."
+    required_evidence: "redress workflow with resolution timestamps"
+    path: ["Principle 5", "Contestability"]
+    reference: "P5.3"
+    obligation_type: process
+    roles: []
+    applicability: "always"
+    assessment_method: ledger
+    citation: "UK AI white paper (2023), Principle 5 (contestability and redress)"
+  - id: p5-4
+    title: "Communication of contest and redress rights"
+    description: "Inform affected parties of their rights to contest a decision and seek redress, and how to exercise them."
+    required_evidence: "user-facing notice of contest and redress rights"
+    path: ["Principle 5", "Contestability"]
+    reference: "P5.4"
+    obligation_type: transparency
+    roles: []
+    applicability: "always"
+    assessment_method: artefact
+    citation: "UK AI white paper (2023), Principle 5 (contestability and redress)"

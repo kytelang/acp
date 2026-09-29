@@ -1,0 +1,867 @@
+# NIST AI Risk Management Framework 1.0 (NIST AI 100-1).
+# Framework type: voluntary standard (outcome-based subcategories across four functions: GOVERN, MAP,
+# MEASURE, MANAGE). Nodes are faithful paraphrases of each subcategory outcome with a citation, never
+# verbatim NIST text.
+slug: nist-ai-rmf
+label: NIST AI RMF
+version: "1.0"
+framework_type: standard
+effective_date: "2023-01-26"
+record_keeping_reference: "MEASURE (measurement and tracking)"
+source: "NIST AI 100-1 (AI RMF 1.0)"
+manifest:
+  - "GOVERN 1"
+  - "GOVERN 2"
+  - "GOVERN 3"
+  - "GOVERN 4"
+  - "GOVERN 5"
+  - "GOVERN 6"
+  - "MAP 1"
+  - "MAP 2"
+  - "MAP 3"
+  - "MAP 4"
+  - "MAP 5"
+  - "MEASURE 1"
+  - "MEASURE 2"
+  - "MEASURE 3"
+  - "MEASURE 4"
+  - "MANAGE 1"
+  - "MANAGE 2"
+  - "MANAGE 3"
+  - "MANAGE 4"
+controls:
+  # --- GOVERN 1: policies, processes, procedures and practices ---
+  - id: govern-1.1
+    title: "Legal and regulatory requirements understood and managed"
+    description: "Ensure the legal and regulatory requirements involving AI are understood, documented and actively managed for the organisation's context."
+    required_evidence: "regulatory mapping and applicability record maintained in the control plane"
+    path: ["GOVERN", "GOVERN 1"]
+    reference: "GOVERN 1.1"
+    obligation_type: govern
+    roles: [provider]
+    applicability: "always"
+    assessment_method: artefact
+    crosswalk: ["eu-ai-act:art-8"]
+    citation: "NIST AI 100-1, GOVERN 1.1"
+  - id: govern-1.2
+    title: "Trustworthy-AI characteristics integrated into policies"
+    description: "Integrate the characteristics of trustworthy AI into organisational policies, processes, procedures and practices."
+    required_evidence: "signed AI governance policy in force referencing trustworthiness characteristics"
+    path: ["GOVERN", "GOVERN 1"]
+    reference: "GOVERN 1.2"
+    obligation_type: govern
+    roles: [provider]
+    applicability: "always"
+    assessment_method: artefact
+    crosswalk: ["iso-42001:5.2"]
+    citation: "NIST AI 100-1, GOVERN 1.2"
+  - id: govern-1.3
+    title: "Risk management process and risk tolerance established"
+    description: "Establish processes, procedures and practices to determine the needed level of risk management activities based on the organisation's risk tolerance."
+    required_evidence: "risk tolerance statement and tiered risk management procedure"
+    path: ["GOVERN", "GOVERN 1"]
+    reference: "GOVERN 1.3"
+    obligation_type: process
+    roles: [provider]
+    applicability: "always"
+    assessment_method: artefact
+    crosswalk: ["eu-ai-act:art-9"]
+    citation: "NIST AI 100-1, GOVERN 1.3"
+  - id: govern-1.4
+    title: "Risk management commitment and resourcing"
+    description: "Ensure the risk management process and its outcomes are established through transparent policies, procedures and other controls based on organisational priorities."
+    required_evidence: "documented risk management commitment with assigned resources and controls"
+    path: ["GOVERN", "GOVERN 1"]
+    reference: "GOVERN 1.4"
+    obligation_type: govern
+    roles: [provider]
+    applicability: "always"
+    assessment_method: artefact
+    citation: "NIST AI 100-1, GOVERN 1.4"
+  - id: govern-1.5
+    title: "Ongoing monitoring and periodic review of the risk process"
+    description: "Plan and implement ongoing monitoring and periodic review of the risk management process, with clearly defined roles and responsibilities including determining periodicity."
+    required_evidence: "review schedule and monitoring records for the risk management process"
+    path: ["GOVERN", "GOVERN 1"]
+    reference: "GOVERN 1.5"
+    obligation_type: process
+    roles: [provider]
+    applicability: "always"
+    assessment_method: ledger
+    citation: "NIST AI 100-1, GOVERN 1.5"
+  - id: govern-1.6
+    title: "Inventory of AI systems"
+    description: "Establish and maintain an inventory of AI systems, resourced according to organisational risk priorities."
+    required_evidence: "AI system inventory or registry maintained in the control plane"
+    path: ["GOVERN", "GOVERN 1"]
+    reference: "GOVERN 1.6"
+    obligation_type: document
+    roles: [provider]
+    applicability: "always"
+    assessment_method: artefact
+    citation: "NIST AI 100-1, GOVERN 1.6"
+  - id: govern-1.7
+    title: "Decommissioning and phase-out of AI systems"
+    description: "Establish processes for decommissioning and phasing out AI systems safely and in a manner that does not increase risk or diminish trustworthiness."
+    required_evidence: "documented decommissioning procedure and retirement records"
+    path: ["GOVERN", "GOVERN 1"]
+    reference: "GOVERN 1.7"
+    obligation_type: process
+    roles: [provider]
+    applicability: "always"
+    assessment_method: artefact
+    citation: "NIST AI 100-1, GOVERN 1.7"
+  # --- GOVERN 2: accountability structures ---
+  - id: govern-2.1
+    title: "Roles, responsibilities and lines of communication"
+    description: "Document and clearly define the roles, responsibilities and lines of communication related to mapping, measuring and managing AI risks."
+    required_evidence: "RACI or accountability matrix for AI risk roles"
+    path: ["GOVERN", "GOVERN 2"]
+    reference: "GOVERN 2.1"
+    obligation_type: govern
+    roles: [provider]
+    applicability: "always"
+    assessment_method: artefact
+    crosswalk: ["iso-42001:5.3"]
+    citation: "NIST AI 100-1, GOVERN 2.1"
+  - id: govern-2.2
+    title: "Training on trustworthy and responsible AI"
+    description: "Ensure the organisation's personnel and partners receive AI risk management training to perform their duties consistent with related policies and procedures."
+    required_evidence: "training records and completion attestations for relevant personnel"
+    path: ["GOVERN", "GOVERN 2"]
+    reference: "GOVERN 2.2"
+    obligation_type: process
+    roles: [provider]
+    applicability: "always"
+    assessment_method: attestation
+    citation: "NIST AI 100-1, GOVERN 2.2"
+  - id: govern-2.3
+    title: "Executive leadership accountability"
+    description: "Ensure executive leadership takes responsibility for decisions about the risks associated with AI development and deployment."
+    required_evidence: "signed leadership accountability statement and decision records"
+    path: ["GOVERN", "GOVERN 2"]
+    reference: "GOVERN 2.3"
+    obligation_type: oversight
+    roles: [provider]
+    applicability: "always"
+    assessment_method: attestation
+    citation: "NIST AI 100-1, GOVERN 2.3"
+  # --- GOVERN 3: workforce diversity, equity, inclusion and accessibility ---
+  - id: govern-3.1
+    title: "Diverse and inclusive decision-making"
+    description: "Prioritise and integrate considerations of diversity, equity, inclusion and accessibility across the AI lifecycle in decision-making processes."
+    required_evidence: "documented practices for diverse and inclusive AI decision-making"
+    path: ["GOVERN", "GOVERN 3"]
+    reference: "GOVERN 3.1"
+    obligation_type: govern
+    roles: [provider]
+    applicability: "always"
+    assessment_method: artefact
+    citation: "NIST AI 100-1, GOVERN 3.1"
+  - id: govern-3.2
+    title: "Human-AI teaming and oversight policies"
+    description: "Define policies and procedures for human-AI configurations and the oversight of AI systems, including roles and responsibilities for human oversight."
+    required_evidence: "human oversight policy defining teaming configurations and intervention roles"
+    path: ["GOVERN", "GOVERN 3"]
+    reference: "GOVERN 3.2"
+    obligation_type: oversight
+    roles: [provider]
+    applicability: "always"
+    assessment_method: artefact
+    crosswalk: ["eu-ai-act:art-14"]
+    citation: "NIST AI 100-1, GOVERN 3.2"
+  # --- GOVERN 4: organisational culture of risk awareness ---
+  - id: govern-4.1
+    title: "Culture of critical thinking and safety-first mindset"
+    description: "Foster a culture that encourages critical thinking and a safety-first mindset in the design, development, deployment and use of AI to minimise potential negative impacts."
+    required_evidence: "documented safety culture practices and awareness activities"
+    path: ["GOVERN", "GOVERN 4"]
+    reference: "GOVERN 4.1"
+    obligation_type: govern
+    roles: [provider]
+    applicability: "always"
+    assessment_method: attestation
+    citation: "NIST AI 100-1, GOVERN 4.1"
+  - id: govern-4.2
+    title: "Documenting and communicating risks and impacts"
+    description: "Document and communicate the risks and potential impacts of the AI technology, and the organisation's process for the design, development, deployment, evaluation and use of AI systems."
+    required_evidence: "impact documentation and communication records for stakeholders"
+    path: ["GOVERN", "GOVERN 4"]
+    reference: "GOVERN 4.2"
+    obligation_type: transparency
+    roles: [provider]
+    applicability: "always"
+    assessment_method: artefact
+    citation: "NIST AI 100-1, GOVERN 4.2"
+  - id: govern-4.3
+    title: "Testing, incident identification and information sharing"
+    description: "Establish organisational practices for testing, identification of incidents and information sharing regarding AI system risks and negative impacts."
+    required_evidence: "incident and information-sharing procedure with recorded outcomes"
+    path: ["GOVERN", "GOVERN 4"]
+    reference: "GOVERN 4.3"
+    obligation_type: process
+    roles: [provider]
+    applicability: "always"
+    assessment_method: ledger
+    crosswalk: ["eu-ai-act:art-73"]
+    citation: "NIST AI 100-1, GOVERN 4.3"
+  # --- GOVERN 5: engagement with relevant AI actors ---
+  - id: govern-5.1
+    title: "Feedback collection from external stakeholders"
+    description: "Establish processes for collecting, considering, prioritising and integrating feedback from those external to the team that developed or deployed the AI system."
+    required_evidence: "documented external feedback channel and triage records"
+    path: ["GOVERN", "GOVERN 5"]
+    reference: "GOVERN 5.1"
+    obligation_type: process
+    roles: [provider]
+    applicability: "always"
+    assessment_method: artefact
+    citation: "NIST AI 100-1, GOVERN 5.1"
+  - id: govern-5.2
+    title: "Mechanisms for stakeholder engagement"
+    description: "Establish mechanisms to enable regular engagement with relevant AI actors and to incorporate feedback into AI system design and implementation."
+    required_evidence: "stakeholder engagement plan with participation records"
+    path: ["GOVERN", "GOVERN 5"]
+    reference: "GOVERN 5.2"
+    obligation_type: process
+    roles: [provider]
+    applicability: "always"
+    assessment_method: artefact
+    citation: "NIST AI 100-1, GOVERN 5.2"
+  # --- GOVERN 6: third-party software, data and supply-chain risk ---
+  - id: govern-6.1
+    title: "Third-party AI risk policies and procedures"
+    description: "Establish policies and procedures to address AI risks associated with third-party software and data and other supply-chain issues."
+    required_evidence: "third-party and supply-chain risk policy with vendor risk records"
+    path: ["GOVERN", "GOVERN 6"]
+    reference: "GOVERN 6.1"
+    obligation_type: govern
+    roles: [provider, deployer]
+    applicability: "always"
+    assessment_method: artefact
+    crosswalk: ["iso-27001:A.5.19"]
+    citation: "NIST AI 100-1, GOVERN 6.1"
+  - id: govern-6.2
+    title: "Contingency for high-risk third-party failures"
+    description: "Establish contingency processes to handle failures or incidents in third-party data or AI systems that are deemed to be high-risk."
+    required_evidence: "contingency and fallback plan for third-party AI failures"
+    path: ["GOVERN", "GOVERN 6"]
+    reference: "GOVERN 6.2"
+    obligation_type: process
+    roles: [provider, deployer]
+    applicability: "always"
+    assessment_method: artefact
+    citation: "NIST AI 100-1, GOVERN 6.2"
+  # --- MAP 1: context establishment and understanding ---
+  - id: map-1.1
+    title: "Intended purpose, context and expectations documented"
+    description: "Understand and document the intended purposes, potentially beneficial uses, context-specific laws, norms and expectations, and prospective settings in which the AI system will be deployed."
+    required_evidence: "system context and intended-use documentation in the registry"
+    path: ["MAP", "MAP 1"]
+    reference: "MAP 1.1"
+    obligation_type: document
+    roles: [provider, deployer]
+    applicability: "always"
+    assessment_method: artefact
+    crosswalk: ["eu-ai-act:art-11"]
+    citation: "NIST AI 100-1, MAP 1.1"
+  - id: map-1.2
+    title: "Interdisciplinary AI actors and competencies"
+    description: "Establish and maintain interdisciplinary AI actors, competencies, skills and capacities, and demographic and disciplinary diversity, for mapping, measuring and managing AI risks."
+    required_evidence: "team composition and competency records covering interdisciplinary perspectives"
+    path: ["MAP", "MAP 1"]
+    reference: "MAP 1.2"
+    obligation_type: govern
+    roles: [provider]
+    applicability: "always"
+    assessment_method: attestation
+    citation: "NIST AI 100-1, MAP 1.2"
+  - id: map-1.3
+    title: "Mission, goals and business value defined"
+    description: "Understand and document the organisation's mission and relevant goals for the AI technology, along with the business value or context of use."
+    required_evidence: "business-case and objectives record for the AI system"
+    path: ["MAP", "MAP 1"]
+    reference: "MAP 1.3"
+    obligation_type: document
+    roles: [provider]
+    applicability: "always"
+    assessment_method: artefact
+    citation: "NIST AI 100-1, MAP 1.3"
+  - id: map-1.4
+    title: "Business need and requirements determined"
+    description: "Understand and document the organisation's business need for the AI system, its capabilities, targeted usage, goals and expected benefits and costs compared with the status quo."
+    required_evidence: "requirements and cost-benefit analysis record"
+    path: ["MAP", "MAP 1"]
+    reference: "MAP 1.4"
+    obligation_type: document
+    roles: [provider]
+    applicability: "always"
+    assessment_method: artefact
+    citation: "NIST AI 100-1, MAP 1.4"
+  - id: map-1.5
+    title: "Risk tolerances determined and documented"
+    description: "Determine and document organisational risk tolerances for the AI system informed by the organisation's mission, priorities, resources and legal or regulatory requirements."
+    required_evidence: "documented risk tolerance for the specific AI system"
+    path: ["MAP", "MAP 1"]
+    reference: "MAP 1.5"
+    obligation_type: govern
+    roles: [provider]
+    applicability: "always"
+    assessment_method: artefact
+    citation: "NIST AI 100-1, MAP 1.5"
+  - id: map-1.6
+    title: "System requirements elicited from relevant actors"
+    description: "Elicit, understand and document system requirements, aligned with expectations from relevant AI actors, and evaluate them against the intended purpose."
+    required_evidence: "requirements specification traced to stakeholder expectations"
+    path: ["MAP", "MAP 1"]
+    reference: "MAP 1.6"
+    obligation_type: document
+    roles: [provider]
+    applicability: "always"
+    assessment_method: artefact
+    citation: "NIST AI 100-1, MAP 1.6"
+  # --- MAP 2: categorisation of the AI system ---
+  - id: map-2.1
+    title: "Task and method definitions documented"
+    description: "Define and document the specific tasks and methods used to implement the tasks that the AI system will support."
+    required_evidence: "task and method definition record for the AI system"
+    path: ["MAP", "MAP 2"]
+    reference: "MAP 2.1"
+    obligation_type: document
+    roles: [provider]
+    applicability: "always"
+    assessment_method: artefact
+    citation: "NIST AI 100-1, MAP 2.1"
+  - id: map-2.2
+    title: "Knowledge limits and human-AI interaction documented"
+    description: "Document information about the AI system's knowledge limits and how output may be used and overseen by humans, so it can be understood and used appropriately."
+    required_evidence: "documentation of knowledge limits and human oversight touchpoints"
+    path: ["MAP", "MAP 2"]
+    reference: "MAP 2.2"
+    obligation_type: document
+    roles: [provider]
+    applicability: "always"
+    assessment_method: artefact
+    crosswalk: ["eu-ai-act:art-13"]
+    citation: "NIST AI 100-1, MAP 2.2"
+  - id: map-2.3
+    title: "Scientific integrity and TEVV considerations documented"
+    description: "Identify and document the scientific integrity and test, evaluation, validation and verification (TEVV) considerations, including those related to experimental design and data quality."
+    required_evidence: "TEVV plan covering experimental design and data-integrity considerations"
+    path: ["MAP", "MAP 2"]
+    reference: "MAP 2.3"
+    obligation_type: document
+    roles: [provider]
+    applicability: "always"
+    assessment_method: artefact
+    citation: "NIST AI 100-1, MAP 2.3"
+  # --- MAP 3: benefits and costs mapped ---
+  - id: map-3.1
+    title: "Potential benefits examined and documented"
+    description: "Examine and document the potential benefits of the AI system's functionality and performance compared with the status quo of the intended context of use."
+    required_evidence: "benefit assessment record for the intended use"
+    path: ["MAP", "MAP 3"]
+    reference: "MAP 3.1"
+    obligation_type: document
+    roles: [provider]
+    applicability: "always"
+    assessment_method: artefact
+    citation: "NIST AI 100-1, MAP 3.1"
+  - id: map-3.2
+    title: "Potential costs and negative impacts documented"
+    description: "Examine and document the potential costs, including non-monetary costs, that result from expected or realised errors or system functionality and trustworthiness."
+    required_evidence: "impact and cost analysis including non-monetary harms"
+    path: ["MAP", "MAP 3"]
+    reference: "MAP 3.2"
+    obligation_type: document
+    roles: [provider]
+    applicability: "always"
+    assessment_method: artefact
+    citation: "NIST AI 100-1, MAP 3.2"
+  - id: map-3.3
+    title: "Application scope specified"
+    description: "Define and document the targeted application scope, taking into account the specifics of the intended context of deployment and any known constraints."
+    required_evidence: "documented application scope and boundary constraints"
+    path: ["MAP", "MAP 3"]
+    reference: "MAP 3.3"
+    obligation_type: document
+    roles: [provider]
+    applicability: "always"
+    assessment_method: artefact
+    citation: "NIST AI 100-1, MAP 3.3"
+  - id: map-3.4
+    title: "Operator and practitioner proficiency defined"
+    description: "Define and document processes to operate and monitor the AI system, and the proficiency and competency required of the operators and practitioners who oversee it."
+    required_evidence: "operating procedures and operator proficiency requirements"
+    path: ["MAP", "MAP 3"]
+    reference: "MAP 3.4"
+    obligation_type: process
+    roles: [deployer]
+    applicability: "always"
+    assessment_method: artefact
+    citation: "NIST AI 100-1, MAP 3.4"
+  - id: map-3.5
+    title: "Human oversight processes defined and assessed"
+    description: "Define, assess and document processes for human oversight, informed by organisational policies and the competencies and capacities of the humans providing the oversight."
+    required_evidence: "human oversight design record with approval and override procedures"
+    path: ["MAP", "MAP 3"]
+    reference: "MAP 3.5"
+    obligation_type: oversight
+    roles: [provider, deployer]
+    applicability: "always"
+    assessment_method: ledger
+    crosswalk: ["eu-ai-act:art-14"]
+    citation: "NIST AI 100-1, MAP 3.5"
+  # --- MAP 4: risks and benefits mapped for all components including third parties ---
+  - id: map-4.1
+    title: "Approaches for mapping third-party risks"
+    description: "Identify and document approaches used to map AI technology and legal risks of its components, including the use of third-party data or software."
+    required_evidence: "third-party component and legal-risk mapping record"
+    path: ["MAP", "MAP 4"]
+    reference: "MAP 4.1"
+    obligation_type: document
+    roles: [provider, deployer]
+    applicability: "always"
+    assessment_method: artefact
+    crosswalk: ["nist-ai-rmf:GOVERN-6.1"]
+    citation: "NIST AI 100-1, MAP 4.1"
+  - id: map-4.2
+    title: "Internal risk controls for components mapped"
+    description: "Identify and document internal risk controls for the AI system components, including third-party components, and the risks they are intended to address."
+    required_evidence: "control mapping for each system component and its residual risk"
+    path: ["MAP", "MAP 4"]
+    reference: "MAP 4.2"
+    obligation_type: document
+    roles: [provider]
+    applicability: "always"
+    assessment_method: artefact
+    citation: "NIST AI 100-1, MAP 4.2"
+  # --- MAP 5: impacts to individuals, groups, communities and society characterised ---
+  - id: map-5.1
+    title: "Likelihood and magnitude of impacts characterised"
+    description: "Identify and document the likelihood and magnitude of each impact, both potential benefit and negative, to individuals, groups, communities, organisations and society, based on expected use, past uses, public feedback or other data."
+    required_evidence: "impact characterisation record with likelihood and severity ratings"
+    path: ["MAP", "MAP 5"]
+    reference: "MAP 5.1"
+    obligation_type: document
+    roles: [provider, deployer]
+    applicability: "always"
+    assessment_method: artefact
+    crosswalk: ["eu-ai-act:art-27"]
+    citation: "NIST AI 100-1, MAP 5.1"
+  - id: map-5.2
+    title: "Practices for engagement and feedback on impacts"
+    description: "Establish and document practices and personnel for supporting regular engagement with relevant AI actors and integrating feedback about positive, negative and unanticipated impacts."
+    required_evidence: "documented impact-feedback engagement practice with records"
+    path: ["MAP", "MAP 5"]
+    reference: "MAP 5.2"
+    obligation_type: process
+    roles: [provider, deployer]
+    applicability: "always"
+    assessment_method: artefact
+    citation: "NIST AI 100-1, MAP 5.2"
+  # --- MEASURE 1: appropriate methods and metrics identified and applied ---
+  - id: measure-1.1
+    title: "Metrics and methods selected and documented"
+    description: "Identify and document the approaches and metrics for measurement of AI risks enumerated during mapping, and note risks or trustworthiness characteristics that are difficult to measure."
+    required_evidence: "measurement plan listing metrics, methods and known measurement gaps"
+    path: ["MEASURE", "MEASURE 1"]
+    reference: "MEASURE 1.1"
+    obligation_type: document
+    roles: [provider]
+    applicability: "always"
+    assessment_method: artefact
+    citation: "NIST AI 100-1, MEASURE 1.1"
+  - id: measure-1.2
+    title: "Appropriateness and effectiveness of metrics evaluated"
+    description: "Regularly assess and update the appropriateness of the metrics and effectiveness of the existing controls, and consider alternatives where they are insufficient."
+    required_evidence: "periodic review record of metric appropriateness and control effectiveness"
+    path: ["MEASURE", "MEASURE 1"]
+    reference: "MEASURE 1.2"
+    obligation_type: process
+    roles: [provider]
+    applicability: "always"
+    assessment_method: ledger
+    citation: "NIST AI 100-1, MEASURE 1.2"
+  - id: measure-1.3
+    title: "Independent assessment and internal expertise"
+    description: "Involve independent assessors and domain experts, including those external to the development team, in measurement and tracking, and consult them on limits of the measurement approach."
+    required_evidence: "independent review or expert consultation records"
+    path: ["MEASURE", "MEASURE 1"]
+    reference: "MEASURE 1.3"
+    obligation_type: oversight
+    roles: [provider]
+    applicability: "always"
+    assessment_method: attestation
+    citation: "NIST AI 100-1, MEASURE 1.3"
+  # --- MEASURE 2: systems evaluated for trustworthy characteristics ---
+  - id: measure-2.1
+    title: "Test sets, metrics and details documented"
+    description: "Document the test sets, metrics and details about the tools used during test, evaluation, validation and verification, and the frequency with which they are applied."
+    required_evidence: "TEVV documentation covering datasets, tooling and cadence"
+    path: ["MEASURE", "MEASURE 2"]
+    reference: "MEASURE 2.1"
+    obligation_type: document
+    roles: [provider]
+    applicability: "always"
+    assessment_method: artefact
+    citation: "NIST AI 100-1, MEASURE 2.1"
+  - id: measure-2.2
+    title: "Human subject evaluation follows appropriate protocols"
+    description: "Evaluate AI systems for human factors, and where human subjects are involved, apply representativeness, informed consent and other protocols consistent with applicable requirements."
+    required_evidence: "human-factors evaluation record with consent and protocol documentation"
+    path: ["MEASURE", "MEASURE 2"]
+    reference: "MEASURE 2.2"
+    obligation_type: process
+    roles: [provider]
+    applicability: "always"
+    assessment_method: artefact
+    citation: "NIST AI 100-1, MEASURE 2.2"
+  - id: measure-2.3
+    title: "System performance and validity demonstrated"
+    description: "Measure and document AI system performance and assurance criteria demonstrating that the system performs as intended in conditions similar to deployment."
+    required_evidence: "performance and validity test results across representative conditions"
+    path: ["MEASURE", "MEASURE 2"]
+    reference: "MEASURE 2.3"
+    obligation_type: technical
+    roles: [provider]
+    applicability: "always"
+    assessment_method: test
+    crosswalk: ["eu-ai-act:art-15"]
+    citation: "NIST AI 100-1, MEASURE 2.3"
+  - id: measure-2.4
+    title: "Deployment monitoring for functionality and behaviour"
+    description: "Monitor the AI system in production, including for its functionality and behaviour, and put mechanisms in place to detect changes that indicate a degradation of trustworthiness."
+    required_evidence: "production monitoring telemetry with drift and degradation alerts"
+    path: ["MEASURE", "MEASURE 2"]
+    reference: "MEASURE 2.4"
+    obligation_type: technical
+    roles: [provider, deployer]
+    applicability: "always"
+    assessment_method: ledger
+    crosswalk: ["eu-ai-act:art-72"]
+    citation: "NIST AI 100-1, MEASURE 2.4"
+  - id: measure-2.5
+    title: "Validity and reliability demonstrated and documented"
+    description: "Demonstrate and document that the AI system is valid and reliable, and identify the conditions under which the system fails or performs poorly."
+    required_evidence: "validity and reliability test results with documented failure conditions"
+    path: ["MEASURE", "MEASURE 2"]
+    reference: "MEASURE 2.5"
+    obligation_type: technical
+    roles: [provider]
+    applicability: "always"
+    assessment_method: test
+    crosswalk: ["eu-ai-act:art-15"]
+    citation: "NIST AI 100-1, MEASURE 2.5"
+  - id: measure-2.6
+    title: "Safety risks evaluated"
+    description: "Evaluate the AI system for safety risks, including those that may arise from real-world deployment, and demonstrate it is safe under conditions of foreseeable use and misuse."
+    required_evidence: "safety evaluation record covering foreseeable use and misuse"
+    path: ["MEASURE", "MEASURE 2"]
+    reference: "MEASURE 2.6"
+    obligation_type: technical
+    roles: [provider]
+    applicability: "always"
+    assessment_method: test
+    citation: "NIST AI 100-1, MEASURE 2.6"
+  - id: measure-2.7
+    title: "Security and resilience evaluated"
+    description: "Evaluate and document the AI system's security and resilience, including against adversarial attacks, data poisoning and other misuse of the system or its data."
+    required_evidence: "content firewall, tool-integrity and adversarial-resilience test evidence; tamper-evident ledger"
+    path: ["MEASURE", "MEASURE 2"]
+    reference: "MEASURE 2.7"
+    obligation_type: technical
+    roles: [provider]
+    applicability: "always"
+    assessment_method: test
+    crosswalk: ["eu-ai-act:art-15", "iso-27001:A.8.7"]
+    citation: "NIST AI 100-1, MEASURE 2.7"
+  - id: measure-2.8
+    title: "Transparency and accountability examined"
+    description: "Assess and document the extent to which the AI system is transparent and accountable, including the availability of model and data documentation and explanation of output."
+    required_evidence: "transparency and accountability assessment with model and data documentation"
+    path: ["MEASURE", "MEASURE 2"]
+    reference: "MEASURE 2.8"
+    obligation_type: transparency
+    roles: [provider]
+    applicability: "always"
+    assessment_method: artefact
+    crosswalk: ["eu-ai-act:art-13"]
+    citation: "NIST AI 100-1, MEASURE 2.8"
+  - id: measure-2.9
+    title: "Explainability and interpretability examined"
+    description: "Evaluate the AI model's explainability and interpretability so that its output can be understood and used appropriately by the relevant AI actors."
+    required_evidence: "explainability evaluation record and interpretability documentation"
+    path: ["MEASURE", "MEASURE 2"]
+    reference: "MEASURE 2.9"
+    obligation_type: transparency
+    roles: [provider]
+    applicability: "always"
+    assessment_method: artefact
+    citation: "NIST AI 100-1, MEASURE 2.9"
+  - id: measure-2.10
+    title: "Privacy risk examined"
+    description: "Examine and document the AI system's privacy risk, and apply the privacy-enhancing measures required to protect individuals and their data."
+    required_evidence: "privacy risk assessment and applied privacy controls"
+    path: ["MEASURE", "MEASURE 2"]
+    reference: "MEASURE 2.10"
+    obligation_type: technical
+    roles: [provider]
+    applicability: "always"
+    assessment_method: artefact
+    crosswalk: ["gdpr:art-35"]
+    citation: "NIST AI 100-1, MEASURE 2.10"
+  - id: measure-2.11
+    title: "Fairness and bias evaluated"
+    description: "Evaluate and document the AI system for fairness and bias, considering computational, systemic and human-cognitive sources of harmful bias across affected groups."
+    required_evidence: "bias and fairness evaluation results disaggregated across groups"
+    path: ["MEASURE", "MEASURE 2"]
+    reference: "MEASURE 2.11"
+    obligation_type: technical
+    roles: [provider]
+    applicability: "always"
+    assessment_method: test
+    crosswalk: ["eu-ai-act:art-10"]
+    citation: "NIST AI 100-1, MEASURE 2.11"
+  - id: measure-2.12
+    title: "Environmental impact measured"
+    description: "Assess and document the environmental impact and sustainability considerations of AI model training and management activities."
+    required_evidence: "environmental impact assessment for training and operations"
+    path: ["MEASURE", "MEASURE 2"]
+    reference: "MEASURE 2.12"
+    obligation_type: document
+    roles: [provider]
+    applicability: "always"
+    assessment_method: artefact
+    citation: "NIST AI 100-1, MEASURE 2.12"
+  - id: measure-2.13
+    title: "Effectiveness of measurement approaches assessed"
+    description: "Assess the effectiveness of the measurement approaches applied through TEVV, and document their reliability and any limitations for the AI system's specific context."
+    required_evidence: "meta-evaluation record of measurement reliability and limitations"
+    path: ["MEASURE", "MEASURE 2"]
+    reference: "MEASURE 2.13"
+    obligation_type: process
+    roles: [provider]
+    applicability: "always"
+    assessment_method: artefact
+    citation: "NIST AI 100-1, MEASURE 2.13"
+  # --- MEASURE 3: mechanisms for tracking identified AI risks ---
+  - id: measure-3.1
+    title: "Tracking of measured and emergent risks"
+    description: "Identify and track existing, unanticipated and emergent AI risks based on the factors identified during mapping, using approaches capable of detecting new risks over time."
+    required_evidence: "risk register with tracking of new and emergent risks over time"
+    path: ["MEASURE", "MEASURE 3"]
+    reference: "MEASURE 3.1"
+    obligation_type: process
+    roles: [provider]
+    applicability: "always"
+    assessment_method: ledger
+    citation: "NIST AI 100-1, MEASURE 3.1"
+  - id: measure-3.2
+    title: "Tracking of risks difficult to measure"
+    description: "Establish and document risk tracking approaches for those risks and trustworthiness characteristics that are difficult to assess using currently available measurement techniques."
+    required_evidence: "documented approach for tracking hard-to-measure risks"
+    path: ["MEASURE", "MEASURE 3"]
+    reference: "MEASURE 3.2"
+    obligation_type: process
+    roles: [provider]
+    applicability: "always"
+    assessment_method: artefact
+    citation: "NIST AI 100-1, MEASURE 3.2"
+  - id: measure-3.3
+    title: "Feedback from operators and users tracked"
+    description: "Establish and integrate mechanisms for feedback from AI system operators, end users and potentially impacted individuals and communities into risk tracking and measurement."
+    required_evidence: "feedback intake mechanism linked to the risk tracking process"
+    path: ["MEASURE", "MEASURE 3"]
+    reference: "MEASURE 3.3"
+    obligation_type: process
+    roles: [provider, deployer]
+    applicability: "always"
+    assessment_method: artefact
+    citation: "NIST AI 100-1, MEASURE 3.3"
+  # --- MEASURE 4: feedback about measurement efficacy gathered and assessed ---
+  - id: measure-4.1
+    title: "Measurement approaches assessed in context of use"
+    description: "Assess measurement approaches and metrics in connection with deployment context, and gather input from domain experts and relevant AI actors to validate whether the system is performing consistently as intended."
+    required_evidence: "context-of-use validation record with domain expert input"
+    path: ["MEASURE", "MEASURE 4"]
+    reference: "MEASURE 4.1"
+    obligation_type: process
+    roles: [provider, deployer]
+    applicability: "always"
+    assessment_method: artefact
+    citation: "NIST AI 100-1, MEASURE 4.1"
+  - id: measure-4.2
+    title: "Trustworthiness evaluated with actor feedback"
+    description: "Evaluate measurement results regarding the AI system's trustworthiness against the organisation's stated objectives, gathering and assessing feedback from relevant AI actors."
+    required_evidence: "trustworthiness evaluation results assessed against objectives with actor feedback"
+    path: ["MEASURE", "MEASURE 4"]
+    reference: "MEASURE 4.2"
+    obligation_type: process
+    roles: [provider]
+    applicability: "always"
+    assessment_method: artefact
+    citation: "NIST AI 100-1, MEASURE 4.2"
+  - id: measure-4.3
+    title: "Measurable performance improvements or declines documented"
+    description: "Identify and document measurable performance improvements or declines based on consultations with relevant AI actors, including affected communities, and with field data where possible."
+    required_evidence: "documented performance trend evidence drawn from field and consultation data"
+    path: ["MEASURE", "MEASURE 4"]
+    reference: "MEASURE 4.3"
+    obligation_type: record-keeping
+    roles: [provider]
+    applicability: "always"
+    assessment_method: ledger
+    citation: "NIST AI 100-1, MEASURE 4.3"
+  # --- MANAGE 1: risks prioritised and acted upon based on impact ---
+  - id: manage-1.1
+    title: "Determination of AI system deployment"
+    description: "Determine and document whether the AI system achieves its intended purpose and stated objectives and whether its development or deployment should proceed."
+    required_evidence: "go or no-go decision record with supporting risk evaluation"
+    path: ["MANAGE", "MANAGE 1"]
+    reference: "MANAGE 1.1"
+    obligation_type: govern
+    roles: [provider]
+    applicability: "always"
+    assessment_method: artefact
+    crosswalk: ["eu-ai-act:art-9"]
+    citation: "NIST AI 100-1, MANAGE 1.1"
+  - id: manage-1.2
+    title: "Treatment of documented risks prioritised"
+    description: "Prioritise the treatment of documented AI risks based on impact, likelihood and available resources or methods."
+    required_evidence: "prioritised risk treatment plan"
+    path: ["MANAGE", "MANAGE 1"]
+    reference: "MANAGE 1.2"
+    obligation_type: process
+    roles: [provider]
+    applicability: "always"
+    assessment_method: artefact
+    citation: "NIST AI 100-1, MANAGE 1.2"
+  - id: manage-1.3
+    title: "Responses to high-priority risks developed"
+    description: "Develop, plan and document responses to the highest-priority AI risks, based on mapping and measurement, and consider options to mitigate, transfer, avoid or accept the risk."
+    required_evidence: "documented response plan for high-priority risks with chosen treatment option"
+    path: ["MANAGE", "MANAGE 1"]
+    reference: "MANAGE 1.3"
+    obligation_type: process
+    roles: [provider]
+    applicability: "always"
+    assessment_method: artefact
+    citation: "NIST AI 100-1, MANAGE 1.3"
+  - id: manage-1.4
+    title: "Negative residual risks documented"
+    description: "Document, monitor and manage negative residual risks to both downstream acquirers of the AI system and end users, whether the risk arises from expected or unexpected use."
+    required_evidence: "residual risk register with documented residual risks and monitoring"
+    path: ["MANAGE", "MANAGE 1"]
+    reference: "MANAGE 1.4"
+    obligation_type: record-keeping
+    roles: [provider]
+    applicability: "always"
+    assessment_method: ledger
+    citation: "NIST AI 100-1, MANAGE 1.4"
+  # --- MANAGE 2: strategies to maximise benefits and minimise negative impacts ---
+  - id: manage-2.1
+    title: "Resources allocated to risk treatment"
+    description: "Establish and document resources required to manage AI risks, weighing them against organisational risk tolerance and considering non-AI-specific enterprise risk controls."
+    required_evidence: "resource allocation record for AI risk treatment"
+    path: ["MANAGE", "MANAGE 2"]
+    reference: "MANAGE 2.1"
+    obligation_type: govern
+    roles: [provider]
+    applicability: "always"
+    assessment_method: artefact
+    citation: "NIST AI 100-1, MANAGE 2.1"
+  - id: manage-2.2
+    title: "Sustained value and trustworthiness mechanisms"
+    description: "Put mechanisms in place to sustain the value of deployed AI systems, and to support the trustworthiness of the system through its lifecycle including maintenance."
+    required_evidence: "lifecycle maintenance and trustworthiness sustainment plan"
+    path: ["MANAGE", "MANAGE 2"]
+    reference: "MANAGE 2.2"
+    obligation_type: process
+    roles: [provider, deployer]
+    applicability: "always"
+    assessment_method: artefact
+    citation: "NIST AI 100-1, MANAGE 2.2"
+  - id: manage-2.3
+    title: "Procedures for unknown risks and superseded systems"
+    description: "Put procedures in place and activate them to respond to and recover from a previously unknown risk when it is identified, including the ability to supersede, disengage or deactivate the system."
+    required_evidence: "kill-switch, disengagement and rollback procedures with activation records"
+    path: ["MANAGE", "MANAGE 2"]
+    reference: "MANAGE 2.3"
+    obligation_type: oversight
+    roles: [provider, deployer]
+    applicability: "always"
+    assessment_method: ledger
+    crosswalk: ["eu-ai-act:art-14"]
+    citation: "NIST AI 100-1, MANAGE 2.3"
+  - id: manage-2.4
+    title: "Mechanisms to supersede, disengage or deactivate maintained"
+    description: "Put mechanisms in place and maintain them to supersede, disengage or deactivate AI systems that demonstrate performance or outcomes inconsistent with intended use."
+    required_evidence: "documented and tested deactivation mechanism with user communication plan"
+    path: ["MANAGE", "MANAGE 2"]
+    reference: "MANAGE 2.4"
+    obligation_type: technical
+    roles: [provider, deployer]
+    applicability: "always"
+    assessment_method: test
+    citation: "NIST AI 100-1, MANAGE 2.4"
+  # --- MANAGE 3: third-party risks managed ---
+  - id: manage-3.1
+    title: "Third-party risks managed and monitored"
+    description: "Manage and monitor AI risks and benefits arising from third-party resources, applying the organisation's risk controls and regularly monitoring them over the lifecycle."
+    required_evidence: "third-party monitoring record and applied risk controls"
+    path: ["MANAGE", "MANAGE 3"]
+    reference: "MANAGE 3.1"
+    obligation_type: process
+    roles: [provider, deployer]
+    applicability: "always"
+    assessment_method: ledger
+    crosswalk: ["nist-ai-rmf:GOVERN-6.1"]
+    citation: "NIST AI 100-1, MANAGE 3.1"
+  - id: manage-3.2
+    title: "Pre-trained and third-party model risks managed"
+    description: "Apply and document controls for risks associated with pre-trained models, external data or other third-party components that are known to be problematic or difficult to monitor."
+    required_evidence: "documented controls for pre-trained and third-party model risks"
+    path: ["MANAGE", "MANAGE 3"]
+    reference: "MANAGE 3.2"
+    obligation_type: process
+    roles: [provider, deployer]
+    applicability: "always"
+    assessment_method: artefact
+    citation: "NIST AI 100-1, MANAGE 3.2"
+  # --- MANAGE 4: risk treatments documented and monitored over time ---
+  - id: manage-4.1
+    title: "Post-deployment monitoring and response plans"
+    description: "Implement and document post-deployment AI system monitoring plans, including mechanisms for capturing and evaluating input from users and other relevant AI actors, appeal and override, decommissioning, incident response, recovery and change management."
+    required_evidence: "post-deployment monitoring and response plan with appeal, override and incident handling"
+    path: ["MANAGE", "MANAGE 4"]
+    reference: "MANAGE 4.1"
+    obligation_type: process
+    roles: [provider, deployer]
+    applicability: "always"
+    assessment_method: ledger
+    crosswalk: ["eu-ai-act:art-72"]
+    citation: "NIST AI 100-1, MANAGE 4.1"
+  - id: manage-4.2
+    title: "Continual improvement measured and implemented"
+    description: "Measure the activities to enable AI actors to continually improve AI systems in production, and implement those improvements based on regular assessment and feedback."
+    required_evidence: "continual improvement records tied to measurement and feedback"
+    path: ["MANAGE", "MANAGE 4"]
+    reference: "MANAGE 4.2"
+    obligation_type: process
+    roles: [provider]
+    applicability: "always"
+    assessment_method: artefact
+    citation: "NIST AI 100-1, MANAGE 4.2"
+  - id: manage-4.3
+    title: "Incidents and errors communicated and shared"
+    description: "Communicate incidents and errors to relevant AI actors, affected communities and the public, and follow documented processes for tracking, responding to and recovering from them."
+    required_evidence: "incident communication log and information-sharing records; tamper-evident ledger"
+    path: ["MANAGE", "MANAGE 4"]
+    reference: "MANAGE 4.3"
+    obligation_type: process
+    roles: [provider, deployer]
+    applicability: "always"
+    assessment_method: ledger
+    crosswalk: ["eu-ai-act:art-73"]
+    citation: "NIST AI 100-1, MANAGE 4.3"

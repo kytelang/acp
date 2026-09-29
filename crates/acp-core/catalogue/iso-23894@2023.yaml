@@ -1,0 +1,276 @@
+# ISO/IEC 23894:2023, guidance on risk management for artificial intelligence.
+# Framework type: standard (voluntary guidance aligned to ISO 31000). Clause 5 sets out principles,
+# clause 6 covers the risk-management framework and process. ISO text is copyrighted, so every node is a
+# faithful paraphrase with a citation, never verbatim standard text.
+slug: iso-23894
+label: ISO/IEC 23894
+version: "2023"
+framework_type: standard
+effective_date: "2023-02-01"
+record_keeping_reference: "Clause 6 (risk management process)"
+source: "ISO/IEC 23894:2023"
+manifest:
+  - "5"
+  - "6"
+controls:
+  # --- Clause 5: principles ---
+  - id: clause-5.1
+    title: "Value creation and protection"
+    description: "Risk management for AI should create and protect value, supporting the achievement of objectives and improvement of performance."
+    required_evidence: "risk management policy stating value objectives"
+    path: ["Clause 5", "Principles"]
+    reference: "5.1"
+    obligation_type: govern
+    roles: []
+    applicability: "always"
+    assessment_method: artefact
+    citation: "ISO/IEC 23894:2023, Clause 5 (principles)"
+  - id: clause-5.2
+    title: "Integration into organisational activities"
+    description: "Risk management should be an integral part of all AI-related organisational activities rather than a standalone exercise."
+    required_evidence: "evidence risk management is embedded in AI lifecycle activities"
+    path: ["Clause 5", "Principles"]
+    reference: "5.2"
+    obligation_type: govern
+    roles: []
+    applicability: "always"
+    assessment_method: artefact
+    citation: "ISO/IEC 23894:2023, Clause 5 (principles)"
+  - id: clause-5.3
+    title: "Structured, comprehensive and customised approach"
+    description: "The approach to AI risk management should be structured and comprehensive, and customised to the organisation's context and the specific AI system."
+    required_evidence: "documented risk approach tailored to context"
+    path: ["Clause 5", "Principles"]
+    reference: "5.3"
+    obligation_type: process
+    roles: []
+    applicability: "always"
+    assessment_method: artefact
+    citation: "ISO/IEC 23894:2023, Clause 5 (principles)"
+  - id: clause-5.4
+    title: "Inclusive and best-available-information based"
+    description: "Risk management should involve appropriate stakeholders and be based on the best available information, acknowledging its limitations and uncertainty."
+    required_evidence: "stakeholder involvement record; information sources"
+    path: ["Clause 5", "Principles"]
+    reference: "5.4"
+    obligation_type: process
+    roles: []
+    applicability: "always"
+    assessment_method: artefact
+    citation: "ISO/IEC 23894:2023, Clause 5 (principles)"
+  - id: clause-5.5
+    title: "Attention to human and cultural factors"
+    description: "Risk management should take account of human behaviour and cultural factors that influence the AI system and its risks."
+    required_evidence: "assessment of human and cultural factors"
+    path: ["Clause 5", "Principles"]
+    reference: "5.5"
+    obligation_type: process
+    roles: []
+    applicability: "always"
+    assessment_method: artefact
+    citation: "ISO/IEC 23894:2023, Clause 5 (principles)"
+  - id: clause-5.6
+    title: "Dynamic and continually improving"
+    description: "Risk management should be dynamic, responding to change, and should be continually improved through learning and experience."
+    required_evidence: "improvement records; change-driven review log"
+    path: ["Clause 5", "Principles"]
+    reference: "5.6"
+    obligation_type: process
+    roles: []
+    applicability: "always"
+    assessment_method: ledger
+    citation: "ISO/IEC 23894:2023, Clause 5 (principles)"
+  # --- Clause 6: framework ---
+  - id: clause-6.1.1
+    title: "Leadership and commitment"
+    description: "Top management should demonstrate leadership and commitment to AI risk management, ensuring it is integrated into governance and adequately resourced."
+    required_evidence: "signed leadership commitment; assigned accountability"
+    path: ["Clause 6", "Framework"]
+    reference: "6.1.1"
+    obligation_type: govern
+    roles: []
+    applicability: "always"
+    assessment_method: attestation
+    crosswalk: ["iso-42001:5.1"]
+    citation: "ISO/IEC 23894:2023, Clause 6 (framework), leadership and commitment"
+  - id: clause-6.1.2
+    title: "Integration of the framework"
+    description: "The AI risk-management framework should be integrated into the organisation's structure, governance and processes."
+    required_evidence: "framework integration documentation"
+    path: ["Clause 6", "Framework"]
+    reference: "6.1.2"
+    obligation_type: govern
+    roles: []
+    applicability: "always"
+    assessment_method: artefact
+    citation: "ISO/IEC 23894:2023, Clause 6 (framework), integration"
+  - id: clause-6.1.3
+    title: "Design of the framework"
+    description: "Design the framework by understanding the organisation and its context, articulating commitment, assigning roles and authority, and allocating resources for AI risk management."
+    required_evidence: "framework design record; roles and resources allocation"
+    path: ["Clause 6", "Framework"]
+    reference: "6.1.3"
+    obligation_type: process
+    roles: []
+    applicability: "always"
+    assessment_method: artefact
+    citation: "ISO/IEC 23894:2023, Clause 6 (framework), design"
+  - id: clause-6.1.4
+    title: "Implementation of the framework"
+    description: "Implement the framework by developing a plan, identifying decision-making, and ensuring the arrangements for managing AI risk are understood and practised."
+    required_evidence: "implementation plan; operating evidence"
+    path: ["Clause 6", "Framework"]
+    reference: "6.1.4"
+    obligation_type: process
+    roles: []
+    applicability: "always"
+    assessment_method: artefact
+    citation: "ISO/IEC 23894:2023, Clause 6 (framework), implementation"
+  - id: clause-6.1.5
+    title: "Evaluation of the framework"
+    description: "Periodically evaluate the effectiveness of the AI risk-management framework against its purpose and plans."
+    required_evidence: "framework evaluation report"
+    path: ["Clause 6", "Framework"]
+    reference: "6.1.5"
+    obligation_type: process
+    roles: []
+    applicability: "always"
+    assessment_method: artefact
+    citation: "ISO/IEC 23894:2023, Clause 6 (framework), evaluation"
+  - id: clause-6.1.6
+    title: "Improvement of the framework"
+    description: "Continually improve the suitability, adequacy and effectiveness of the framework, adapting it as the organisation and its AI systems change."
+    required_evidence: "improvement actions log"
+    path: ["Clause 6", "Framework"]
+    reference: "6.1.6"
+    obligation_type: process
+    roles: []
+    applicability: "always"
+    assessment_method: ledger
+    citation: "ISO/IEC 23894:2023, Clause 6 (framework), improvement"
+  # --- Clause 6: risk management process ---
+  - id: clause-6.2
+    title: "Communication and consultation"
+    description: "Communicate and consult with internal and external stakeholders throughout the AI risk-management process to inform and support risk decisions."
+    required_evidence: "communication and consultation records"
+    path: ["Clause 6", "Process"]
+    reference: "6.2"
+    obligation_type: process
+    roles: []
+    applicability: "always"
+    assessment_method: artefact
+    citation: "ISO/IEC 23894:2023, Clause 6 (process), communication and consultation"
+  - id: clause-6.3
+    title: "Scope, context and criteria"
+    description: "Define the scope of the AI risk-management activities, establish the external and internal context, and set the criteria used to evaluate the significance of risk."
+    required_evidence: "documented scope, context and risk criteria"
+    path: ["Clause 6", "Process"]
+    reference: "6.3"
+    obligation_type: process
+    roles: []
+    applicability: "always"
+    assessment_method: artefact
+    citation: "ISO/IEC 23894:2023, Clause 6 (process), scope, context and criteria"
+  - id: clause-6.4
+    title: "Risk assessment"
+    description: "Carry out risk assessment as the overall process of risk identification, risk analysis and risk evaluation for the AI system."
+    required_evidence: "risk assessment record covering identification, analysis and evaluation"
+    path: ["Clause 6", "Process", "Risk assessment"]
+    reference: "6.4"
+    obligation_type: process
+    roles: []
+    applicability: "always"
+    assessment_method: artefact
+    crosswalk: ["eu-ai-act:Art. 9"]
+    citation: "ISO/IEC 23894:2023, Clause 6 (process), risk assessment"
+  - id: clause-6.4.2
+    title: "Risk identification"
+    description: "Identify the sources of AI risk, events, causes and potential consequences, including risks specific to AI such as data quality, bias, opacity and drift."
+    required_evidence: "risk register entries identifying AI-specific risks"
+    path: ["Clause 6", "Process", "Risk assessment"]
+    reference: "6.4.2"
+    obligation_type: process
+    roles: []
+    applicability: "always"
+    assessment_method: artefact
+    citation: "ISO/IEC 23894:2023, Clause 6 (process), risk identification"
+  - id: clause-6.4.3
+    title: "Risk analysis"
+    description: "Analyse the nature and level of each identified risk, considering likelihood, consequences and the effectiveness of existing controls, with attention to uncertainty."
+    required_evidence: "risk analysis results with likelihood and consequence ratings"
+    path: ["Clause 6", "Process", "Risk assessment"]
+    reference: "6.4.3"
+    obligation_type: process
+    roles: []
+    applicability: "always"
+    assessment_method: artefact
+    citation: "ISO/IEC 23894:2023, Clause 6 (process), risk analysis"
+  - id: clause-6.4.4
+    title: "Risk evaluation"
+    description: "Compare the results of risk analysis against the risk criteria to decide whether the risk is acceptable and what further action is required."
+    required_evidence: "risk evaluation decisions against criteria"
+    path: ["Clause 6", "Process", "Risk assessment"]
+    reference: "6.4.4"
+    obligation_type: process
+    roles: []
+    applicability: "always"
+    assessment_method: artefact
+    citation: "ISO/IEC 23894:2023, Clause 6 (process), risk evaluation"
+  - id: clause-6.5
+    title: "Risk treatment"
+    description: "Select and implement options to address risk, prepare and implement treatment plans, and assess residual risk against the criteria."
+    required_evidence: "risk treatment plans; residual-risk record"
+    path: ["Clause 6", "Process"]
+    reference: "6.5"
+    obligation_type: process
+    roles: []
+    applicability: "always"
+    assessment_method: artefact
+    citation: "ISO/IEC 23894:2023, Clause 6 (process), risk treatment"
+  - id: clause-6.6
+    title: "Monitoring and review"
+    description: "Monitor and review the AI risks, controls and the process itself on an ongoing basis to detect change and confirm continued effectiveness."
+    required_evidence: "monitoring and review records"
+    path: ["Clause 6", "Process"]
+    reference: "6.6"
+    obligation_type: process
+    roles: []
+    applicability: "always"
+    assessment_method: ledger
+    crosswalk: ["eu-ai-act:Art. 72"]
+    citation: "ISO/IEC 23894:2023, Clause 6 (process), monitoring and review"
+  - id: clause-6.7
+    title: "Recording and reporting"
+    description: "Record and report the AI risk-management process and its outcomes to support decision-making, accountability and continual improvement."
+    required_evidence: "tamper-evident ledger of risk decisions; reporting records"
+    path: ["Clause 6", "Process"]
+    reference: "6.7"
+    obligation_type: record-keeping
+    roles: []
+    applicability: "always"
+    assessment_method: ledger
+    crosswalk: ["eu-ai-act:Art. 12"]
+    citation: "ISO/IEC 23894:2023, Clause 6 (process), recording and reporting"
+  # --- Annex mapping guidance (informative; outside the numbered clauses) ---
+  - id: annex-a
+    title: "Annex A: AI risk sources and considerations"
+    description: "Use the informative guidance on AI-specific objectives and risk sources to inform identification and analysis of risks."
+    required_evidence: "mapping of identified risks to Annex A risk sources"
+    path: ["Annex A"]
+    reference: "Annex A"
+    obligation_type: process
+    roles: []
+    applicability: "always"
+    assessment_method: artefact
+    citation: "ISO/IEC 23894:2023, Annex A (risk sources)"
+  - id: annex-b
+    title: "Annex B: risk management across the AI lifecycle"
+    description: "Use the informative guidance on applying risk management across the AI lifecycle stages to align treatment and monitoring with each stage."
+    required_evidence: "lifecycle-stage risk mapping"
+    path: ["Annex B"]
+    reference: "Annex B"
+    obligation_type: process
+    roles: []
+    applicability: "always"
+    assessment_method: artefact
+    citation: "ISO/IEC 23894:2023, Annex B (lifecycle)"

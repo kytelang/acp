@@ -1,0 +1,380 @@
+# GDPR, Regulation (EU) 2016/679.
+# Framework type: statutory conformity (pass/fail against binding legal obligations for the processing of
+# personal data). Nodes are faithful paraphrases with a citation, never verbatim regulation text.
+slug: gdpr
+label: GDPR
+version: "2016"
+framework_type: statutory_conformity
+effective_date: "2018-05-25"
+record_keeping_reference: "Art. 30 (records of processing)"
+source: "Regulation (EU) 2016/679"
+manifest:
+  - "Art. 5"
+  - "Art. 6"
+  - "Art. 9"
+  - "Art. 12"
+  - "Art. 13"
+  - "Art. 14"
+  - "Art. 15"
+  - "Art. 16"
+  - "Art. 17"
+  - "Art. 18"
+  - "Art. 20"
+  - "Art. 21"
+  - "Art. 22"
+  - "Art. 24"
+  - "Art. 25"
+  - "Art. 28"
+  - "Art. 30"
+  - "Art. 32"
+  - "Art. 33"
+  - "Art. 34"
+  - "Art. 35"
+  - "Art. 36"
+  - "Art. 44"
+controls:
+  # --- Chapter II: principles (Art. 5) ---
+  - id: art-5-1-a
+    title: "Lawfulness, fairness and transparency"
+    description: "Process personal data lawfully, fairly and in a transparent manner in relation to the data subject."
+    required_evidence: "lawful-basis register; fairness and transparency assessment for each processing activity"
+    path: ["Chapter II", "Article 5"]
+    reference: "Art. 5(1)(a)"
+    obligation_type: govern
+    roles: [controller]
+    applicability: "always"
+    assessment_method: artefact
+    crosswalk: ["eu-ai-act:art-10", "dpdp-2023:s4"]
+    citation: "Regulation (EU) 2016/679, Art. 5(1)(a)"
+  - id: art-5-1-b
+    title: "Purpose limitation"
+    description: "Collect personal data for specified, explicit and legitimate purposes and do not further process it in a way incompatible with those purposes."
+    required_evidence: "documented processing purposes; compatibility assessment for any secondary use"
+    path: ["Chapter II", "Article 5"]
+    reference: "Art. 5(1)(b)"
+    obligation_type: govern
+    roles: [controller]
+    applicability: "always"
+    assessment_method: artefact
+    citation: "Regulation (EU) 2016/679, Art. 5(1)(b)"
+  - id: art-5-1-c
+    title: "Data minimisation"
+    description: "Ensure personal data is adequate, relevant and limited to what is necessary for the purposes for which it is processed."
+    required_evidence: "data inventory showing fields justified against purpose; minimisation review"
+    path: ["Chapter II", "Article 5"]
+    reference: "Art. 5(1)(c)"
+    obligation_type: technical
+    roles: [controller]
+    applicability: "always"
+    assessment_method: artefact
+    crosswalk: ["dpdp-2023:s8"]
+    citation: "Regulation (EU) 2016/679, Art. 5(1)(c)"
+  - id: art-5-1-d
+    title: "Accuracy"
+    description: "Keep personal data accurate and, where necessary, up to date, and take reasonable steps to erase or rectify inaccurate data without delay."
+    required_evidence: "accuracy and correction workflow; records of rectification"
+    path: ["Chapter II", "Article 5"]
+    reference: "Art. 5(1)(d)"
+    obligation_type: process
+    roles: [controller]
+    applicability: "always"
+    assessment_method: process
+    crosswalk: ["dpdp-2023:s8"]
+    citation: "Regulation (EU) 2016/679, Art. 5(1)(d)"
+  - id: art-5-1-e
+    title: "Storage limitation"
+    description: "Keep personal data in a form permitting identification of data subjects for no longer than is necessary for the purposes of processing."
+    required_evidence: "retention schedule; evidence of deletion or anonymisation at end of retention"
+    path: ["Chapter II", "Article 5"]
+    reference: "Art. 5(1)(e)"
+    obligation_type: process
+    roles: [controller]
+    applicability: "always"
+    assessment_method: artefact
+    citation: "Regulation (EU) 2016/679, Art. 5(1)(e)"
+  - id: art-5-1-f
+    title: "Integrity and confidentiality"
+    description: "Process personal data with appropriate security, protecting against unauthorised or unlawful processing and against accidental loss, destruction or damage."
+    required_evidence: "technical and organisational security measures; access-control and encryption evidence"
+    path: ["Chapter II", "Article 5"]
+    reference: "Art. 5(1)(f)"
+    obligation_type: technical
+    roles: [controller, processor]
+    applicability: "always"
+    assessment_method: test
+    crosswalk: ["iso-27001:A.5.1", "dpdp-2023:s8"]
+    citation: "Regulation (EU) 2016/679, Art. 5(1)(f)"
+  - id: art-5-2
+    title: "Accountability"
+    description: "The controller is responsible for, and must be able to demonstrate, compliance with the data-protection principles."
+    required_evidence: "accountability documentation; evidence mapping each principle to controls"
+    path: ["Chapter II", "Article 5"]
+    reference: "Art. 5(2)"
+    obligation_type: govern
+    roles: [controller]
+    applicability: "always"
+    assessment_method: artefact
+    crosswalk: ["eu-ai-act:art-17", "iso-42001:8.1"]
+    citation: "Regulation (EU) 2016/679, Art. 5(2)"
+  # --- Chapter II: lawfulness and special categories (Art. 6, 9) ---
+  - id: art-6
+    title: "Lawfulness of processing"
+    description: "Process personal data only where at least one lawful basis applies: consent, contract, legal obligation, vital interests, public task or legitimate interests."
+    required_evidence: "lawful-basis determination per processing activity; legitimate-interests assessment where relied on"
+    path: ["Chapter II", "Article 6"]
+    reference: "Art. 6"
+    obligation_type: govern
+    roles: [controller]
+    applicability: "always"
+    assessment_method: artefact
+    crosswalk: ["dpdp-2023:s4"]
+    citation: "Regulation (EU) 2016/679, Art. 6"
+  - id: art-9
+    title: "Processing of special categories of personal data"
+    description: "Do not process special-category data (such as health, biometrics for identification, race, or political or religious beliefs) unless a specific Art. 9(2) condition applies."
+    required_evidence: "special-category condition record; explicit-consent or exemption evidence"
+    path: ["Chapter II", "Article 9"]
+    reference: "Art. 9"
+    obligation_type: govern
+    roles: [controller]
+    applicability: "always"
+    assessment_method: artefact
+    crosswalk: ["eu-ai-act:art-10"]
+    citation: "Regulation (EU) 2016/679, Art. 9"
+  # --- Chapter III: information and rights of the data subject (Art. 12-22) ---
+  - id: art-12
+    title: "Transparent information, communication and modalities"
+    description: "Provide information and handle data-subject requests in a concise, transparent, intelligible and easily accessible form, and respond within one month free of charge."
+    required_evidence: "request-handling procedure with timing; templates for responses"
+    path: ["Chapter III", "Section 1", "Article 12"]
+    reference: "Art. 12"
+    obligation_type: transparency
+    roles: [controller]
+    applicability: "always"
+    assessment_method: process
+    crosswalk: ["dpdp-2023:s5"]
+    citation: "Regulation (EU) 2016/679, Art. 12"
+  - id: art-13
+    title: "Information where data is collected from the subject"
+    description: "When collecting personal data directly from the subject, provide identity of the controller, purposes, lawful basis, recipients, retention and the subject's rights at the time of collection."
+    required_evidence: "privacy notice shown at point of collection covering the Art. 13 items"
+    path: ["Chapter III", "Section 2", "Article 13"]
+    reference: "Art. 13"
+    obligation_type: transparency
+    roles: [controller]
+    applicability: "always"
+    assessment_method: artefact
+    crosswalk: ["dpdp-2023:s5"]
+    citation: "Regulation (EU) 2016/679, Art. 13"
+  - id: art-14
+    title: "Information where data is not obtained from the subject"
+    description: "When personal data is obtained from a source other than the subject, provide the required information within a reasonable period and disclose the source of the data."
+    required_evidence: "privacy notice for indirectly collected data; record of data source"
+    path: ["Chapter III", "Section 2", "Article 14"]
+    reference: "Art. 14"
+    obligation_type: transparency
+    roles: [controller]
+    applicability: "always"
+    assessment_method: artefact
+    citation: "Regulation (EU) 2016/679, Art. 14"
+  - id: art-15
+    title: "Right of access by the data subject"
+    description: "Confirm whether personal data is being processed and provide a copy of the data along with information on purposes, recipients, retention and the subject's rights."
+    required_evidence: "subject-access request workflow; access response records"
+    path: ["Chapter III", "Section 2", "Article 15"]
+    reference: "Art. 15"
+    obligation_type: process
+    roles: [controller]
+    applicability: "always"
+    assessment_method: process
+    crosswalk: ["dpdp-2023:s11"]
+    citation: "Regulation (EU) 2016/679, Art. 15"
+  - id: art-16
+    title: "Right to rectification"
+    description: "Rectify inaccurate personal data without undue delay and complete incomplete data, including by means of a supplementary statement."
+    required_evidence: "rectification request workflow; records of corrections made"
+    path: ["Chapter III", "Section 3", "Article 16"]
+    reference: "Art. 16"
+    obligation_type: process
+    roles: [controller]
+    applicability: "always"
+    assessment_method: process
+    crosswalk: ["dpdp-2023:s12"]
+    citation: "Regulation (EU) 2016/679, Art. 16"
+  - id: art-17
+    title: "Right to erasure (right to be forgotten)"
+    description: "Erase personal data without undue delay where a ground applies, such as the data is no longer necessary, consent is withdrawn, or processing is unlawful."
+    required_evidence: "erasure request workflow; deletion confirmation and downstream-notification records"
+    path: ["Chapter III", "Section 3", "Article 17"]
+    reference: "Art. 17"
+    obligation_type: process
+    roles: [controller]
+    applicability: "always"
+    assessment_method: process
+    crosswalk: ["dpdp-2023:s12"]
+    citation: "Regulation (EU) 2016/679, Art. 17"
+  - id: art-18
+    title: "Right to restriction of processing"
+    description: "Restrict processing where accuracy is contested, processing is unlawful, or the subject objects, storing the data but not otherwise processing it during the restriction."
+    required_evidence: "restriction request workflow; flags marking restricted records"
+    path: ["Chapter III", "Section 3", "Article 18"]
+    reference: "Art. 18"
+    obligation_type: process
+    roles: [controller]
+    applicability: "always"
+    assessment_method: process
+    citation: "Regulation (EU) 2016/679, Art. 18"
+  - id: art-20
+    title: "Right to data portability"
+    description: "Where processing is based on consent or contract and is automated, provide the subject their data in a structured, commonly used, machine-readable format and transmit it to another controller where feasible."
+    required_evidence: "portability export mechanism; machine-readable export samples"
+    path: ["Chapter III", "Section 3", "Article 20"]
+    reference: "Art. 20"
+    obligation_type: technical
+    roles: [controller]
+    applicability: "always"
+    assessment_method: test
+    citation: "Regulation (EU) 2016/679, Art. 20"
+  - id: art-21
+    title: "Right to object"
+    description: "Allow the subject to object to processing based on legitimate interests or public task, and to object at any time to processing for direct marketing."
+    required_evidence: "objection-handling workflow; opt-out mechanism for direct marketing"
+    path: ["Chapter III", "Section 3", "Article 21"]
+    reference: "Art. 21"
+    obligation_type: process
+    roles: [controller]
+    applicability: "always"
+    assessment_method: process
+    citation: "Regulation (EU) 2016/679, Art. 21"
+  - id: art-22
+    title: "Automated individual decision-making, including profiling"
+    description: "The subject has the right not to be subject to a decision based solely on automated processing, including profiling, that produces legal or similarly significant effects, save for the permitted exceptions with safeguards."
+    required_evidence: "record of automated-decision use cases; human-review, contest and explanation safeguards"
+    path: ["Chapter III", "Section 4", "Article 22"]
+    reference: "Art. 22"
+    obligation_type: oversight
+    roles: [controller]
+    applicability: "always"
+    assessment_method: ledger
+    crosswalk: ["eu-ai-act:art-14", "dpdp-2023:s11"]
+    citation: "Regulation (EU) 2016/679, Art. 22"
+  # --- Chapter IV: controller and processor (Art. 24, 25, 28, 30, 32-36) ---
+  - id: art-24
+    title: "Responsibility of the controller"
+    description: "Implement appropriate technical and organisational measures, and review and update them, to ensure and demonstrate that processing complies with the Regulation."
+    required_evidence: "data-protection policy set; evidence measures are reviewed and updated"
+    path: ["Chapter IV", "Section 1", "Article 24"]
+    reference: "Art. 24"
+    obligation_type: govern
+    roles: [controller]
+    applicability: "always"
+    assessment_method: artefact
+    crosswalk: ["dpdp-2023:s8"]
+    citation: "Regulation (EU) 2016/679, Art. 24"
+  - id: art-25
+    title: "Data protection by design and by default"
+    description: "Implement data-protection principles through appropriate measures by design, and ensure by default only personal data necessary for each specific purpose is processed."
+    required_evidence: "design records showing privacy measures; default-configuration evidence limiting data"
+    path: ["Chapter IV", "Section 1", "Article 25"]
+    reference: "Art. 25"
+    obligation_type: technical
+    roles: [controller]
+    applicability: "always"
+    assessment_method: artefact
+    crosswalk: ["eu-ai-act:art-9", "iso-42001:6.1"]
+    citation: "Regulation (EU) 2016/679, Art. 25"
+  - id: art-28
+    title: "Processor obligations and processing agreements"
+    description: "Use only processors giving sufficient guarantees, and govern processing by a written contract binding the processor to act only on documented instructions and to assist the controller."
+    required_evidence: "data-processing agreements; processor due-diligence records"
+    path: ["Chapter IV", "Section 1", "Article 28"]
+    reference: "Art. 28"
+    obligation_type: govern
+    roles: [controller, processor]
+    applicability: "always"
+    assessment_method: artefact
+    crosswalk: ["dpdp-2023:s8"]
+    citation: "Regulation (EU) 2016/679, Art. 28"
+  - id: art-30
+    title: "Records of processing activities"
+    description: "Maintain a record of processing activities under the controller's responsibility, and processors maintain a record of processing carried out on behalf of controllers."
+    required_evidence: "records of processing activities (RoPA) kept current"
+    path: ["Chapter IV", "Section 1", "Article 30"]
+    reference: "Art. 30"
+    obligation_type: record-keeping
+    roles: [controller, processor]
+    applicability: "always"
+    assessment_method: artefact
+    crosswalk: ["eu-ai-act:art-12"]
+    citation: "Regulation (EU) 2016/679, Art. 30"
+  - id: art-32
+    title: "Security of processing"
+    description: "Implement appropriate technical and organisational measures for a level of security appropriate to the risk, including pseudonymisation, encryption, resilience and regular testing."
+    required_evidence: "security control set; encryption and pseudonymisation evidence; test and review records"
+    path: ["Chapter IV", "Section 2", "Article 32"]
+    reference: "Art. 32"
+    obligation_type: technical
+    roles: [controller, processor]
+    applicability: "always"
+    assessment_method: test
+    crosswalk: ["iso-27001:A.8.7", "eu-ai-act:art-15", "dpdp-2023:s8"]
+    citation: "Regulation (EU) 2016/679, Art. 32"
+  - id: art-33
+    title: "Notification of a personal data breach to the supervisory authority"
+    description: "Notify the competent supervisory authority of a personal data breach without undue delay and, where feasible, within 72 hours of becoming aware of it, unless it is unlikely to pose a risk."
+    required_evidence: "breach-notification workflow with timestamps; tamper-evident breach ledger"
+    path: ["Chapter IV", "Section 2", "Article 33"]
+    reference: "Art. 33"
+    obligation_type: process
+    roles: [controller, processor]
+    applicability: "always"
+    assessment_method: ledger
+    crosswalk: ["eu-ai-act:art-73"]
+    citation: "Regulation (EU) 2016/679, Art. 33"
+  - id: art-34
+    title: "Communication of a personal data breach to the data subject"
+    description: "Where a breach is likely to result in a high risk to individuals, communicate the breach to the affected data subjects without undue delay in clear and plain language."
+    required_evidence: "high-risk breach assessment; records of subject communications"
+    path: ["Chapter IV", "Section 2", "Article 34"]
+    reference: "Art. 34"
+    obligation_type: process
+    roles: [controller]
+    applicability: "always"
+    assessment_method: process
+    citation: "Regulation (EU) 2016/679, Art. 34"
+  - id: art-35
+    title: "Data protection impact assessment"
+    description: "Carry out a data-protection impact assessment before processing likely to result in a high risk, in particular for large-scale profiling or special-category data."
+    required_evidence: "completed DPIA record for the high-risk processing"
+    path: ["Chapter IV", "Section 3", "Article 35"]
+    reference: "Art. 35"
+    obligation_type: process
+    roles: [controller]
+    applicability: "always"
+    assessment_method: artefact
+    crosswalk: ["eu-ai-act:art-27", "dpdp-2023:s10"]
+    citation: "Regulation (EU) 2016/679, Art. 35"
+  - id: art-36
+    title: "Prior consultation"
+    description: "Consult the supervisory authority before processing where a DPIA indicates a high residual risk that the controller cannot mitigate."
+    required_evidence: "record of prior consultation with the supervisory authority where triggered"
+    path: ["Chapter IV", "Section 3", "Article 36"]
+    reference: "Art. 36"
+    obligation_type: process
+    roles: [controller]
+    applicability: "always"
+    assessment_method: artefact
+    citation: "Regulation (EU) 2016/679, Art. 36"
+  # --- Chapter V: transfers to third countries (Art. 44) ---
+  - id: art-44
+    title: "General principle for transfers"
+    description: "Transfer personal data to a third country or international organisation only where the conditions in Chapter V are met so that the level of protection is not undermined."
+    required_evidence: "transfer register; adequacy decision, standard contractual clauses or other safeguard evidence"
+    path: ["Chapter V", "Article 44"]
+    reference: "Art. 44"
+    obligation_type: govern
+    roles: [controller, processor]
+    applicability: "always"
+    assessment_method: artefact
+    crosswalk: ["dpdp-2023:s16"]
+    citation: "Regulation (EU) 2016/679, Art. 44"

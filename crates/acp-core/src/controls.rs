@@ -1,82 +1,213 @@
-//! Control library (complete-platform GRC build).
+//! Control catalogue (exhaustive-conformance build).
 //!
-//! `grc.rs` maps ledger evidence to a control STATUS, but there was no library of the controls
-//! themselves. This is that reference library: for each framework, the controls, what each requires,
-//! and the evidence that satisfies it. Assessments (see `assessment.rs`) and reports draw from it, so
-//! control ids are one source of truth across ACP.
+//! The catalogue is versioned DATA, not code literals: one YAML file per framework-version under
+//! `catalogue/`, embedded at build time and parsed here. Each framework carries its metadata (label,
+//! version, type, record-keeping reference) and a coverage manifest (the source-of-truth section list),
+//! and each control carries the exhaustive-conformance fields (hierarchy path, normative reference,
+//! obligation type, bound roles, applicability predicate, evidence type, assessment method, crosswalk
+//! and citation). `assessment.rs` and the reports draw from this, so control ids are one source of
+//! truth across ACP.
 
 use serde::{Deserialize, Serialize};
+use std::sync::OnceLock;
 
+fn applic_always() -> String {
+    "always".to_string()
+}
+
+/// One control (a single normative obligation) in a framework.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct Control {
     pub framework: String,
     pub id: String,
     pub title: String,
+    #[serde(default)]
     pub description: String,
+    #[serde(default)]
     pub required_evidence: String,
+    /// Hierarchy path, for example ["Chapter III", "Section 2", "Article 14"].
+    #[serde(default)]
+    pub path: Vec<String>,
+    /// Normative reference, for example "Art. 14", "A.8.2", "CC6.1", "GOVERN 1.1".
+    #[serde(default)]
+    pub reference: String,
+    /// govern | document | technical | process | transparency | oversight | record-keeping | prohibition.
+    #[serde(default)]
+    pub obligation_type: String,
+    /// The roles this obligation binds: provider, deployer, developer, importer, distributor,
+    /// controller, processor. Empty means it binds any role.
+    #[serde(default)]
+    pub roles: Vec<String>,
+    /// Applicability predicate over a subject profile (see `assessment`), for example
+    /// "risk_tier in [high]", "role=deployer", "asset_type=gpai". Default "always".
+    #[serde(default = "applic_always")]
+    pub applicability: String,
+    /// attestation | artefact | test | ledger.
+    #[serde(default)]
+    pub assessment_method: String,
+    /// Equivalent controls in other frameworks, as "framework:id".
+    #[serde(default)]
+    pub crosswalk: Vec<String>,
+    /// Citation to the official source (regulation article, standard clause).
+    #[serde(default)]
+    pub citation: String,
 }
 
-/// The full built-in control library across EU AI Act, NIST AI RMF and ISO 42001.
+/// Framework-level metadata (one per catalogue file).
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct Framework {
+    pub slug: String,
+    pub label: String,
+    pub version: String,
+    /// statutory_conformity | principles_based | standard | sectoral. This is what makes a UK
+    /// principles-based report render differently from an EU statutory-conformity report.
+    #[serde(default)]
+    pub framework_type: String,
+    #[serde(default)]
+    pub effective_date: String,
+    /// The record-keeping (or equivalent) reference used in the signed-pack envelope.
+    #[serde(default)]
+    pub record_keeping_reference: String,
+    #[serde(default)]
+    pub source: String,
+}
+
+/// A parsed catalogue file: the framework metadata, its coverage manifest, and its controls.
+#[derive(Debug, Clone, Deserialize)]
+struct CatalogueFile {
+    #[serde(flatten)]
+    framework: Framework,
+    #[serde(default)]
+    manifest: Vec<String>,
+    controls: Vec<ControlDef>,
+}
+
+/// A control as authored in a catalogue file (the framework is injected from the file metadata).
+#[derive(Debug, Clone, Deserialize)]
+struct ControlDef {
+    id: String,
+    title: String,
+    #[serde(default)]
+    description: String,
+    #[serde(default)]
+    required_evidence: String,
+    #[serde(default)]
+    path: Vec<String>,
+    #[serde(default)]
+    reference: String,
+    #[serde(default)]
+    obligation_type: String,
+    #[serde(default)]
+    roles: Vec<String>,
+    #[serde(default = "applic_always")]
+    applicability: String,
+    #[serde(default)]
+    assessment_method: String,
+    #[serde(default)]
+    crosswalk: Vec<String>,
+    #[serde(default)]
+    citation: String,
+}
+
+/// Every embedded catalogue file. Adding a framework is adding a file and a line here.
+static CATALOGUE_YAML: &[(&str, &str)] = &[
+    ("eu-ai-act@2024", include_str!("../catalogue/eu-ai-act@2024.yaml")),
+    ("nist-ai-rmf@1.0", include_str!("../catalogue/nist-ai-rmf@1.0.yaml")),
+    ("iso-42001@2023", include_str!("../catalogue/iso-42001@2023.yaml")),
+    ("iso-27001@2022", include_str!("../catalogue/iso-27001@2022.yaml")),
+    ("soc-2@2017", include_str!("../catalogue/soc-2@2017.yaml")),
+    ("gdpr@2016", include_str!("../catalogue/gdpr@2016.yaml")),
+    ("dpdp-2023@2023", include_str!("../catalogue/dpdp-2023@2023.yaml")),
+    ("uk-ai@2023", include_str!("../catalogue/uk-ai@2023.yaml")),
+    ("colorado-ai-act@2024", include_str!("../catalogue/colorado-ai-act@2024.yaml")),
+    ("nyc-ll144@2023", include_str!("../catalogue/nyc-ll144@2023.yaml")),
+    ("canada-aida@2022", include_str!("../catalogue/canada-aida@2022.yaml")),
+    ("iso-23894@2023", include_str!("../catalogue/iso-23894@2023.yaml")),
+];
+
+struct Parsed {
+    frameworks: Vec<Framework>,
+    controls: Vec<Control>,
+    // Read by the coverage-manifest completeness test; unused in non-test builds.
+    #[cfg_attr(not(test), allow(dead_code))]
+    manifests: Vec<(String, Vec<String>)>,
+}
+
+/// Parse a single catalogue file. Returns the framework, its controls (framework injected) and its
+/// coverage manifest. Returns an error string so tests can assert every catalogue parses.
+fn parse_one(name: &str, yaml: &str) -> Result<(Framework, Vec<Control>, Vec<String>), String> {
+    let cf: CatalogueFile =
+        serde_yaml::from_str(yaml).map_err(|e| format!("catalogue {name}: {e}"))?;
+    let fw = cf.framework.clone();
+    let controls = cf
+        .controls
+        .into_iter()
+        .map(|d| Control {
+            framework: fw.slug.clone(),
+            id: d.id,
+            title: d.title,
+            description: d.description,
+            required_evidence: d.required_evidence,
+            path: d.path,
+            reference: d.reference,
+            obligation_type: d.obligation_type,
+            roles: d.roles,
+            applicability: d.applicability,
+            assessment_method: d.assessment_method,
+            crosswalk: d.crosswalk,
+            citation: d.citation,
+        })
+        .collect();
+    Ok((fw, controls, cf.manifest))
+}
+
+fn parsed() -> &'static Parsed {
+    static CACHE: OnceLock<Parsed> = OnceLock::new();
+    CACHE.get_or_init(|| {
+        let mut frameworks = Vec::new();
+        let mut controls = Vec::new();
+        let mut manifests = Vec::new();
+        for (name, yaml) in CATALOGUE_YAML {
+            match parse_one(name, yaml) {
+                Ok((fw, mut cs, manifest)) => {
+                    manifests.push((fw.slug.clone(), manifest));
+                    frameworks.push(fw);
+                    controls.append(&mut cs);
+                }
+                // A malformed embedded catalogue is a build-asset error, caught by `catalogues_parse`.
+                // At runtime we skip it rather than panic in a request handler.
+                Err(e) => {
+                    tracing::error!("{e}");
+                }
+            }
+        }
+        Parsed { frameworks, controls, manifests }
+    })
+}
+
+/// The full built-in control library across every framework.
 pub fn library() -> Vec<Control> {
-    let c = |framework: &str, id: &str, title: &str, description: &str, ev: &str| Control {
-        framework: framework.into(),
-        id: id.into(),
-        title: title.into(),
-        description: description.into(),
-        required_evidence: ev.into(),
-    };
-    vec![
-        // EU AI Act (high-risk obligations, Chapter III Section 2).
-        c("eu-ai-act", "art-9", "Risk management system", "Establish, operate and document a risk management system across the lifecycle.", "risk register entries with treatment and review"),
-        c("eu-ai-act", "art-10", "Data governance", "Training, validation and testing data meet quality and governance criteria.", "data governance records"),
-        c("eu-ai-act", "art-11", "Technical documentation", "Maintain up-to-date technical documentation.", "system technical documentation"),
-        c("eu-ai-act", "art-12", "Record-keeping", "Automatic recording of events (logs) over the system lifetime.", "tamper-evident ledger of decisions"),
-        c("eu-ai-act", "art-13", "Transparency", "Provide information enabling users to interpret and use output.", "user-facing transparency notice"),
-        c("eu-ai-act", "art-14", "Human oversight", "Enable effective oversight by natural persons, including stop/override.", "approvals, step-up and kill-switch records"),
-        c("eu-ai-act", "art-15", "Accuracy, robustness, cybersecurity", "Appropriate accuracy, robustness and cybersecurity across the lifecycle.", "content firewall, tool-integrity and coverage evidence"),
-        // NIST AI RMF (functions).
-        c("nist-ai-rmf", "govern", "Govern", "A culture of risk management is cultivated and present.", "policy, roles (RBAC/SoD), signed evidence"),
-        c("nist-ai-rmf", "map", "Map", "Context is recognised and risks are identified.", "use-case registry, discovery, risk register"),
-        c("nist-ai-rmf", "measure", "Measure", "Risks are assessed, analysed and tracked.", "assessments, coverage, drift metrics"),
-        c("nist-ai-rmf", "manage", "Manage", "Risks are prioritised and acted upon.", "enforcement decisions, kill-switch, attestations"),
-        // ISO/IEC 42001 (AIMS clauses).
-        c("iso-42001", "6.1", "Actions to address risks and opportunities", "Plan actions to address AI risks and opportunities.", "risk register with treatment"),
-        c("iso-42001", "8.1", "Operational planning and control", "Plan, implement and control the processes for AI.", "signed policy, enforcement in path"),
-        c("iso-42001", "9.1", "Monitoring, measurement, analysis, evaluation", "Evaluate AI performance and the AIMS.", "coverage, SIEM export, evidence reports"),
-        c("iso-42001", "10.1", "Continual improvement", "Continually improve the AIMS.", "tuning/shadow-eval, posture progression"),
-        // SOC 2 (Trust Services Criteria, the security-relevant subset).
-        c("soc2", "cc6.1", "Logical access controls", "Restrict logical access to systems and data.", "RBAC/SCIM, per-route capability gating"),
-        c("soc2", "cc7.2", "Security monitoring", "Detect and respond to security events.", "violation events, SIEM export, spike alerts"),
-        c("soc2", "cc7.3", "Incident response", "Evaluate and act on detected security incidents.", "break-glass, kill-switch, approvals"),
-        c("soc2", "a1.2", "Availability and recovery", "Recover systems and data to meet availability commitments.", "HA leader lease, DR restore + acp verify"),
-        // GDPR (data-protection obligations relevant to AI processing).
-        c("gdpr", "art-5", "Principles of processing", "Lawful, fair, minimised and accurate processing.", "data-boundary lineage, PII redaction"),
-        c("gdpr", "art-25", "Data protection by design and by default", "Embed data protection into processing.", "content firewall, resource-boundary authz"),
-        c("gdpr", "art-30", "Records of processing", "Maintain records of processing activities.", "tamper-evident decision ledger"),
-        c("gdpr", "art-32", "Security of processing", "Appropriate technical and organisational security.", "encryption at rest, mTLS, signed evidence"),
-        // India DPDP Act 2023 (Digital Personal Data Protection).
-        c("dpdp", "s4", "Lawful processing", "Process personal data only for a lawful purpose with consent or legitimate use.", "use-case registry, consent basis records"),
-        c("dpdp", "s8", "Data fiduciary obligations", "Accuracy, security safeguards and breach notification as a data fiduciary.", "content firewall, encryption, incident records"),
-        c("dpdp", "s8-5", "Security safeguards", "Reasonable security safeguards to prevent personal data breach.", "encryption at rest, mTLS, resource-boundary authz"),
-        c("dpdp", "s8-6", "Breach notification", "Notify the Board and affected principals of a personal data breach.", "serious-incident workflow, tamper-evident ledger"),
-        c("dpdp", "s10", "Significant data fiduciary", "Additional obligations including DPIA and audit for significant fiduciaries.", "impact assessment records, signed audit evidence"),
-        // UK approach (pro-innovation AI regulation, cross-sector principles).
-        c("uk-ai", "safety", "Safety, security and robustness", "AI systems function robustly and securely throughout their lifecycle.", "content firewall, tool-integrity, coverage evidence"),
-        c("uk-ai", "transparency", "Appropriate transparency and explainability", "Provide appropriate information about AI systems and decisions.", "transparency obligations, decision ledger"),
-        c("uk-ai", "fairness", "Fairness", "AI systems do not undermine legal rights or discriminate unfairly.", "bias/performance test evidence"),
-        c("uk-ai", "accountability", "Accountability and governance", "Clear accountability and effective oversight for AI outcomes.", "RBAC/SoD, approvals, oversight-quality monitoring"),
-        c("uk-ai", "contestability", "Contestability and redress", "Routes to contest AI decisions and seek redress.", "approval/override records, signed evidence"),
-    ]
+    parsed().controls.clone()
 }
 
 /// Controls for one framework.
 pub fn for_framework(framework: &str) -> Vec<Control> {
-    library().into_iter().filter(|c| c.framework == framework).collect()
+    parsed().controls.iter().filter(|c| c.framework == framework).cloned().collect()
 }
 
 /// Look up a control by (framework, id).
 pub fn get(framework: &str, id: &str) -> Option<Control> {
-    library().into_iter().find(|c| c.framework == framework && c.id == id)
+    parsed().controls.iter().find(|c| c.framework == framework && c.id == id).cloned()
+}
+
+/// All framework metadata (label, version, type, record-keeping reference).
+pub fn frameworks() -> Vec<Framework> {
+    parsed().frameworks.clone()
+}
+
+/// Metadata for one framework slug.
+pub fn framework(slug: &str) -> Option<Framework> {
+    parsed().frameworks.iter().find(|f| f.slug == slug).cloned()
 }
 
 #[cfg(test)]
@@ -84,15 +215,63 @@ mod tests {
     use super::*;
 
     #[test]
-    fn library_covers_three_frameworks() {
-        let fws: std::collections::BTreeSet<String> = library().into_iter().map(|c| c.framework).collect();
-        assert!(fws.contains("eu-ai-act") && fws.contains("nist-ai-rmf") && fws.contains("iso-42001"));
+    fn catalogues_parse() {
+        // Every embedded catalogue must parse; a syntax error fails CI here rather than at runtime.
+        for (name, yaml) in CATALOGUE_YAML {
+            parse_one(name, yaml).unwrap_or_else(|e| panic!("{e}"));
+        }
+    }
+
+    #[test]
+    fn frameworks_are_canonical_and_unique() {
+        let fws = frameworks();
+        let canonical = [
+            "eu-ai-act", "nist-ai-rmf", "iso-42001", "iso-27001", "soc-2", "gdpr", "dpdp-2023",
+            "uk-ai", "colorado-ai-act", "nyc-ll144", "canada-aida", "iso-23894",
+        ];
+        let slugs: std::collections::BTreeSet<&str> = fws.iter().map(|f| f.slug.as_str()).collect();
+        for want in canonical {
+            assert!(slugs.contains(want), "missing canonical framework {want}");
+        }
+        // Each framework has a label, a version and a type.
+        for f in &fws {
+            assert!(!f.label.is_empty() && !f.version.is_empty(), "{} needs label+version", f.slug);
+            assert!(!f.framework_type.is_empty(), "{} needs a framework_type", f.slug);
+        }
+    }
+
+    #[test]
+    fn control_ids_unique_per_framework() {
+        for f in frameworks() {
+            let cs = for_framework(&f.slug);
+            let mut seen = std::collections::BTreeSet::new();
+            for c in &cs {
+                assert!(seen.insert(c.id.clone()), "duplicate id {}:{}", f.slug, c.id);
+            }
+            assert!(!cs.is_empty(), "{} has no controls", f.slug);
+        }
+    }
+
+    #[test]
+    fn coverage_manifest_is_satisfied() {
+        // Exhaustiveness gate: every manifest section must be covered by at least one control whose
+        // reference or path begins with that section string. An incomplete catalogue fails here.
+        for (slug, manifest) in &parsed().manifests {
+            let cs = for_framework(slug);
+            for section in manifest {
+                let covered = cs.iter().any(|c| {
+                    c.reference.starts_with(section.as_str())
+                        || c.path.iter().any(|p| p.starts_with(section.as_str()))
+                });
+                assert!(covered, "{slug}: manifest section '{section}' has no control covering it");
+            }
+        }
     }
 
     #[test]
     fn lookup_and_filter_work() {
-        assert_eq!(for_framework("eu-ai-act").len(), 7);
         assert_eq!(get("eu-ai-act", "art-14").unwrap().title, "Human oversight");
         assert!(get("eu-ai-act", "art-999").is_none());
+        assert!(for_framework("eu-ai-act").len() >= 40, "EU AI Act is authored exhaustively");
     }
 }
