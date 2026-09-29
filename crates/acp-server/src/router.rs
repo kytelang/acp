@@ -115,6 +115,7 @@ pub(crate) fn build_router(state: Arc<AppState>) -> Router {
             .route("/grc/risk", post(grc_risk))
             .route("/grc/model-card", post(grc_model_card))
             .route("/grc/:id/status", post(grc_status))
+            .route("/grc/:id/delete", post(grc_delete))
             .route("/grc/:id/usecase/:stage", post(grc_usecase_transition))
             .route("/grc/:id/assign", post(grc_assign))
             .route("/grc/:id/link", post(grc_link))

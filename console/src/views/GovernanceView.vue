@@ -7,6 +7,7 @@ import DataTable from '../components/ui/DataTable.vue'
 import Badge from '../components/ui/Badge.vue'
 import Btn from '../components/ui/Btn.vue'
 import Modal from '../components/ui/Modal.vue'
+import RowActions from '../components/ui/RowActions.vue'
 
 const router = useRouter()
 const records = ref([])
@@ -86,6 +87,17 @@ async function submit(kind) {
   } catch (e) { err.value = String(e.message || e) }
 }
 function stkind(s) { return (s === 'signed' || s === 'approved' || s === 'done') ? 'ok' : s === 'open' ? 'warn' : 'muted' }
+const statusEdit = ref(null) // { id, title, status }
+const STATUSES = ['open', 'in-progress', 'done', 'accepted', 'closed']
+function editStatus(r) { statusEdit.value = { id: r.id, title: r.title, status: r.status || 'open' }; err.value = '' }
+async function saveStatus() {
+  try { await post(`/grc/${statusEdit.value.id}/status`, { status: statusEdit.value.status }, 'GrcAuthor'); statusEdit.value = null; await load() }
+  catch (e) { err.value = String(e.message || e) }
+}
+async function delRecord(r) {
+  if (!confirm(`Delete ${r.kind} "${r.title || r.id}"?`)) return
+  try { await post(`/grc/${r.id}/delete`, {}, 'GrcAuthor'); await load() } catch (e) { err.value = String(e.message || e) }
+}
 onMounted(load)
 </script>
 <template>
@@ -124,25 +136,27 @@ onMounted(load)
               @click="tab=t[0]" class="px-3 py-1 rounded-md text-xs"
               :class="tab===t[0] ? 'bg-accent text-white' : 'text-dim hover:text-txt'">{{ t[1] }}</button>
           </div>
-          <DataTable :columns="['Kind','Title','Status','ID']">
+          <DataTable :columns="['Kind','Title','Status','ID','']">
             <tr v-for="r in currentRecords" :key="r.id" class="border-b border-line/60">
               <td class="py-2 pr-4">{{ r.kind }}</td>
               <td class="py-2 pr-4">{{ r.title }}</td>
               <td class="py-2 pr-4"><Badge :kind="stkind(r.status)">{{ r.status }}</Badge></td>
               <td class="py-2 pr-4 font-mono text-xs">{{ r.id }}</td>
+              <td class="py-2 pr-4"><RowActions @edit="editStatus(r)" @delete="delRecord(r)" /></td>
             </tr>
-            <tr v-if="!currentRecords.length"><td colspan="4" class="py-6 text-center text-dim">No records in this tab.</td></tr>
+            <tr v-if="!currentRecords.length"><td colspan="5" class="py-6 text-center text-dim">No records in this tab.</td></tr>
           </DataTable>
         </Card>
         <Card v-else title="All governance records">
-          <DataTable :columns="['System','Kind','Title','Status']">
+          <DataTable :columns="['System','Kind','Title','Status','']">
             <tr v-for="r in records" :key="r.id" class="border-b border-line/60 cursor-pointer hover:bg-panel2/50" @click="selected = r.subject">
               <td class="py-2 pr-4">{{ r.subject }}</td>
               <td class="py-2 pr-4">{{ r.kind }}</td>
               <td class="py-2 pr-4 text-dim">{{ r.title }}</td>
               <td class="py-2 pr-4"><Badge :kind="stkind(r.status)">{{ r.status }}</Badge></td>
+              <td class="py-2 pr-4" @click.stop><RowActions @edit="editStatus(r)" @delete="delRecord(r)" /></td>
             </tr>
-            <tr v-if="!records.length"><td colspan="4" class="py-6 text-center text-dim">No governance records yet.</td></tr>
+            <tr v-if="!records.length"><td colspan="5" class="py-6 text-center text-dim">No governance records yet.</td></tr>
           </DataTable>
         </Card>
       </div>
@@ -202,6 +216,17 @@ onMounted(load)
         </div>
         <label class="text-xs text-dim">Summary<textarea v-model="cardForm.summary" rows="3" class="mt-1 block w-full bg-panel2 border border-line rounded-md px-2 py-1.5 text-sm"></textarea></label>
         <div class="flex items-center gap-3"><Btn @click="submit('modelcard')">Create</Btn><span v-if="err" class="text-bad text-sm">{{ err }}</span></div>
+      </div>
+    </Modal>
+
+    <Modal v-if="statusEdit" :title="`Edit status: ${statusEdit.title || statusEdit.id}`" @close="statusEdit = null">
+      <div class="grid gap-3">
+        <label class="text-xs text-dim">Status
+          <select v-model="statusEdit.status" class="mt-1 block w-full bg-panel2 border border-line rounded-md px-2 py-1.5 text-sm">
+            <option v-for="s in STATUSES" :key="s" :value="s">{{ s }}</option>
+          </select>
+        </label>
+        <div class="flex items-center gap-3"><Btn @click="saveStatus">Save</Btn><span v-if="err" class="text-bad text-sm">{{ err }}</span></div>
       </div>
     </Modal>
   </div>

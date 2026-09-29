@@ -144,6 +144,15 @@ pub(crate) async fn grc_create(State(st): State<Arc<AppState>>, headers: HeaderM
 }
 
 /// POST /grc/:id/status: advance a record's status (e.g. use-case lifecycle, risk treatment).
+
+/// POST /grc/:id/delete: remove a governance record (EditGrc).
+pub(crate) async fn grc_delete(State(st): State<Arc<AppState>>, headers: HeaderMap, Path(id): Path<String>) -> Response {
+    if let Err(r) = authorize(&st.auth, &headers, acp_core::auth::Capability::EditGrc) { return r; }
+    let tenant = tenant_of(&headers, &None);
+    let store = match &st.store { Some(s) => s, None => return Json(serde_json::json!({"ok": false, "error": "no --store configured"})).into_response() };
+    match store.delete_grc(&id, &tenant).await { Ok(()) => Json(serde_json::json!({"ok": true})).into_response(), Err(e) => Json(serde_json::json!({"ok": false, "error": e})).into_response() }
+}
+
 pub(crate) async fn grc_status(State(st): State<Arc<AppState>>, headers: HeaderMap, Path(id): Path<String>, Json(body): Json<serde_json::Value>) -> Response {
     if let Err(r) = authorize(&st.auth, &headers, acp_core::auth::Capability::EditGrc) { return r; }
     let store = match &st.store { Some(s) => s, None => return Json(serde_json::json!({"ok": false, "error": "no --store configured"})).into_response() };

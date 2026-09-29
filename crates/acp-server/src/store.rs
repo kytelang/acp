@@ -365,6 +365,10 @@ impl ControlStore {
         sqlx::query(&self.ph("UPDATE ai_systems SET name = ?, purpose = ?, owner = ?, lifecycle_state = ?, risk_tier = ?, sector = ?, asset_type = ?, jurisdictions = ?, updated_ms = ? WHERE id = ? AND tenant_id = ?"))
             .bind(name).bind(purpose).bind(owner).bind(lifecycle).bind(risk_tier).bind(sector).bind(asset_type).bind(jurisdictions_json).bind(now_ms).bind(id).bind(tenant).execute(&self.pool).await.map_err(|e| e.to_string())?; Ok(())
     }
+    pub async fn delete_grc(&self, id: &str, tenant: &str) -> Result<(), String> {
+        let _ = sqlx::query(&self.ph("DELETE FROM grc_comments WHERE grc_id = ?")).bind(id).execute(&self.pool).await;
+        sqlx::query(&self.ph("DELETE FROM grc_records WHERE id = ? AND tenant_id = ?")).bind(id).bind(tenant).execute(&self.pool).await.map_err(|e| e.to_string())?; Ok(())
+    }
     pub async fn delete_role(&self, id: &str, tenant: &str) -> Result<(), String> {
         sqlx::query(&self.ph("DELETE FROM system_roles WHERE id = ? AND tenant_id = ?")).bind(id).bind(tenant).execute(&self.pool).await.map_err(|e| e.to_string())?; Ok(())
     }
