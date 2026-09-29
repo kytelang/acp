@@ -209,6 +209,17 @@ pub struct Evidence {
     pub created_ms: i64,
 }
 
+#[derive(Debug, Clone, Serialize)]
+pub struct AuditEvent {
+    pub id: String,
+    pub entity_type: String,
+    pub entity_id: String,
+    pub action: String,
+    pub actor: String,
+    pub detail: String,
+    pub ts_ms: i64,
+}
+
 impl ControlStore {
     /// Connect using a URL whose scheme selects the backend:
     ///   sqlite://<path>?mode=rwc  |  postgres://user:pass@host/db  |  mysql://user:pass@host/db
@@ -253,7 +264,7 @@ impl ControlStore {
             "CREATE TABLE IF NOT EXISTS vendors (id VARCHAR(255) PRIMARY KEY, name TEXT NOT NULL, risk_json TEXT NOT NULL DEFAULT '{}', tenant_id VARCHAR(255) NOT NULL DEFAULT 'default', review_due_ms BIGINT NOT NULL DEFAULT 0, created_ms BIGINT NOT NULL)",
             "CREATE TABLE IF NOT EXISTS control_packs (id VARCHAR(255) PRIMARY KEY, version TEXT NOT NULL, doc_json TEXT NOT NULL, pubkey_hex TEXT NOT NULL, sig_hex TEXT NOT NULL, created_ms BIGINT NOT NULL)",
             "CREATE TABLE IF NOT EXISTS endpoints (endpoint VARCHAR(255) PRIMARY KEY, kind TEXT NOT NULL, provider TEXT NOT NULL, disposition TEXT NOT NULL, operator TEXT NOT NULL, reason TEXT NOT NULL, decided_ms BIGINT NOT NULL, expires_ms BIGINT NOT NULL, pubkey_hex TEXT NOT NULL, sig_hex TEXT NOT NULL)",
-            "CREATE TABLE IF NOT EXISTS grc_records (id VARCHAR(255) PRIMARY KEY, kind TEXT NOT NULL, subject TEXT NOT NULL, title TEXT NOT NULL, status TEXT NOT NULL, body TEXT NOT NULL, operator TEXT NOT NULL, created_ms BIGINT NOT NULL, pubkey_hex TEXT NOT NULL, sig_hex TEXT NOT NULL, linked_refs TEXT NOT NULL DEFAULT '[]', answers_json TEXT NOT NULL DEFAULT '{}', assignee TEXT NOT NULL DEFAULT '', due_ms BIGINT NOT NULL DEFAULT 0, stage TEXT NOT NULL DEFAULT '', tenant_id VARCHAR(255) NOT NULL DEFAULT 'default')",
+            "CREATE TABLE IF NOT EXISTS grc_records (id VARCHAR(255) PRIMARY KEY, kind TEXT NOT NULL, subject TEXT NOT NULL, title TEXT NOT NULL, status TEXT NOT NULL, body TEXT NOT NULL, operator TEXT NOT NULL, created_ms BIGINT NOT NULL, pubkey_hex TEXT NOT NULL, sig_hex TEXT NOT NULL, linked_refs TEXT NOT NULL DEFAULT '[]', answers_json TEXT NOT NULL DEFAULT '{}', assignee TEXT NOT NULL DEFAULT '', due_ms BIGINT NOT NULL DEFAULT 0, stage TEXT NOT NULL DEFAULT '', tenant_id VARCHAR(255) NOT NULL DEFAULT 'default', system_id VARCHAR(255) NOT NULL DEFAULT '')",
             "CREATE TABLE IF NOT EXISTS grc_comments (id VARCHAR(255) PRIMARY KEY, grc_id TEXT NOT NULL, author TEXT NOT NULL, body TEXT NOT NULL, created_ms BIGINT NOT NULL)",
             "CREATE TABLE IF NOT EXISTS ingested_evidence (decision_id VARCHAR(255) PRIMARY KEY, pep TEXT NOT NULL, kind TEXT NOT NULL, verdict TEXT NOT NULL, record TEXT NOT NULL, operator TEXT NOT NULL, created_ms BIGINT NOT NULL, pubkey_hex TEXT NOT NULL, sig_hex TEXT NOT NULL)",
             "CREATE TABLE IF NOT EXISTS firewall_config (tenant_id VARCHAR(255) PRIMARY KEY, enabled INTEGER NOT NULL, block_secrets INTEGER NOT NULL, deny_topics TEXT NOT NULL, model TEXT NOT NULL, scan_url TEXT NOT NULL DEFAULT '', block_on_scanner_error INTEGER NOT NULL DEFAULT 0, feed_version BIGINT NOT NULL DEFAULT 0, threat_signatures TEXT NOT NULL DEFAULT '[]', block_toxicity INTEGER NOT NULL DEFAULT 0, updated_ms BIGINT NOT NULL)",
@@ -268,9 +279,12 @@ impl ControlStore {
             "CREATE TABLE IF NOT EXISTS system_roles (id VARCHAR(255) PRIMARY KEY, system_id TEXT NOT NULL, role TEXT NOT NULL, jurisdiction TEXT NOT NULL DEFAULT '', market_date TEXT NOT NULL DEFAULT '', tenant_id VARCHAR(255) NOT NULL DEFAULT 'default', created_ms BIGINT NOT NULL)",
             "CREATE TABLE IF NOT EXISTS soa_entries (id VARCHAR(255) PRIMARY KEY, system_id TEXT NOT NULL, framework TEXT NOT NULL, control_id TEXT NOT NULL, applicable INTEGER NOT NULL DEFAULT 1, justification TEXT NOT NULL DEFAULT '', status TEXT NOT NULL DEFAULT 'planned', evidence_refs TEXT NOT NULL DEFAULT '[]', tenant_id VARCHAR(255) NOT NULL DEFAULT 'default', updated_ms BIGINT NOT NULL)",
             "CREATE TABLE IF NOT EXISTS evidence (id VARCHAR(255) PRIMARY KEY, system_id TEXT NOT NULL, framework TEXT NOT NULL, control_id TEXT NOT NULL, title TEXT NOT NULL DEFAULT '', source TEXT NOT NULL DEFAULT '', owner TEXT NOT NULL DEFAULT '', produced_ms BIGINT NOT NULL DEFAULT 0, valid_until_ms BIGINT NOT NULL DEFAULT 0, artefact_ref TEXT NOT NULL DEFAULT '', note TEXT NOT NULL DEFAULT '', tenant_id VARCHAR(255) NOT NULL DEFAULT 'default', created_ms BIGINT NOT NULL)",
+            "CREATE TABLE IF NOT EXISTS grc_audit (id VARCHAR(255) PRIMARY KEY, entity_type TEXT NOT NULL, entity_id TEXT NOT NULL, action TEXT NOT NULL, actor TEXT NOT NULL DEFAULT '', detail TEXT NOT NULL DEFAULT '', tenant_id VARCHAR(255) NOT NULL DEFAULT 'default', ts_ms BIGINT NOT NULL)",
         ] {
             sqlx::query(ddl).execute(&self.pool).await.map_err(|e| e.to_string())?;
         }
+        // Best-effort column add for existing DBs (audit G6: link governance records to a system).
+        let _ = sqlx::query("ALTER TABLE grc_records ADD COLUMN system_id VARCHAR(255) NOT NULL DEFAULT ''").execute(&self.pool).await;
         Ok(())
     }
 
@@ -936,6 +950,54 @@ impl ControlStore {
         }).collect())
     }
 
+    /// Append an immutable change-history event (audit P2 G7): who did what to which governance entity.
+    #[allow(clippy::too_many_arguments)]
+    pub async fn add_audit(&self, id: &str, entity_type: &str, entity_id: &str, action: &str, actor: &str, detail: &str, tenant: &str, ts_ms: i64) -> Result<(), String> {
+        let sql = self.ph("INSERT INTO grc_audit (id, entity_type, entity_id, action, actor, detail, tenant_id, ts_ms) VALUES (?, ?, ?, ?, ?, ?, ?, ?)");
+        sqlx::query(&sql).bind(id).bind(entity_type).bind(entity_id).bind(action).bind(actor).bind(detail).bind(tenant).bind(ts_ms)
+            .execute(&self.pool).await.map_err(|e| e.to_string())?;
+        Ok(())
+    }
+
+    /// The change history for one entity (newest first), or the whole tenant when entity_id is empty.
+    pub async fn list_audit(&self, entity_id: &str, tenant: &str, limit: i64) -> Result<Vec<AuditEvent>, String> {
+        let rows = if entity_id.is_empty() {
+            sqlx::query(&self.ph("SELECT * FROM grc_audit WHERE tenant_id = ? ORDER BY ts_ms DESC LIMIT ?")).bind(tenant).bind(limit).fetch_all(&self.pool).await
+        } else {
+            sqlx::query(&self.ph("SELECT * FROM grc_audit WHERE entity_id = ? AND tenant_id = ? ORDER BY ts_ms DESC LIMIT ?")).bind(entity_id).bind(tenant).bind(limit).fetch_all(&self.pool).await
+        }.map_err(|e| e.to_string())?;
+        Ok(rows.iter().map(|r| AuditEvent {
+            id: r.get("id"), entity_type: r.get("entity_type"), entity_id: r.get("entity_id"),
+            action: r.get("action"), actor: r.get("actor"), detail: r.get("detail"), ts_ms: r.get("ts_ms"),
+        }).collect())
+    }
+
+    /// Resolve a system id by exact name (for linking a governance record whose subject is a system name).
+    pub async fn find_system_by_name(&self, name: &str, tenant: &str) -> Option<String> {
+        sqlx::query(&self.ph("SELECT id FROM ai_systems WHERE name = ? AND tenant_id = ?"))
+            .bind(name).bind(tenant).fetch_optional(&self.pool).await.ok().flatten().map(|r| r.get::<String, _>("id"))
+    }
+
+    /// Link a governance record to a system (audit G6).
+    pub async fn set_grc_system(&self, grc_id: &str, system_id: &str) -> Result<(), String> {
+        sqlx::query(&self.ph("UPDATE grc_records SET system_id = ? WHERE id = ?"))
+            .bind(system_id).bind(grc_id).execute(&self.pool).await.map_err(|e| e.to_string())?;
+        Ok(())
+    }
+
+    /// Governance records linked to a system by the system_id FK.
+    pub async fn list_grc_for_system(&self, system_id: &str, tenant: &str) -> Result<Vec<GrcRecord>, String> {
+        let rows = sqlx::query(&self.ph("SELECT id, kind, subject, title, status, body, operator, created_ms, pubkey_hex, sig_hex, linked_refs, answers_json, assignee, due_ms, stage, tenant_id FROM grc_records WHERE system_id = ? AND tenant_id = ? ORDER BY created_ms"))
+            .bind(system_id).bind(tenant).fetch_all(&self.pool).await.map_err(|e| e.to_string())?;
+        Ok(rows.iter().map(|r| GrcRecord {
+            id: r.get("id"), kind: r.get("kind"), subject: r.get("subject"), title: r.get("title"),
+            status: r.get("status"), body: r.get("body"), operator: r.get("operator"),
+            created_ms: r.get("created_ms"), pubkey_hex: r.get("pubkey_hex"), sig_hex: r.get("sig_hex"),
+            linked_refs: r.get("linked_refs"), answers_json: r.get("answers_json"), assignee: r.get("assignee"),
+            due_ms: r.get("due_ms"), stage: r.get("stage"), tenant: r.get("tenant_id"),
+        }).collect())
+    }
+
     pub async fn list_soa(&self, system_id: &str, framework: &str, tenant: &str) -> Result<Vec<SoaEntry>, String> {
         let rows = sqlx::query(&self.ph("SELECT * FROM soa_entries WHERE system_id = ? AND framework = ? AND tenant_id = ?"))
             .bind(system_id).bind(framework).bind(tenant).fetch_all(&self.pool).await.map_err(|e| e.to_string())?;
@@ -980,6 +1042,13 @@ mod tests {
         assert_eq!(ev.len(), 1);
         assert_eq!(ev[0].control_id, "art-12");
         assert!(!s.list_all_soa("sys-1", "default").await.unwrap().is_empty());
+        // Change-history log (G7) + governance-record-to-system linkage (G6).
+        s.add_audit("aud-1", "system", "sys-1", "system-created", "you", "resume-screener", "default", 1000).await.unwrap();
+        s.add_audit("aud-2", "system", "sys-1", "soa-updated", "you", "eu-ai-act: 2", "default", 1001).await.unwrap();
+        let hist = s.list_audit("sys-1", "default", 100).await.unwrap();
+        assert_eq!(hist.len(), 2);
+        assert_eq!(hist[0].action, "soa-updated", "newest first");
+        assert_eq!(s.find_system_by_name("resume-screener", "default").await.as_deref(), Some("sys-1"));
         s.add_agent("agt-1", "app-1", "asst", "deadbeef", "you", "{\"deps\":[]}", "default", 1001).await.unwrap();
         assert!(s.verify_agent("agt-1", "deadbeef").await.unwrap());
         assert!(!s.verify_agent("agt-1", "wrong").await.unwrap());
@@ -994,6 +1063,9 @@ mod tests {
         s.add_grc("grc-2", "assessment", "checkout-agent", "EU AI Act tiering", "high", "{}", "console", 4001, "aa", "cc", "[]", "{}", "", 0, "", "default").await.unwrap();
         assert_eq!(s.list_grc("default", None).await.unwrap().len(), 2);
         assert_eq!(s.list_grc("default", Some("risk")).await.unwrap().len(), 1);
+        // G6: link an existing record to a system by FK and query it back.
+        s.set_grc_system("grc-1", "sys-1").await.unwrap();
+        assert!(s.list_grc_for_system("sys-1", "default").await.unwrap().iter().any(|r| r.id == "grc-1"), "record linked by system_id FK");
         // A4: get_grc + update_grc_signed round-trip (status + signature updated together).
         let g = s.get_grc("grc-1").await.unwrap().expect("record present");
         assert_eq!(g.status, "open");

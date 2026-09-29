@@ -6,6 +6,12 @@ use crate::common::*;
 use axum::{extract::{Path, State}, http::HeaderMap, response::{IntoResponse, Response}, Json};
 use std::sync::Arc;
 
+async fn audit(st: &Arc<AppState>, entity_id: &str, action: &str, actor: &str, detail: &str, tenant: &str) {
+    if let Some(store) = &st.store {
+        let _ = store.add_audit(&format!("aud-{}", rand_hex(6)), "system", entity_id, action, actor, detail, tenant, now_ms() as i64).await;
+    }
+}
+
 fn store_or<'a>(st: &'a Arc<AppState>) -> Result<&'a std::sync::Arc<crate::store::ControlStore>, Response> {
     match &st.store { Some(s) => Ok(s), None => Err(Json(serde_json::json!({"ok": false, "error": "no --store configured"})).into_response()) }
 }
@@ -23,7 +29,7 @@ pub(crate) async fn systems_list(State(st): State<Arc<AppState>>, headers: Heade
 /// POST /systems: register a first-class AI system. Body: {name, purpose, owner, lifecycle_state,
 /// risk_tier, sector, asset_type, jurisdictions:[..]}. EditGrc scope.
 pub(crate) async fn system_create(State(st): State<Arc<AppState>>, headers: HeaderMap, Json(body): Json<serde_json::Value>) -> Response {
-    if let Err(r) = authorize(&st.auth, &headers, acp_core::auth::Capability::EditGrc) { return r; }
+    let principal = match authorize(&st.auth, &headers, acp_core::auth::Capability::EditGrc) { Ok(p) => p, Err(r) => return r };
     let tenant = tenant_of(&headers, &None);
     let store = match store_or(&st) { Ok(s) => s, Err(r) => return r };
     let g = |k: &str| body.get(k).and_then(|v| v.as_str()).unwrap_or("").trim().to_string();
@@ -33,7 +39,7 @@ pub(crate) async fn system_create(State(st): State<Arc<AppState>>, headers: Head
     let id = format!("sys-{}", rand_hex(6));
     let lifecycle = { let l = g("lifecycle_state"); if l.is_empty() { "development".to_string() } else { l } };
     match store.add_system(&id, &name, &g("purpose"), &g("owner"), &lifecycle, &g("risk_tier"), &g("sector"), &g("asset_type"), &jurisdictions.to_string(), &tenant, now_ms() as i64).await {
-        Ok(()) => Json(serde_json::json!({"ok": true, "id": id})).into_response(),
+        Ok(()) => { audit(&st, &id, "system-created", &actor_of(&principal), &name, &tenant).await; Json(serde_json::json!({"ok": true, "id": id})).into_response() }
         Err(e) => Json(serde_json::json!({"ok": false, "error": e})).into_response(),
     }
 }
@@ -45,8 +51,12 @@ pub(crate) async fn system_get(State(st): State<Arc<AppState>>, headers: HeaderM
     let sys = match store.get_system(&id, &tenant).await { Ok(Some(s)) => s, Ok(None) => return Json(serde_json::json!({"error": "not found"})).into_response(), Err(e) => return Json(serde_json::json!({"error": e})).into_response() };
     let roles = store.list_roles(&id, &tenant).await.unwrap_or_default();
     // Records linked by subject == system name (until grc_records carries a system_id).
-    let recs = store.list_grc(&tenant, None).await.unwrap_or_default();
-    let linked: Vec<&crate::store::GrcRecord> = recs.iter().filter(|r| r.subject == sys.name).collect();
+    let by_fk = store.list_grc_for_system(&id, &tenant).await.unwrap_or_default();
+    let all = store.list_grc(&tenant, None).await.unwrap_or_default();
+    let by_name: Vec<crate::store::GrcRecord> = all.into_iter().filter(|r| r.subject == sys.name).collect();
+    // Union FK-linked and subject-name-linked records, de-duplicated by id.
+    let mut seen = std::collections::HashSet::new();
+    let linked: Vec<&crate::store::GrcRecord> = by_fk.iter().chain(by_name.iter()).filter(|r| seen.insert(r.id.clone())).collect();
     let mut by_kind: std::collections::HashMap<String, usize> = std::collections::HashMap::new();
     for r in &linked { *by_kind.entry(r.kind.clone()).or_insert(0) += 1; }
     Json(serde_json::json!({"system": sys, "roles": roles, "records_by_kind": by_kind, "records": linked.iter().map(|r| serde_json::json!({"id": r.id, "kind": r.kind, "title": r.title, "status": r.status})).collect::<Vec<_>>()})).into_response()
@@ -55,7 +65,7 @@ pub(crate) async fn system_get(State(st): State<Arc<AppState>>, headers: HeaderM
 /// POST /systems/:id/roles: add a role the org plays for this system, per jurisdiction (G2). Body:
 /// {role, jurisdiction, market_date}. EditGrc scope.
 pub(crate) async fn role_add(State(st): State<Arc<AppState>>, headers: HeaderMap, Path(id): Path<String>, Json(body): Json<serde_json::Value>) -> Response {
-    if let Err(r) = authorize(&st.auth, &headers, acp_core::auth::Capability::EditGrc) { return r; }
+    let principal = match authorize(&st.auth, &headers, acp_core::auth::Capability::EditGrc) { Ok(p) => p, Err(r) => return r };
     let tenant = tenant_of(&headers, &None);
     let store = match store_or(&st) { Ok(s) => s, Err(r) => return r };
     let g = |k: &str| body.get(k).and_then(|v| v.as_str()).unwrap_or("").trim().to_string();
@@ -65,7 +75,7 @@ pub(crate) async fn role_add(State(st): State<Arc<AppState>>, headers: HeaderMap
     match store.get_system(&id, &tenant).await { Ok(Some(_)) => {}, Ok(None) => return Json(serde_json::json!({"ok": false, "error": format!("unknown system '{id}'")})).into_response(), Err(e) => return Json(serde_json::json!({"ok": false, "error": e})).into_response() }
     let rid = format!("role-{}", rand_hex(6));
     match store.add_role(&rid, &id, &role, &g("jurisdiction"), &g("market_date"), &tenant, now_ms() as i64).await {
-        Ok(()) => Json(serde_json::json!({"ok": true, "id": rid})).into_response(),
+        Ok(()) => { audit(&st, &id, "role-added", &actor_of(&principal), &format!("{role} ({})", g("jurisdiction")), &tenant).await; Json(serde_json::json!({"ok": true, "id": rid})).into_response() }
         Err(e) => Json(serde_json::json!({"ok": false, "error": e})).into_response(),
     }
 }
@@ -108,7 +118,7 @@ pub(crate) async fn soa_get(State(st): State<Arc<AppState>>, headers: HeaderMap,
 /// POST /systems/:id/soa/:framework: persist SoA entries. Body: {entries:[{control_id, applicable,
 /// justification, status, evidence_refs?}]}. EditGrc scope.
 pub(crate) async fn soa_set(State(st): State<Arc<AppState>>, headers: HeaderMap, Path((id, framework)): Path<(String, String)>, Json(body): Json<serde_json::Value>) -> Response {
-    if let Err(r) = authorize(&st.auth, &headers, acp_core::auth::Capability::EditGrc) { return r; }
+    let principal = match authorize(&st.auth, &headers, acp_core::auth::Capability::EditGrc) { Ok(p) => p, Err(r) => return r };
     let tenant = tenant_of(&headers, &None);
     let store = match store_or(&st) { Ok(s) => s, Err(r) => return r };
     // Referential integrity (audit P1 E2): the system must exist.
@@ -124,6 +134,7 @@ pub(crate) async fn soa_set(State(st): State<Arc<AppState>>, headers: HeaderMap,
         let evidence = e.get("evidence_refs").cloned().unwrap_or_else(|| serde_json::json!([]));
         if store.set_soa(&id, &framework, cid, applicable, justification, status, &evidence.to_string(), &tenant, now_ms() as i64).await.is_ok() { n += 1; }
     }
+    audit(&st, &id, "soa-updated", &actor_of(&principal), &format!("{framework}: {n} control(s)"), &tenant).await;
     Json(serde_json::json!({"ok": true, "saved": n})).into_response()
 }
 
@@ -131,7 +142,7 @@ pub(crate) async fn soa_set(State(st): State<Arc<AppState>>, headers: HeaderMap,
 /// {framework, control_id, title, source, owner, produced_ms, valid_until_ms, artefact_ref, note}.
 /// EditGrc scope.
 pub(crate) async fn evidence_add(State(st): State<Arc<AppState>>, headers: HeaderMap, Path(id): Path<String>, Json(body): Json<serde_json::Value>) -> Response {
-    if let Err(r) = authorize(&st.auth, &headers, acp_core::auth::Capability::EditGrc) { return r; }
+    let principal = match authorize(&st.auth, &headers, acp_core::auth::Capability::EditGrc) { Ok(p) => p, Err(r) => return r };
     let tenant = tenant_of(&headers, &None);
     let store = match store_or(&st) { Ok(s) => s, Err(r) => return r };
     let g = |k: &str| body.get(k).and_then(|v| v.as_str()).unwrap_or("").trim().to_string();
@@ -143,7 +154,7 @@ pub(crate) async fn evidence_add(State(st): State<Arc<AppState>>, headers: Heade
     if control_id.is_empty() || framework.is_empty() { return Json(serde_json::json!({"ok": false, "error": "framework and control_id are required"})).into_response(); }
     let eid = format!("ev-{}", rand_hex(6));
     match store.add_evidence(&eid, &id, &framework, &control_id, &g("title"), &g("source"), &g("owner"), n("produced_ms"), n("valid_until_ms"), &g("artefact_ref"), &g("note"), &tenant, now_ms() as i64).await {
-        Ok(()) => Json(serde_json::json!({"ok": true, "id": eid})).into_response(),
+        Ok(()) => { audit(&st, &id, "evidence-added", &actor_of(&principal), &format!("{framework}:{control_id}"), &tenant).await; Json(serde_json::json!({"ok": true, "id": eid})).into_response() }
         Err(e) => Json(serde_json::json!({"ok": false, "error": e})).into_response(),
     }
 }
@@ -264,4 +275,12 @@ pub(crate) async fn system_report(State(st): State<Arc<AppState>>, headers: Head
             "conformant": summary.conformant, "partial": summary.partial, "non_conformant": summary.non_conformant, "not_assessed": summary.not_assessed,
         },
     })).into_response()
+}
+
+/// GET /systems/:id/audit: the change history for a system (audit P2 G7).
+pub(crate) async fn system_audit(State(st): State<Arc<AppState>>, headers: HeaderMap, Path(id): Path<String>) -> Response {
+    let tenant = tenant_of(&headers, &None);
+    let store = match store_or(&st) { Ok(s) => s, Err(r) => return r };
+    let rows = store.list_audit(&id, &tenant, 500).await.unwrap_or_default();
+    Json(serde_json::json!({"audit": rows})).into_response()
 }

@@ -130,6 +130,12 @@ pub(crate) async fn grc_create(State(st): State<Arc<AppState>>, headers: HeaderM
     let sig_hex = hex::encode(sig);
     match store.add_grc(&id, &kind, &subject, &title, &status, &doc_body, &operator, now as i64, &pubkey_hex, &sig_hex, &linked_refs, "{}", "", 0, &status, &tenant).await {
         Ok(()) => {
+            // G6: link the record to a system (explicit body.system_id, else resolve subject as a system name).
+            let sys_id = match body.get("system_id").and_then(|v| v.as_str()).map(|s| s.trim().to_string()).filter(|s| !s.is_empty()) {
+                Some(sid) => Some(sid),
+                None => store.find_system_by_name(&subject, &tenant).await,
+            };
+            if let Some(sid) = sys_id { let _ = store.set_grc_system(&id, &sid).await; }
             fire_webhook(&st, "grc.created", serde_json::json!({"id": id, "kind": kind, "subject": subject, "title": title}));
             Json(serde_json::json!({"ok": true, "id": id, "kind": kind})).into_response()
         }

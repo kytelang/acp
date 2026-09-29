@@ -9,7 +9,7 @@ import Btn from '../components/ui/Btn.vue'
 
 const route = useRoute(); const router = useRouter()
 const id = route.params.id
-const sys = ref(null); const roles = ref([])
+const sys = ref(null); const roles = ref([]); const records = ref([]); const auditLog = ref([])
 const frameworks = ref([])
 const framework = ref('eu-ai-act')
 const soa = ref([])              // worksheet rows (editable)
@@ -22,8 +22,11 @@ const STATUS = ['planned', 'implemented', 'partial', 'gap', 'not-applicable']
 
 async function loadSystem() {
   const d = await getOr(`/systems/${id}`, {})
-  sys.value = d.system || null; roles.value = d.roles || []
+  sys.value = d.system || null; roles.value = d.roles || []; records.value = d.records || []
+  const a = await getOr(`/systems/${id}/audit`, { audit: [] })
+  auditLog.value = a.audit || []
 }
+function ts(ms) { return ms ? new Date(ms).toLocaleString() : '' }
 async function loadFrameworks() {
   const t = await getOr('/grc/templates', { templates: [] })
   frameworks.value = (t.templates || []).filter(x => x.kind === 'checklist').map(x => ({ slug: x.framework, name: x.name }))
@@ -54,7 +57,7 @@ async function addEvidence() {
 async function saveSoa() {
   err.value = ''; msg.value = ''
   const entries = soa.value.map(e => ({ control_id: e.control_id, applicable: e.applicable, justification: e.justification, status: e.status }))
-  try { await post(`/systems/${id}/soa/${framework.value}`, { entries }, 'GrcAuthor'); msg.value = 'Statement of Applicability saved.'; await loadSoa() }
+  try { await post(`/systems/${id}/soa/${framework.value}`, { entries }, 'GrcAuthor'); msg.value = 'Statement of Applicability saved.'; await loadSoa(); await loadSystem() }
   catch (e) { err.value = String(e.message || e) }
 }
 async function addRole() {
@@ -161,6 +164,29 @@ onMounted(async () => { await loadSystem(); await loadFrameworks(); await loadSo
         <Btn size="sm" @click="addEvidence">Add evidence</Btn>
       </div>
       <p class="text-xs text-dim mt-2">Evidence is scoped to the framework selected above. A control marked implemented needs fresh evidence to grade as conformant; evidence on one control also satisfies mapped controls in other frameworks (crosswalk).</p>
+    </Card>
+
+    <Card title="Governance records" subtitle="assessments, risks, incidents and more linked to this system">
+      <DataTable :columns="['Kind','Title','Status']">
+        <tr v-for="r in records" :key="r.id" class="border-b border-line/60">
+          <td class="py-2 pr-4"><Badge :kind="r.kind==='incident' ? 'bad' : 'ver'">{{ r.kind }}</Badge></td>
+          <td class="py-2 pr-4">{{ r.title }}</td>
+          <td class="py-2 pr-4 text-dim">{{ r.status }}</td>
+        </tr>
+        <tr v-if="!records.length"><td colspan="3" class="py-4 text-center text-dim">No records linked. Create assessments, risks or incidents in Governance with this system as the subject.</td></tr>
+      </DataTable>
+    </Card>
+
+    <Card title="Change history" subtitle="immutable audit trail of governance changes to this system">
+      <DataTable :columns="['When','Action','Actor','Detail']">
+        <tr v-for="a in auditLog" :key="a.id" class="border-b border-line/60">
+          <td class="py-2 pr-4 text-dim whitespace-nowrap">{{ ts(a.ts_ms) }}</td>
+          <td class="py-2 pr-4"><Badge kind="muted">{{ a.action }}</Badge></td>
+          <td class="py-2 pr-4">{{ a.actor || '-' }}</td>
+          <td class="py-2 pr-4 text-dim">{{ a.detail }}</td>
+        </tr>
+        <tr v-if="!auditLog.length"><td colspan="4" class="py-4 text-center text-dim">No changes recorded yet.</td></tr>
+      </DataTable>
     </Card>
   </div>
 </template>
