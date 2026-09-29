@@ -1,4 +1,4 @@
-import { createRouter, createWebHistory } from 'vue-router'
+import { createRouter, createWebHashHistory } from 'vue-router'
 
 // One route per view. Views are lazy-loaded so the initial bundle stays small.
 const routes = [
@@ -23,4 +23,7 @@ const routes = [
   { path: '/monitors', component: () => import('./views/MonitorsView.vue'), meta: { title: 'Monitors' } }
 ]
 
-export const router = createRouter({ history: createWebHistory(), routes })
+// Hash history: client routes live under /#/... so they never collide with acp-server's top-level
+// JSON API routes (e.g. GET /agents, /models, /oversight). The server only ever serves / (index),
+// the flat assets, and the API. No route-shadowing, no server changes needed.
+export const router = createRouter({ history: createWebHashHistory(), routes })

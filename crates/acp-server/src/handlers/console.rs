@@ -9,6 +9,10 @@ use axum::{
 };
 use std::sync::Arc;
 
+// The console uses stable, unhashed filenames (index.html, main.js, main.css). Without content-hash
+// cache-busting, tell browsers to always revalidate so a redeploy is never served stale.
+const NO_CACHE: &str = "no-cache, must-revalidate";
+
 fn content_type(path: &str) -> &'static str {
     match path.rsplit('.').next().unwrap_or("") {
         "html" => "text/html; charset=utf-8",
@@ -45,11 +49,11 @@ fn serve(st: &Arc<AppState>, path: &str) -> Response {
     // (for example /overview, /reports) load the SPA which then renders the route.
     if !path.is_empty() && path != "/" {
         if let Some((ct, bytes)) = read_under(dir, path) {
-            return ([(header::CONTENT_TYPE, ct)], bytes).into_response();
+            return ([(header::CONTENT_TYPE, ct), (header::CACHE_CONTROL, NO_CACHE)], bytes).into_response();
         }
     }
     match read_under(dir, "index.html") {
-        Some((ct, bytes)) => ([(header::CONTENT_TYPE, ct)], bytes).into_response(),
+        Some((ct, bytes)) => ([(header::CONTENT_TYPE, ct), (header::CACHE_CONTROL, NO_CACHE)], bytes).into_response(),
         None => (StatusCode::NOT_FOUND, "console index.html not found").into_response(),
     }
 }
@@ -63,7 +67,7 @@ pub(crate) async fn asset(State(st): State<Arc<AppState>>, uri: Uri) -> Response
         None => return (StatusCode::NOT_FOUND, "console not built").into_response(),
     };
     match read_under(dir, uri.path()) {
-        Some((ct, bytes)) => ([(header::CONTENT_TYPE, ct)], bytes).into_response(),
+        Some((ct, bytes)) => ([(header::CONTENT_TYPE, ct), (header::CACHE_CONTROL, NO_CACHE)], bytes).into_response(),
         None => (StatusCode::NOT_FOUND, "not found").into_response(),
     }
 }

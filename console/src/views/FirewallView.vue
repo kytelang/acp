@@ -1,6 +1,6 @@
 <script setup>
 import { ref, onMounted } from 'vue'
-import { get, getOr, post } from '../api.js'
+import { getOr, post } from '../api.js'
 import Card from '../components/ui/Card.vue'
 import DataTable from '../components/ui/DataTable.vue'
 import Badge from '../components/ui/Badge.vue'
@@ -9,7 +9,11 @@ import Btn from '../components/ui/Btn.vue'
 const cfg = ref({ enabled: false, block_secrets: false, block_toxicity: false, block_on_scanner_error: false, model: '', scan_url: '', deny_topics: [] })
 const denyTopics = ref('')
 const rules = ref([])
-const rule = ref({ tool: '', app: '', agent: '', action: 'deny', classify: '' })
+// The content firewall is gateway/network scoped: rules match on host/path/sni/port, and the action is
+// one of the firewall's own verbs (not allow/deny). These mirror the acp-server firewall handler.
+const MATCH_KEYS = ['host_contains', 'host_suffix', 'host_exact', 'sni', 'path_contains', 'path_prefix']
+const ACTIONS = ['inspect-prompt', 'govern-tool-call', 'dlp-only', 'block', 'pass']
+const rule = ref({ matchKey: 'host_contains', matchVal: '', port: '', action: 'block', classify: '' })
 const msg = ref(''); const err = ref('')
 
 async function load() {
@@ -27,17 +31,22 @@ async function saveConfig() {
 }
 async function addRule() {
   err.value = ''; msg.value = ''
-  const body = {}
-  for (const k of ['tool', 'app', 'agent']) if (rule.value[k]) body[k] = rule.value[k]
-  body.action = rule.value.action
+  const body = { action: rule.value.action }
+  if (rule.value.matchVal.trim()) body[rule.value.matchKey] = rule.value.matchVal.trim()
+  if (rule.value.port) body.port = Number(rule.value.port)
   if (rule.value.classify) body.classify = rule.value.classify
-  try { await post('/firewall/rules', body, 'FirewallAdmin'); rule.value = { tool: '', app: '', agent: '', action: 'deny', classify: '' }; await load() }
+  try { await post('/firewall/rules', body, 'FirewallAdmin'); rule.value = { matchKey: 'host_contains', matchVal: '', port: '', action: 'block', classify: '' }; await load() }
   catch (e) { err.value = String(e.message || e) }
 }
 async function del(id) {
   try { await post(`/firewall/rules/${id}/delete`, {}, 'FirewallAdmin'); await load() }
   catch (e) { err.value = String(e.message || e) }
 }
+function matchStr(m) {
+  if (!m || typeof m !== 'object') return '*'
+  return Object.entries(m).map(([k, v]) => `${k}=${v}`).join(' ') || '*'
+}
+function actKind(a) { return a === 'block' ? 'bad' : a === 'pass' ? 'ok' : 'warn' }
 onMounted(load)
 </script>
 <template>
@@ -69,20 +78,28 @@ onMounted(load)
       <DataTable :columns="['ID','Match','Action','Classify','']">
         <tr v-for="r in rules" :key="r.id" class="border-b border-line/60">
           <td class="py-2 pr-4 font-mono text-xs">{{ r.id }}</td>
-          <td class="py-2 pr-4 font-mono text-xs">{{ [r.tool && ('tool='+r.tool), r.app && ('app='+r.app), r.agent && ('agent='+r.agent), r.port && ('port='+r.port)].filter(Boolean).join(' ') || '*' }}</td>
-          <td class="py-2 pr-4"><Badge :kind="r.action==='deny' ? 'bad' : r.action==='allow' ? 'ok' : 'warn'">{{ r.action }}</Badge></td>
+          <td class="py-2 pr-4 font-mono text-xs">{{ matchStr(r.match) }}</td>
+          <td class="py-2 pr-4"><Badge :kind="actKind(r.action)">{{ r.action }}</Badge></td>
           <td class="py-2 pr-4 text-dim">{{ r.classify || '-' }}</td>
           <td class="py-2 pr-4"><Btn size="sm" variant="ghost" @click="del(r.id)">Delete</Btn></td>
         </tr>
         <tr v-if="!rules.length"><td colspan="5" class="py-6 text-center text-dim">No custom rules.</td></tr>
       </DataTable>
-      <div class="grid sm:grid-cols-5 gap-2 mt-4 items-end">
-        <label class="text-xs text-dim">Tool<input v-model="rule.tool" class="mt-1 block w-full bg-panel2 border border-line rounded-md px-2 py-1.5 text-sm" placeholder="glob" /></label>
-        <label class="text-xs text-dim">App<input v-model="rule.app" class="mt-1 block w-full bg-panel2 border border-line rounded-md px-2 py-1.5 text-sm" /></label>
-        <label class="text-xs text-dim">Agent<input v-model="rule.agent" class="mt-1 block w-full bg-panel2 border border-line rounded-md px-2 py-1.5 text-sm" /></label>
+      <div class="grid sm:grid-cols-6 gap-2 mt-4 items-end">
+        <label class="text-xs text-dim">Match on
+          <select v-model="rule.matchKey" class="mt-1 block w-full bg-panel2 border border-line rounded-md px-2 py-1.5 text-sm">
+            <option v-for="k in MATCH_KEYS" :key="k" :value="k">{{ k }}</option>
+          </select>
+        </label>
+        <label class="text-xs text-dim sm:col-span-2">Value
+          <input v-model="rule.matchVal" class="mt-1 block w-full bg-panel2 border border-line rounded-md px-2 py-1.5 text-sm" placeholder="e.g. api.openai.com" />
+        </label>
+        <label class="text-xs text-dim">Port
+          <input v-model="rule.port" type="number" class="mt-1 block w-full bg-panel2 border border-line rounded-md px-2 py-1.5 text-sm" placeholder="(any)" />
+        </label>
         <label class="text-xs text-dim">Action
           <select v-model="rule.action" class="mt-1 block w-full bg-panel2 border border-line rounded-md px-2 py-1.5 text-sm">
-            <option value="deny">deny</option><option value="allow">allow</option><option value="flag">flag</option>
+            <option v-for="a in ACTIONS" :key="a" :value="a">{{ a }}</option>
           </select>
         </label>
         <Btn size="sm" @click="addRule">Add rule</Btn>
