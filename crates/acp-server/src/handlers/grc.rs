@@ -166,28 +166,50 @@ pub(crate) async fn grc_status(State(st): State<Arc<AppState>>, headers: HeaderM
     }
 }
 
-/// A1: the built-in EU AI Act screening questionnaire. Served so the console can render a guided
-/// "New assessment" wizard. Each entry is a yes/no question mapped to an assessment flag.
+/// A1 (exhaustive build): the assessment templates the console renders. This serves the EU AI Act
+/// risk-screening questionnaire (the guided "New assessment" wizard) PLUS one conformity-checklist
+/// template per framework in the catalogue, each listing every control (id, reference, title,
+/// obligation type) so an operator can assess any framework, not only the EU AI Act.
 pub(crate) async fn grc_templates() -> impl IntoResponse {
     let q = |key: &str, label: &str| serde_json::json!({"key": key, "label": label});
-    Json(serde_json::json!({
-        "templates": [{
-            "id": "eu-ai-act-screening",
-            "kind": "assessment",
-            "name": "EU AI Act risk screening",
-            "questions": [
-                q("prohibited_practice", "Is this a prohibited practice (social scoring, manipulative or exploitative AI, untargeted scraping)?"),
-                q("safety_component", "Is the AI a safety component of a product, or an Annex III high-risk use?"),
-                q("biometric_identification", "Does it perform biometric identification or categorisation?"),
-                q("critical_infrastructure", "Is it used in critical infrastructure?"),
-                q("employment_or_education", "Does it make employment or education decisions?"),
-                q("essential_services", "Does it gate access to essential services (credit, benefits, insurance)?"),
-                q("law_enforcement", "Is it used for law enforcement?"),
-                q("interacts_with_humans", "Does it interact directly with people (chatbot)?"),
-                q("generates_content", "Does it generate or manipulate content (gen-AI, deepfakes)?")
-            ]
-        }]
-    }))
+    let mut templates = vec![serde_json::json!({
+        "id": "eu-ai-act-screening",
+        "kind": "assessment",
+        "framework": "eu-ai-act",
+        "name": "EU AI Act risk screening",
+        "questions": [
+            q("prohibited_practice", "Is this a prohibited practice (social scoring, manipulative or exploitative AI, untargeted scraping)?"),
+            q("safety_component", "Is the AI a safety component of a product, or an Annex III high-risk use?"),
+            q("biometric_identification", "Does it perform biometric identification or categorisation?"),
+            q("critical_infrastructure", "Is it used in critical infrastructure?"),
+            q("employment_or_education", "Does it make employment or education decisions?"),
+            q("essential_services", "Does it gate access to essential services (credit, benefits, insurance)?"),
+            q("law_enforcement", "Is it used for law enforcement?"),
+            q("interacts_with_humans", "Does it interact directly with people (chatbot)?"),
+            q("generates_content", "Does it generate or manipulate content (gen-AI, deepfakes)?")
+        ]
+    })];
+    // One conformity-checklist template per framework, listing its full control set.
+    for fw in acp_core::controls::frameworks() {
+        let items: Vec<serde_json::Value> = acp_core::controls::for_framework(&fw.slug).into_iter().map(|c| {
+            serde_json::json!({
+                "control_id": c.id,
+                "reference": c.reference,
+                "title": c.title,
+                "obligation_type": c.obligation_type,
+            })
+        }).collect();
+        templates.push(serde_json::json!({
+            "id": format!("{}-checklist", fw.slug),
+            "kind": "checklist",
+            "framework": fw.slug,
+            "framework_type": fw.framework_type,
+            "version": fw.version,
+            "name": format!("{} conformity checklist", fw.label),
+            "items": items,
+        }));
+    }
+    Json(serde_json::json!({"templates": templates}))
 }
 
 /// G3: create a model-card GRC record that references a model, a use-case and a risk by id. On read

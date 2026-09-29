@@ -22,6 +22,7 @@ pub mod classify;
 pub mod conformity;
 pub mod content;
 pub mod databoundary;
+pub mod conformance;
 pub mod controls;
 pub mod pack;
 pub mod threatfeed;

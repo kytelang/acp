@@ -225,21 +225,29 @@ pub(crate) async fn report_post_market_history(State(st): State<Arc<AppState>>, 
 }
 
 pub(crate) async fn framework_report_value(st: &Arc<AppState>, tenant: &str, name: &str) -> serde_json::Value {
+    // Default subject profile: a provider-and-deployer at high risk tier, so the report is exhaustive
+    // for the demanding case. A caller can narrow it via report_framework_value_profile.
+    let profile = acp_core::conformance::SubjectProfile {
+        roles: vec!["provider".to_string(), "deployer".to_string()],
+        risk_tier: Some("high".to_string()),
+        ..Default::default()
+    };
+    framework_report_value_profile(st, tenant, name, &profile).await
+}
+
+/// A6 (exhaustive build, B.8-5): the framework conformance report. For the given subject profile it
+/// enumerates EVERY control of the framework with its conformity state (conformant, partial,
+/// non-conformant, not-applicable, not-assessed), lists the not-applicable controls with the reason
+/// they were excluded, rolls up a conformity summary, and pins the framework version and type. Runtime
+/// evidence (GRC checklists and linked, verified evidence) drives the conformant/partial states.
+pub(crate) async fn framework_report_value_profile(
+    st: &Arc<AppState>,
+    tenant: &str,
+    name: &str,
+    profile: &acp_core::conformance::SubjectProfile,
+) -> serde_json::Value {
     let store = match &st.store { Some(s) => s, None => return serde_json::json!({"error": "no --store configured"}) };
-    // 1. Controls for the framework (loaded packs, else built-in).
-    let mut controls: Vec<serde_json::Value> = Vec::new();
-    if let Ok(rows) = store.list_packs().await {
-        for r in &rows {
-            if let Ok(doc) = serde_json::from_str::<serde_json::Value>(&r.doc_json) {
-                if let Some(arr) = doc.get("controls").and_then(|c| c.as_array()) { controls.extend(arr.clone()); }
-            }
-        }
-    }
-    if controls.is_empty() {
-        controls = acp_core::controls::library().iter().map(|c| serde_json::to_value(c).unwrap_or_default()).collect();
-    }
-    controls.retain(|c| c.get("framework").and_then(|v| v.as_str()) == Some(name));
-    // 2. GRC records -> which controls are satisfied, and linked-evidence counts.
+    // 1. Which controls carry evidence: a GRC checklist item done=true -> satisfied; addressed -> partial.
     let mut satisfied: std::collections::HashSet<String> = std::collections::HashSet::new();
     let mut addressed: std::collections::HashSet<String> = std::collections::HashSet::new();
     let (mut ev_verified, mut ev_total) = (0usize, 0usize);
@@ -255,7 +263,6 @@ pub(crate) async fn framework_report_value(st: &Arc<AppState>, tenant: &str, nam
                     }
                 }
             }
-            // linked-evidence verification for this record.
             let refs: Vec<serde_json::Value> = serde_json::from_str(&r.linked_refs).unwrap_or_default();
             ev_total += refs.len();
             for rf in &refs {
@@ -264,35 +271,89 @@ pub(crate) async fn framework_report_value(st: &Arc<AppState>, tenant: &str, nam
             }
         }
     }
-    let control_rows: Vec<serde_json::Value> = controls.iter().map(|c| {
-        let cid = c.get("id").and_then(|v| v.as_str()).unwrap_or("");
-        let status = if satisfied.contains(cid) { "satisfied" } else if addressed.contains(cid) { "in-progress" } else { "not-addressed" };
-        serde_json::json!({"control_id": cid, "title": c.get("title"), "status": status})
+    // partial = addressed but not satisfied.
+    let partial: std::collections::HashSet<String> = addressed.difference(&satisfied).cloned().collect();
+    // 2. Exhaustive per-control assessment via the conformance engine.
+    let rows = acp_core::conformance::assess_framework(name, profile, &satisfied, &partial);
+    let summary = acp_core::conformance::summarise(&rows);
+    let control_rows: Vec<serde_json::Value> = rows.iter().map(|r| {
+        // Keep the coarse legacy `status` for existing consumers, plus the precise `conformity`.
+        let status = match r.conformity {
+            acp_core::conformance::Conformity::Conformant => "satisfied",
+            acp_core::conformance::Conformity::Partial => "in-progress",
+            acp_core::conformance::Conformity::NotApplicable => "n/a",
+            _ => "not-addressed",
+        };
+        serde_json::json!({
+            "control_id": r.control_id,
+            "title": r.title,
+            "reference": r.reference,
+            "obligation_type": r.obligation_type,
+            "applicable": r.applicable,
+            "conformity": r.conformity.as_str(),
+            "exclusion_reason": r.exclusion_reason,
+            "status": status,
+        })
     }).collect();
-    let total = controls.len();
-    let sat = controls.iter().filter(|c| satisfied.contains(c.get("id").and_then(|v| v.as_str()).unwrap_or(""))).count();
-    // 3. breach summary.
+    // 3. Breach summary (unchanged).
     let mut breach_total = 0usize;
     let mut by_verdict: std::collections::HashMap<String, usize> = std::collections::HashMap::new();
     if let Ok(rows) = store.list_violations(5000).await {
         breach_total = rows.len();
         for r in &rows { *by_verdict.entry(if r.verdict.is_empty() { r.kind.clone() } else { r.verdict.clone() }).or_insert(0) += 1; }
     }
-    let coverage = if total > 0 { sat as f64 / total as f64 } else { 0.0 };
+    // Conformance rate over the APPLICABLE controls (not the whole framework).
+    let coverage = if summary.applicable > 0 { summary.conformant as f64 / summary.applicable as f64 } else { 0.0 };
+    let fw = acp_core::controls::framework(name);
     serde_json::json!({
         "framework": name,
+        "framework_label": fw.as_ref().map(|f| f.label.clone()),
+        "framework_version": fw.as_ref().map(|f| f.version.clone()),
+        "framework_type": fw.as_ref().map(|f| f.framework_type.clone()),
         "generated_ms": now_ms(),
+        "subject_profile": profile,
         "controls": control_rows,
-        "controls_summary": {"satisfied": sat, "total": total},
+        // Legacy summary kept; conformity_summary is the exhaustive roll-up.
+        "controls_summary": {"satisfied": summary.conformant, "total": summary.applicable},
+        "conformity_summary": {
+            "total": summary.total,
+            "applicable": summary.applicable,
+            "not_applicable": summary.not_applicable,
+            "conformant": summary.conformant,
+            "partial": summary.partial,
+            "non_conformant": summary.non_conformant,
+            "not_assessed": summary.not_assessed,
+        },
         "linked_evidence": {"verified": ev_verified, "total": ev_total},
         "breaches": {"total": breach_total, "by_verdict": by_verdict},
         "coverage": coverage,
     })
 }
 
-pub(crate) async fn report_framework(State(st): State<Arc<AppState>>, headers: HeaderMap, Path(name): Path<String>) -> Response {
+
+/// Build a subject profile from optional query params: `role` (comma-separated), `tier`, `sector`,
+/// `jurisdiction`, `asset_type`. With no params it falls back to the exhaustive default
+/// (provider+deployer, high tier), so `/report/framework/uk-ai?role=deployer&jurisdiction=UK` scopes
+/// the report to a UK deployer while the bare path stays exhaustive.
+pub(crate) fn profile_from_query(q: &std::collections::HashMap<String, String>) -> acp_core::conformance::SubjectProfile {
+    let opt = |k: &str| q.get(k).map(|s| s.trim().to_string()).filter(|s| !s.is_empty());
+    let roles: Vec<String> = match q.get("role") {
+        Some(v) if !v.trim().is_empty() => v.split(',').map(|s| s.trim().to_string()).filter(|s| !s.is_empty()).collect(),
+        _ => vec!["provider".to_string(), "deployer".to_string()],
+    };
+    acp_core::conformance::SubjectProfile {
+        roles,
+        risk_tier: Some(opt("tier").unwrap_or_else(|| "high".to_string())),
+        sector: opt("sector"),
+        jurisdiction: opt("jurisdiction"),
+        asset_type: opt("asset_type"),
+    }
+}
+
+pub(crate) async fn report_framework(State(st): State<Arc<AppState>>, headers: HeaderMap, Path(name): Path<String>, axum::extract::Query(q): axum::extract::Query<std::collections::HashMap<String, String>>) -> Response {
     let tenant = tenant_of(&headers, &None);
-    Json(framework_report_value(&st, &tenant, &name).await).into_response()
+    let profile = profile_from_query(&q);
+    Json(framework_report_value_profile(&st, &tenant, &name, &profile).await).into_response()
 }
 
 /// A6: the framework report as CSV (control_id, status) plus summary rows, for a same-origin download.
