@@ -19,6 +19,7 @@ const routes = [
   { path: '/guard', component: () => import('./views/GuardView.vue'), meta: { title: 'Guard' } },
   { path: '/systems', component: () => import('./views/SystemsView.vue'), meta: { title: 'AI systems' } },
   { path: '/systems/:id', component: () => import('./views/SystemDetailView.vue'), meta: { title: 'AI system' } },
+  { path: '/packs', component: () => import('./views/PacksView.vue'), meta: { title: 'Policy packs' } },
   { path: '/governance', component: () => import('./views/GovernanceView.vue'), meta: { title: 'Governance' } },
   { path: '/kill-switch', component: () => import('./views/KillSwitchView.vue'), meta: { title: 'Kill-switch' } },
   { path: '/integrity', component: () => import('./views/IntegrityView.vue'), meta: { title: 'Integrity' } },

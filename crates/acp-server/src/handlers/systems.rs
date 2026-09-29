@@ -172,6 +172,56 @@ pub(crate) async fn evidence_list(State(st): State<Arc<AppState>>, headers: Head
     Json(serde_json::json!({"evidence": rows})).into_response()
 }
 
+
+/// POST /systems/:id/apply-pack: apply a policy pack to a system, seeding its Statement of Applicability
+/// (audit-friendly, Credo-style). Body: {framework} for a built-in per-framework pack, or {pack_id} for a
+/// stored (possibly cross-framework) pack. Non-destructive: controls that already have an SoA entry are
+/// left untouched; the rest are seeded applicable + planned. EditGrc scope.
+pub(crate) async fn apply_pack(State(st): State<Arc<AppState>>, headers: HeaderMap, Path(id): Path<String>, Json(body): Json<serde_json::Value>) -> Response {
+    let principal = match authorize(&st.auth, &headers, acp_core::auth::Capability::EditGrc) { Ok(p) => p, Err(r) => return r };
+    let tenant = tenant_of(&headers, &None);
+    let store = match store_or(&st) { Ok(s) => s, Err(r) => return r };
+    if store.get_system(&id, &tenant).await.ok().flatten().is_none() {
+        return Json(serde_json::json!({"ok": false, "error": format!("unknown system '{id}'")})).into_response();
+    }
+    // Resolve the (framework, control_id) set from either a built-in framework pack or a stored pack.
+    let mut controls: Vec<(String, String)> = Vec::new();
+    let mut pack_label = String::new();
+    if let Some(fw) = body.get("framework").and_then(|v| v.as_str()) {
+        pack_label = fw.to_string();
+        for c in acp_core::controls::for_framework(fw) { controls.push((c.framework, c.id)); }
+    } else if let Some(pid) = body.get("pack_id").and_then(|v| v.as_str()) {
+        pack_label = pid.to_string();
+        if let Ok(rows) = store.list_packs().await {
+            if let Some(row) = rows.into_iter().find(|r| r.id == pid) {
+                if let Ok(doc) = serde_json::from_str::<serde_json::Value>(&row.doc_json) {
+                    if let Some(arr) = doc.get("controls").and_then(|c| c.as_array()) {
+                        for c in arr {
+                            let fw = c.get("framework").and_then(|v| v.as_str()).unwrap_or("").to_string();
+                            let cid = c.get("id").and_then(|v| v.as_str()).unwrap_or("").to_string();
+                            if !fw.is_empty() && !cid.is_empty() { controls.push((fw, cid)); }
+                        }
+                    }
+                }
+            }
+        }
+    }
+    if controls.is_empty() {
+        return Json(serde_json::json!({"ok": false, "error": "provide a known 'framework' or 'pack_id' with controls"})).into_response();
+    }
+    // Non-destructive: skip controls that already have an SoA entry for this system.
+    let existing: std::collections::HashSet<(String, String)> = store.list_all_soa(&id, &tenant).await.unwrap_or_default()
+        .into_iter().map(|e| (e.framework, e.control_id)).collect();
+    let now = now_ms() as i64;
+    let (mut seeded, mut skipped) = (0usize, 0usize);
+    for (fw, cid) in controls {
+        if existing.contains(&(fw.clone(), cid.clone())) { skipped += 1; continue; }
+        if store.set_soa(&id, &fw, &cid, true, "", "planned", "[]", &tenant, now).await.is_ok() { seeded += 1; }
+    }
+    audit(&st, &id, "pack-applied", &actor_of(&principal), &format!("{pack_label}: seeded {seeded}, skipped {skipped}"), &tenant).await;
+    Json(serde_json::json!({"ok": true, "seeded": seeded, "skipped": skipped})).into_response()
+}
+
 /// Map a SoA status string to a conformity state.
 fn status_conformity(status: &str, applicable: bool) -> acp_core::conformance::Conformity {
     use acp_core::conformance::Conformity::*;

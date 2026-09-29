@@ -3,7 +3,7 @@ import { RouterLink } from 'vue-router'
 import {
   LayoutDashboard, Hand, Eye, ScrollText, AlertTriangle, ClipboardList,
   Package, Bot, Brain, Globe, Lock, Shield, Laptop, FileText, OctagonAlert,
-  ShieldCheck, LineChart, Waypoints, Boxes
+  ShieldCheck, LineChart, Waypoints, Boxes, Library
 } from 'lucide-vue-next'
 
 const groups = [
@@ -29,6 +29,7 @@ const groups = [
   ]},
   { label: 'Compliance', items: [
     { to: '/systems', text: 'AI systems', icon: Boxes },
+    { to: '/packs', text: 'Policy packs', icon: Library },
     { to: '/governance', text: 'Governance', icon: FileText }
   ]},
   { label: 'Emergency', items: [

@@ -54,6 +54,11 @@ async function addEvidence() {
     evForm.value = { control_id: '', title: '', owner: '', valid_until: '' }; await loadSoa()
   } catch (e) { err.value = String(e.message || e) }
 }
+async function applyPack() {
+  err.value = ''; msg.value = ''
+  try { const r = await post(`/systems/${id}/apply-pack`, { framework: framework.value }, 'GrcAuthor'); msg.value = `Seeded ${r.seeded} controls from the ${framework.value} pack (${r.skipped} already present).`; await loadSoa() }
+  catch (e) { err.value = String(e.message || e) }
+}
 async function saveSoa() {
   err.value = ''; msg.value = ''
   const entries = soa.value.map(e => ({ control_id: e.control_id, applicable: e.applicable, justification: e.justification, status: e.status }))
@@ -117,6 +122,7 @@ onMounted(async () => { await loadSystem(); await loadFrameworks(); await loadSo
             <option v-for="f in frameworks" :key="f.slug" :value="f.slug">{{ f.name }}</option>
           </select>
         </label>
+        <Btn size="sm" variant="ghost" @click="applyPack" title="Seed this framework's controls into the Statement of Applicability">Seed from pack</Btn>
         <div v-if="report" class="ml-auto flex gap-2 text-center text-xs">
           <div><div class="text-base font-semibold text-ok">{{ sum.conformant }}</div>conformant</div>
           <div><div class="text-base font-semibold text-warn">{{ sum.partial }}</div>partial</div>
