@@ -69,18 +69,17 @@ async function submit(kind) {
     if (kind === 'assess') {
       const subject = assessForm.value.subject.trim()
       if (!subject) throw new Error('System name is required.')
-      if (assessForm.value.framework === 'eu-ai-act') {
-        // EU AI Act keeps its risk-tier screening (produces a tier + obligation checklist).
+      const fw = assessForm.value.framework
+      // EU AI Act additionally files a risk screening (tiering) when any screening answer is set.
+      if (fw === 'eu-ai-act' && Object.values(assessForm.value.answers).some(Boolean)) {
         await post('/grc/assess', { subject, framework: 'eu-ai-act', answers: assessForm.value.answers }, 'GrcAuthor')
-      } else {
-        // Every other framework is a conformity checklist over its controls. Create a conformity record
-        // whose checklist the framework report then grades (each control done or not).
-        const fw = assessForm.value.framework
-        const checklist = frameworkControls.value.map(c => ({
-          control_id: c.control_id, reference: c.reference, title: c.title, done: !!checked.value[c.control_id]
-        }))
-        await post('/grc', { kind: 'conformity', subject, title: `${frameworkName(fw)} conformity`, status: 'open', body: { framework: fw, checklist } }, 'GrcAuthor')
       }
+      // Every framework (EU AI Act included) creates a conformity record over its full control set, which
+      // the framework report then grades. This is the complete conformity checklist.
+      const checklist = frameworkControls.value.map(c => ({
+        control_id: c.control_id, reference: c.reference, title: c.title, done: !!checked.value[c.control_id]
+      }))
+      await post('/grc', { kind: 'conformity', subject, title: `${frameworkName(fw)} conformity`, status: 'open', body: { framework: fw, checklist } }, 'GrcAuthor')
     } else if (kind === 'risk') {
       if (!riskForm.value.subject.trim()) throw new Error('System name is required.')
       await post('/grc/risk', riskForm.value, 'GrcAuthor')
@@ -165,12 +164,12 @@ onMounted(load)
           </select>
         </label>
         <div v-if="assessForm.framework==='eu-ai-act'" class="grid gap-1.5 border border-line rounded-lg p-3">
-          <div class="text-xs text-dim mb-1">EU AI Act risk screening</div>
+          <div class="text-xs text-dim mb-1">EU AI Act risk screening <span class="text-muted">(optional, sets the risk tier)</span></div>
           <label v-for="q in euQuestions" :key="q.key" class="flex items-start gap-2 text-[13px]">
             <input type="checkbox" v-model="assessForm.answers[q.key]" class="mt-1" /> <span>{{ q.label }}</span>
           </label>
         </div>
-        <div v-else class="border border-line rounded-lg p-3 max-h-80 overflow-y-auto">
+        <div class="border border-line rounded-lg p-3 max-h-80 overflow-y-auto">
           <div class="text-xs text-dim mb-2">Conformity checklist &middot; {{ frameworkControls.length }} controls. Tick the controls already in place; the rest are recorded as open.</div>
           <label v-for="c in frameworkControls" :key="c.control_id" class="flex items-start gap-2 text-[13px] py-0.5">
             <input type="checkbox" v-model="checked[c.control_id]" class="mt-1" />
