@@ -151,7 +151,7 @@ free-text references today:
 - Use-case lifecycle registry with gated transitions (`acp usecase`)
 - Signed attestations and sign-offs (`acp attest`)
 - Signed AI bill of materials in CycloneDX (`acp aibom`) over an operator-supplied inventory
-- Static control library across the three frameworks (`acp controls`)
+- Exhaustive, versioned control catalogue across twelve frameworks, 494 controls (`acp controls`): EU AI Act, NIST AI RMF, ISO/IEC 42001, ISO/IEC 27001, SOC 2, GDPR, India DPDP 2023, UK AI principles, Colorado AI Act, NYC LL144, Canada AIDA, ISO/IEC 23894
 - Policy-hash signing and a push allowlist (`policyprov.rs`): genuine cryptographic policy integrity
 
 ## Operations and posture (enforced)
