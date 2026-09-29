@@ -154,6 +154,45 @@ pub struct ControlStore {
     pg: bool,
 }
 
+#[derive(Debug, Clone, Serialize)]
+pub struct AiSystem {
+    pub id: String,
+    pub name: String,
+    pub purpose: String,
+    pub owner: String,
+    pub lifecycle_state: String,
+    pub risk_tier: String,
+    pub sector: String,
+    pub asset_type: String,
+    pub jurisdictions: String, // JSON array
+    pub tenant: String,
+    pub created_ms: i64,
+    pub updated_ms: i64,
+}
+
+#[derive(Debug, Clone, Serialize)]
+pub struct SystemRole {
+    pub id: String,
+    pub system_id: String,
+    pub role: String,
+    pub jurisdiction: String,
+    pub market_date: String,
+    pub created_ms: i64,
+}
+
+#[derive(Debug, Clone, Serialize)]
+pub struct SoaEntry {
+    pub id: String,
+    pub system_id: String,
+    pub framework: String,
+    pub control_id: String,
+    pub applicable: bool,
+    pub justification: String,
+    pub status: String,
+    pub evidence_refs: String, // JSON array
+    pub updated_ms: i64,
+}
+
 impl ControlStore {
     /// Connect using a URL whose scheme selects the backend:
     ///   sqlite://<path>?mode=rwc  |  postgres://user:pass@host/db  |  mysql://user:pass@host/db
@@ -209,6 +248,9 @@ impl ControlStore {
             "CREATE TABLE IF NOT EXISTS drift_counts (class VARCHAR(255) PRIMARY KEY, hits BIGINT NOT NULL, total BIGINT NOT NULL, baseline DOUBLE PRECISION NOT NULL, updated_ms BIGINT NOT NULL)",
             "CREATE TABLE IF NOT EXISTS report_snapshots (id VARCHAR(255) PRIMARY KEY, framework TEXT NOT NULL, tenant_id VARCHAR(255) NOT NULL DEFAULT 'default', body_json TEXT NOT NULL, created_ms BIGINT NOT NULL)",
             "CREATE TABLE IF NOT EXISTS lineage_edges (id VARCHAR(255) PRIMARY KEY, data_class TEXT NOT NULL, tool TEXT NOT NULL, count BIGINT NOT NULL, updated_ms BIGINT NOT NULL)",
+            "CREATE TABLE IF NOT EXISTS ai_systems (id VARCHAR(255) PRIMARY KEY, name TEXT NOT NULL, purpose TEXT NOT NULL DEFAULT '', owner TEXT NOT NULL DEFAULT '', lifecycle_state TEXT NOT NULL DEFAULT 'development', risk_tier TEXT NOT NULL DEFAULT '', sector TEXT NOT NULL DEFAULT '', asset_type TEXT NOT NULL DEFAULT '', jurisdictions TEXT NOT NULL DEFAULT '[]', tenant_id VARCHAR(255) NOT NULL DEFAULT 'default', created_ms BIGINT NOT NULL, updated_ms BIGINT NOT NULL)",
+            "CREATE TABLE IF NOT EXISTS system_roles (id VARCHAR(255) PRIMARY KEY, system_id TEXT NOT NULL, role TEXT NOT NULL, jurisdiction TEXT NOT NULL DEFAULT '', market_date TEXT NOT NULL DEFAULT '', tenant_id VARCHAR(255) NOT NULL DEFAULT 'default', created_ms BIGINT NOT NULL)",
+            "CREATE TABLE IF NOT EXISTS soa_entries (id VARCHAR(255) PRIMARY KEY, system_id TEXT NOT NULL, framework TEXT NOT NULL, control_id TEXT NOT NULL, applicable INTEGER NOT NULL DEFAULT 1, justification TEXT NOT NULL DEFAULT '', status TEXT NOT NULL DEFAULT 'planned', evidence_refs TEXT NOT NULL DEFAULT '[]', tenant_id VARCHAR(255) NOT NULL DEFAULT 'default', updated_ms BIGINT NOT NULL)",
         ] {
             sqlx::query(ddl).execute(&self.pool).await.map_err(|e| e.to_string())?;
         }
@@ -768,6 +810,76 @@ impl ControlStore {
             })
             .collect())
     }
+
+    // ---- Governance spine (audit P0: ai_system + roles + Statement of Applicability) ----
+
+    #[allow(clippy::too_many_arguments)]
+    pub async fn add_system(&self, id: &str, name: &str, purpose: &str, owner: &str, lifecycle: &str, risk_tier: &str, sector: &str, asset_type: &str, jurisdictions_json: &str, tenant: &str, now_ms: i64) -> Result<(), String> {
+        let sql = self.ph("INSERT INTO ai_systems (id, name, purpose, owner, lifecycle_state, risk_tier, sector, asset_type, jurisdictions, tenant_id, created_ms, updated_ms) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)");
+        sqlx::query(&sql).bind(id).bind(name).bind(purpose).bind(owner).bind(lifecycle).bind(risk_tier).bind(sector).bind(asset_type).bind(jurisdictions_json).bind(tenant).bind(now_ms).bind(now_ms)
+            .execute(&self.pool).await.map_err(|e| e.to_string())?;
+        Ok(())
+    }
+
+    fn map_system(r: &sqlx::any::AnyRow) -> AiSystem {
+        AiSystem {
+            id: r.get("id"), name: r.get("name"), purpose: r.get("purpose"), owner: r.get("owner"),
+            lifecycle_state: r.get("lifecycle_state"), risk_tier: r.get("risk_tier"), sector: r.get("sector"),
+            asset_type: r.get("asset_type"), jurisdictions: r.get("jurisdictions"), tenant: r.get("tenant_id"),
+            created_ms: r.get("created_ms"), updated_ms: r.get("updated_ms"),
+        }
+    }
+
+    pub async fn list_systems(&self, tenant: &str) -> Result<Vec<AiSystem>, String> {
+        let rows = sqlx::query(&self.ph("SELECT * FROM ai_systems WHERE tenant_id = ? ORDER BY created_ms"))
+            .bind(tenant).fetch_all(&self.pool).await.map_err(|e| e.to_string())?;
+        Ok(rows.iter().map(Self::map_system).collect())
+    }
+
+    pub async fn get_system(&self, id: &str, tenant: &str) -> Result<Option<AiSystem>, String> {
+        let rows = sqlx::query(&self.ph("SELECT * FROM ai_systems WHERE id = ? AND tenant_id = ?"))
+            .bind(id).bind(tenant).fetch_all(&self.pool).await.map_err(|e| e.to_string())?;
+        Ok(rows.first().map(Self::map_system))
+    }
+
+    pub async fn add_role(&self, id: &str, system_id: &str, role: &str, jurisdiction: &str, market_date: &str, tenant: &str, now_ms: i64) -> Result<(), String> {
+        let sql = self.ph("INSERT INTO system_roles (id, system_id, role, jurisdiction, market_date, tenant_id, created_ms) VALUES (?, ?, ?, ?, ?, ?, ?)");
+        sqlx::query(&sql).bind(id).bind(system_id).bind(role).bind(jurisdiction).bind(market_date).bind(tenant).bind(now_ms)
+            .execute(&self.pool).await.map_err(|e| e.to_string())?;
+        Ok(())
+    }
+
+    pub async fn list_roles(&self, system_id: &str, tenant: &str) -> Result<Vec<SystemRole>, String> {
+        let rows = sqlx::query(&self.ph("SELECT * FROM system_roles WHERE system_id = ? AND tenant_id = ? ORDER BY created_ms"))
+            .bind(system_id).bind(tenant).fetch_all(&self.pool).await.map_err(|e| e.to_string())?;
+        Ok(rows.iter().map(|r| SystemRole {
+            id: r.get("id"), system_id: r.get("system_id"), role: r.get("role"),
+            jurisdiction: r.get("jurisdiction"), market_date: r.get("market_date"), created_ms: r.get("created_ms"),
+        }).collect())
+    }
+
+    /// Upsert one SoA entry, keyed deterministically by (system, framework, control). Delete-then-insert
+    /// so it works the same on SQLite and Postgres.
+    #[allow(clippy::too_many_arguments)]
+    pub async fn set_soa(&self, system_id: &str, framework: &str, control_id: &str, applicable: bool, justification: &str, status: &str, evidence_refs_json: &str, tenant: &str, now_ms: i64) -> Result<(), String> {
+        let id = format!("soa:{system_id}:{framework}:{control_id}");
+        let del = self.ph("DELETE FROM soa_entries WHERE id = ?");
+        sqlx::query(&del).bind(&id).execute(&self.pool).await.map_err(|e| e.to_string())?;
+        let ins = self.ph("INSERT INTO soa_entries (id, system_id, framework, control_id, applicable, justification, status, evidence_refs, tenant_id, updated_ms) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)");
+        sqlx::query(&ins).bind(&id).bind(system_id).bind(framework).bind(control_id).bind(if applicable {1} else {0}).bind(justification).bind(status).bind(evidence_refs_json).bind(tenant).bind(now_ms)
+            .execute(&self.pool).await.map_err(|e| e.to_string())?;
+        Ok(())
+    }
+
+    pub async fn list_soa(&self, system_id: &str, framework: &str, tenant: &str) -> Result<Vec<SoaEntry>, String> {
+        let rows = sqlx::query(&self.ph("SELECT * FROM soa_entries WHERE system_id = ? AND framework = ? AND tenant_id = ?"))
+            .bind(system_id).bind(framework).bind(tenant).fetch_all(&self.pool).await.map_err(|e| e.to_string())?;
+        Ok(rows.iter().map(|r| SoaEntry {
+            id: r.get("id"), system_id: r.get("system_id"), framework: r.get("framework"), control_id: r.get("control_id"),
+            applicable: { let v: i64 = r.get("applicable"); v != 0 }, justification: r.get("justification"),
+            status: r.get("status"), evidence_refs: r.get("evidence_refs"), updated_ms: r.get("updated_ms"),
+        }).collect())
+    }
 }
 
 #[cfg(test)]
@@ -778,6 +890,18 @@ mod tests {
         let s = ControlStore::connect(url).await.expect("connect");
         s.add_app("app-1", "acme", "you", "{}", "default", 1000).await.unwrap();
         assert_eq!(s.list_apps("default").await.unwrap().len(), 1);
+        // Governance spine (audit P0): ai_system + roles + Statement of Applicability round-trip.
+        s.add_system("sys-1", "resume-screener", "screen resumes", "hr", "development", "high", "hr", "", "[\"UK\"]", "default", 1000).await.unwrap();
+        assert_eq!(s.list_systems("default").await.unwrap().len(), 1);
+        assert_eq!(s.get_system("sys-1", "default").await.unwrap().unwrap().name, "resume-screener");
+        s.add_role("role-1", "sys-1", "deployer", "UK", "", "default", 1000).await.unwrap();
+        assert_eq!(s.list_roles("sys-1", "default").await.unwrap()[0].role, "deployer");
+        s.set_soa("sys-1", "eu-ai-act", "art-14", true, "", "implemented", "[]", "default", 1000).await.unwrap();
+        s.set_soa("sys-1", "eu-ai-act", "art-14", true, "", "partial", "[]", "default", 2000).await.unwrap(); // upsert
+        let soa = s.list_soa("sys-1", "eu-ai-act", "default").await.unwrap();
+        assert_eq!(soa.len(), 1, "SoA upsert keeps one row per (system,framework,control)");
+        assert_eq!(soa[0].status, "partial");
+        assert!(soa[0].applicable);
         s.add_agent("agt-1", "app-1", "asst", "deadbeef", "you", "{\"deps\":[]}", "default", 1001).await.unwrap();
         assert!(s.verify_agent("agt-1", "deadbeef").await.unwrap());
         assert!(!s.verify_agent("agt-1", "wrong").await.unwrap());

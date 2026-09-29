@@ -3,7 +3,7 @@
 
 use crate::state::AppState;
 use crate::handlers::{
-    packs::*, models::*, identity::*, approvals::*, policy::*, firewall::*, endpoints::*, grc::*, assurance::*, monitoring::*, evidence::*, reports::*, tickets::*, breakglass::*, console::*,
+    packs::*, models::*, identity::*, approvals::*, policy::*, firewall::*, endpoints::*, grc::*, assurance::*, monitoring::*, evidence::*, reports::*, tickets::*, breakglass::*, console::*, systems::*,
 };
 use crate::auth::dev_token;
 use axum::{routing::{get, post}, Router};
@@ -77,6 +77,11 @@ pub(crate) fn build_router(state: Arc<AppState>) -> Router {
             .route("/agents/verify", post(agent_verify))
             .route("/grc", get(grc_list).post(grc_create))
             .route("/grc/templates", get(grc_templates))
+            .route("/systems", get(systems_list).post(system_create))
+            .route("/systems/:id", get(system_get))
+            .route("/systems/:id/roles", post(role_add))
+            .route("/systems/:id/soa/:framework", get(soa_get).post(soa_set))
+            .route("/systems/:id/report/:framework", get(system_report))
             .route("/redteam/run", post(redteam_run))
             .route("/redteam/runs", get(redteam_runs))
             .route("/oversight", get(oversight_get))

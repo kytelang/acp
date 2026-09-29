@@ -1,5 +1,6 @@
 //! Control-plane HTTP handlers, grouped by domain.
 pub(crate) mod console;
+pub(crate) mod systems;
 pub(crate) mod packs;
 pub(crate) mod models;
 pub(crate) mod identity;
