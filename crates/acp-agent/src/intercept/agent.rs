@@ -57,12 +57,14 @@ fn extract_identity(cfg: &Cfg, headers: &str) -> (String, String) {
 
 fn record(cfg: &Cfg, host: &str, action: &str, verdict: &str, rule: &Option<String>, agent: &str, principal: &str) {
     // Report block decisions to the control plane so they appear in the console Violations feed.
+    let class = acp_core::llmclass::classify_destination(host, &[]);
     if verdict == "deny" {
         if let Some(base) = cfg.report_url.clone() {
             let token = cfg.report_token.clone();
             let body = serde_json::json!({
                 "kind": "deny", "verdict": "deny", "ts_ms": now_ms(), "proxy": cfg.proxy_id,
                 "agent": agent, "principal": {"id": principal, "verified": !principal.is_empty()},
+                "class": class,
                 "tool": host, "resource": host, "rule_id": rule, "impact": "egress", "outcome": action,
             }).to_string();
             let client = cfg.client.clone();
@@ -78,7 +80,7 @@ fn record(cfg: &Cfg, host: &str, action: &str, verdict: &str, rule: &Option<Stri
         let did = format!("intercept-{}-{}", now_ms(), host);
         let rec = serde_json::json!({
             "kind": "intercept", "host": host, "action": action, "verdict": verdict,
-            "rule": rule, "ts_ms": now_ms(),
+            "class": class, "rule": rule, "ts_ms": now_ms(),
         });
         if let Ok(mut g) = l.lock() {
             let _ = g.append(&did, "intercept", &rec, None);
