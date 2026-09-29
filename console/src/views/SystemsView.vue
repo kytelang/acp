@@ -7,6 +7,7 @@ import Card from '../components/ui/Card.vue'
 import DataTable from '../components/ui/DataTable.vue'
 import Badge from '../components/ui/Badge.vue'
 import Btn from '../components/ui/Btn.vue'
+import Modal from '../components/ui/Modal.vue'
 
 const router = useRouter()
 const { data, refresh } = usePoll(async () => (await getOr('/systems', { systems: [] })).systems || [])
@@ -24,13 +25,14 @@ function tierKind(t) { return { high: 'bad', limited: 'warn', minimal: 'ok', una
 </script>
 <template>
   <Card title="AI systems" subtitle="the governed AI estate (first-class use-case registry)">
-    <template #cta><Btn size="sm" @click="showAdd = !showAdd">{{ showAdd ? 'Cancel' : 'New system' }}</Btn></template>
+    <template #cta><Btn size="sm" @click="showAdd = true">New system</Btn></template>
     <p class="text-xs text-dim mb-3">
       An AI system (use case) is the anchor for governance: roles, assessments, risks, evidence and reports
       all hang off it. Register a system, declare the roles you play per jurisdiction, then work its Statement
       of Applicability per framework.
     </p>
-    <div v-if="showAdd" class="grid sm:grid-cols-2 gap-2 mb-4 p-3 border border-line rounded-lg">
+    <Modal v-if="showAdd" title="New AI system" @close="showAdd = false">
+      <div class="grid sm:grid-cols-2 gap-3">
       <label class="text-xs text-dim">Name<input v-model="form.name" class="mt-1 block w-full bg-panel2 border border-line rounded-md px-2 py-1.5 text-sm" placeholder="e.g. Resume Screener" /></label>
       <label class="text-xs text-dim">Owner<input v-model="form.owner" class="mt-1 block w-full bg-panel2 border border-line rounded-md px-2 py-1.5 text-sm" placeholder="team / owner" /></label>
       <label class="text-xs text-dim">Risk tier
@@ -39,8 +41,9 @@ function tierKind(t) { return { high: 'bad', limited: 'warn', minimal: 'ok', una
       <label class="text-xs text-dim">Sector<input v-model="form.sector" class="mt-1 block w-full bg-panel2 border border-line rounded-md px-2 py-1.5 text-sm" placeholder="e.g. hr, finance" /></label>
       <label class="text-xs text-dim">Jurisdictions (comma-separated)<input v-model="form.jurisdictions" class="mt-1 block w-full bg-panel2 border border-line rounded-md px-2 py-1.5 text-sm" placeholder="e.g. UK, EU" /></label>
       <label class="text-xs text-dim">Purpose<input v-model="form.purpose" class="mt-1 block w-full bg-panel2 border border-line rounded-md px-2 py-1.5 text-sm" placeholder="intended purpose" /></label>
-      <div class="sm:col-span-2"><Btn size="sm" @click="add">Register system</Btn></div>
-    </div>
+        <div class="col-span-full flex justify-end pt-1"><Btn @click="add">Register system</Btn></div>
+      </div>
+    </Modal>
     <p v-if="err" class="text-bad text-sm mb-2">{{ err }}</p>
     <DataTable :columns="['Name','Owner','Risk tier','Sector','Lifecycle','']">
       <tr v-for="s in (data||[])" :key="s.id" class="border-b border-line/60 hover:bg-panel2/50 cursor-pointer" @click="router.push(`/systems/${s.id}`)">

@@ -6,6 +6,7 @@ import Card from '../components/ui/Card.vue'
 import DataTable from '../components/ui/DataTable.vue'
 import Badge from '../components/ui/Badge.vue'
 import Btn from '../components/ui/Btn.vue'
+import Modal from '../components/ui/Modal.vue'
 
 const { data, refresh } = usePoll(async () => asList(await getOr('/agents', { agents: [] }), 'agents'))
 const apps = ref([])
@@ -51,7 +52,7 @@ onMounted(loadApps)
 </script>
 <template>
   <Card title="Agents" subtitle="governed AI agent identities">
-    <template #cta><Btn size="sm" @click="showAdd = !showAdd; if (showAdd) loadApps()">{{ showAdd ? 'Cancel' : 'New agent' }}</Btn></template>
+    <template #cta><Btn size="sm" @click="showAdd = true; loadApps()">New agent</Btn></template>
 
     <p class="text-xs text-dim mb-3">
       An agent is a specific AI agent deployment governed by the control plane, running under an application.
@@ -60,7 +61,8 @@ onMounted(loadApps)
       attributed to the human it acts for.
     </p>
 
-    <div v-if="showAdd" class="grid sm:grid-cols-2 gap-2 mb-4 p-3 border border-line rounded-lg">
+    <Modal v-if="showAdd" title="New agent" wide @close="showAdd = false">
+      <div class="grid sm:grid-cols-2 gap-3">
       <label class="text-xs text-dim">Application
         <select v-model="form.app_id" class="mt-1 block w-full bg-panel2 border border-line rounded-md px-2 py-1.5 text-sm">
           <option value="">select app…</option>
@@ -86,8 +88,9 @@ onMounted(loadApps)
       </label>
       <label class="text-xs text-dim">Owner<input v-model="form.owner" class="mt-1 block w-full bg-panel2 border border-line rounded-md px-2 py-1.5 text-sm" placeholder="team / owner" /></label>
       <label class="text-xs text-dim">Description<input v-model="form.description" class="mt-1 block w-full bg-panel2 border border-line rounded-md px-2 py-1.5 text-sm" placeholder="what it does" /></label>
-      <div class="sm:col-span-2"><Btn size="sm" @click="add">Register agent</Btn></div>
-    </div>
+        <div class="col-span-full flex justify-end pt-1"><Btn @click="add">Register agent</Btn></div>
+      </div>
+    </Modal>
 
     <p v-if="err" class="text-bad text-sm mb-2">{{ err }}</p>
     <p v-if="assessMsg" class="text-ok text-sm mb-2">{{ assessMsg }}</p>

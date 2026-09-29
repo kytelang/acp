@@ -6,6 +6,7 @@ import Card from '../components/ui/Card.vue'
 import DataTable from '../components/ui/DataTable.vue'
 import Badge from '../components/ui/Badge.vue'
 import Btn from '../components/ui/Btn.vue'
+import Modal from '../components/ui/Modal.vue'
 const { data, refresh } = usePoll(async () => asList(await getOr('/apps', { apps: [] }), 'apps'))
 const showAdd = ref(false); const form = ref({ name: '', owner: '', description: '', environment: 'prod' }); const err = ref(''); const msg = ref('')
 async function add() {
@@ -19,16 +20,18 @@ async function add() {
 </script>
 <template>
   <Card title="Teams / applications" subtitle="the applications/services that own agents (the PEP boundary)">
-    <template #cta><Btn size="sm" @click="showAdd = !showAdd">{{ showAdd ? 'Cancel' : 'New team' }}</Btn></template>
-    <div v-if="showAdd" class="grid sm:grid-cols-2 gap-2 mb-4 p-3 border border-line rounded-lg">
+    <template #cta><Btn size="sm" @click="showAdd = true">New team</Btn></template>
+    <Modal v-if="showAdd" title="New team" @close="showAdd = false">
+      <div class="grid sm:grid-cols-2 gap-3">
       <label class="text-xs text-dim">Name<input v-model="form.name" class="mt-1 block w-full bg-panel2 border border-line rounded-md px-2 py-1.5 text-sm" placeholder="e.g. HR Portal" /></label>
       <label class="text-xs text-dim">Owner<input v-model="form.owner" class="mt-1 block w-full bg-panel2 border border-line rounded-md px-2 py-1.5 text-sm" placeholder="team / owner" /></label>
       <label class="text-xs text-dim">Environment
         <select v-model="form.environment" class="mt-1 block w-full bg-panel2 border border-line rounded-md px-2 py-1.5 text-sm"><option value="prod">prod</option><option value="staging">staging</option><option value="dev">dev</option></select>
       </label>
       <label class="text-xs text-dim">Description<input v-model="form.description" class="mt-1 block w-full bg-panel2 border border-line rounded-md px-2 py-1.5 text-sm" placeholder="what this application is" /></label>
-      <div class="sm:col-span-2"><Btn size="sm" @click="add">Register</Btn></div>
-    </div>
+        <div class="col-span-full flex justify-end pt-1"><Btn @click="add">Register</Btn></div>
+      </div>
+    </Modal>
     <p v-if="err" class="text-bad text-sm mb-2">{{ err }}</p>
     <p v-if="msg" class="text-ok text-sm mb-2">{{ msg }}</p>
     <DataTable :columns="['ID','Name','Owner','Status']">

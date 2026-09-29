@@ -6,6 +6,7 @@ import Card from '../components/ui/Card.vue'
 import DataTable from '../components/ui/DataTable.vue'
 import Badge from '../components/ui/Badge.vue'
 import Btn from '../components/ui/Btn.vue'
+import Modal from '../components/ui/Modal.vue'
 const { data, refresh } = usePoll(async () => asList(await getOr('/endpoints', { endpoints: [] }), 'endpoints'))
 const showAdd = ref(false); const form = ref({ endpoint: '', disposition: 'govern', reason: '' }); const err = ref(''); const msg = ref('')
 async function add() {
@@ -20,8 +21,9 @@ function dkind(d) { return d === 'block' ? 'bad' : d === 'govern' ? 'ok' : 'warn
 </script>
 <template>
   <Card title="AI endpoints" subtitle="registered model API endpoints (LLM gateway)">
-    <template #cta><Btn size="sm" @click="showAdd = !showAdd">{{ showAdd ? 'Cancel' : 'New endpoint' }}</Btn></template>
-    <div v-if="showAdd" class="grid sm:grid-cols-[1.4fr_0.8fr_1fr_auto] gap-2 items-end mb-4 p-3 border border-line rounded-lg">
+    <template #cta><Btn size="sm" @click="showAdd = true">New endpoint</Btn></template>
+    <Modal v-if="showAdd" title="New AI endpoint" @close="showAdd = false">
+      <div class="grid sm:grid-cols-2 gap-3">
       <label class="text-xs text-dim">Endpoint (URL or host)<input v-model="form.endpoint" class="mt-1 block w-full bg-panel2 border border-line rounded-md px-2 py-1.5 text-sm" placeholder="e.g. https://api.openai.com" /></label>
       <label class="text-xs text-dim">Disposition
         <select v-model="form.disposition" class="mt-1 block w-full bg-panel2 border border-line rounded-md px-2 py-1.5 text-sm">
@@ -29,8 +31,9 @@ function dkind(d) { return d === 'block' ? 'bad' : d === 'govern' ? 'ok' : 'warn
         </select>
       </label>
       <label class="text-xs text-dim">Reason<input v-model="form.reason" class="mt-1 block w-full bg-panel2 border border-line rounded-md px-2 py-1.5 text-sm" placeholder="optional" /></label>
-      <Btn size="sm" @click="add">Register</Btn>
-    </div>
+        <div class="col-span-full flex justify-end pt-1"><Btn @click="add">Register</Btn></div>
+      </div>
+    </Modal>
     <p v-if="err" class="text-bad text-sm mb-2">{{ err }}</p>
     <p v-if="msg" class="text-ok text-sm mb-2">{{ msg }}</p>
     <DataTable :columns="['Endpoint','Provider','Kind','Disposition','Status']">
