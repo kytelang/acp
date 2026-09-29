@@ -15,6 +15,8 @@ const framework = ref('eu-ai-act')
 const soa = ref([])              // worksheet rows (editable)
 const report = ref(null)
 const roleForm = ref({ role: 'deployer', jurisdiction: '' })
+const evidence = ref([])
+const evForm = ref({ control_id: '', title: '', owner: '', valid_until: '' })
 const err = ref(''); const msg = ref('')
 const STATUS = ['planned', 'implemented', 'partial', 'gap', 'not-applicable']
 
@@ -31,6 +33,23 @@ async function loadSoa() {
   const d = await getOr(`/systems/${id}/soa/${framework.value}`, { entries: [] })
   soa.value = d.entries || []
   report.value = await getOr(`/systems/${id}/report/${framework.value}`, null)
+  const e = await getOr(`/systems/${id}/evidence`, { evidence: [] })
+  evidence.value = e.evidence || []
+}
+const reportByControl = computed(() => {
+  const m = {}
+  for (const c of (report.value?.controls || [])) m[c.control_id] = c
+  return m
+})
+function freshFor(cid) { return evidence.value.some(e => e.control_id === cid && e.framework === framework.value && e.fresh) }
+async function addEvidence() {
+  err.value = ''
+  if (!evForm.value.control_id.trim()) { err.value = 'Control id is required for evidence.'; return }
+  const valid_until_ms = evForm.value.valid_until ? new Date(evForm.value.valid_until).getTime() : 0
+  try {
+    await post(`/systems/${id}/evidence`, { framework: framework.value, control_id: evForm.value.control_id.trim(), title: evForm.value.title, owner: evForm.value.owner, valid_until_ms }, 'GrcAuthor')
+    evForm.value = { control_id: '', title: '', owner: '', valid_until: '' }; await loadSoa()
+  } catch (e) { err.value = String(e.message || e) }
 }
 async function saveSoa() {
   err.value = ''; msg.value = ''
@@ -98,7 +117,7 @@ onMounted(async () => { await loadSystem(); await loadFrameworks(); await loadSo
         </div>
       </div>
       <div class="max-h-[28rem] overflow-y-auto">
-        <DataTable :columns="['Reference','Control','Applicable','Status','Justification']">
+        <DataTable :columns="['Reference','Control','Applicable','Status','Evidence','Result']">
           <tr v-for="e in soa" :key="e.control_id" class="border-b border-line/60">
             <td class="py-1.5 pr-4 font-mono text-xs whitespace-nowrap">{{ e.reference || e.control_id }}</td>
             <td class="py-1.5 pr-4">{{ e.title }}</td>
@@ -108,7 +127,11 @@ onMounted(async () => { await loadSystem(); await loadFrameworks(); await loadSo
                 <option v-for="s in STATUS" :key="s" :value="s">{{ s }}</option>
               </select>
             </td>
-            <td class="py-1.5 pr-4"><input v-model="e.justification" class="bg-panel2 border border-line rounded-md px-1.5 py-1 text-xs w-full" :placeholder="e.applicable ? 'optional' : 'why excluded'" /></td>
+            <td class="py-1.5 pr-4"><Badge :kind="freshFor(e.control_id) ? 'ok' : 'muted'">{{ freshFor(e.control_id) ? 'fresh' : 'none' }}</Badge></td>
+            <td class="py-1.5 pr-4">
+              <Badge v-if="reportByControl[e.control_id]" :kind="cmark(reportByControl[e.control_id].conformity)">{{ reportByControl[e.control_id].conformity }}</Badge>
+              <div v-if="reportByControl[e.control_id] && reportByControl[e.control_id].exclusion_reason" class="text-[10px] text-dim">{{ reportByControl[e.control_id].exclusion_reason }}</div>
+            </td>
           </tr>
         </DataTable>
       </div>
@@ -117,6 +140,27 @@ onMounted(async () => { await loadSystem(); await loadFrameworks(); await loadSo
         <span v-if="msg" class="text-ok text-sm">{{ msg }}</span>
         <span v-if="err" class="text-bad text-sm">{{ err }}</span>
       </div>
+    </Card>
+
+    <Card title="Evidence" subtitle="freshness gates the grade; evidence crosswalks to mapped controls">
+      <DataTable :columns="['Framework','Control','Title','Owner','Fresh']">
+        <tr v-for="ev in evidence" :key="ev.id" class="border-b border-line/60">
+          <td class="py-2 pr-4 text-dim">{{ ev.framework }}</td>
+          <td class="py-2 pr-4 font-mono text-xs">{{ ev.control_id }}</td>
+          <td class="py-2 pr-4">{{ ev.title || '-' }}</td>
+          <td class="py-2 pr-4 text-dim">{{ ev.owner || '-' }}</td>
+          <td class="py-2 pr-4"><Badge :kind="ev.fresh ? 'ok' : 'bad'">{{ ev.fresh ? 'fresh' : 'expired' }}</Badge></td>
+        </tr>
+        <tr v-if="!evidence.length"><td colspan="5" class="py-4 text-center text-dim">No evidence attached.</td></tr>
+      </DataTable>
+      <div class="grid sm:grid-cols-5 gap-2 items-end mt-3">
+        <label class="text-xs text-dim">Control id<input v-model="evForm.control_id" class="mt-1 block w-full bg-panel2 border border-line rounded-md px-2 py-1.5 text-sm" placeholder="e.g. art-12" /></label>
+        <label class="text-xs text-dim">Title<input v-model="evForm.title" class="mt-1 block w-full bg-panel2 border border-line rounded-md px-2 py-1.5 text-sm" placeholder="what it is" /></label>
+        <label class="text-xs text-dim">Owner<input v-model="evForm.owner" class="mt-1 block w-full bg-panel2 border border-line rounded-md px-2 py-1.5 text-sm" /></label>
+        <label class="text-xs text-dim">Valid until<input v-model="evForm.valid_until" type="date" class="mt-1 block w-full bg-panel2 border border-line rounded-md px-2 py-1.5 text-sm" /></label>
+        <Btn size="sm" @click="addEvidence">Add evidence</Btn>
+      </div>
+      <p class="text-xs text-dim mt-2">Evidence is scoped to the framework selected above. A control marked implemented needs fresh evidence to grade as conformant; evidence on one control also satisfies mapped controls in other frameworks (crosswalk).</p>
     </Card>
   </div>
 </template>

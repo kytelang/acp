@@ -193,6 +193,22 @@ pub struct SoaEntry {
     pub updated_ms: i64,
 }
 
+#[derive(Debug, Clone, Serialize)]
+pub struct Evidence {
+    pub id: String,
+    pub system_id: String,
+    pub framework: String,
+    pub control_id: String,
+    pub title: String,
+    pub source: String,
+    pub owner: String,
+    pub produced_ms: i64,
+    pub valid_until_ms: i64,
+    pub artefact_ref: String,
+    pub note: String,
+    pub created_ms: i64,
+}
+
 impl ControlStore {
     /// Connect using a URL whose scheme selects the backend:
     ///   sqlite://<path>?mode=rwc  |  postgres://user:pass@host/db  |  mysql://user:pass@host/db
@@ -251,6 +267,7 @@ impl ControlStore {
             "CREATE TABLE IF NOT EXISTS ai_systems (id VARCHAR(255) PRIMARY KEY, name TEXT NOT NULL, purpose TEXT NOT NULL DEFAULT '', owner TEXT NOT NULL DEFAULT '', lifecycle_state TEXT NOT NULL DEFAULT 'development', risk_tier TEXT NOT NULL DEFAULT '', sector TEXT NOT NULL DEFAULT '', asset_type TEXT NOT NULL DEFAULT '', jurisdictions TEXT NOT NULL DEFAULT '[]', tenant_id VARCHAR(255) NOT NULL DEFAULT 'default', created_ms BIGINT NOT NULL, updated_ms BIGINT NOT NULL)",
             "CREATE TABLE IF NOT EXISTS system_roles (id VARCHAR(255) PRIMARY KEY, system_id TEXT NOT NULL, role TEXT NOT NULL, jurisdiction TEXT NOT NULL DEFAULT '', market_date TEXT NOT NULL DEFAULT '', tenant_id VARCHAR(255) NOT NULL DEFAULT 'default', created_ms BIGINT NOT NULL)",
             "CREATE TABLE IF NOT EXISTS soa_entries (id VARCHAR(255) PRIMARY KEY, system_id TEXT NOT NULL, framework TEXT NOT NULL, control_id TEXT NOT NULL, applicable INTEGER NOT NULL DEFAULT 1, justification TEXT NOT NULL DEFAULT '', status TEXT NOT NULL DEFAULT 'planned', evidence_refs TEXT NOT NULL DEFAULT '[]', tenant_id VARCHAR(255) NOT NULL DEFAULT 'default', updated_ms BIGINT NOT NULL)",
+            "CREATE TABLE IF NOT EXISTS evidence (id VARCHAR(255) PRIMARY KEY, system_id TEXT NOT NULL, framework TEXT NOT NULL, control_id TEXT NOT NULL, title TEXT NOT NULL DEFAULT '', source TEXT NOT NULL DEFAULT '', owner TEXT NOT NULL DEFAULT '', produced_ms BIGINT NOT NULL DEFAULT 0, valid_until_ms BIGINT NOT NULL DEFAULT 0, artefact_ref TEXT NOT NULL DEFAULT '', note TEXT NOT NULL DEFAULT '', tenant_id VARCHAR(255) NOT NULL DEFAULT 'default', created_ms BIGINT NOT NULL)",
         ] {
             sqlx::query(ddl).execute(&self.pool).await.map_err(|e| e.to_string())?;
         }
@@ -884,6 +901,35 @@ impl ControlStore {
         Ok(())
     }
 
+    /// All SoA entries for a system across every framework (for crosswalk propagation).
+    pub async fn list_all_soa(&self, system_id: &str, tenant: &str) -> Result<Vec<SoaEntry>, String> {
+        let rows = sqlx::query(&self.ph("SELECT * FROM soa_entries WHERE system_id = ? AND tenant_id = ?"))
+            .bind(system_id).bind(tenant).fetch_all(&self.pool).await.map_err(|e| e.to_string())?;
+        Ok(rows.iter().map(|r| SoaEntry {
+            id: r.get("id"), system_id: r.get("system_id"), framework: r.get("framework"), control_id: r.get("control_id"),
+            applicable: { let v: i64 = r.get("applicable"); v != 0 }, justification: r.get("justification"),
+            status: r.get("status"), evidence_refs: r.get("evidence_refs"), updated_ms: r.get("updated_ms"),
+        }).collect())
+    }
+
+    #[allow(clippy::too_many_arguments)]
+    pub async fn add_evidence(&self, id: &str, system_id: &str, framework: &str, control_id: &str, title: &str, source: &str, owner: &str, produced_ms: i64, valid_until_ms: i64, artefact_ref: &str, note: &str, tenant: &str, now_ms: i64) -> Result<(), String> {
+        let sql = self.ph("INSERT INTO evidence (id, system_id, framework, control_id, title, source, owner, produced_ms, valid_until_ms, artefact_ref, note, tenant_id, created_ms) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)");
+        sqlx::query(&sql).bind(id).bind(system_id).bind(framework).bind(control_id).bind(title).bind(source).bind(owner).bind(produced_ms).bind(valid_until_ms).bind(artefact_ref).bind(note).bind(tenant).bind(now_ms)
+            .execute(&self.pool).await.map_err(|e| e.to_string())?;
+        Ok(())
+    }
+
+    pub async fn list_evidence(&self, system_id: &str, tenant: &str) -> Result<Vec<Evidence>, String> {
+        let rows = sqlx::query(&self.ph("SELECT * FROM evidence WHERE system_id = ? AND tenant_id = ? ORDER BY created_ms DESC"))
+            .bind(system_id).bind(tenant).fetch_all(&self.pool).await.map_err(|e| e.to_string())?;
+        Ok(rows.iter().map(|r| Evidence {
+            id: r.get("id"), system_id: r.get("system_id"), framework: r.get("framework"), control_id: r.get("control_id"),
+            title: r.get("title"), source: r.get("source"), owner: r.get("owner"), produced_ms: r.get("produced_ms"),
+            valid_until_ms: r.get("valid_until_ms"), artefact_ref: r.get("artefact_ref"), note: r.get("note"), created_ms: r.get("created_ms"),
+        }).collect())
+    }
+
     pub async fn list_soa(&self, system_id: &str, framework: &str, tenant: &str) -> Result<Vec<SoaEntry>, String> {
         let rows = sqlx::query(&self.ph("SELECT * FROM soa_entries WHERE system_id = ? AND framework = ? AND tenant_id = ?"))
             .bind(system_id).bind(framework).bind(tenant).fetch_all(&self.pool).await.map_err(|e| e.to_string())?;
@@ -920,6 +966,12 @@ mod tests {
         assert_eq!(soa.len(), 1, "SoA upsert keeps one row per (system,framework,control)");
         assert_eq!(soa[0].status, "partial");
         assert!(soa[0].applicable);
+        // Evidence entity (audit P1) + all-SoA round-trip.
+        s.add_evidence("ev-1", "sys-1", "eu-ai-act", "art-12", "signed ledger", "acp", "you", 1000, 0, "", "", "default", 1000).await.unwrap();
+        let ev = s.list_evidence("sys-1", "default").await.unwrap();
+        assert_eq!(ev.len(), 1);
+        assert_eq!(ev[0].control_id, "art-12");
+        assert!(!s.list_all_soa("sys-1", "default").await.unwrap().is_empty());
         s.add_agent("agt-1", "app-1", "asst", "deadbeef", "you", "{\"deps\":[]}", "default", 1001).await.unwrap();
         assert!(s.verify_agent("agt-1", "deadbeef").await.unwrap());
         assert!(!s.verify_agent("agt-1", "wrong").await.unwrap());

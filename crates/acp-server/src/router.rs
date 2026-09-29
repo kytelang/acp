@@ -82,6 +82,7 @@ pub(crate) fn build_router(state: Arc<AppState>) -> Router {
             .route("/systems/:id", get(system_get))
             .route("/systems/:id/roles", post(role_add))
             .route("/systems/:id/soa/:framework", get(soa_get).post(soa_set))
+            .route("/systems/:id/evidence", get(evidence_list).post(evidence_add))
             .route("/systems/:id/report/:framework", get(system_report))
             .route("/redteam/run", post(redteam_run))
             .route("/redteam/runs", get(redteam_runs))

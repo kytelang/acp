@@ -210,6 +210,26 @@ pub fn framework(slug: &str) -> Option<Framework> {
     parsed().frameworks.iter().find(|f| f.slug == slug).cloned()
 }
 
+/// Resolved crosswalk edges across the whole catalogue: for each control that declares crosswalk
+/// targets ("framework:token"), the resolved (from) -> (to) pairs as (framework, control_id). The
+/// target token may be a control id or a reference (the catalogue uses both forms), so it is resolved
+/// against the target framework's controls. Edges are directed as authored; callers usually treat the
+/// relation as symmetric. Audit P1: this powers "author evidence once, satisfy many frameworks".
+pub fn crosswalk_edges() -> Vec<((String, String), (String, String))> {
+    let mut out = Vec::new();
+    for c in library() {
+        for x in &c.crosswalk {
+            if let Some((fw, token)) = x.split_once(':') {
+                let token = token.trim();
+                if let Some(target) = for_framework(fw).into_iter().find(|t| t.id == token || t.reference == token) {
+                    out.push(((c.framework.clone(), c.id.clone()), (fw.to_string(), target.id)));
+                }
+            }
+        }
+    }
+    out
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -265,6 +285,19 @@ mod tests {
                 });
                 assert!(covered, "{slug}: manifest section '{section}' has no control covering it");
             }
+        }
+    }
+
+    #[test]
+    fn crosswalk_resolves_across_frameworks() {
+        let edges = crosswalk_edges();
+        assert!(!edges.is_empty(), "the catalogue authors crosswalk links");
+        // EU AI Act art-12 (record-keeping) maps to GDPR records-of-processing.
+        assert!(edges.iter().any(|((f, c), (tf, _))| f == "eu-ai-act" && c == "art-12" && tf == "gdpr"),
+            "eu-ai-act:art-12 crosswalks to gdpr");
+        // Every edge target resolves to a real control id in its framework.
+        for (_, (tf, tid)) in &edges {
+            assert!(get(tf, tid).is_some(), "crosswalk target {tf}:{tid} must resolve to a control");
         }
     }
 

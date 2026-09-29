@@ -123,6 +123,38 @@ pub(crate) async fn soa_set(State(st): State<Arc<AppState>>, headers: HeaderMap,
     Json(serde_json::json!({"ok": true, "saved": n})).into_response()
 }
 
+/// POST /systems/:id/evidence: attach a first-class evidence record to a control (audit P1). Body:
+/// {framework, control_id, title, source, owner, produced_ms, valid_until_ms, artefact_ref, note}.
+/// EditGrc scope.
+pub(crate) async fn evidence_add(State(st): State<Arc<AppState>>, headers: HeaderMap, Path(id): Path<String>, Json(body): Json<serde_json::Value>) -> Response {
+    if let Err(r) = authorize(&st.auth, &headers, acp_core::auth::Capability::EditGrc) { return r; }
+    let tenant = tenant_of(&headers, &None);
+    let store = match store_or(&st) { Ok(s) => s, Err(r) => return r };
+    let g = |k: &str| body.get(k).and_then(|v| v.as_str()).unwrap_or("").trim().to_string();
+    let n = |k: &str| body.get(k).and_then(|v| v.as_i64()).unwrap_or(0);
+    let control_id = g("control_id");
+    let framework = g("framework");
+    if control_id.is_empty() || framework.is_empty() { return Json(serde_json::json!({"ok": false, "error": "framework and control_id are required"})).into_response(); }
+    let eid = format!("ev-{}", rand_hex(6));
+    match store.add_evidence(&eid, &id, &framework, &control_id, &g("title"), &g("source"), &g("owner"), n("produced_ms"), n("valid_until_ms"), &g("artefact_ref"), &g("note"), &tenant, now_ms() as i64).await {
+        Ok(()) => Json(serde_json::json!({"ok": true, "id": eid})).into_response(),
+        Err(e) => Json(serde_json::json!({"ok": false, "error": e})).into_response(),
+    }
+}
+
+/// GET /systems/:id/evidence: the evidence register for a system.
+pub(crate) async fn evidence_list(State(st): State<Arc<AppState>>, headers: HeaderMap, Path(id): Path<String>) -> Response {
+    let tenant = tenant_of(&headers, &None);
+    let store = match store_or(&st) { Ok(s) => s, Err(r) => return r };
+    let ev = store.list_evidence(&id, &tenant).await.unwrap_or_default();
+    let now = now_ms() as i64;
+    let rows: Vec<serde_json::Value> = ev.iter().map(|e| {
+        let fresh = e.valid_until_ms == 0 || e.valid_until_ms > now;
+        serde_json::json!({"id": e.id, "framework": e.framework, "control_id": e.control_id, "title": e.title, "source": e.source, "owner": e.owner, "produced_ms": e.produced_ms, "valid_until_ms": e.valid_until_ms, "fresh": fresh})
+    }).collect();
+    Json(serde_json::json!({"evidence": rows})).into_response()
+}
+
 /// Map a SoA status string to a conformity state.
 fn status_conformity(status: &str, applicable: bool) -> acp_core::conformance::Conformity {
     use acp_core::conformance::Conformity::*;
@@ -137,24 +169,73 @@ fn status_conformity(status: &str, applicable: bool) -> acp_core::conformance::C
 }
 
 /// GET /systems/:id/report/:framework: the framework conformance report for one system, graded from its
-/// persisted Statement of Applicability (falling back to the computed applicability where no SoA entry
-/// exists yet). This is the audit-grade, system-anchored report.
+/// persisted Statement of Applicability, with two audit-P1 rules applied: evidence FRESHNESS gates a
+/// "conformant" grade (a control claimed implemented but lacking fresh evidence drops to partial), and
+/// the control CROSSWALK propagates satisfaction (a control is satisfied via crosswalk when a mapped
+/// control in another framework is itself satisfied with fresh evidence for this system).
 pub(crate) async fn system_report(State(st): State<Arc<AppState>>, headers: HeaderMap, Path((id, framework)): Path<(String, String)>) -> Response {
     let tenant = tenant_of(&headers, &None);
     let store = match store_or(&st) { Ok(s) => s, Err(r) => return r };
     let sys = match store.get_system(&id, &tenant).await { Ok(Some(s)) => s, Ok(None) => return Json(serde_json::json!({"error": "system not found"})).into_response(), Err(e) => return Json(serde_json::json!({"error": e})).into_response() };
     let profile = system_profile(store, &sys, &tenant).await;
-    let stored: std::collections::HashMap<String, crate::store::SoaEntry> = store.list_soa(&id, &framework, &tenant).await.unwrap_or_default().into_iter().map(|e| (e.control_id.clone(), e)).collect();
+    let now = now_ms() as i64;
+
+    // Evidence freshness per (framework, control): fresh if any evidence has no expiry or expires later.
+    let mut fresh: std::collections::HashSet<(String, String)> = std::collections::HashSet::new();
+    for e in store.list_evidence(&id, &tenant).await.unwrap_or_default() {
+        if e.valid_until_ms == 0 || e.valid_until_ms > now { fresh.insert((e.framework.clone(), e.control_id.clone())); }
+    }
+    // All SoA across frameworks for this system.
+    let all_soa = store.list_all_soa(&id, &tenant).await.unwrap_or_default();
+    let mut soa_map: std::collections::HashMap<(String, String), crate::store::SoaEntry> = std::collections::HashMap::new();
+    for e in all_soa { soa_map.insert((e.framework.clone(), e.control_id.clone()), e); }
+    // A control is "satisfied" iff SoA marks it applicable + conformant-ish AND it has fresh evidence.
+    let conformant_status = |s: &str| matches!(s, "implemented" | "done" | "conformant");
+    let is_satisfied = |fw: &str, cid: &str| -> bool {
+        match soa_map.get(&(fw.to_string(), cid.to_string())) {
+            Some(e) => e.applicable && conformant_status(&e.status) && fresh.contains(&(fw.to_string(), cid.to_string())),
+            None => false,
+        }
+    };
+    // Symmetric crosswalk adjacency.
+    let mut adj: std::collections::HashMap<(String, String), Vec<(String, String)>> = std::collections::HashMap::new();
+    for (a, b) in acp_core::controls::crosswalk_edges() {
+        adj.entry(a.clone()).or_default().push(b.clone());
+        adj.entry(b).or_default().push(a);
+    }
+
     use acp_core::conformance::{Conformity, ControlAssessment, summarise};
     let rows: Vec<ControlAssessment> = acp_core::controls::for_framework(&framework).into_iter().map(|c| {
+        let key = (framework.clone(), c.id.clone());
         let (computed_applies, why) = acp_core::conformance::applies(&c, &profile);
-        let (applicable, conformity, reason) = match stored.get(&c.id) {
-            Some(e) => (e.applicable, status_conformity(&e.status, e.applicable), if e.applicable { String::new() } else { e.justification.clone() }),
-            None => (computed_applies, if computed_applies { Conformity::NotAssessed } else { Conformity::NotApplicable }, why),
+        let soa = soa_map.get(&key);
+        let applicable = soa.map(|e| e.applicable).unwrap_or(computed_applies);
+        let mut exclusion = if applicable { String::new() } else { soa.map(|e| e.justification.clone()).unwrap_or(why) };
+        let conformity = if !applicable {
+            Conformity::NotApplicable
+        } else if is_satisfied(&framework, &c.id) {
+            Conformity::Conformant
+        } else if let Some(entry) = soa {
+            if conformant_status(&entry.status) {
+                // claimed implemented but no fresh evidence -> freshness gate
+                exclusion = "claimed implemented but no fresh evidence".to_string();
+                Conformity::Partial
+            } else {
+                // crosswalk: satisfied elsewhere?
+                match adj.get(&key).and_then(|ns| ns.iter().find(|(fw, cid)| is_satisfied(fw, cid))) {
+                    Some((fw, cid)) => { exclusion = format!("satisfied via crosswalk: {fw}:{cid}"); Conformity::Conformant }
+                    None => status_conformity(&entry.status, true),
+                }
+            }
+        } else {
+            match adj.get(&key).and_then(|ns| ns.iter().find(|(fw, cid)| is_satisfied(fw, cid))) {
+                Some((fw, cid)) => { exclusion = format!("satisfied via crosswalk: {fw}:{cid}"); Conformity::Conformant }
+                None => Conformity::NotAssessed,
+            }
         };
         ControlAssessment {
             framework: c.framework, control_id: c.id, title: c.title, reference: c.reference,
-            obligation_type: c.obligation_type, applicable, conformity, exclusion_reason: reason,
+            obligation_type: c.obligation_type, applicable, conformity, exclusion_reason: exclusion,
         }
     }).collect();
     let summary = summarise(&rows);
