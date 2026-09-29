@@ -44,8 +44,8 @@ const groups = [
     <nav class="py-3">
       <div v-for="g in groups" :key="g.label" class="mb-4">
         <div class="px-4 pb-1.5 text-[10px] uppercase tracking-widest text-muted font-semibold">{{ g.label }}</div>
-        <RouterLink v-for="it in g.items" :key="it.to" :to="it.to" custom v-slot="{ isActive, navigate }">
-          <a :href="it.to" @click.prevent="navigate"
+        <RouterLink v-for="it in g.items" :key="it.to" :to="it.to" custom v-slot="{ href, isActive, navigate }">
+          <a :href="href" @click="navigate"
              class="flex items-center gap-2.5 px-4 py-2 text-[13px] border-l-2 transition cursor-pointer"
              :class="isActive ? 'border-accent bg-accent/10 text-txt' : 'border-transparent text-dim hover:text-txt hover:bg-panel2/60'">
             <component :is="it.icon" :size="16" />
