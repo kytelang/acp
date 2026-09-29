@@ -289,3 +289,34 @@ pub(crate) async fn system_audit(State(st): State<Arc<AppState>>, headers: Heade
     let rows = store.list_audit(&id, &tenant, 500).await.unwrap_or_default();
     Json(serde_json::json!({"audit": rows})).into_response()
 }
+
+/// POST /systems/:id/delete (EditGrc): delete a system and cascade its roles/SoA/evidence/audit.
+pub(crate) async fn system_delete(State(st): State<Arc<AppState>>, headers: HeaderMap, Path(id): Path<String>) -> Response {
+    let principal = match authorize(&st.auth, &headers, acp_core::auth::Capability::EditGrc) { Ok(p) => p, Err(r) => return r };
+    let tenant = tenant_of(&headers, &None);
+    let store = match store_or(&st) { Ok(s) => s, Err(r) => return r };
+    match store.delete_system(&id, &tenant).await { Ok(()) => { audit(&st, &id, "system-deleted", &actor_of(&principal), "", &tenant).await; Json(serde_json::json!({"ok": true})).into_response() }, Err(e) => Json(serde_json::json!({"ok": false, "error": e})).into_response() }
+}
+
+/// POST /systems/:id/update (EditGrc). Body: same fields as create.
+pub(crate) async fn system_update(State(st): State<Arc<AppState>>, headers: HeaderMap, Path(id): Path<String>, Json(body): Json<serde_json::Value>) -> Response {
+    let principal = match authorize(&st.auth, &headers, acp_core::auth::Capability::EditGrc) { Ok(p) => p, Err(r) => return r };
+    let tenant = tenant_of(&headers, &None);
+    let store = match store_or(&st) { Ok(s) => s, Err(r) => return r };
+    let sys = match store.get_system(&id, &tenant).await { Ok(Some(s)) => s, Ok(None) => return Json(serde_json::json!({"ok": false, "error": "unknown system"})).into_response(), Err(e) => return Json(serde_json::json!({"ok": false, "error": e})).into_response() };
+    let g = |k: &str, d: &str| body.get(k).and_then(|v| v.as_str()).map(|s| s.trim().to_string()).unwrap_or_else(|| d.to_string());
+    let jurisdictions = body.get("jurisdictions").cloned().map(|v| v.to_string()).unwrap_or(sys.jurisdictions.clone());
+    let lifecycle = g("lifecycle_state", &sys.lifecycle_state);
+    match store.update_system(&id, &g("name", &sys.name), &g("purpose", &sys.purpose), &g("owner", &sys.owner), &lifecycle, &g("risk_tier", &sys.risk_tier), &g("sector", &sys.sector), &g("asset_type", &sys.asset_type), &jurisdictions, &tenant, now_ms() as i64).await {
+        Ok(()) => { audit(&st, &id, "system-updated", &actor_of(&principal), &g("name", &sys.name), &tenant).await; Json(serde_json::json!({"ok": true})).into_response() }
+        Err(e) => Json(serde_json::json!({"ok": false, "error": e})).into_response(),
+    }
+}
+
+/// POST /systems/:id/roles/:rid/delete (EditGrc).
+pub(crate) async fn role_delete(State(st): State<Arc<AppState>>, headers: HeaderMap, Path((id, rid)): Path<(String, String)>) -> Response {
+    let principal = match authorize(&st.auth, &headers, acp_core::auth::Capability::EditGrc) { Ok(p) => p, Err(r) => return r };
+    let tenant = tenant_of(&headers, &None);
+    let store = match store_or(&st) { Ok(s) => s, Err(r) => return r };
+    match store.delete_role(&rid, &tenant).await { Ok(()) => { audit(&st, &id, "role-removed", &actor_of(&principal), &rid, &tenant).await; Json(serde_json::json!({"ok": true})).into_response() }, Err(e) => Json(serde_json::json!({"ok": false, "error": e})).into_response() }
+}

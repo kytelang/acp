@@ -160,3 +160,19 @@ pub(crate) async fn model_fairness(State(st): State<Arc<AppState>>, headers: Hea
         Err(e) => Json(serde_json::json!({"ok": false, "error": e})).into_response(),
     }
 }
+
+/// POST /models/:id/delete and /models/:id/update (AppRegistrar).
+pub(crate) async fn model_delete(State(st): State<Arc<AppState>>, headers: HeaderMap, Path(id): Path<String>) -> Response {
+    if let Err(r) = authorize(&st.auth, &headers, acp_core::auth::Capability::RegisterApp) { return r; }
+    let tenant = tenant_of(&headers, &None);
+    let store = match &st.store { Some(s) => s, None => return Json(serde_json::json!({"ok": false, "error": "no --store configured"})).into_response() };
+    match store.delete_model(&id, &tenant).await { Ok(()) => Json(serde_json::json!({"ok": true})).into_response(), Err(e) => Json(serde_json::json!({"ok": false, "error": e})).into_response() }
+}
+pub(crate) async fn model_update(State(st): State<Arc<AppState>>, headers: HeaderMap, Path(id): Path<String>, Json(body): Json<serde_json::Value>) -> Response {
+    if let Err(r) = authorize(&st.auth, &headers, acp_core::auth::Capability::RegisterApp) { return r; }
+    let tenant = tenant_of(&headers, &None);
+    let store = match &st.store { Some(s) => s, None => return Json(serde_json::json!({"ok": false, "error": "no --store configured"})).into_response() };
+    let g = |k: &str| body.get(k).and_then(|v| v.as_str()).unwrap_or("").to_string();
+    let card = body.get("card").map(|v| v.to_string()).unwrap_or_else(|| "{}".to_string());
+    match store.update_model(&id, &g("name"), &g("provider"), &g("version"), &card, &tenant).await { Ok(()) => Json(serde_json::json!({"ok": true})).into_response(), Err(e) => Json(serde_json::json!({"ok": false, "error": e})).into_response() }
+}

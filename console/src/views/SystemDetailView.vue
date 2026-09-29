@@ -60,6 +60,10 @@ async function saveSoa() {
   try { await post(`/systems/${id}/soa/${framework.value}`, { entries }, 'GrcAuthor'); msg.value = 'Statement of Applicability saved.'; await loadSoa(); await loadSystem() }
   catch (e) { err.value = String(e.message || e) }
 }
+async function delRole(r) {
+  if (!confirm(`Remove role "${r.role}${r.jurisdiction ? ' / ' + r.jurisdiction : ''}"?`)) return
+  try { await post(`/systems/${id}/roles/${r.id}/delete`, {}, 'GrcAuthor'); await loadSystem() } catch (e) { err.value = String(e.message || e) }
+}
 async function addRole() {
   err.value = ''
   if (!roleForm.value.role) return
@@ -88,13 +92,14 @@ onMounted(async () => { await loadSystem(); await loadFrameworks(); await loadSo
     </Card>
 
     <Card title="Roles" subtitle="the role you play per jurisdiction (drives applicability)">
-      <DataTable :columns="['Role','Jurisdiction','Market date']">
+      <DataTable :columns="['Role','Jurisdiction','Market date','']">
         <tr v-for="r in roles" :key="r.id" class="border-b border-line/60">
           <td class="py-2 pr-4"><Badge kind="ver">{{ r.role }}</Badge></td>
           <td class="py-2 pr-4">{{ r.jurisdiction || '-' }}</td>
           <td class="py-2 pr-4 text-dim">{{ r.market_date || '-' }}</td>
+          <td class="py-2 pr-4 text-right"><button class="text-dim hover:text-bad p-1" title="Remove role" @click="delRole(r)">&times;</button></td>
         </tr>
-        <tr v-if="!roles.length"><td colspan="3" class="py-4 text-center text-dim">No roles declared.</td></tr>
+        <tr v-if="!roles.length"><td colspan="4" class="py-4 text-center text-dim">No roles declared.</td></tr>
       </DataTable>
       <div class="grid sm:grid-cols-[1fr_1fr_auto] gap-2 items-end mt-3">
         <label class="text-xs text-dim">Role

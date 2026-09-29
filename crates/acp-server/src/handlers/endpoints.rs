@@ -140,3 +140,12 @@ pub(crate) async fn endpoints_register(
     }
     Json(serde_json::json!({"ok": true, "endpoint": endpoint, "provider": provider, "kind": kind})).into_response()
 }
+
+/// POST /endpoints/delete (EditPolicy). Body: {endpoint}. The endpoint host is the key.
+pub(crate) async fn endpoint_delete(State(st): State<Arc<AppState>>, headers: HeaderMap, Json(body): Json<serde_json::Value>) -> Response {
+    if let Err(r) = authorize(&st.auth, &headers, acp_core::auth::Capability::EditPolicy) { return r; }
+    let store = match &st.store { Some(s) => s, None => return Json(serde_json::json!({"ok": false, "error": "no --store configured"})).into_response() };
+    let endpoint = body.get("endpoint").and_then(|v| v.as_str()).unwrap_or("").trim().to_string();
+    if endpoint.is_empty() { return Json(serde_json::json!({"ok": false, "error": "endpoint is required"})).into_response(); }
+    match store.delete_endpoint(&endpoint).await { Ok(()) => Json(serde_json::json!({"ok": true})).into_response(), Err(e) => Json(serde_json::json!({"ok": false, "error": e})).into_response() }
+}

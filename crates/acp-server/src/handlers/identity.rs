@@ -148,6 +148,37 @@ pub(crate) async fn principal_register(State(st): State<Arc<AppState>>, headers:
     }
 }
 
+/// POST /apps/:id/delete and /apps/:id/update (AppRegistrar).
+pub(crate) async fn app_delete(State(st): State<Arc<AppState>>, headers: HeaderMap, Path(id): Path<String>) -> Response {
+    if let Err(r) = authorize(&st.auth, &headers, acp_core::auth::Capability::RegisterApp) { return r; }
+    let tenant = tenant_of(&headers, &None);
+    let store = match &st.store { Some(s) => s, None => return Json(serde_json::json!({"ok": false, "error": "no --store configured"})).into_response() };
+    match store.delete_app(&id, &tenant).await { Ok(()) => Json(serde_json::json!({"ok": true})).into_response(), Err(e) => Json(serde_json::json!({"ok": false, "error": e})).into_response() }
+}
+pub(crate) async fn app_update(State(st): State<Arc<AppState>>, headers: HeaderMap, Path(id): Path<String>, Json(body): Json<serde_json::Value>) -> Response {
+    if let Err(r) = authorize(&st.auth, &headers, acp_core::auth::Capability::RegisterApp) { return r; }
+    let tenant = tenant_of(&headers, &None);
+    let store = match &st.store { Some(s) => s, None => return Json(serde_json::json!({"ok": false, "error": "no --store configured"})).into_response() };
+    let g = |k: &str| body.get(k).and_then(|v| v.as_str()).unwrap_or("").to_string();
+    let metadata = body.get("metadata").map(|v| v.to_string()).unwrap_or_else(|| "{}".to_string());
+    match store.update_app(&id, &g("name"), &g("owner"), &metadata, &tenant).await { Ok(()) => Json(serde_json::json!({"ok": true})).into_response(), Err(e) => Json(serde_json::json!({"ok": false, "error": e})).into_response() }
+}
+/// POST /agents/:id/delete and /agents/:id/update (AppRegistrar).
+pub(crate) async fn agent_delete(State(st): State<Arc<AppState>>, headers: HeaderMap, Path(id): Path<String>) -> Response {
+    if let Err(r) = authorize(&st.auth, &headers, acp_core::auth::Capability::RegisterAgent) { return r; }
+    let tenant = tenant_of(&headers, &None);
+    let store = match &st.store { Some(s) => s, None => return Json(serde_json::json!({"ok": false, "error": "no --store configured"})).into_response() };
+    match store.delete_agent(&id, &tenant).await { Ok(()) => Json(serde_json::json!({"ok": true})).into_response(), Err(e) => Json(serde_json::json!({"ok": false, "error": e})).into_response() }
+}
+pub(crate) async fn agent_update(State(st): State<Arc<AppState>>, headers: HeaderMap, Path(id): Path<String>, Json(body): Json<serde_json::Value>) -> Response {
+    if let Err(r) = authorize(&st.auth, &headers, acp_core::auth::Capability::RegisterAgent) { return r; }
+    let tenant = tenant_of(&headers, &None);
+    let store = match &st.store { Some(s) => s, None => return Json(serde_json::json!({"ok": false, "error": "no --store configured"})).into_response() };
+    let g = |k: &str| body.get(k).and_then(|v| v.as_str()).unwrap_or("").to_string();
+    let metadata = body.get("metadata").map(|v| v.to_string()).unwrap_or_else(|| "{}".to_string());
+    match store.update_agent(&id, &g("name"), &g("owner"), &metadata, &tenant).await { Ok(()) => Json(serde_json::json!({"ok": true})).into_response(), Err(e) => Json(serde_json::json!({"ok": false, "error": e})).into_response() }
+}
+
 /// POST /agents/resolve-key: resolve an agent's authenticated identity from its per-agent virtual key
 /// alone (audit P0 F1). Unauthenticated because the key IS the credential; a wrong key returns
 /// verified:false. Used by the LLM gateway to bind a call to a verified agent+app instead of a

@@ -330,6 +330,45 @@ impl ControlStore {
         Ok(())
     }
 
+    // ---- Edit / delete (audit-friendly CRUD for the console) ----
+    pub async fn delete_app(&self, id: &str, tenant: &str) -> Result<(), String> {
+        sqlx::query(&self.ph("DELETE FROM apps WHERE id = ? AND tenant_id = ?")).bind(id).bind(tenant).execute(&self.pool).await.map_err(|e| e.to_string())?; Ok(())
+    }
+    pub async fn update_app(&self, id: &str, name: &str, owner: &str, metadata_json: &str, tenant: &str) -> Result<(), String> {
+        sqlx::query(&self.ph("UPDATE apps SET name = ?, owner = ?, metadata_json = ? WHERE id = ? AND tenant_id = ?")).bind(name).bind(owner).bind(metadata_json).bind(id).bind(tenant).execute(&self.pool).await.map_err(|e| e.to_string())?; Ok(())
+    }
+    pub async fn delete_agent(&self, id: &str, tenant: &str) -> Result<(), String> {
+        sqlx::query(&self.ph("DELETE FROM agents WHERE id = ? AND tenant_id = ?")).bind(id).bind(tenant).execute(&self.pool).await.map_err(|e| e.to_string())?; Ok(())
+    }
+    pub async fn update_agent(&self, id: &str, name: &str, owner: &str, metadata_json: &str, tenant: &str) -> Result<(), String> {
+        sqlx::query(&self.ph("UPDATE agents SET name = ?, owner = ?, metadata_json = ? WHERE id = ? AND tenant_id = ?")).bind(name).bind(owner).bind(metadata_json).bind(id).bind(tenant).execute(&self.pool).await.map_err(|e| e.to_string())?; Ok(())
+    }
+    pub async fn delete_model(&self, id: &str, tenant: &str) -> Result<(), String> {
+        sqlx::query(&self.ph("DELETE FROM models WHERE id = ? AND tenant_id = ?")).bind(id).bind(tenant).execute(&self.pool).await.map_err(|e| e.to_string())?; Ok(())
+    }
+    pub async fn update_model(&self, id: &str, name: &str, provider: &str, version: &str, card_json: &str, tenant: &str) -> Result<(), String> {
+        sqlx::query(&self.ph("UPDATE models SET name = ?, provider = ?, version = ?, card_json = ? WHERE id = ? AND tenant_id = ?")).bind(name).bind(provider).bind(version).bind(card_json).bind(id).bind(tenant).execute(&self.pool).await.map_err(|e| e.to_string())?; Ok(())
+    }
+    pub async fn delete_endpoint(&self, endpoint: &str) -> Result<(), String> {
+        sqlx::query(&self.ph("DELETE FROM endpoints WHERE endpoint = ?")).bind(endpoint).execute(&self.pool).await.map_err(|e| e.to_string())?; Ok(())
+    }
+    /// Delete a system and cascade its roles, SoA entries, evidence and audit trail.
+    pub async fn delete_system(&self, id: &str, tenant: &str) -> Result<(), String> {
+        for t in ["system_roles", "soa_entries", "evidence"] {
+            let _ = sqlx::query(&self.ph(&format!("DELETE FROM {t} WHERE system_id = ? AND tenant_id = ?"))).bind(id).bind(tenant).execute(&self.pool).await;
+        }
+        let _ = sqlx::query(&self.ph("DELETE FROM grc_audit WHERE entity_id = ? AND tenant_id = ?")).bind(id).bind(tenant).execute(&self.pool).await;
+        sqlx::query(&self.ph("DELETE FROM ai_systems WHERE id = ? AND tenant_id = ?")).bind(id).bind(tenant).execute(&self.pool).await.map_err(|e| e.to_string())?; Ok(())
+    }
+    #[allow(clippy::too_many_arguments)]
+    pub async fn update_system(&self, id: &str, name: &str, purpose: &str, owner: &str, lifecycle: &str, risk_tier: &str, sector: &str, asset_type: &str, jurisdictions_json: &str, tenant: &str, now_ms: i64) -> Result<(), String> {
+        sqlx::query(&self.ph("UPDATE ai_systems SET name = ?, purpose = ?, owner = ?, lifecycle_state = ?, risk_tier = ?, sector = ?, asset_type = ?, jurisdictions = ?, updated_ms = ? WHERE id = ? AND tenant_id = ?"))
+            .bind(name).bind(purpose).bind(owner).bind(lifecycle).bind(risk_tier).bind(sector).bind(asset_type).bind(jurisdictions_json).bind(now_ms).bind(id).bind(tenant).execute(&self.pool).await.map_err(|e| e.to_string())?; Ok(())
+    }
+    pub async fn delete_role(&self, id: &str, tenant: &str) -> Result<(), String> {
+        sqlx::query(&self.ph("DELETE FROM system_roles WHERE id = ? AND tenant_id = ?")).bind(id).bind(tenant).execute(&self.pool).await.map_err(|e| e.to_string())?; Ok(())
+    }
+
     pub async fn deactivate_agent(&self, id: &str) -> Result<(), String> {
         let sql = self.ph("UPDATE agents SET active = 0 WHERE id = ?");
         sqlx::query(&sql).bind(id).execute(&self.pool).await.map_err(|e| e.to_string())?;
