@@ -113,8 +113,9 @@ async fn control_service_inbox_and_endpoints() {
         "ok"
     );
 
-    // inbox shows the pending approval's tool
-    let inbox = c.get(&base).send().await.unwrap().text().await.unwrap();
+    // inbox shows the pending approval's tool (the legacy maud inbox moved to /inbox when `/` became
+    // the Vue console SPA entry)
+    let inbox = c.get(format!("{base}/inbox")).send().await.unwrap().text().await.unwrap();
     assert!(
         inbox.contains("payments.charge"),
         "inbox must list the pending approval"

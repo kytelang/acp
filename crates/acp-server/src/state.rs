@@ -55,5 +55,6 @@ pub(crate) struct AppState {
     pub(crate) approval_sla_ms: i64,
     pub(crate) escalated: std::sync::Mutex<std::collections::HashSet<String>>,
     pub(crate) lease: std::sync::Mutex<(bool, String, i64)>,
+    pub(crate) console_dir: Option<String>,
 }
 

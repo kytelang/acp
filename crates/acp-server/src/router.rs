@@ -3,7 +3,7 @@
 
 use crate::state::AppState;
 use crate::handlers::{
-    packs::*, models::*, identity::*, approvals::*, policy::*, firewall::*, endpoints::*, grc::*, assurance::*, monitoring::*, evidence::*, reports::*, tickets::*, breakglass::*,
+    packs::*, models::*, identity::*, approvals::*, policy::*, firewall::*, endpoints::*, grc::*, assurance::*, monitoring::*, evidence::*, reports::*, tickets::*, breakglass::*, console::*,
 };
 use crate::auth::dev_token;
 use axum::{routing::{get, post}, Router};
@@ -12,7 +12,8 @@ use std::sync::Arc;
 /// Build the fully-wired axum router with every route and the shared application state.
 pub(crate) fn build_router(state: Arc<AppState>) -> Router {
     Router::new()
-            .route("/", get(inbox))
+            .route("/", get(spa_index))
+            .route("/inbox", get(inbox))
             .route("/healthz", get(|| async { "ok" }))
             .route("/readyz", get(|| async { "ready" }))
             .route("/approvals/register", post(approval_register))
@@ -113,5 +114,6 @@ pub(crate) fn build_router(state: Arc<AppState>) -> Router {
         .route("/principal/groups", get(principal_groups))
             .route("/scim/v2/Groups", get(scim_groups))
             .route("/auth/dev-token", get(dev_token))
-        .with_state(state)
+        .fallback(spa_fallback)
+            .with_state(state)
 }

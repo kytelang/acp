@@ -73,6 +73,8 @@ pub(crate) struct Config {
     #[serde(skip)]
     pub(crate) entra_preflight: bool,
     pub(crate) entra_test_token: Option<String>,
+    /// Directory of the built Vue console (index.html + assets). Served by the SPA fallback.
+    pub(crate) console_dir: Option<String>,
 }
 
 impl Default for Config {
@@ -122,6 +124,7 @@ impl Default for Config {
             lease_ttl_ms: default_lease_ttl(),
             entra_preflight: false,
             entra_test_token: None,
+            console_dir: None,
         }
     }
 }
@@ -237,11 +240,23 @@ impl Config {
                 "--tls-cert" => c.tls_cert = it.next().cloned(),
                 "--tls-key" => c.tls_key = it.next().cloned(),
                 "--break-glass-key" => c.break_glass_key = it.next().cloned(),
+                "--console" => c.console_dir = it.next().cloned(),
                 other => {
                     tracing::warn!("unknown option '{other}'");
                     std::process::exit(2);
                 }
             }
+        }
+
+        // Resolve the console directory: explicit flag/yaml wins, else ACP_CONSOLE_DIR, else the
+        // conventional ./console/dist if it has been built. Serving is skipped when none is found.
+        if c.console_dir.is_none() {
+            if let Ok(d) = std::env::var("ACP_CONSOLE_DIR") {
+                if !d.is_empty() { c.console_dir = Some(d); }
+            }
+        }
+        if c.console_dir.is_none() && std::path::Path::new("console/dist/index.html").exists() {
+            c.console_dir = Some("console/dist".to_string());
         }
 
         // Decode the break-glass seed (a 32-byte hex value, or an env:/file: secret reference) once,

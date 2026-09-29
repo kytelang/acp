@@ -44,13 +44,13 @@ pub(crate) async fn inbox(State(st): State<Arc<AppState>>) -> Html<String> {
 pub(crate) async fn approve(State(st): State<Arc<AppState>>, headers: HeaderMap, Path(id): Path<String>) -> Response {
     let principal = match authorize(&st.auth, &headers, acp_core::auth::Capability::Approve) { Ok(p) => p, Err(r) => return r };
     resolve(&st, &id, true, &actor_of(&principal));
-    Redirect::to("/").into_response()
+    Redirect::to("/inbox").into_response()
 }
 
 pub(crate) async fn deny(State(st): State<Arc<AppState>>, headers: HeaderMap, Path(id): Path<String>) -> Response {
     let principal = match authorize(&st.auth, &headers, acp_core::auth::Capability::Approve) { Ok(p) => p, Err(r) => return r };
     resolve(&st, &id, false, &actor_of(&principal));
-    Redirect::to("/").into_response()
+    Redirect::to("/inbox").into_response()
 }
 
 pub(crate) fn resolve(st: &AppState, id: &str, ok: bool, actor: &str) {
