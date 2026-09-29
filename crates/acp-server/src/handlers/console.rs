@@ -54,6 +54,20 @@ fn serve(st: &Arc<AppState>, path: &str) -> Response {
     }
 }
 
+/// Serve a specific static asset file (for example /main.js, /main.css) with the right content type.
+/// Unlike the SPA fallback this does NOT fall back to index.html: a missing asset is a real 404, so a
+/// bad asset URL never returns an HTML page with a 200.
+pub(crate) async fn asset(State(st): State<Arc<AppState>>, uri: Uri) -> Response {
+    let dir = match &st.console_dir {
+        Some(d) => d,
+        None => return (StatusCode::NOT_FOUND, "console not built").into_response(),
+    };
+    match read_under(dir, uri.path()) {
+        Some((ct, bytes)) => ([(header::CONTENT_TYPE, ct)], bytes).into_response(),
+        None => (StatusCode::NOT_FOUND, "not found").into_response(),
+    }
+}
+
 /// GET / -> the console entry (index.html).
 pub(crate) async fn spa_index(State(st): State<Arc<AppState>>) -> Response {
     serve(&st, "/")

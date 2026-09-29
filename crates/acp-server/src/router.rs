@@ -13,6 +13,11 @@ use std::sync::Arc;
 pub(crate) fn build_router(state: Arc<AppState>) -> Router {
     Router::new()
             .route("/", get(spa_index))
+            // The Vue console assets (flat, stable filenames from console/dist). Deep links like
+            // /overview are handled by the SPA fallback below, which returns index.html.
+            .route("/main.js", get(asset))
+            .route("/main.css", get(asset))
+            .route("/favicon.svg", get(asset))
             .route("/inbox", get(inbox))
             .route("/healthz", get(|| async { "ok" }))
             .route("/readyz", get(|| async { "ready" }))
