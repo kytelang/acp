@@ -122,6 +122,22 @@ pub(crate) async fn agents(State(st): State<Arc<AppState>>, headers: HeaderMap) 
     }
 }
 
+/// POST /agents/resolve-key: resolve an agent's authenticated identity from its per-agent virtual key
+/// alone (audit P0 F1). Unauthenticated because the key IS the credential; a wrong key returns
+/// verified:false. Used by the LLM gateway to bind a call to a verified agent+app instead of a
+/// spoofable header.
+pub(crate) async fn agent_resolve_key(State(st): State<Arc<AppState>>, Json(body): Json<serde_json::Value>) -> Response {
+    let store = match &st.store { Some(s) => s, None => return Json(serde_json::json!({"ok": false, "error": "no --store configured"})).into_response() };
+    let key = body.get("key").and_then(|v| v.as_str()).unwrap_or("");
+    if key.is_empty() { return Json(serde_json::json!({"ok": false, "error": "key is required"})).into_response(); }
+    let token_sha = acp_core::canonical::sha256_hex_bytes(key.as_bytes());
+    match store.resolve_agent_by_token_sha(&token_sha).await {
+        Ok(Some((agent_id, name, app_id, tenant))) => Json(serde_json::json!({"ok": true, "verified": true, "agent_id": agent_id, "name": name, "app_id": app_id, "tenant": tenant})).into_response(),
+        Ok(None) => Json(serde_json::json!({"ok": true, "verified": false})).into_response(),
+        Err(e) => Json(serde_json::json!({"ok": false, "error": e})).into_response(),
+    }
+}
+
 /// POST /agents/verify: the enforcement path verifies an agent by id + token against the store, so a
 /// DB-registered agent is honoured without a registry file. Returns the display identity when valid.
 /// Ungated: it only confirms a token the caller already holds.

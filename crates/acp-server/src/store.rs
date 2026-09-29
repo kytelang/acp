@@ -382,6 +382,19 @@ impl ControlStore {
     /// Verify an agent by token hash and return its display identity (agent name, app id, app name)
     /// when active. Used by the enforcement path (the proxy) so DB-registered agents are honoured
     /// without a registry file.
+    /// Resolve an agent from its per-agent virtual key alone (the token issued at registration), for the
+    /// LLM-gateway path where a sanctioned agent presents only its key. Returns (agent_id, agent_name,
+    /// app_id, tenant) for the active agent whose token hash matches. Audit P0 F1.
+    pub async fn resolve_agent_by_token_sha(&self, token_sha256: &str) -> Result<Option<(String, String, String, String)>, String> {
+        let sql = self.ph("SELECT id, name, app_id, tenant_id FROM agents WHERE token_sha256 = ? AND active <> 0");
+        let row = sqlx::query(&sql).bind(token_sha256).fetch_optional(&self.pool).await.map_err(|e| e.to_string())?;
+        Ok(row.map(|r| {
+            let id: String = r.get("id"); let name: String = r.get("name");
+            let app_id: String = r.get("app_id"); let tenant: String = r.get("tenant_id");
+            (id, name, app_id, tenant)
+        }))
+    }
+
     pub async fn verify_agent_identity(&self, id: &str, token_sha256: &str) -> Result<Option<(String, String, String)>, String> {
         let sql = self.ph("SELECT a.name AS an, a.app_id AS aid, ap.name AS apn FROM agents a LEFT JOIN apps ap ON a.app_id = ap.id WHERE a.id = ? AND a.token_sha256 = ? AND a.active <> 0");
         let row = sqlx::query(&sql)
@@ -890,6 +903,11 @@ mod tests {
         let s = ControlStore::connect(url).await.expect("connect");
         s.add_app("app-1", "acme", "you", "{}", "default", 1000).await.unwrap();
         assert_eq!(s.list_apps("default").await.unwrap().len(), 1);
+        // Virtual-key resolution (audit P0 F1): an agent's token alone resolves its authenticated identity.
+        s.add_agent("agt-vk", "app-1", "triage", "sha-of-key", "you", "{}", "default", 1000).await.unwrap();
+        let vk = s.resolve_agent_by_token_sha("sha-of-key").await.unwrap();
+        assert_eq!(vk.as_ref().map(|(id, _, app, _)| (id.clone(), app.clone())), Some(("agt-vk".to_string(), "app-1".to_string())));
+        assert!(s.resolve_agent_by_token_sha("nope").await.unwrap().is_none());
         // Governance spine (audit P0): ai_system + roles + Statement of Applicability round-trip.
         s.add_system("sys-1", "resume-screener", "screen resumes", "hr", "development", "high", "hr", "", "[\"UK\"]", "default", 1000).await.unwrap();
         assert_eq!(s.list_systems("default").await.unwrap().len(), 1);

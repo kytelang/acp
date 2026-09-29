@@ -60,6 +60,9 @@ struct GwState {
     // B2: when set, the gateway checks each model response for groundedness against the request
     // context and blocks/flags below this threshold.
     groundedness_threshold: Option<f32>,
+    // Audit P0 F1: cache of per-agent virtual key -> (agent_id, app_id), resolved against the control
+    // plane so the caller identity is authenticated, not a spoofable header.
+    identity_cache: Mutex<HashMap<String, (String, String)>>,
 }
 
 #[tokio::main]
@@ -208,6 +211,7 @@ async fn main() -> std::process::ExitCode {
         budget_state,
         metrics: Metrics::default(),
         groundedness_threshold,
+        identity_cache: Mutex::new(HashMap::new()),
     });
     let upstream_log = st.upstream.clone();
     let app = Router::new()
@@ -426,6 +430,28 @@ fn now_ms() -> u64 {
         .unwrap_or(0)
 }
 
+/// Resolve an agent's authenticated identity from its per-agent virtual key against the control plane
+/// (audit P0 F1). Cached in-process. Returns (agent_id, app_id) for a valid key, None otherwise.
+async fn resolve_virtual_key(st: &GwState, key: &str) -> Option<(String, String)> {
+    if key.is_empty() { return None; }
+    if let Ok(cache) = st.identity_cache.lock() {
+        if let Some(v) = cache.get(key) { return Some(v.clone()); }
+    }
+    let base = st.report_url.clone()?; // the control-plane base
+    let url = format!("{}/agents/resolve-key", base.trim_end_matches('/'));
+    let resp = st.client.post(&url).json(&json!({"key": key})).send().await.ok()?;
+    let v: serde_json::Value = resp.json().await.ok()?;
+    if v.get("verified").and_then(|b| b.as_bool()).unwrap_or(false) {
+        let agent_id = v.get("agent_id").and_then(|x| x.as_str()).unwrap_or("").to_string();
+        let app_id = v.get("app_id").and_then(|x| x.as_str()).unwrap_or("").to_string();
+        if !app_id.is_empty() {
+            if let Ok(mut cache) = st.identity_cache.lock() { cache.insert(key.to_string(), (agent_id.clone(), app_id.clone())); }
+            return Some((agent_id, app_id));
+        }
+    }
+    None
+}
+
 async fn handle(
     State(st): State<Arc<GwState>>,
     axum::extract::Path(path): axum::extract::Path<String>,
@@ -444,9 +470,16 @@ async fn handle(
     let parsed: serde_json::Value = serde_json::from_slice(&body).unwrap_or(json!({}));
     let model = parsed.get("model").and_then(|v| v.as_str()).unwrap_or("");
 
-    // Subject: the calling app (an id header the caller cannot forge for policy is a future hardening;
-    // for now an explicit header) and the verified human principal from the bearer.
-    let app = headers.get("x-acp-app").and_then(|v| v.to_str().ok()).unwrap_or("unknown-app");
+    // Subject identity. Preferred: a per-agent virtual key (x-acp-agent-key) resolved and verified
+    // against the control plane, so the app/agent subject is authenticated, not a spoofable header
+    // (audit P0 F1). Fallback: the legacy x-acp-app header, marked unverified so policy can deny or
+    // step-up unattributed high-risk calls.
+    let vkey = headers.get("x-acp-agent-key").and_then(|v| v.to_str().ok()).unwrap_or("");
+    let (app_owned, agent_id, verified_identity) = match resolve_virtual_key(&st, vkey).await {
+        Some((agent, app_id)) => (app_id, agent, true),
+        None => (headers.get("x-acp-app").and_then(|v| v.to_str().ok()).unwrap_or("unknown-app").to_string(), String::new(), false),
+    };
+    let app = app_owned.as_str();
     let (principal, groups) = resolve_principal(&st, &headers).unwrap_or_else(|| ("unattributed".to_string(), Vec::new()));
 
     // A small, non-sensitive summary for policy matching. Never the prompt (that is a scan obligation).
@@ -476,7 +509,7 @@ async fn handle(
             let token = st.report_token.clone();
             let body = json!({
                 "kind": "deny", "verdict": "deny", "ts_ms": now_ms(), "proxy": st.proxy_id,
-                "agent": app, "tool": model, "resource": d.resource, "rule_id": d.rule_id,
+                "agent": if agent_id.is_empty() { app } else { agent_id.as_str() }, "verified_identity": verified_identity, "tool": model, "resource": d.resource, "rule_id": d.rule_id,
                 "impact": "model-call", "outcome": "blocked",
             }).to_string();
             let client = st.client.clone();

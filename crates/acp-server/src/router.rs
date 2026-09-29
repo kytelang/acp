@@ -70,6 +70,7 @@ pub(crate) fn build_router(state: Arc<AppState>) -> Router {
             .route("/firewall/rules/:id/delete", post(firewall_rules_delete))
             .route("/apps", post(app_register))
             .route("/agents", post(agent_register))
+            .route("/agents/resolve-key", post(agent_resolve_key))
             .route("/agents/:id/deactivate", post(agent_deactivate))
             .route("/agents/:id/auto-assess", post(agent_auto_assess))
         .route("/agent-config/:group", get(agent_config_get).post(agent_config_set))
