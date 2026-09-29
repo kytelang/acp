@@ -21,6 +21,9 @@ struct Cfg {
     report_url: Option<String>,
     report_token: Option<String>,
     proxy_id: String,
+    // F2: pinned public key of the workstation agents that may sign egress-identity assertions. When set,
+    // only assertions signed by this key are trusted; when None, any well-formed fresh assertion is used.
+    identity_pubkey: Option<String>,
     content: RwLock<ContentPolicy>,
     content_ml: RwLock<Option<std::sync::Arc<LinearScorer>>>,
     client: reqwest::Client,
@@ -33,13 +36,33 @@ fn now_ms() -> u64 {
     std::time::SystemTime::now().duration_since(std::time::UNIX_EPOCH).map(|d| d.as_millis() as u64).unwrap_or(0)
 }
 
-fn record(cfg: &Cfg, host: &str, action: &str, verdict: &str, rule: &Option<String>) {
+/// F2: extract and verify the caller identity from the request headers (x-acp-identity or
+/// Proxy-Authorization, carrying a signed egress-identity assertion). Returns (agent, principal), empty
+/// when absent or invalid, so an unattributed flow is visible to policy rather than silently trusted.
+fn extract_identity(cfg: &Cfg, headers: &str) -> (String, String) {
+    let hval = headers.lines().find_map(|l| {
+        let low = l.to_ascii_lowercase();
+        if low.starts_with("x-acp-identity:") || low.starts_with("proxy-authorization:") {
+            l.splitn(2, ':').nth(1).map(|v| v.trim().to_string())
+        } else { None }
+    });
+    let Some(hv) = hval else { return (String::new(), String::new()); };
+    let Some(id) = acp_core::egress::EgressIdentity::decode(&hv) else { return (String::new(), String::new()); };
+    let ok = match &cfg.identity_pubkey {
+        Some(pin) => id.verify_pinned(pin, now_ms(), 300_000),
+        None => id.verify(now_ms(), 300_000),
+    };
+    if ok { (id.agent, id.principal) } else { (String::new(), String::new()) }
+}
+
+fn record(cfg: &Cfg, host: &str, action: &str, verdict: &str, rule: &Option<String>, agent: &str, principal: &str) {
     // Report block decisions to the control plane so they appear in the console Violations feed.
     if verdict == "deny" {
         if let Some(base) = cfg.report_url.clone() {
             let token = cfg.report_token.clone();
             let body = serde_json::json!({
                 "kind": "deny", "verdict": "deny", "ts_ms": now_ms(), "proxy": cfg.proxy_id,
+                "agent": agent, "principal": {"id": principal, "verified": !principal.is_empty()},
                 "tool": host, "resource": host, "rule_id": rule, "impact": "egress", "outcome": action,
             }).to_string();
             let client = cfg.client.clone();
@@ -155,6 +178,7 @@ pub async fn run(args: Vec<String>) -> std::process::ExitCode {
     let mut firewall_url: Option<String> = None;
     let mut report_url: Option<String> = None;
     let mut report_token: Option<String> = None;
+    let mut identity_pubkey: Option<String> = None;
     let mut proxy_id: Option<String> = None;
     let mut it = args.iter().skip(1);
     while let Some(a) = it.next() {
@@ -175,6 +199,7 @@ pub async fn run(args: Vec<String>) -> std::process::ExitCode {
             "--report-url" => report_url = it.next().cloned(),
             "--report-token" => report_token = it.next().cloned(),
             "--proxy-id" => proxy_id = it.next().cloned(),
+            "--identity-pubkey" => identity_pubkey = it.next().cloned(),
             other => { tracing::warn!("unknown option '{other}'"); return std::process::ExitCode::from(2); }
         }
     }
@@ -227,6 +252,7 @@ pub async fn run(args: Vec<String>) -> std::process::ExitCode {
         report_url: report_url.clone(),
         report_token: report_token.clone(),
         proxy_id: proxy_id.clone().unwrap_or_else(|| "intercept".to_string()),
+        identity_pubkey: identity_pubkey.clone(),
         content: RwLock::new(ContentPolicy { block_injection: true, block_secrets, redact_pii: true, denied_topics: deny_topics, block_toxicity: false }),
         content_ml: RwLock::new(None),
         client: http.clone(),
@@ -360,6 +386,7 @@ async fn write_status(sock: &mut TcpStream, code: u16, reason: &str, body: &str)
 
 async fn handle(cfg: Arc<Cfg>, mut client: TcpStream) -> std::io::Result<()> {
     let (headers, leftover) = read_headers(&mut client).await?;
+    let (eg_agent, eg_principal) = extract_identity(&cfg, &headers);
     let first = headers.lines().next().unwrap_or("");
     let Some((method, target)) = parse_request_line(first) else {
         return write_status(&mut client, 400, "Bad Request", "malformed request line").await;
@@ -370,16 +397,16 @@ async fn handle(cfg: Arc<Cfg>, mut client: TcpStream) -> std::io::Result<()> {
             return write_status(&mut client, 400, "Bad Request", "bad CONNECT target").await;
         };
         if !cfg.allow_internal && acp_core::egress::is_internal_target(&host) {
-            record(&cfg, &host, "ssrf-block", "deny", &None);
+            record(&cfg, &host, "ssrf-block", "deny", &None, &eg_agent, &eg_principal);
             return write_status(&mut client, 403, "Forbidden", "SSRF: internal target blocked").await;
         }
         if bg_blocks(&cfg, &host) {
-            record(&cfg, &host, "break-glass", "deny", &None);
+            record(&cfg, &host, "break-glass", "deny", &None, &eg_agent, &eg_principal);
             return write_status(&mut client, 403, "Forbidden", "blocked by break-glass lockdown").await;
         }
         let decision = { cfg.registry.read().unwrap().evaluate(&host, "", port) };
         if decision.action == Action::Block {
-            record(&cfg, &host, "block", "deny", &decision.rule_id);
+            record(&cfg, &host, "block", "deny", &decision.rule_id, &eg_agent, &eg_principal);
             return write_status(&mut client, 403, "Forbidden", "blocked by endpoint policy").await;
         }
         // Phase 3: if TLS interception is enabled and this host needs the body, MITM it.
@@ -412,14 +439,14 @@ async fn handle(cfg: Arc<Cfg>, mut client: TcpStream) -> std::io::Result<()> {
                     mitm::MitmOutcome::HandshakeFailed(_) => "pinning-or-handshake-failed",
                     mitm::MitmOutcome::UpstreamFailed(_) => "upstream-failed",
                 };
-                record(&cfg, &host, "mitm", verdict, &decision.rule_id);
+                record(&cfg, &host, "mitm", verdict, &decision.rule_id, &eg_agent, &eg_principal);
                 return Ok(());
             }
         }
         // Phase 2: no MITM. A body-inspecting HTTPS host is tunnelled and flagged (inspection needs
         // phase 3). block/pass are fully enforced here.
         let verdict = if { cfg.registry.read().unwrap().should_decrypt(&host, port) } { "tunnel-uninspected" } else { "tunnel" };
-        record(&cfg, &host, "connect", verdict, &decision.rule_id);
+        record(&cfg, &host, "connect", verdict, &decision.rule_id, &eg_agent, &eg_principal);
         let mut upstream = match TcpStream::connect((host.as_str(), port)).await {
             Ok(u) => u,
             Err(_) => return write_status(&mut client, 502, "Bad Gateway", "upstream unreachable").await,
@@ -434,11 +461,11 @@ async fn handle(cfg: Arc<Cfg>, mut client: TcpStream) -> std::io::Result<()> {
         return write_status(&mut client, 400, "Bad Request", "only CONNECT or absolute-form http:// supported").await;
     };
     if !cfg.allow_internal && acp_core::egress::is_internal_target(&host) {
-        record(&cfg, &host, "ssrf-block", "deny", &None);
+        record(&cfg, &host, "ssrf-block", "deny", &None, &eg_agent, &eg_principal);
         return write_status(&mut client, 403, "Forbidden", "SSRF: internal target blocked").await;
     }
     if bg_blocks(&cfg, &host) {
-        record(&cfg, &host, "break-glass", "deny", &None);
+        record(&cfg, &host, "break-glass", "deny", &None, &eg_agent, &eg_principal);
         return write_status(&mut client, 403, "Forbidden", "blocked by break-glass lockdown").await;
     }
     let want = content_length(&headers);
@@ -453,7 +480,7 @@ async fn handle(cfg: Arc<Cfg>, mut client: TcpStream) -> std::io::Result<()> {
     }
     let decision = { cfg.registry.read().unwrap().evaluate(&host, &path, port) };
     if decision.action == Action::Block {
-        record(&cfg, &host, "block", "deny", &decision.rule_id);
+        record(&cfg, &host, "block", "deny", &decision.rule_id, &eg_agent, &eg_principal);
         return write_status(&mut client, 403, "Forbidden", "blocked by endpoint policy").await;
     }
     if decision.action.needs_body() {
@@ -465,12 +492,12 @@ async fn handle(cfg: Arc<Cfg>, mut client: TcpStream) -> std::io::Result<()> {
         };
         if cv.block {
             let kinds: Vec<String> = cv.findings.iter().map(|f| f.kind.clone()).collect();
-            record(&cfg, &host, "inspect", "deny", &decision.rule_id);
+            record(&cfg, &host, "inspect", "deny", &decision.rule_id, &eg_agent, &eg_principal);
             return write_status(&mut client, 403, "Forbidden", &format!("blocked by content firewall: {}", kinds.join(", "))).await;
         }
     }
     // Forward to origin.
-    record(&cfg, &host, &format!("{:?}", decision.action), "allow", &decision.rule_id);
+    record(&cfg, &host, &format!("{:?}", decision.action), "allow", &decision.rule_id, &eg_agent, &eg_principal);
     let url = format!("http://{host}:{port}{path}");
     let m = reqwest::Method::from_bytes(method.as_bytes()).unwrap_or(reqwest::Method::GET);
     let mut req = cfg.client.request(m, &url);

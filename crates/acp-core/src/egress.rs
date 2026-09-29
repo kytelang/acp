@@ -6,6 +6,11 @@
 //! default-deny allowlist plus a hard block on obviously-internal destinations. It is pure and
 //! host-based so it is unit-testable without a network.
 
+
+use crate::sign::{verify_ed25519, Signer};
+use serde::{Deserialize, Serialize};
+use serde_json::{json, Value};
+
 /// An allowlist of permitted egress hosts. Empty means deny-all (fail closed).
 #[derive(Debug, Default, Clone)]
 pub struct EgressPolicy {
@@ -97,7 +102,79 @@ pub fn evaluate_probes(probes: &[Probe]) -> CanaryResult {
     CanaryResult { breaches, contained }
 }
 
+/// Signed egress identity (audit F2). At a single shared egress proxy the raw flow carries only a
+/// workstation IP, not who is really making the call. The workstation-side agent signs a short-lived
+/// assertion of the agent it runs and the human principal it acts for; the egress proxy verifies the
+/// signature and freshness (optionally pinning the expected signer key) and attributes the flow to a
+/// real principal instead of an IP. The counterpart of the gateway's per-agent virtual key (F1).
+
+/// Clock-skew tolerance: an assertion issued up to this far in the future is still accepted.
+const IDENT_SKEW_MS: u64 = 60_000;
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct EgressIdentity {
+    pub agent: String,
+    pub principal: String,
+    #[serde(default)]
+    pub groups: Vec<String>,
+    pub issued_ms: u64,
+    pub pubkey_hex: String,
+    pub sig_hex: String,
+}
+
+fn ident_signing_value(agent: &str, principal: &str, groups: &[String], issued_ms: u64) -> Value {
+    json!({"agent": agent, "principal": principal, "groups": groups, "issued_ms": issued_ms})
+}
+
+/// Sign an egress-identity assertion with the workstation agent's key.
+pub fn issue_identity(signer: &dyn Signer, agent: &str, principal: &str, groups: &[String], now_ms: u64) -> EgressIdentity {
+    let bytes = crate::canonical::canonical_bytes(&ident_signing_value(agent, principal, groups, now_ms));
+    let sig = signer.sign(&bytes);
+    EgressIdentity {
+        agent: agent.to_string(),
+        principal: principal.to_string(),
+        groups: groups.to_vec(),
+        issued_ms: now_ms,
+        pubkey_hex: hex::encode(signer.public_key()),
+        sig_hex: hex::encode(sig),
+    }
+}
+
+impl EgressIdentity {
+    /// Verify the signature and freshness. Fail-closed on any decode error.
+    pub fn verify(&self, now_ms: u64, max_age_ms: u64) -> bool {
+        if self.issued_ms > now_ms.saturating_add(IDENT_SKEW_MS) { return false; }
+        if now_ms > self.issued_ms.saturating_add(max_age_ms) { return false; }
+        let pk = match hex::decode(&self.pubkey_hex) { Ok(p) => p, Err(_) => return false };
+        let sig = match hex::decode(&self.sig_hex) { Ok(s) => s, Err(_) => return false };
+        let bytes = crate::canonical::canonical_bytes(&ident_signing_value(&self.agent, &self.principal, &self.groups, self.issued_ms));
+        verify_ed25519(&pk, &bytes, &sig)
+    }
+
+    /// Verify AND require the signer key to equal a pinned public key (the trust root the proxy expects).
+    pub fn verify_pinned(&self, pinned_pubkey_hex: &str, now_ms: u64, max_age_ms: u64) -> bool {
+        self.pubkey_hex.eq_ignore_ascii_case(pinned_pubkey_hex) && self.verify(now_ms, max_age_ms)
+    }
+
+    /// Encode for an HTTP header (base64 of the JSON).
+    pub fn encode(&self) -> String {
+        use base64::Engine;
+        base64::engine::general_purpose::STANDARD_NO_PAD.encode(serde_json::to_vec(self).unwrap_or_default())
+    }
+
+    /// Decode from a header value (base64 JSON, tolerating an `acp ` / `Bearer ` scheme prefix).
+    pub fn decode(s: &str) -> Option<EgressIdentity> {
+        use base64::Engine;
+        let s = s.trim();
+        let s = s.strip_prefix("acp ").or_else(|| s.strip_prefix("Bearer ")).unwrap_or(s).trim();
+        let bytes = base64::engine::general_purpose::STANDARD_NO_PAD.decode(s)
+            .or_else(|_| base64::engine::general_purpose::STANDARD.decode(s)).ok()?;
+        serde_json::from_slice(&bytes).ok()
+    }
+}
+
 #[cfg(test)]
+
 mod tests {
     #[test]
     fn a_directly_reachable_host_is_a_breach() {
@@ -148,5 +225,35 @@ mod tests {
         );
         assert!(!p.permits("10.0.0.5"), "private range stays blocked");
         assert!(!p.permits("127.0.0.1"));
+    }
+}
+
+
+#[cfg(test)]
+mod egress_identity_tests {
+    use super::*;
+    use crate::sign::Ed25519Signer;
+
+    #[test]
+    fn round_trips_and_verifies() {
+        let signer = Ed25519Signer::from_seed(&[3u8; 32]);
+        let id = issue_identity(&signer, "triage-agent", "alice@corp", &["eng".into()], 1_000_000);
+        assert!(id.verify(1_000_500, 300_000));
+        let hdr = id.encode();
+        let back = EgressIdentity::decode(&format!("acp {hdr}")).unwrap();
+        assert_eq!(back, id);
+        assert!(back.verify(1_000_500, 300_000));
+    }
+
+    #[test]
+    fn rejects_tamper_expiry_future_and_wrong_pin() {
+        let signer = Ed25519Signer::from_seed(&[4u8; 32]);
+        let id = issue_identity(&signer, "a", "bob", &[], 1_000_000);
+        let mut bad = id.clone(); bad.principal = "eve".into();
+        assert!(!bad.verify(1_000_100, 300_000));
+        assert!(!id.verify(1_000_000 + 300_001, 300_000));
+        assert!(!id.verify(500_000, 300_000));
+        assert!(!id.verify_pinned("00ff", 1_000_100, 300_000));
+        assert!(id.verify_pinned(&id.pubkey_hex, 1_000_100, 300_000));
     }
 }

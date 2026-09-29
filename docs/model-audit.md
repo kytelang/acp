@@ -104,7 +104,7 @@ body inspection, TLS MITM as a later phase).
 
 | # | Finding | Severity |
 | :-- | :-- | :-- |
-| F1 | **Identity attribution at egress.** With everyone behind one proxy you have a workstation IP, not an agent or a human. The policy manifest matches app/agent/group/tool, but a raw TLS flow cannot populate those fields. The rich policy model is starved of identity. | P0 |
+| F1/F2 | **Egress identity: PARTIALLY RESOLVED.** The workstation agent now signs a short-lived egress-identity assertion (acp_core::egress::EgressIdentity); the egress intercept verifies it (optionally pinned via --identity-pubkey) and attributes deny events to a real agent+principal instead of an IP. Remaining: wiring the agent to inject the header on every outbound request, TLS-MITM body inspection quality, and HA. Original finding: identity attribution at egress, With everyone behind one proxy you have a workstation IP, not an agent or a human. The policy manifest matches app/agent/group/tool, but a raw TLS flow cannot populate those fields. The rich policy model is starved of identity. | P0 |
 | F2 | **Application vs host granularity.** `host_contains/sni/path` cannot tell "payroll-agent calling OpenAI" from "marketing-bot calling OpenAI": same host. Per-application policy degrades to per-destination policy at egress. | P0 |
 | F3 | **TLS interception cost and risk.** Content inspection needs MITM: a CA on every client, breakage on cert-pinned / mTLS / QUIC-HTTP3 endpoints, and one box becomes a plaintext honeypot of every prompt, a high-value target and a compliance concern. | P1 |
 | F4 | **Single choke point.** One proxy is an availability and latency SPOF with no HA story yet. | P1 |
