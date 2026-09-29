@@ -13,13 +13,12 @@ const records = ref([])
 const frameworks = ref([])
 const templates = ref([])   // full per-framework checklist templates (with control items)
 const checked = ref({})      // control_id -> done, for a non-EU conformity assessment
-const euQuestions = ref([])
 const selected = ref(null)     // selected system name
 const tab = ref('all')
 const modal = ref(null)        // 'assess' | 'risk' | 'modelcard'
 const msg = ref(''); const err = ref('')
 
-const assessForm = ref({ subject: '', framework: 'eu-ai-act', answers: {} })
+const assessForm = ref({ subject: '', framework: 'eu-ai-act' })
 const riskForm = ref({ subject: '', title: '', likelihood: 'medium', impact: 'medium', treatment: 'mitigate', owner: '' })
 const cardForm = ref({ subject: '', title: '', model_id: '', use_case_id: '', risk_id: '', summary: '' })
 
@@ -29,7 +28,6 @@ async function load() {
   const t = await getOr('/grc/templates', { templates: [] })
   templates.value = (t.templates || []).filter(x => x.kind === 'checklist')
   frameworks.value = templates.value.map(x => ({ slug: x.framework, name: x.name }))
-  euQuestions.value = ((t.templates || []).find(x => x.id === 'eu-ai-act-screening') || {}).questions || []
 }
 
 // The AI-system registry is the hub: records grouped by their subject (the system / use case).
@@ -59,7 +57,7 @@ const currentRecords = computed(() => {
   return current.value.records.filter(r => kinds.includes(r.kind))
 })
 
-function openAssess() { assessForm.value = { subject: selected.value || '', framework: 'eu-ai-act', answers: {} }; checked.value = {}; err.value=''; modal.value = 'assess' }
+function openAssess() { assessForm.value = { subject: selected.value || '', framework: 'eu-ai-act' }; checked.value = {}; err.value=''; modal.value = 'assess' }
 function openRisk() { riskForm.value = { subject: selected.value || '', title: '', likelihood: 'medium', impact: 'medium', treatment: 'mitigate', owner: '' }; err.value=''; modal.value = 'risk' }
 function openCard() { cardForm.value = { subject: selected.value || '', title: '', model_id: '', use_case_id: '', risk_id: '', summary: '' }; err.value=''; modal.value = 'modelcard' }
 
@@ -70,12 +68,8 @@ async function submit(kind) {
       const subject = assessForm.value.subject.trim()
       if (!subject) throw new Error('System name is required.')
       const fw = assessForm.value.framework
-      // EU AI Act additionally files a risk screening (tiering) when any screening answer is set.
-      if (fw === 'eu-ai-act' && Object.values(assessForm.value.answers).some(Boolean)) {
-        await post('/grc/assess', { subject, framework: 'eu-ai-act', answers: assessForm.value.answers }, 'GrcAuthor')
-      }
-      // Every framework (EU AI Act included) creates a conformity record over its full control set, which
-      // the framework report then grades. This is the complete conformity checklist.
+      // Every framework creates a conformity record over its full control set, which the framework
+      // report then grades. The risk tier lives on the AI system itself (drives applicability).
       const checklist = frameworkControls.value.map(c => ({
         control_id: c.control_id, reference: c.reference, title: c.title, done: !!checked.value[c.control_id]
       }))
@@ -163,12 +157,6 @@ onMounted(load)
             <option v-for="f in frameworks" :key="f.slug" :value="f.slug">{{ f.name }}</option>
           </select>
         </label>
-        <div v-if="assessForm.framework==='eu-ai-act'" class="grid gap-1.5 border border-line rounded-lg p-3">
-          <div class="text-xs text-dim mb-1">EU AI Act risk screening <span class="text-muted">(optional, sets the risk tier)</span></div>
-          <label v-for="q in euQuestions" :key="q.key" class="flex items-start gap-2 text-[13px]">
-            <input type="checkbox" v-model="assessForm.answers[q.key]" class="mt-1" /> <span>{{ q.label }}</span>
-          </label>
-        </div>
         <div class="border border-line rounded-lg p-3 max-h-80 overflow-y-auto">
           <div class="text-xs text-dim mb-2">Conformity checklist &middot; {{ frameworkControls.length }} controls. Tick the controls already in place; the rest are recorded as open.</div>
           <label v-for="c in frameworkControls" :key="c.control_id" class="flex items-start gap-2 text-[13px] py-0.5">
