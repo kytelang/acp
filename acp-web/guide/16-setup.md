@@ -13,7 +13,7 @@ Varman has two kinds of component.
   configuration (`mcp` to wrap a local MCP server, `firewall` for a forward proxy, `guard` for a
   tool-server sidecar). The `acp` CLI (with `acp verify` for independent evidence verification) is the
   offline tools alongside it.
-- **Services**, run on a server: `acp-server` (the control plane) and `acp-console` (the web UI), plus
+- **Services**, run on a server: `acp-server` (the control plane, which also serves the web console at `/`), plus
   the optional `acp-gateway` (the LLM gateway). These run continuously, as systemd units.
 
 Install the agent on every developer machine; install the services on one or more Linux hosts.
@@ -211,9 +211,10 @@ Run the console pointed at the control plane to get a dashboard, approvals, poli
 kill-switch, the integrity view, and the AI-endpoints page ([chapter 14](14-operations.md)):
 
 ```sh
-cd acp-console && kyte build
-# ACP_CONTROL_PLANE_URL points the console at the control plane (default http://127.0.0.1:8787)
-ACP_CONTROL_PLANE_URL=http://127.0.0.1:8787 ./build/debug/bin/acp-console   # http://127.0.0.1:8080
+# Build the Vue console once; acp-server serves it at / on its own port.
+cd console && npm ci && npm run build && cd ..
+# acp-server auto-discovers console/dist from the working directory (or pass --console <dir>).
+# Open the console at the server's address, for example http://127.0.0.1:8787/
 ```
 
 The console reads `ACP_CONTROL_PLANE_URL` (default `http://127.0.0.1:8787`), so in a compose or helm

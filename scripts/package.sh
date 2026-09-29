@@ -19,10 +19,12 @@ cp target/release/acp-agent target/release/acp-server target/release/acp-cli tar
 cp scripts/run-local.sh scripts/pentest.sh scripts/sbom.sh "$STAGE/scripts/" 2>/dev/null || true
 cp -r docs/ops docs/compliance "$STAGE/docs/" 2>/dev/null || true
 
-# The Kyte console: ship source (built on the host if the kyte toolchain is present).
-if [ -d acp-console ]; then
+# The Vue console: ship the built static bundle (acp-server serves it from disk).
+if [ -d console/dist ]; then
   mkdir -p "$STAGE/console"
-  cp -r acp-console/src acp-console/wwwroot acp-console/project.json acp-console/README.md "$STAGE/console/" 2>/dev/null || true
+  cp -r console/dist "$STAGE/console/dist"
+elif [ -d console ]; then
+  echo "note: console/dist not built; run 'cd console && npm ci && npm run build' before packaging" >&2
 fi
 
 # Installer: put binaries on PATH under a prefix.

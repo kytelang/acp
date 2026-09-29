@@ -1,10 +1,12 @@
 # 17. Console reference
 
-The web console (`acp-console`) is the browser UI over the control plane. It is a thin, read-only
-view over `acp-server`'s verifiable API: every figure it shows is served by `acp-server` and is
-re-derivable from the signed evidence, and every change it makes is forwarded to `acp-server`, which
-is the only component that holds a signing key and makes a decision. The console holds no trust and
-no key of its own.
+The web console is the browser UI over the control plane. It is a Vue 3 single-page app (under
+`console/`, built with Vite) that `acp-server` serves directly at `/`, on the same origin and port as
+the API, so there is no separate console process. It is a thin, read-only view over `acp-server`'s
+verifiable API: every figure it shows is served by `acp-server` and is re-derivable from the signed
+evidence, and every change it makes is forwarded to `acp-server`, which is the only component that
+holds a signing key and makes a decision. The console holds no trust and no key of its own. (The
+earlier Kyte-built console has been retired to `acp-console-retire/`.)
 
 This chapter documents every configuration entry an operator can make from the console: each page,
 each input field, each button, the server endpoint it calls, and the RBAC capability that endpoint

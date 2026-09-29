@@ -35,7 +35,7 @@ async function register() {
   err.value = ''; msg.value = ''
   if (!newGroup.value.trim()) return
   try {
-    await post('/groups', { name: newGroup.value.trim() }, 'PolicyAdmin')
+    await post('/groups', { name: newGroup.value.trim() }, 'AppRegistrar')
     group.value = newGroup.value.trim(); newGroup.value = ''
     await loadGroups(); await loadConfig()
     msg.value = 'Group registered.'
@@ -43,7 +43,7 @@ async function register() {
 }
 async function save() {
   err.value = ''; msg.value = ''
-  try { await post(`/agent-config/${encodeURIComponent(group.value)}`, { config: cfg.value }, 'PolicyAdmin'); msg.value = 'Saved.' }
+  try { await post(`/agent-config/${encodeURIComponent(group.value)}`, { config: cfg.value }, 'AppRegistrar'); msg.value = 'Saved.' }
   catch (e) { err.value = String(e.message || e) }
 }
 onMounted(async () => { await loadGroups(); await loadConfig() })

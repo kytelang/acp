@@ -16,6 +16,7 @@ const routes = [
   { path: '/policy', component: () => import('./views/PolicyView.vue'), meta: { title: 'Policy' } },
   { path: '/firewall', component: () => import('./views/FirewallView.vue'), meta: { title: 'Content firewall' } },
   { path: '/agent-config', component: () => import('./views/AgentConfigView.vue'), meta: { title: 'Agent config' } },
+  { path: '/guard', component: () => import('./views/GuardView.vue'), meta: { title: 'Guard' } },
   { path: '/governance', component: () => import('./views/GovernanceView.vue'), meta: { title: 'Governance' } },
   { path: '/kill-switch', component: () => import('./views/KillSwitchView.vue'), meta: { title: 'Kill-switch' } },
   { path: '/integrity', component: () => import('./views/IntegrityView.vue'), meta: { title: 'Integrity' } },

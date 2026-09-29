@@ -8,7 +8,7 @@ name: release
 #   2. acp-server-<tag>-linux-<arch>  server services: acp-server, acp-gateway, acp-agent, acp (admin
 #                                     CLI), acp-verify, the content model and the systemd units. Linux
 #                                     only (the services target Linux).
-#   3. acp-console-<tag>-linux-<arch> the Kyte-built web console (binary + wwwroot + app.yaml).
+#   3. acp-console-<tag> the Vue web console static bundle (dist/), served by acp-server.
 #
 # Each archive has a .sha256 sidecar. install.sh fetches (1), install-server.sh fetches (2) and (3).
 
@@ -125,24 +125,17 @@ jobs:
       - uses: actions/setup-node@v4
         with:
           node-version: 20
-      - name: Install the Kyte toolchain
-        run: |
-          curl -fsSL https://kytelang.org/install.sh | sh
-          echo "$HOME/.kyte/bin" >> "$GITHUB_PATH"
-      - name: Build the console
-        working-directory: acp-console
+      - name: Build the Vue console
+        working-directory: console
         run: |
           npm ci || npm install
-          npm run css || true
-          kyte build
+          npm run build
       - name: Stage and publish
         run: |
           set -eu
           TAG="${{ steps.tag.outputs.tag }}"; ARCH="${{ matrix.arch }}"
-          C="acp-console-$TAG-linux-$ARCH"; mkdir -p "dist/$C/bin"
-          cp acp-console/build/debug/bin/acp-console "dist/$C/bin/"
-          cp -R acp-console/wwwroot "dist/$C/wwwroot"
-          [ -f acp-console/app.yaml ] && cp acp-console/app.yaml "dist/$C/app.yaml" || true
+          C="acp-console-$TAG"; mkdir -p "dist/$C"
+          cp -R console/dist "dist/$C/console"
           echo "$TAG" > "dist/$C/VERSION"
           ( cd dist && tar -czf "$C.tar.gz" "$C" && sha256sum "$C.tar.gz" > "$C.tar.gz.sha256" )
       - uses: softprops/action-gh-release@v2
