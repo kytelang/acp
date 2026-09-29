@@ -11,6 +11,8 @@ import Modal from '../components/ui/Modal.vue'
 const router = useRouter()
 const records = ref([])
 const frameworks = ref([])
+const templates = ref([])   // full per-framework checklist templates (with control items)
+const checked = ref({})      // control_id -> done, for a non-EU conformity assessment
 const euQuestions = ref([])
 const selected = ref(null)     // selected system name
 const tab = ref('all')
@@ -25,7 +27,8 @@ async function load() {
   const r = await getOr('/grc', { records: [] })
   records.value = Array.isArray(r) ? r : (r.records || [])
   const t = await getOr('/grc/templates', { templates: [] })
-  frameworks.value = (t.templates || []).filter(x => x.kind === 'checklist').map(x => ({ slug: x.framework, name: x.name }))
+  templates.value = (t.templates || []).filter(x => x.kind === 'checklist')
+  frameworks.value = templates.value.map(x => ({ slug: x.framework, name: x.name }))
   euQuestions.value = ((t.templates || []).find(x => x.id === 'eu-ai-act-screening') || {}).questions || []
 }
 
@@ -42,6 +45,12 @@ const systems = computed(() => {
   return [...m.values()].sort((a, b) => a.name.localeCompare(b.name))
 })
 const current = computed(() => systems.value.find(s => s.name === selected.value) || null)
+// The control set for the framework selected in the assessment modal (non-EU conformity checklist).
+const frameworkControls = computed(() => {
+  const t = templates.value.find(x => x.framework === assessForm.value.framework)
+  return t ? (t.items || []) : []
+})
+function frameworkName(slug) { return (frameworks.value.find(f => f.slug === slug) || {}).name || slug }
 const currentRecords = computed(() => {
   if (!current.value) return []
   if (tab.value === 'all') return current.value.records
@@ -50,7 +59,7 @@ const currentRecords = computed(() => {
   return current.value.records.filter(r => kinds.includes(r.kind))
 })
 
-function openAssess() { assessForm.value = { subject: selected.value || '', framework: 'eu-ai-act', answers: {} }; err.value=''; modal.value = 'assess' }
+function openAssess() { assessForm.value = { subject: selected.value || '', framework: 'eu-ai-act', answers: {} }; checked.value = {}; err.value=''; modal.value = 'assess' }
 function openRisk() { riskForm.value = { subject: selected.value || '', title: '', likelihood: 'medium', impact: 'medium', treatment: 'mitigate', owner: '' }; err.value=''; modal.value = 'risk' }
 function openCard() { cardForm.value = { subject: selected.value || '', title: '', model_id: '', use_case_id: '', risk_id: '', summary: '' }; err.value=''; modal.value = 'modelcard' }
 
@@ -58,8 +67,20 @@ async function submit(kind) {
   err.value = ''
   try {
     if (kind === 'assess') {
-      if (!assessForm.value.subject.trim()) throw new Error('System name is required.')
-      await post('/grc/assess', { subject: assessForm.value.subject.trim(), framework: assessForm.value.framework, answers: assessForm.value.answers }, 'GrcAuthor')
+      const subject = assessForm.value.subject.trim()
+      if (!subject) throw new Error('System name is required.')
+      if (assessForm.value.framework === 'eu-ai-act') {
+        // EU AI Act keeps its risk-tier screening (produces a tier + obligation checklist).
+        await post('/grc/assess', { subject, framework: 'eu-ai-act', answers: assessForm.value.answers }, 'GrcAuthor')
+      } else {
+        // Every other framework is a conformity checklist over its controls. Create a conformity record
+        // whose checklist the framework report then grades (each control done or not).
+        const fw = assessForm.value.framework
+        const checklist = frameworkControls.value.map(c => ({
+          control_id: c.control_id, reference: c.reference, title: c.title, done: !!checked.value[c.control_id]
+        }))
+        await post('/grc', { kind: 'conformity', subject, title: `${frameworkName(fw)} conformity`, status: 'open', body: { framework: fw, checklist } }, 'GrcAuthor')
+      }
     } else if (kind === 'risk') {
       if (!riskForm.value.subject.trim()) throw new Error('System name is required.')
       await post('/grc/risk', riskForm.value, 'GrcAuthor')
@@ -149,7 +170,14 @@ onMounted(load)
             <input type="checkbox" v-model="assessForm.answers[q.key]" class="mt-1" /> <span>{{ q.label }}</span>
           </label>
         </div>
-        <p v-else class="text-dim text-xs">Conformity checklist for this framework will enumerate its applicable controls.</p>
+        <div v-else class="border border-line rounded-lg p-3 max-h-80 overflow-y-auto">
+          <div class="text-xs text-dim mb-2">Conformity checklist &middot; {{ frameworkControls.length }} controls. Tick the controls already in place; the rest are recorded as open.</div>
+          <label v-for="c in frameworkControls" :key="c.control_id" class="flex items-start gap-2 text-[13px] py-0.5">
+            <input type="checkbox" v-model="checked[c.control_id]" class="mt-1" />
+            <span><span class="font-mono text-xs text-dim mr-1">{{ c.reference || c.control_id }}</span>{{ c.title }}</span>
+          </label>
+          <p v-if="!frameworkControls.length" class="text-dim text-xs">No controls found for this framework.</p>
+        </div>
         <div class="flex items-center gap-3"><Btn @click="submit('assess')">Create</Btn><span v-if="err" class="text-bad text-sm">{{ err }}</span></div>
       </div>
     </Modal>
