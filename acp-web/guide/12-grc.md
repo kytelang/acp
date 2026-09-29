@@ -224,3 +224,7 @@ allows, denies or steps up an actual tool call, that goes into the tamper-eviden
 author-attested paperwork. Post-market monitoring (EU AI Act Art. 72), serious-incident cases (Art. 73)
 and the auditor evidence pack (`GET /audit/pack`, verified with `acp verify-pack`) all draw from the
 ledger, so the strongest parts of a report are the ledger itself.
+
+::: tip Per-regulation reference
+The complete, code-aligned control list for each framework, with how Varman supports it and how evidence and reporting work, is in the [Conformance reference](/guide/conformance/).
+:::

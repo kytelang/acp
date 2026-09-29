@@ -87,6 +87,25 @@ export default defineConfig({
           ],
         },
         {
+          text: 'Conformance reference',
+          collapsed: true,
+          items: [
+            { text: 'Overview', link: '/guide/conformance/' },
+            { text: 'EU AI Act', link: '/guide/conformance/eu-ai-act' },
+            { text: 'NIST AI RMF', link: '/guide/conformance/nist-ai-rmf' },
+            { text: 'ISO/IEC 42001', link: '/guide/conformance/iso-42001' },
+            { text: 'ISO/IEC 27001', link: '/guide/conformance/iso-27001' },
+            { text: 'SOC 2', link: '/guide/conformance/soc-2' },
+            { text: 'GDPR', link: '/guide/conformance/gdpr' },
+            { text: 'India DPDP Act 2023', link: '/guide/conformance/dpdp-2023' },
+            { text: 'UK AI principles', link: '/guide/conformance/uk-ai' },
+            { text: 'Colorado AI Act (SB 24-205)', link: '/guide/conformance/colorado-ai-act' },
+            { text: 'NYC Local Law 144', link: '/guide/conformance/nyc-ll144' },
+            { text: 'Canada AIDA', link: '/guide/conformance/canada-aida' },
+            { text: 'ISO/IEC 23894', link: '/guide/conformance/iso-23894' },
+          ],
+        },
+        {
           text: 'Reference and operations',
           collapsed: false,
           items: [
