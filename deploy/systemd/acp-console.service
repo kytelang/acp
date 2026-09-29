@@ -1,3 +1,5 @@
+# RETIRED: the console is now embedded in acp-server (served at / on the API port). This unit for the
+# standalone Kyte console (moved to acp-console-retire/) is obsolete and kept only for reference.
 # Shipped in the release archive. Matches the console unit install-server.sh generates inline. The
 # console is a Kyte app installed under /opt/acp/console (binary + wwwroot + app.yaml). It serves the
 # web UI on :8080 and reads the control plane at http://127.0.0.1:8787 (a hardcoded upstream today),

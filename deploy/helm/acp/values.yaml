@@ -38,6 +38,8 @@ controlPlane:
 # (acp-console/src/main.ky). Across separate pods that address does not reach the control plane, so
 # controlPlaneUrl below is only documentation of the intended target until the source is made
 # configurable. Until then, run the console as a sidecar in the control-plane pod for a working URL.
+# The web console is now embedded in acp-server (served at / on the api port). This separate
+# console Deployment is RETIRED (the old Kyte app moved to acp-console-retire/) and stays disabled.
 console:
   enabled: false
   image:

@@ -42,6 +42,8 @@ services:
     depends_on:
       postgres: { condition: service_healthy }
 
+  # RETIRED: the web console is now embedded in acp-server (served at / on :8787). This separate
+  # Kyte-console service is obsolete (source moved to acp-console-retire/) and kept only for reference.
   # Web console (read-only view over the control-plane API).
   # LIMITATION: the console binary hardcodes the control-plane URL http://127.0.0.1:8787
   # (acp-console/src/main.ky) and cannot yet be pointed at a service DNS name without a code change.
