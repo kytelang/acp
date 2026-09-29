@@ -61,6 +61,8 @@ pub(crate) async fn role_add(State(st): State<Arc<AppState>>, headers: HeaderMap
     let g = |k: &str| body.get(k).and_then(|v| v.as_str()).unwrap_or("").trim().to_string();
     let role = g("role");
     if role.is_empty() { return Json(serde_json::json!({"ok": false, "error": "role is required"})).into_response(); }
+    // Referential integrity (audit P1 E2): the system must exist.
+    match store.get_system(&id, &tenant).await { Ok(Some(_)) => {}, Ok(None) => return Json(serde_json::json!({"ok": false, "error": format!("unknown system '{id}'")})).into_response(), Err(e) => return Json(serde_json::json!({"ok": false, "error": e})).into_response() }
     let rid = format!("role-{}", rand_hex(6));
     match store.add_role(&rid, &id, &role, &g("jurisdiction"), &g("market_date"), &tenant, now_ms() as i64).await {
         Ok(()) => Json(serde_json::json!({"ok": true, "id": rid})).into_response(),
@@ -109,6 +111,8 @@ pub(crate) async fn soa_set(State(st): State<Arc<AppState>>, headers: HeaderMap,
     if let Err(r) = authorize(&st.auth, &headers, acp_core::auth::Capability::EditGrc) { return r; }
     let tenant = tenant_of(&headers, &None);
     let store = match store_or(&st) { Ok(s) => s, Err(r) => return r };
+    // Referential integrity (audit P1 E2): the system must exist.
+    match store.get_system(&id, &tenant).await { Ok(Some(_)) => {}, Ok(None) => return Json(serde_json::json!({"ok": false, "error": format!("unknown system '{id}'")})).into_response(), Err(e) => return Json(serde_json::json!({"ok": false, "error": e})).into_response() }
     let entries = body.get("entries").and_then(|v| v.as_array()).cloned().unwrap_or_default();
     let mut n = 0usize;
     for e in &entries {
@@ -132,6 +136,8 @@ pub(crate) async fn evidence_add(State(st): State<Arc<AppState>>, headers: Heade
     let store = match store_or(&st) { Ok(s) => s, Err(r) => return r };
     let g = |k: &str| body.get(k).and_then(|v| v.as_str()).unwrap_or("").trim().to_string();
     let n = |k: &str| body.get(k).and_then(|v| v.as_i64()).unwrap_or(0);
+    // Referential integrity (audit P1 E2): the system must exist.
+    match store.get_system(&id, &tenant).await { Ok(Some(_)) => {}, Ok(None) => return Json(serde_json::json!({"ok": false, "error": format!("unknown system '{id}'")})).into_response(), Err(e) => return Json(serde_json::json!({"ok": false, "error": e})).into_response() }
     let control_id = g("control_id");
     let framework = g("framework");
     if control_id.is_empty() || framework.is_empty() { return Json(serde_json::json!({"ok": false, "error": "framework and control_id are required"})).into_response(); }

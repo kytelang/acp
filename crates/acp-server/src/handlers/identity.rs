@@ -176,6 +176,9 @@ pub(crate) async fn agent_register(State(st): State<Arc<AppState>>, headers: Hea
     let app_id = body.get("app_id").and_then(|v| v.as_str()).unwrap_or("").trim().to_string();
     let name = body.get("name").and_then(|v| v.as_str()).unwrap_or("").trim().to_string();
     if app_id.is_empty() || name.is_empty() { return Json(serde_json::json!({"ok": false, "error": "app_id and name are required"})).into_response(); }
+    // Referential integrity (audit P1 E2): reject an agent whose parent app does not exist.
+    let tenant0 = tenant_of(&headers, &None);
+    if !store.app_exists(&app_id, &tenant0).await { return Json(serde_json::json!({"ok": false, "error": format!("unknown app_id '{app_id}'")})).into_response(); }
     let owner = body.get("owner").and_then(|v| v.as_str()).unwrap_or("").to_string();
     let metadata = body.get("metadata").map(|v| v.to_string()).unwrap_or_else(|| "{}".to_string());
     let id = format!("agt-{}", rand_hex(6));

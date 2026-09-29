@@ -293,6 +293,12 @@ impl ControlStore {
 
     // ---- agents ----
     #[allow(clippy::too_many_arguments)]
+    /// Referential integrity (audit P1 E2): does an app with this id exist for the tenant?
+    pub async fn app_exists(&self, id: &str, tenant: &str) -> bool {
+        sqlx::query(&self.ph("SELECT 1 FROM apps WHERE id = ? AND tenant_id = ?"))
+            .bind(id).bind(tenant).fetch_optional(&self.pool).await.ok().flatten().is_some()
+    }
+
     pub async fn add_agent(&self, id: &str, app_id: &str, name: &str, token_sha256: &str, owner: &str, metadata_json: &str, tenant: &str, now_ms: i64) -> Result<(), String> {
         let sql = self.ph("INSERT INTO agents (id, app_id, name, token_sha256, active, owner, metadata_json, tenant_id, created_ms) VALUES (?, ?, ?, ?, 1, ?, ?, ?, ?)");
         sqlx::query(&sql).bind(id).bind(app_id).bind(name).bind(token_sha256).bind(owner).bind(metadata_json).bind(tenant).bind(now_ms)
@@ -949,6 +955,8 @@ mod tests {
         let s = ControlStore::connect(url).await.expect("connect");
         s.add_app("app-1", "acme", "you", "{}", "default", 1000).await.unwrap();
         assert_eq!(s.list_apps("default").await.unwrap().len(), 1);
+        assert!(s.app_exists("app-1", "default").await, "referential integrity: registered app exists");
+        assert!(!s.app_exists("app-nope", "default").await, "unknown app id does not exist");
         // Virtual-key resolution (audit P0 F1): an agent's token alone resolves its authenticated identity.
         s.add_agent("agt-vk", "app-1", "triage", "sha-of-key", "you", "{}", "default", 1000).await.unwrap();
         let vk = s.resolve_agent_by_token_sha("sha-of-key").await.unwrap();

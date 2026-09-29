@@ -386,8 +386,26 @@ registered group set.
 
 ---
 
-## 6. Multi-tenancy
+## 6. Tenancy model (two planes)
 
-Most tables carry a `tenant_id` (default `default`). The control plane scopes reads and writes by the
-`x-acp-tenant` header, so one deployment can serve several isolated tenants. Signing is per tenant for
-the tenant-scoped records, so a tenant's evidence and reports verify with that tenant's key.
+Tenancy is deliberately split into two planes, because a single egress proxy per site enforces one
+policy domain while governance data may belong to several tenants.
+
+- **Governance and configuration plane: tenant-scoped.** These tables carry `tenant_id` and are scoped
+  by the `x-acp-tenant` header, so one control plane can serve several isolated tenants, each signing
+  its own evidence and reports with its own key: `apps`, `agents`, `models`, `vendors`, `ai_systems`,
+  `system_roles`, `soa_entries`, `evidence`, `grc_records`, `report_snapshots`, `firewall_config`.
+- **Enforcement and telemetry plane: deployment-scoped.** These feed the single egress proxy and the one
+  control-plane deployment that governs it, and are not per tenant by design: `firewall_rules` (pulled
+  by the proxy via `intercept_rules`, which has no tenant), `endpoints` (the enrolled governed-endpoint
+  set), `violation_events`, `drift_counts`, `lineage_edges` (runtime telemetry reported by PEPs, which do
+  not carry a tenant in the enforcement protocol). A deployment governs one enforcement domain.
+
+This resolves the earlier inconsistency (audit finding E1): rather than tables being tenant-scoped by
+accident, the split is a deliberate model. For the recommended on-prem shape (one deployment per site),
+everything runs under the single `default` tenant and the distinction is moot; for a multi-tenant
+control plane, governance is isolated per tenant while the shared egress proxy remains deployment-wide.
+
+Referential integrity (audit finding E2) is enforced at write time: an agent's `app_id` must reference
+an existing app, and a system sub-resource (role, SoA entry, evidence) must reference an existing
+`ai_system`. The server rejects a dangling reference rather than storing it.
