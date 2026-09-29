@@ -78,6 +78,7 @@ pub(crate) fn build_router(state: Arc<AppState>) -> Router {
             .route("/agents/verify", post(agent_verify))
             .route("/grc", get(grc_list).post(grc_create))
             .route("/grc/templates", get(grc_templates))
+            .route("/principals", get(principals_list).post(principal_register))
             .route("/systems", get(systems_list).post(system_create))
             .route("/systems/:id", get(system_get))
             .route("/systems/:id/roles", post(role_add))

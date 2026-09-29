@@ -122,6 +122,32 @@ pub(crate) async fn agents(State(st): State<Arc<AppState>>, headers: HeaderMap) 
     }
 }
 
+/// GET /principals: the persisted human-principal directory (audit P2 E3).
+pub(crate) async fn principals_list(State(st): State<Arc<AppState>>, headers: HeaderMap) -> Response {
+    let tenant = tenant_of(&headers, &None);
+    let store = match &st.store { Some(s) => s, None => return Json(serde_json::json!({"principals": []})).into_response() };
+    match store.list_principals(&tenant).await {
+        Ok(rows) => Json(serde_json::json!({"principals": rows})).into_response(),
+        Err(e) => Json(serde_json::json!({"principals": [], "error": e})).into_response(),
+    }
+}
+
+/// POST /principals: register or update a human principal. Body: {id, display, source, groups:[..]}.
+pub(crate) async fn principal_register(State(st): State<Arc<AppState>>, headers: HeaderMap, Json(body): Json<serde_json::Value>) -> Response {
+    if let Err(r) = authorize(&st.auth, &headers, acp_core::auth::Capability::RegisterAgent) { return r; }
+    let tenant = tenant_of(&headers, &None);
+    let store = match &st.store { Some(s) => s, None => return Json(serde_json::json!({"ok": false, "error": "no --store configured"})).into_response() };
+    let id = body.get("id").and_then(|v| v.as_str()).unwrap_or("").trim().to_string();
+    if id.is_empty() { return Json(serde_json::json!({"ok": false, "error": "id is required"})).into_response(); }
+    let display = body.get("display").and_then(|v| v.as_str()).unwrap_or(&id).to_string();
+    let source = body.get("source").and_then(|v| v.as_str()).unwrap_or("sso").to_string();
+    let groups = body.get("groups").cloned().unwrap_or_else(|| serde_json::json!([]));
+    match store.upsert_principal(&id, &display, &source, &groups.to_string(), &tenant, now_ms() as i64).await {
+        Ok(()) => Json(serde_json::json!({"ok": true, "id": id})).into_response(),
+        Err(e) => Json(serde_json::json!({"ok": false, "error": e})).into_response(),
+    }
+}
+
 /// POST /agents/resolve-key: resolve an agent's authenticated identity from its per-agent virtual key
 /// alone (audit P0 F1). Unauthenticated because the key IS the credential; a wrong key returns
 /// verified:false. Used by the LLM gateway to bind a call to a verified agent+app instead of a

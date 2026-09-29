@@ -190,22 +190,26 @@ fn status_conformity(status: &str, applicable: bool) -> acp_core::conformance::C
 /// "conformant" grade (a control claimed implemented but lacking fresh evidence drops to partial), and
 /// the control CROSSWALK propagates satisfaction (a control is satisfied via crosswalk when a mapped
 /// control in another framework is itself satisfied with fresh evidence for this system).
-pub(crate) async fn system_report(State(st): State<Arc<AppState>>, headers: HeaderMap, Path((id, framework)): Path<(String, String)>) -> Response {
+pub(crate) async fn system_report(State(st): State<Arc<AppState>>, headers: HeaderMap, Path((id, framework)): Path<(String, String)>, axum::extract::Query(q): axum::extract::Query<std::collections::HashMap<String, String>>) -> Response {
     let tenant = tenant_of(&headers, &None);
     let store = match store_or(&st) { Ok(s) => s, Err(r) => return r };
     let sys = match store.get_system(&id, &tenant).await { Ok(Some(s)) => s, Ok(None) => return Json(serde_json::json!({"error": "system not found"})).into_response(), Err(e) => return Json(serde_json::json!({"error": e})).into_response() };
     let profile = system_profile(store, &sys, &tenant).await;
-    let now = now_ms() as i64;
+    // G8: "as at" a point in time. Evidence and SoA are filtered to what existed by then, so a historical
+    // conformance state can be rendered. Defaults to now.
+    let as_at: i64 = q.get("as_at").and_then(|s| s.parse().ok()).unwrap_or(now_ms() as i64);
+    let now = as_at;
 
     // Evidence freshness per (framework, control): fresh if any evidence has no expiry or expires later.
     let mut fresh: std::collections::HashSet<(String, String)> = std::collections::HashSet::new();
     for e in store.list_evidence(&id, &tenant).await.unwrap_or_default() {
+        if e.produced_ms > as_at { continue; } // did not exist as at the reporting date
         if e.valid_until_ms == 0 || e.valid_until_ms > now { fresh.insert((e.framework.clone(), e.control_id.clone())); }
     }
     // All SoA across frameworks for this system.
     let all_soa = store.list_all_soa(&id, &tenant).await.unwrap_or_default();
     let mut soa_map: std::collections::HashMap<(String, String), crate::store::SoaEntry> = std::collections::HashMap::new();
-    for e in all_soa { soa_map.insert((e.framework.clone(), e.control_id.clone()), e); }
+    for e in all_soa { if e.updated_ms <= as_at { soa_map.insert((e.framework.clone(), e.control_id.clone()), e); } }
     // A control is "satisfied" iff SoA marks it applicable + conformant-ish AND it has fresh evidence.
     let conformant_status = |s: &str| matches!(s, "implemented" | "done" | "conformant");
     let is_satisfied = |fw: &str, cid: &str| -> bool {
@@ -269,6 +273,7 @@ pub(crate) async fn system_report(State(st): State<Arc<AppState>>, headers: Head
         "system": {"id": sys.id, "name": sys.name, "owner": sys.owner, "risk_tier": sys.risk_tier},
         "subject_profile": profile,
         "generated_ms": now_ms(),
+        "as_at": as_at,
         "controls": control_rows,
         "conformity_summary": {
             "total": summary.total, "applicable": summary.applicable, "not_applicable": summary.not_applicable,

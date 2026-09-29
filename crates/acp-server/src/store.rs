@@ -220,6 +220,15 @@ pub struct AuditEvent {
     pub ts_ms: i64,
 }
 
+#[derive(Debug, Clone, Serialize)]
+pub struct Principal {
+    pub id: String,
+    pub display: String,
+    pub source: String,
+    pub groups_json: String,
+    pub created_ms: i64,
+}
+
 impl ControlStore {
     /// Connect using a URL whose scheme selects the backend:
     ///   sqlite://<path>?mode=rwc  |  postgres://user:pass@host/db  |  mysql://user:pass@host/db
@@ -280,6 +289,7 @@ impl ControlStore {
             "CREATE TABLE IF NOT EXISTS soa_entries (id VARCHAR(255) PRIMARY KEY, system_id TEXT NOT NULL, framework TEXT NOT NULL, control_id TEXT NOT NULL, applicable INTEGER NOT NULL DEFAULT 1, justification TEXT NOT NULL DEFAULT '', status TEXT NOT NULL DEFAULT 'planned', evidence_refs TEXT NOT NULL DEFAULT '[]', tenant_id VARCHAR(255) NOT NULL DEFAULT 'default', updated_ms BIGINT NOT NULL)",
             "CREATE TABLE IF NOT EXISTS evidence (id VARCHAR(255) PRIMARY KEY, system_id TEXT NOT NULL, framework TEXT NOT NULL, control_id TEXT NOT NULL, title TEXT NOT NULL DEFAULT '', source TEXT NOT NULL DEFAULT '', owner TEXT NOT NULL DEFAULT '', produced_ms BIGINT NOT NULL DEFAULT 0, valid_until_ms BIGINT NOT NULL DEFAULT 0, artefact_ref TEXT NOT NULL DEFAULT '', note TEXT NOT NULL DEFAULT '', tenant_id VARCHAR(255) NOT NULL DEFAULT 'default', created_ms BIGINT NOT NULL)",
             "CREATE TABLE IF NOT EXISTS grc_audit (id VARCHAR(255) PRIMARY KEY, entity_type TEXT NOT NULL, entity_id TEXT NOT NULL, action TEXT NOT NULL, actor TEXT NOT NULL DEFAULT '', detail TEXT NOT NULL DEFAULT '', tenant_id VARCHAR(255) NOT NULL DEFAULT 'default', ts_ms BIGINT NOT NULL)",
+            "CREATE TABLE IF NOT EXISTS principals (id VARCHAR(255) PRIMARY KEY, display TEXT NOT NULL DEFAULT '', source TEXT NOT NULL DEFAULT 'sso', groups_json TEXT NOT NULL DEFAULT '[]', tenant_id VARCHAR(255) NOT NULL DEFAULT 'default', created_ms BIGINT NOT NULL)",
         ] {
             sqlx::query(ddl).execute(&self.pool).await.map_err(|e| e.to_string())?;
         }
@@ -998,6 +1008,20 @@ impl ControlStore {
         }).collect())
     }
 
+    /// Persist a human principal (audit P2 E3): the durable directory of humans agents may act for.
+    pub async fn upsert_principal(&self, id: &str, display: &str, source: &str, groups_json: &str, tenant: &str, now_ms: i64) -> Result<(), String> {
+        let del = self.ph("DELETE FROM principals WHERE id = ? AND tenant_id = ?");
+        sqlx::query(&del).bind(id).bind(tenant).execute(&self.pool).await.map_err(|e| e.to_string())?;
+        let ins = self.ph("INSERT INTO principals (id, display, source, groups_json, tenant_id, created_ms) VALUES (?, ?, ?, ?, ?, ?)");
+        sqlx::query(&ins).bind(id).bind(display).bind(source).bind(groups_json).bind(tenant).bind(now_ms).execute(&self.pool).await.map_err(|e| e.to_string())?;
+        Ok(())
+    }
+
+    pub async fn list_principals(&self, tenant: &str) -> Result<Vec<Principal>, String> {
+        let rows = sqlx::query(&self.ph("SELECT * FROM principals WHERE tenant_id = ? ORDER BY id")).bind(tenant).fetch_all(&self.pool).await.map_err(|e| e.to_string())?;
+        Ok(rows.iter().map(|r| Principal { id: r.get("id"), display: r.get("display"), source: r.get("source"), groups_json: r.get("groups_json"), created_ms: r.get("created_ms") }).collect())
+    }
+
     pub async fn list_soa(&self, system_id: &str, framework: &str, tenant: &str) -> Result<Vec<SoaEntry>, String> {
         let rows = sqlx::query(&self.ph("SELECT * FROM soa_entries WHERE system_id = ? AND framework = ? AND tenant_id = ?"))
             .bind(system_id).bind(framework).bind(tenant).fetch_all(&self.pool).await.map_err(|e| e.to_string())?;
@@ -1049,6 +1073,12 @@ mod tests {
         assert_eq!(hist.len(), 2);
         assert_eq!(hist[0].action, "soa-updated", "newest first");
         assert_eq!(s.find_system_by_name("resume-screener", "default").await.as_deref(), Some("sys-1"));
+        // Human principal directory (E3).
+        s.upsert_principal("alice@corp", "Alice", "oauth", "[\"eng\"]", "default", 1000).await.unwrap();
+        s.upsert_principal("alice@corp", "Alice R", "oauth", "[\"eng\",\"leads\"]", "default", 2000).await.unwrap(); // upsert
+        let ps = s.list_principals("default").await.unwrap();
+        assert_eq!(ps.len(), 1, "upsert keeps one row");
+        assert_eq!(ps[0].display, "Alice R");
         s.add_agent("agt-1", "app-1", "asst", "deadbeef", "you", "{\"deps\":[]}", "default", 1001).await.unwrap();
         assert!(s.verify_agent("agt-1", "deadbeef").await.unwrap());
         assert!(!s.verify_agent("agt-1", "wrong").await.unwrap());
