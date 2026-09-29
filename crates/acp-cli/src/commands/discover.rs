@@ -415,3 +415,29 @@ Note: this is a starting scaffold; it has not been run-verified in a browser her
         _ => usage("acp intercept <validate|sign|match|from-enrollment|suggest|pac|extension> ..."),
     }
 }
+
+/// Mint a signed egress-identity header (audit F2 client side). The workstation agent uses this to
+/// assert who is behind an outbound call so the egress proxy can attribute the flow to a real
+/// principal instead of an IP.
+///   acp egress-identity --key <32-byte-hex-seed> --agent <id> --principal <id> [--group <g> ...]
+/// Prints the x-acp-identity header value and the signer public key (pin it on the proxy with
+/// --identity-pubkey).
+pub(crate) fn cmd_egress_identity(rest: &[String]) -> std::process::ExitCode {
+    use std::process::ExitCode;
+    let flag = |name: &str| -> Option<String> {
+        rest.iter().position(|a| a == name).and_then(|i| rest.get(i + 1).cloned())
+    };
+    let groups: Vec<String> = rest.iter().enumerate().filter(|(_, a)| a.as_str() == "--group")
+        .filter_map(|(i, _)| rest.get(i + 1).cloned()).collect();
+    let (Some(key), Some(agent), Some(principal)) = (flag("--key"), flag("--agent"), flag("--principal")) else {
+        eprintln!("usage: acp egress-identity --key <32-byte-hex-seed> --agent <id> --principal <id> [--group <g> ...]");
+        return ExitCode::from(2);
+    };
+    let seed = match hex::decode(&key) { Ok(b) if b.len() == 32 => { let mut s = [0u8; 32]; s.copy_from_slice(&b); s }, _ => { eprintln!("--key must be a 32-byte hex seed"); return ExitCode::from(2); } };
+    let signer = acp_core::sign::Ed25519Signer::from_seed(&seed);
+    let now_ms = std::time::SystemTime::now().duration_since(std::time::UNIX_EPOCH).map(|d| d.as_millis() as u64).unwrap_or(0);
+    let id = acp_core::egress::issue_identity(&signer, &agent, &principal, &groups, now_ms);
+    println!("x-acp-identity: acp {}", id.encode());
+    println!("# signer pubkey (pin on the proxy): --identity-pubkey {}", id.pubkey_hex);
+    ExitCode::SUCCESS
+}

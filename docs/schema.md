@@ -409,3 +409,101 @@ control plane, governance is isolated per tenant while the shared egress proxy r
 Referential integrity (audit finding E2) is enforced at write time: an agent's `app_id` must reference
 an existing app, and a system sub-resource (role, SoA entry, evidence) must reference an existing
 `ai_system`. The server rejects a dangling reference rather than storing it.
+
+---
+
+## 7. Governance spine tables (added per the model audit)
+
+The audit added a normalised governance spine on top of the signed-record store: a first-class AI
+system, roles per system, a persisted Statement of Applicability, first-class evidence with freshness,
+an immutable change-history log, and a human-principal directory.
+
+```mermaid
+erDiagram
+  AI_SYSTEMS ||--o{ SYSTEM_ROLES : "roles per jurisdiction"
+  AI_SYSTEMS ||--o{ SOA_ENTRIES : "statement of applicability"
+  AI_SYSTEMS ||--o{ EVIDENCE : "evidence"
+  AI_SYSTEMS ||--o{ GRC_RECORDS : "system_id (incidents, assessments...)"
+  AI_SYSTEMS ||--o{ GRC_AUDIT : "change history"
+
+  AI_SYSTEMS {
+    string id PK
+    string name
+    string purpose
+    string owner
+    string lifecycle_state
+    string risk_tier
+    string sector
+    string asset_type
+    json jurisdictions
+    string tenant_id
+  }
+  SYSTEM_ROLES {
+    string id PK
+    string system_id FK
+    string role
+    string jurisdiction
+    string market_date
+    string tenant_id
+  }
+  SOA_ENTRIES {
+    string id PK
+    string system_id FK
+    string framework
+    string control_id
+    bool applicable
+    string justification
+    string status
+    json evidence_refs
+    string tenant_id
+  }
+  EVIDENCE {
+    string id PK
+    string system_id FK
+    string framework
+    string control_id
+    string title
+    string owner
+    bigint produced_ms
+    bigint valid_until_ms
+    string tenant_id
+  }
+  GRC_AUDIT {
+    string id PK
+    string entity_type
+    string entity_id
+    string action
+    string actor
+    string detail
+    string tenant_id
+    bigint ts_ms
+  }
+  PRINCIPALS {
+    string id PK
+    string display
+    string source
+    json groups_json
+    string tenant_id
+  }
+```
+
+Reporting reads the SoA (applicability plus status) and the evidence (freshness gates a conformant
+grade), and propagates satisfaction across the control crosswalk so evidence authored once satisfies
+mapped controls in other frameworks. The report accepts an as-at date to render a historical state.
+Every mutation writes a `grc_audit` event. Referential integrity is enforced: an agent's `app_id` and a
+system sub-resource's `system_id` must reference an existing row.
+
+## 8. Operational notes
+
+- **Evidence ledger scale (audit E4).** The Merkle ledger is append-only. For a busy site-wide egress
+  proxy, treat it as rotating storage: cap by size or age, roll to a new segment, and retain the signed
+  tree head of each closed segment so historical records stay verifiable. Runtime violation counts live
+  in the bounded `violation_events` table, not the ledger, so the console feed does not grow unbounded.
+- **Egress bypass closure (audit F5).** The egress firewall is only as good as the traffic that reaches
+  it. Pair it with network-layer default-deny egress (only the proxy may reach the internet), block DNS
+  over HTTPS so name resolution cannot be smuggled, and treat a direct-to-IP connection to a known LLM
+  range as suspicious. A firewall that can be trivially bypassed gives false assurance.
+- **Egress identity (audit F1/F2).** The gateway authenticates a caller by a per-agent virtual key
+  (`/agents/resolve-key`); the egress proxy verifies a signed identity assertion in `x-acp-identity`
+  (mint one with `acp egress-identity`, pin the signer with `--identity-pubkey`). Both attribute a flow
+  to a real agent and principal rather than an IP.

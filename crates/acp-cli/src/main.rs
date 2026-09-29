@@ -55,6 +55,7 @@ fn main() -> ExitCode {
         "discover" => cmd_discover(&args[2..]),
         "coverage" => cmd_coverage(&args[2..]),
         "canary-egress" => cmd_canary_egress(&args[2..]),
+        "egress-identity" => cmd_egress_identity(&args[2..]),
         "aibom" => retired("aibom", "Create an AI-BOM record from the console Governance page, or POST /grc."),
         "enroll" => retired("enroll", "Register AI endpoints from the console AI Endpoints page, or POST /endpoints/register."),
         "siem" => cmd_siem(&args[2..]),
