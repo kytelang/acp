@@ -26,6 +26,13 @@ serde_yaml.workspace = true
 base64.workspace = true
 hex.workspace = true
 
+rust-embed = { version = "8", optional = true }
+
+[features]
+# Bake console/dist into the binary for a single-file deploy: build with --features embed-console
+# (build the Vue console first). Default serves console/dist from disk (--console / auto-discovery).
+embed-console = ["dep:rust-embed"]
+
 [dev-dependencies]
 reqwest.workspace = true
 tokio = { workspace = true }

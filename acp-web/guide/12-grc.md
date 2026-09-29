@@ -1,7 +1,10 @@
 # 12. Discovery, enrolment and GRC
 
 Governing what you know about is only half the job. This chapter covers finding the AI you do not yet
-govern, bringing it under policy, and producing the compliance artifacts an auditor asks for.
+govern, bringing it under policy, and producing the compliance artifacts an auditor asks for. The GRC
+model is anchored on the AI system: you register a system once, declare who you are for it in each
+market, work its controls per framework, attach evidence, and generate a signed report that is aware of
+your jurisdiction.
 
 ## Discovering shadow AI
 
@@ -27,306 +30,197 @@ curl -X POST http://<host>:8787/endpoints/register \
 curl http://<host>:8787/endpoints            # the current dispositions
 ```
 
-You can also register an endpoint from the web console's AI-endpoints page ([chapter 14](14-operations.md)),
-which classifies the provider and records the same signed disposition.
-
 Each disposition is Ed25519-signed, so it is tamper-evident evidence of an operator's decision. The
-governed set feeds the [coverage report](#measuring-unavoidability), and the enrolment feeds the
-[interceptor's rules](05-intercept.md) via `acp intercept from-enrollment`.
+governed set feeds the coverage report and the [interceptor's rules](05-intercept.md) via
+`acp intercept from-enrollment`.
 
-### How to register an AI endpoint (step by step)
+## The GRC model: everything hangs off the AI system
 
-1. Select **AI Endpoints** in the sidebar.
-2. Click **+ Register endpoint**. The **Register an AI endpoint** popup opens.
-3. Fill in **Endpoint (host or URL)** (required, for example `claude.ai`). The provider is classified automatically.
-4. Choose a **Disposition**: `govern` (route through the control plane), `block` (quarantine), or `accept-risk` (time-boxed). Add a short **Reason**.
-5. Click **Register endpoint**. The signed disposition is stored (the latest wins) and appears in the list. Re-registering the same endpoint updates its disposition.
+Older versions of Varman kept governance as a flat list of signed records. That could not answer the
+question an auditor actually asks: "for this AI system, what is its compliance posture against the
+regulation that applies in my jurisdiction, with the evidence, as a signed report I accept." The model
+is now anchored on a first-class **AI system**, and every other object hangs off it. All of it is
+implemented and live.
 
-## Measuring unavoidability
+The moving parts:
 
-Two commands measure whether anything is acting off-ACP.
+- an exhaustive, versioned **control catalogue** (12 frameworks, 494 controls),
+- an **AI system** registry (the use-case anchor),
+- **roles per system** that drive which controls apply,
+- a persisted **Statement of Applicability** (SoA) per system and framework,
+- **evidence** as first-class records with freshness,
+- the **control crosswalk** (author once, satisfy many frameworks),
+- **conformity states** per control with a rollup,
+- an **immutable change-history** plus signed, as-at report snapshots.
+
+### The control catalogue
+
+The catalogue is exhaustive and versioned as data, not hand-written code. It ships inside the binary,
+read-only, under `crates/acp-core/catalogue/<slug>@<version>.yaml`. It covers twelve frameworks and 494
+controls: EU AI Act, NIST AI RMF, ISO/IEC 42001, ISO/IEC 27001, SOC 2, GDPR, India DPDP 2023, UK AI
+principles, Colorado AI Act, NYC LL144, Canada AIDA and ISO/IEC 23894.
+
+Each control is not just an id and a title. It carries a hierarchy path (for example Chapter III,
+Section 2, Article 14), a normative reference (`Art. 14`, `A.8.2`, `CC6.1`, `GOVERN 1.1`), an
+obligation type (govern, document, technical, process, transparency, oversight, record-keeping,
+prohibition), the roles it binds (provider, deployer, importer, distributor, controller, processor), an
+applicability predicate (for example `risk_tier in [high]`, `role=deployer`, `asset_type=gpai`), an
+evidence type (attestation, artefact, test, ledger), a crosswalk to equivalent controls in other
+frameworks, and a citation to the official source. Each framework also declares its **type**
+(`statutory_conformity`, `principles_based`, `standard` or `sectoral`), which is what makes a UK report
+read differently from an EU one. See "Jurisdiction-aware reporting" below.
+
+### Registering an AI system
+
+The AI system is the hub. Register it once with: id, name, purpose, owner, lifecycle state (intake,
+development, staging, production, retired), risk tier, sector and the set of jurisdictions it operates
+in (for example `["uk","eu"]`).
 
 ```sh
-acp coverage observed.txt governed.txt --require-full    # signed coverage report
-acp canary-egress targets.txt                            # fails (exit 3) if a model/tool is reachable off-ACP
+curl -X POST http://<host>:8787/systems \
+  -d '{"name":"hiring-screener","purpose":"rank CVs","owner":"hr-lead",
+       "risk_tier":"high","sector":"employment","jurisdictions":["uk","eu"]}'
+curl http://<host>:8787/systems            # the registry
 ```
 
-`acp coverage` joins the observed endpoints against the governed set, lists ungoverned and leaky
-paths, computes a coverage percentage, and signs the report. `--require-full` makes it gate a rollout.
-`acp canary-egress` actively probes for direct model or tool access and fails if any host is reachable
-without going through ACP.
+In the console, open **Governance**, **AI Systems** and click **+ Register system**.
+
+### Declaring roles per system
+
+The same system is governed differently depending on what your organisation is for it in a given
+market. Declare a role (provider, deployer, importer or distributor) per jurisdiction:
+
+```sh
+curl -X POST http://<host>:8787/systems/<id>/roles \
+  -d '{"role":"deployer","jurisdiction":"uk"}'
+```
 
-## What is a governance record
-
-If you are new to GRC (governance, risk and compliance), start here. A **governance record** is a
-signed operator document that captures a compliance decision or artefact about an AI system. It is
-paperwork, the kind an auditor asks for, written by a person and attested by the control plane. It is
-**not** a runtime enforcement decision. When the proxy allows, denies or steps up an actual tool call,
-that goes into the tamper-evident decision ledger ([chapter 9](09-evidence.md)). A governance record is
-the human-authored document that sits above those decisions: "we assessed this system as high-risk",
-"here is the model card", "here is our risk register entry". Think of the ledger as the flight recorder
-and governance records as the logbook the crew signs.
-
-Every governance record is Ed25519-signed by the control plane when you create it, stored in the
-control-plane database, and re-verified whenever it is read, so the console shows a checked "signed"
-state rather than an asserted one. The signature proves the document was not altered after signing. It
-does not prove that any "evidence" or "linked-decision" reference written inside the record points at a
-real ledger record: those references are author-supplied text today.
-
-There are nine kinds. The seven core kinds are detailed next; the two EU AI Act kinds, `fria` and `incident`, are covered in the EU AI Act sections further down this chapter. Choose the kind for what you are actually recording.
-
-### assessment
-
-**What it is for:** tiering a system under the EU AI Act (unacceptable, high, limited or minimal) and
-listing the controls that tier must satisfy.
-
-**When you create one:** at the start of governing a new AI system, to decide how much oversight it
-needs.
-
-**Worked example:** you are launching `hiring-screener`, an agent that ranks CVs. Because it makes
-employment decisions, the screening flags it as an Annex III use, so the assessment tiers it **high**
-and pulls the full EU AI Act high-risk obligation set (Articles 9 to 15: risk management, data
-governance, technical documentation, record-keeping, transparency, human oversight, accuracy and
-robustness). A plain spellchecker, by contrast, would come out **minimal** with no mandated controls.
-
-### conformity
-
-**What it is for:** turning the obligations from an assessment into a worked checklist you drive to
-done, control by control, with an owner and evidence links on each.
-
-**When you create one:** right after a high-risk assessment, to actually close the obligations.
-
-**Worked example:** the `hiring-screener` assessment produced seven high-risk obligations. The
-conformity record seeds all seven as `gap`. As your team completes each one you move it to `satisfied`,
-name the owner (say `carol`, compliance) and attach the evidence. The record reports completeness
-(for example 5 of 7, 71 percent), and it counts as conformant only when every control is `satisfied`.
-
-### risk
-
-**What it is for:** an AI risk register entry: a named risk scored likelihood by impact, with an owner,
-a treatment and a lifecycle status.
-
-**When you create one:** whenever you identify a specific risk you want to track to closure.
-
-**Worked example:** "the screener may leak candidate PII into a model prompt". You set likelihood
-`medium` and impact `high`, which gives an inherent score of 2 by 3 = 6 (a **high** band). You assign
-the owner, choose a treatment (`mitigate`), set the status (`open`, then `mitigating`, `accepted` or
-`closed`), and optionally link the controls and ledger decisions that bear on it.
-
-### model-card
-
-**What it is for:** the documented properties of a model or system: intended use, limitations, training
-data, evaluation summary, owner, and the risk tier and use case it is bound to.
-
-**When you create one:** for every model you put into service, so an auditor can read what it is and how
-it was evaluated.
-
-**Worked example:** a model card for the screener records provider `acme`, version `1.0`, intended use
-"screen CVs", limitation "no protected-attribute use", evaluation summary "bias tested", owner
-`hr-lead`, risk tier `high`, and a link to use case `uc-hire`. A completeness check flags a card that
-is missing intended use, limitations, evaluation summary or owner.
-
-### use-case
-
-**What it is for:** a use-case lifecycle record that moves through gated stages: proposed, assessed,
-approved, deployed, retired.
-
-**When you create one:** to govern a use case end to end and enforce sign-off gates between stages.
-
-**Worked example:** `uc-hire` starts `proposed`. It cannot move to `assessed` until an assessment is
-linked, and it cannot move to `approved` until a valid approval attestation exists. Stages cannot be
-skipped forward (proposed straight to deployed is refused), but a use case can be retired at any time.
-Advance the status from the console or with `POST /grc/:id/status`, and the control plane re-signs the
-record on the change, so the lifecycle move is itself signed evidence.
-
-### attestation
-
-**What it is for:** a named person attesting something about a subject, non-repudiably. It binds an
-attestor and a role to a subject with a signature.
-
-**When you create one:** whenever a human sign-off is required, for example the approval gate above.
-
-**Worked example:** `carol`, in the role `compliance`, attests that the "conformity assessment approved"
-for subject `assess-hiring`. The record binds her name and role to that statement and signature, so it
-is a durable, verifiable sign-off rather than an email. This is the artefact the use-case approval gate
-looks for. It is distinct from a break-glass approval, which gates a live action; an attestation is a
-sign-off on the record.
-
-### aibom
-
-**What it is for:** an AI bill of materials over your supplied inventory: every agent, MCP server, tool
-and model class in the estate, each with its provenance, admission verdict, integrity pin and the
-policy in force over it.
-
-**When you create one:** to answer "what AI is in our estate, where did each piece come from, and is it
-governed" with a signed document rather than a spreadsheet. It is emitted as CycloneDX so it drops into
-tools you already have.
-
-**Worked example:** you feed in the inventory and the record lists each component (say a frontier model
-class and two MCP tool servers) with its SHA-256 digest, its admission verdict and the policy hash in
-force, and it flags anything that was denied admission.
-
-**MITRE ATLAS enrichment:** when a model admission scan returns findings, ACP maps each finding kind to
-its MITRE ATLAS technique id (for example a malicious pickle maps to AML.T0011.000, a prompt-injection
-finding to AML.T0051) and annotates the AI-BOM entry (the CycloneDX `acp:atlas` property) and the
-console Models page with them. This puts the standard adversarial-technique language an auditor or a SOC
-already speaks on top of whatever the scanner returns. ACP does not run the scanner itself; it enriches
-its output.
-
-### When do I use a governance record versus the evidence ledger?
-
-Use the **evidence ledger** when you want proof of what actually happened at runtime: it is the signed,
-tamper-evident, hash-chained record of every allow, deny and step-up the proxy made, and you cannot
-edit it. Use a **governance record** when you want to document a human governance decision or artefact
-about a system: a risk tier, a checklist, a risk item, a model card, a lifecycle stage, a sign-off or a
-bill of materials. The ledger is machine-generated proof; governance records are author-attested
-paperwork. Both are signed and useful, but do not present a governance record as if it were ledger
-proof: an auditor gets runtime evidence from the ledger and documented governance from these records.
-
-The signed control packs now cover seven frameworks: EU AI Act, NIST AI RMF, ISO/IEC 42001, SOC 2,
-GDPR, India DPDP Act and the UK AI principles. Each is a signed, versioned data pack, verified before
-it loads.
-
-## Post-market monitoring (EU AI Act Art. 72)
-
-The **Reports** page carries a Post-market monitoring card assembled entirely from runtime evidence:
-the count of governed events, blocks, classifier drift and the latest red-team outcome. Nothing is
-typed in. Snapshot it to store a signed copy with history, the same as the framework reports. This is
-where runtime evidence beats a questionnaire most clearly.
-
-A **fundamental-rights impact assessment (Art. 27)** is a governance record kind (`fria`): create it
-from the Governance page like any other record, link it to the use-case, and it feeds the framework
-report and coverage.
-
-> API: `GET /report/post-market`, `POST /report/post-market/snapshot`, `GET /report/post-market/history`.
-
-## Assurance and reporting capabilities
-
-Several governance capabilities produce signed records that appear in this view:
-
-- **Serious-incident cases (Art. 73).** Promote a detected issue to an incident case (`incident` record
-  kind) with a reporting deadline; the case draws its evidence from the ledger. `POST /incident/promote`.
-- **Fundamental-rights impact assessment (Art. 27).** The `fria` record kind, worked like an assessment.
-- **Model fairness testing.** Run fairness and quality tests against a model's labelled outcomes; the
-  demographic-parity and equal-opportunity gaps are stored as a signed record linked to the model.
-  `POST /models/:id/fairness`.
-- **Red-team a customer agent.** Run the attack corpus against a customer's own agent endpoint and file
-  the catch rate as signed evidence. `POST /redteam/target`.
-- **Public trust summary.** `GET /trust` returns a signed, verifiable summary of the controls in force,
-  for a customer to publish to their own clients.
-- **Auditor evidence pack.** `GET /audit/pack?from=&to=` returns a signed evidence pack for a time
-  window that an auditor verifies with the public key alone (`acp verify-pack`), no customer staff
-  involved.
-- **One-click regulator compliance pack (Art. 12 record-keeping).** From the console **Reports** page,
-  the Regulator report card offers **Signed pack (JSON-LD)** next to the CSV and print options.
-  `GET /report/framework/:name/pack` returns the framework conformance report (controls satisfied,
-  linked-evidence verification, breach summary, coverage) wrapped in a signed JSON-LD envelope
-  (`@type: acp:ComplianceReport`, `conformsTo` the framework). Every figure is drawn from the signed
-  ledger and GRC records, and the whole document is signed with the control-plane key, so a regulator
-  verifies it offline with `acp verify-pack` and the public key alone. It is Export-gated (Auditor).
-
-## Oversight-quality monitoring
-
-Human oversight has to be effective, not just present (EU AI Act Article 14). Because the control plane
-records every approval decision with the approver, the request time and the decision time, it can
-measure whether oversight is real or rubber-stamping, rather than assume it.
-
-In the console, open **Oversight** (under Governance). The page lists each approver with their decision
-count, approve rate, median decision time, and an effective-or-weakness badge. An approver is flagged
-when they approve nearly everything, decide faster than a human plausibly could have reviewed, or
-approve in bulk within a short window. The thresholds are configurable, and a change to them is written
-to the meta-audit log. Flagging an approver writes a signed governance finding, so the weakness is
-itself tamper-evident evidence.
-
-> API (for automation and CI): `GET /oversight` returns the same profiles, `POST /oversight/config`
-> updates the thresholds, and `POST /oversight/scan` writes the signed findings. These are for
-> schedulers; day to day, use the console page above.
-
-## The GRC surface
-
-Varman produces two honestly different kinds of compliance artifact. Know which is which.
-
-### Ledger-backed (derived from real signed records)
-
-- **`acp grc-report evidence.db`** grades EU AI Act, NIST AI RMF and ISO 42001 controls from counts
-  decoded out of real ledger decision records.
-- **`acp siem`** projects real decisions into your SIEM ([chapter 9](09-evidence.md)).
-- **Warehouse re-verification** re-checks an exported evidence row against a Merkle inclusion proof
-  and a signed tree head.
-
-These are as strong as the ledger, because they are the ledger.
-
-### Signed operator documents (author-attested)
-
-You create these from the console's **Governance** page (the **Create governance record** popup, which
-carries a **Kind** selector) or the control-plane API (`POST /grc`). Each record is Ed25519-signed by
-the control plane, stored in the control-plane database, and re-verified on read. The signature proves
-the document was not altered after signing; it does **not** prove that the "evidence" or
-"linked-decision" references inside it correspond to real ledger records, because those are free-text
-today. The nine record **kinds** (assessment, conformity, risk, model-card, use-case, attestation,
-aibom, fria and incident) and when to use each are explained with worked examples under
-[What is a governance record](#what-is-a-governance-record) above.
-
-The static control library across the three frameworks is served by the control plane and shown on the
-console Governance page. (These record kinds were previously separate `acp` subcommands; management now
-lives in the console and the control-plane API, so the CLI subcommands are retired.)
-
-Advancing a record's status is not API-only. Each record on the console Governance panel carries per-record
-**Review**, **Approve** and **Close** controls that POST to `POST /grc/:id/status`; the control plane
-re-signs the record on the change, so the lifecycle move is itself signed evidence, not an unsigned edit.
-
-Both kinds are useful. An auditor gets runtime proof from the ledger-backed set and documented
-governance from the signed set. Do not present the second kind as if it were the first.
-
-### How to create a governance record (step by step)
-
-1. Select **Governance** in the sidebar.
-2. Click **+ Create record**. The **Create a governance record** popup opens.
-3. Choose a **Kind** (`assessment`, `conformity`, `risk`, `model-card`, `use-case`, `attestation` or `aibom`).
-4. Fill in **Subject** (required, the system or agent the record is about, for example `checkout-agent`) and, optionally, a **Title** and **Status** (defaults to `open`).
-5. Put the record content in **Details** as JSON or plain text.
-6. Click **Create record**. The control plane signs it (Ed25519), stores it in the control-plane database, and re-verifies it on read, so the list shows a checked "signed" state, not an asserted one.
-
-### How to run a guided assessment (step by step)
-
-Rather than hand-authoring an assessment, use the guided wizard so the tier and the control checklist are computed for you.
-
-1. Select **Governance** in the sidebar.
-2. Click **+ New assessment**. The **New EU AI Act assessment** popup opens.
-3. Fill in **Subject** (required) and optionally a **Title** and an **Assignee**.
-4. Answer the nine screening questions (prohibited practice, safety component or Annex III use, biometric identification, critical infrastructure, employment or education, essential services, law enforcement, interacts with people, generates content).
-5. Click **Run assessment**. The control plane runs the deterministic screening, assigns the EU AI Act tier (unacceptable, high, limited or minimal) and builds a control checklist from the built-in control library. It signs and stores the record.
-6. The new record appears in the table with its **Tier**, **Stage**, **Assignee** and a **Controls** cell showing progress (for example `0/7 controls`).
-
-The screening questionnaire itself is served at `GET /grc/templates`, so a client can render the same wizard from the control plane's own definition.
-
-### Auto risk-tiering from an agent's tool bindings
-
-You do not have to answer the questionnaire by hand for a registered agent. On the **Agents** page each
-row has an **Auto-assess** action (`POST /agents/:id/auto-assess`). It reads the agent's business
-`domain` and its registered `tools` from the registration metadata (both overridable in the request
-body), derives the screening from them, and runs the same deterministic tiering as the wizard, then
-files a signed `assessment` record pre-filled with the proposed tier and control checklist.
-
-The mapping is conservative and can only *raise* a flag: a tool binding like `resume.parse` or
-`candidate.rank` (or a `hiring` domain) trips **employment or education**, so the agent tiers **High**
-and pulls the Art. 9 to 15 obligation set; `credit.score` or `loan.underwrite` trips **essential
-services**; `face`/`biometric` trips **biometric identification**; a `chat`/`support` tool trips the
-transparency duty (**Limited**). Every flag records which signal raised it, in the record's
-`auto.signals`. Because it only proposes, an operator still reviews, works the checklist and advances
-the record, exactly as with a hand-run assessment: auto-tiering removes the guesswork of the first
-draft, it does not sign off on itself.
-
-### How to work an assessment or conformity checklist (step by step)
-
-1. In the **Governance** table, open the **Controls** cell for the record (click the `k/m controls` disclosure).
-2. Each control shows its framework id (for example `art-14`), title and current state (`open` or `done`).
-3. Click **Mark done** as your team completes a control, or **Reopen** to reverse it. Every toggle re-signs the record server-side, so the checklist progress stays tamper-evident and the record still reads as verified.
-4. Use **Review**, **Approve** or **Close** to advance the record's stage; the stage change also re-signs.
-5. Set or change the **Assignee** to route the work to an owner.
-
-The checklist lives inside the signed document, so `k/m` progress is part of what the Ed25519 signature covers, not a side note.
-
-### Linked evidence on a governance record
-
-When you create a record you can list **Linked decision ids** (comma separated). These are advisory references to decisions in the evidence ledger. The control plane checks each id against the central ingested-evidence store and shows a ratio such as `1/2 verified` in the record row. It never trusts or rewrites what you typed: an id that does not exist in the ledger simply counts as unverified. A record with no linked ids shows `0/0`.
+Roles feed the applicability predicate on each control, so a UK deployer and an EU provider of the same
+system see different applicable control sets and therefore report differently. This is not a display
+filter: it drives which obligations bind you.
+
+### The Statement of Applicability
+
+For each system and framework, Varman persists a Statement of Applicability: one row per control saying
+whether it is **applicable** or not, a **justification** (the reason it is excluded, or the note on how
+it is met), and a **status** (planned, in progress, implemented). The framework report is graded
+directly from the SoA, so the SoA is the working surface, not a report artefact.
+
+```sh
+curl http://<host>:8787/systems/<id>/soa/eu-ai-act          # read the SoA for a framework
+curl -X POST http://<host>:8787/systems/<id>/soa/eu-ai-act \
+  -d '{"control_id":"art-14","applicable":true,"status":"implemented",
+       "justification":"human reviewer signs every rejection"}'
+```
+
+In the console, open the system, pick a framework tab, and work down the control list. The applicable
+set is seeded from the control catalogue's predicates against the system's profile and roles; you can
+override any row with an explicit applicable-or-not and a justification.
+
+### Evidence with freshness
+
+Evidence is a first-class record bound to a system, framework and control. Each piece carries a title,
+a source, an owner, a produced timestamp, an artefact reference and, crucially, a **valid_until**
+freshness date.
+
+```sh
+curl -X POST http://<host>:8787/systems/<id>/evidence \
+  -d '{"framework":"eu-ai-act","control_id":"art-12","title":"audit-log config",
+       "source":"ledger","owner":"carol","valid_until_ms":1790000000000}'
+```
+
+Freshness gates the grade. A control the SoA marks implemented but which has no fresh evidence (none
+attached, or every piece expired) does not count as conformant: it drops to **partial**, with the
+reason "claimed implemented but no fresh evidence". A signed report is then honest about its own
+currency rather than presenting stale paperwork as live proof.
+
+### The control crosswalk: author once, satisfy many
+
+Every control declares a crosswalk to equivalent controls in other frameworks, and the report resolver
+walks that graph symmetrically. Evidence attached to one control automatically satisfies the mapped
+controls in every other framework. Attach EU AI Act Art. 12 (record-keeping) evidence once and it also
+satisfies GDPR Art. 30 (records of processing); the GDPR report shows that control conformant with the
+reason "satisfied via crosswalk: eu-ai-act:art-12". You assess and collect once, and report against
+whichever regulations apply.
+
+### Conformity states and the rollup
+
+Each control in a report resolves to one conformity state: **conformant**, **partial**,
+**non-conformant**, **not-applicable** or **not-assessed**. The logic, in order: a control the SoA
+excludes is not-applicable; one that is applicable, marked implemented and backed by fresh evidence is
+conformant; one implemented but without fresh evidence is partial; one satisfied via a crosswalk edge is
+conformant; anything else falls back to its SoA status or, with no SoA row at all, not-assessed. The
+report carries a **conformity rollup**: totals for applicable, not-applicable, conformant, partial,
+non-conformant and not-assessed, so the posture is one glance.
+
+### Immutable change-history and as-at reporting
+
+Every governance change to a system (created, roles declared, SoA updated, evidence added) appends an
+immutable event to the change-history (`grc_audit`): who did what to which entity, when. This is the
+audit trail an assessor relies on, and it is append-only.
+
+```sh
+curl http://<host>:8787/systems/<id>/audit          # the change history, newest first
+```
+
+Because history is preserved, a report can be rendered **as at** any past date. Pass `as_at` (epoch
+milliseconds) and the resolver filters evidence and SoA rows to only those that existed by that instant,
+so you can reproduce the conformance posture as it stood on the day of an incident or a prior audit,
+not just today.
+
+```sh
+curl "http://<host>:8787/systems/<id>/report/eu-ai-act?as_at=1780000000000"
+```
+
+Reports are also stored as immutable, signed snapshots, so a point-in-time rendering is pinned and
+reproducible.
+
+## Jurisdiction-aware reporting
+
+The report is `(system) x (framework) -> graded, signed, versioned`. It branches on the framework's
+type, because the regimes are genuinely different in shape:
+
+- **EU AI Act** is `statutory_conformity`: enumerated Annex obligations, pass or fail, the Art. 9 to 15
+  controls with status and evidence, data governance, human oversight, accuracy and robustness,
+  post-market monitoring, and a conformity declaration (the Annex IV technical documentation shape).
+- **UK AI principles** is `principles_based`: there is no single UK AI statute, so the report is a
+  principle-by-principle narrative (safety and robustness, transparency and explainability, fairness,
+  accountability and governance, contestability and redress) with the same evidence bound under each
+  principle, plus the relevant sector-regulator expectations. It is attestation-style, not a pass/fail
+  checklist.
+
+An organisation operating in both markets registers one system, declares an EU provider role and a UK
+deployer role, works one SoA, and generates both reports off the same crosswalked evidence.
+
+## The console flow, end to end
+
+1. **Register the system.** Governance, AI Systems, **+ Register system**. Give it a name, purpose,
+   owner, risk tier, sector and jurisdictions.
+2. **Declare roles.** On the system, add a role per jurisdiction (provider, deployer, importer,
+   distributor). This sets which controls bind you in each market.
+3. **Work the SoA per framework.** Open a framework tab. For each control, confirm it is applicable (or
+   exclude it with a justification) and move its status towards implemented as your team closes it.
+4. **Attach evidence.** Bind each piece of proof to its control with an owner and a valid_until date.
+   The crosswalk carries it to mapped controls in other frameworks automatically.
+5. **Generate and download the report.** The framework report is graded live from the SoA and evidence,
+   with the conformity rollup and any freshness or crosswalk reasons per control. Download it as a signed
+   JSON-LD pack (`@type: acp:ComplianceReport`, `conformsTo` the framework, verifiable offline with
+   `acp verify-pack` and the public key alone) or as CSV for the controls table. Reporting is
+   jurisdiction-aware: the UK principles-based narrative and the EU statutory Annex IV report come from
+   the same object graph.
+
+> API: `GET/POST /systems`, `GET /systems/:id`, `POST /systems/:id/roles`,
+> `GET/POST /systems/:id/soa/:framework`, `GET/POST /systems/:id/evidence`,
+> `GET /systems/:id/audit`, `GET /systems/:id/report/:framework?as_at=<ms>`, and the signed pack and CSV
+> at `GET /report/framework/:name/pack` and `GET /report/framework/:name/csv`. Day to day, use the
+> console; the API is for schedulers and CI.
+
+## Runtime evidence still counts
+
+The system-anchored model documents governance; it does not replace the runtime record. When the proxy
+allows, denies or steps up an actual tool call, that goes into the tamper-evident decision ledger
+([chapter 9](09-evidence.md)), an append-only Merkle log with a signed tree head. Evidence with source
+`ledger` binds a control to that machine-generated proof, so a report can cite runtime facts rather than
+author-attested paperwork. Post-market monitoring (EU AI Act Art. 72), serious-incident cases (Art. 73)
+and the auditor evidence pack (`GET /audit/pack`, verified with `acp verify-pack`) all draw from the
+ledger, so the strongest parts of a report are the ledger itself.

@@ -13,6 +13,27 @@ use std::sync::Arc;
 // cache-busting, tell browsers to always revalidate so a redeploy is never served stale.
 const NO_CACHE: &str = "no-cache, must-revalidate";
 
+#[cfg(feature = "embed-console")]
+#[derive(rust_embed::RustEmbed)]
+#[folder = "../../console/dist"]
+struct EmbeddedConsole;
+
+/// Read an asset from the embedded bundle when built with --features embed-console (single-binary
+/// deploy). Returns None otherwise, so serving falls through to the on-disk console directory.
+fn embedded_asset(rel: &str) -> Option<(&'static str, Vec<u8>)> {
+    #[cfg(feature = "embed-console")]
+    {
+        let mut rel = rel.trim_start_matches('/');
+        if rel.is_empty() { rel = "index.html"; }
+        if let Some(f) = EmbeddedConsole::get(rel) {
+            return Some((content_type(rel), f.data.into_owned()));
+        }
+    }
+    #[cfg(not(feature = "embed-console"))]
+    { let _ = rel; }
+    None
+}
+
 fn content_type(path: &str) -> &'static str {
     match path.rsplit('.').next().unwrap_or("") {
         "html" => "text/html; charset=utf-8",
@@ -41,32 +62,26 @@ fn read_under(dir: &str, rel: &str) -> Option<(&'static str, Vec<u8>)> {
 }
 
 fn serve(st: &Arc<AppState>, path: &str) -> Response {
-    let dir = match &st.console_dir {
-        Some(d) => d,
-        None => return (StatusCode::NOT_FOUND, "console not built; run the Vite build or set --console").into_response(),
-    };
-    // Serve the exact asset when it exists; otherwise fall back to index.html so client-side routes
-    // (for example /overview, /reports) load the SPA which then renders the route.
+    let dir = st.console_dir.as_deref();
+    // A specific asset: embedded bundle first (single-binary build), else the on-disk console dir.
     if !path.is_empty() && path != "/" {
-        if let Some((ct, bytes)) = read_under(dir, path) {
+        if let Some((ct, bytes)) = embedded_asset(path).or_else(|| dir.and_then(|d| read_under(d, path))) {
             return ([(header::CONTENT_TYPE, ct), (header::CACHE_CONTROL, NO_CACHE)], bytes).into_response();
         }
     }
-    match read_under(dir, "index.html") {
-        Some((ct, bytes)) => ([(header::CONTENT_TYPE, ct), (header::CACHE_CONTROL, NO_CACHE)], bytes).into_response(),
-        None => (StatusCode::NOT_FOUND, "console index.html not found").into_response(),
+    // SPA fallback: index.html (embedded, else disk).
+    if let Some((ct, bytes)) = embedded_asset("index.html").or_else(|| dir.and_then(|d| read_under(d, "index.html"))) {
+        return ([(header::CONTENT_TYPE, ct), (header::CACHE_CONTROL, NO_CACHE)], bytes).into_response();
     }
+    (StatusCode::NOT_FOUND, "console not built; run the Vite build, set --console, or build with --features embed-console").into_response()
 }
 
 /// Serve a specific static asset file (for example /main.js, /main.css) with the right content type.
 /// Unlike the SPA fallback this does NOT fall back to index.html: a missing asset is a real 404, so a
 /// bad asset URL never returns an HTML page with a 200.
 pub(crate) async fn asset(State(st): State<Arc<AppState>>, uri: Uri) -> Response {
-    let dir = match &st.console_dir {
-        Some(d) => d,
-        None => return (StatusCode::NOT_FOUND, "console not built").into_response(),
-    };
-    match read_under(dir, uri.path()) {
+    let dir = st.console_dir.as_deref();
+    match embedded_asset(uri.path()).or_else(|| dir.and_then(|d| read_under(d, uri.path()))) {
         Some((ct, bytes)) => ([(header::CONTENT_TYPE, ct), (header::CACHE_CONTROL, NO_CACHE)], bytes).into_response(),
         None => (StatusCode::NOT_FOUND, "not found").into_response(),
     }
