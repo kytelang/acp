@@ -128,6 +128,7 @@ pub(crate) fn build_router(state: Arc<AppState>) -> Router {
             .route("/break-glass/engage", post(break_glass_engage))
             .route("/break-glass/clear", post(break_glass_clear))
             .route("/packs", get(packs_list).post(pack_load))
+            .route("/packs/custom", post(pack_custom))
             .route("/packs/available", get(packs_available))
             .route("/controls", get(controls_list))
             .route("/models", get(models_list).post(model_register))

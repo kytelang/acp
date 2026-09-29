@@ -21,6 +21,43 @@ pub(crate) async fn packs_available(State(st): State<Arc<AppState>>) -> impl Int
 
 /// A4: load a signed control pack. The signature is verified before storing; a tampered pack (body
 /// no longer matches the signature) is rejected with a clear error. Idempotent by pack id.
+
+/// POST /packs/custom: author a custom policy pack from a curated set of controls (possibly across
+/// frameworks), sign it with the control-plane key and store it. Body: {name, version?, controls:
+/// [{framework, control_id}]}. The controls are resolved from the catalogue; unknown ids are dropped.
+/// EditPolicy scope.
+pub(crate) async fn pack_custom(State(st): State<Arc<AppState>>, headers: HeaderMap, Json(body): Json<serde_json::Value>) -> Response {
+    if let Err(r) = authorize(&st.auth, &headers, acp_core::auth::Capability::EditPolicy) { return r; }
+    let store = match &st.store { Some(s) => s, None => return Json(serde_json::json!({"ok": false, "error": "no --store configured"})).into_response() };
+    let name = body.get("name").and_then(|v| v.as_str()).unwrap_or("").trim().to_string();
+    if name.is_empty() { return Json(serde_json::json!({"ok": false, "error": "name is required"})).into_response(); }
+    let version = body.get("version").and_then(|v| v.as_str()).filter(|s| !s.is_empty()).unwrap_or("custom").to_string();
+    let sel = body.get("controls").and_then(|v| v.as_array()).cloned().unwrap_or_default();
+    let mut controls: Vec<acp_core::controls::Control> = Vec::new();
+    let mut frameworks: Vec<String> = Vec::new();
+    for c in &sel {
+        let fw = c.get("framework").and_then(|v| v.as_str()).unwrap_or("");
+        let cid = c.get("control_id").and_then(|v| v.as_str()).unwrap_or("");
+        if let Some(ctrl) = acp_core::controls::get(fw, cid) {
+            if !frameworks.contains(&ctrl.framework) { frameworks.push(ctrl.framework.clone()); }
+            controls.push(ctrl);
+        }
+    }
+    if controls.is_empty() { return Json(serde_json::json!({"ok": false, "error": "no known controls selected"})).into_response(); }
+    // Slugify the name into a stable pack id.
+    let slug: String = name.to_lowercase().chars().map(|c| if c.is_ascii_alphanumeric() { c } else { '-' }).collect();
+    let slug = slug.trim_matches('-').to_string();
+    let id = format!("pack-custom-{slug}");
+    let pack = acp_core::pack::ControlPack { id: id.clone(), version: version.clone(), frameworks, controls, generated_ms: now_ms() };
+    let signer = enroll_signer(&st.cp_key);
+    let signed = pack.sign(&signer);
+    let doc_json = signed.pack.to_string();
+    match store.add_pack(&id, &version, &doc_json, &signed.pubkey_hex, &signed.sig_hex, now_ms() as i64).await {
+        Ok(()) => Json(serde_json::json!({"ok": true, "id": id, "controls": pack.controls.len()})).into_response(),
+        Err(e) => Json(serde_json::json!({"ok": false, "error": e})).into_response(),
+    }
+}
+
 pub(crate) async fn pack_load(State(st): State<Arc<AppState>>, headers: HeaderMap, Json(body): Json<serde_json::Value>) -> Response {
     if let Err(r) = authorize(&st.auth, &headers, acp_core::auth::Capability::EditPolicy) { return r; }
     let store = match &st.store { Some(s) => s, None => return Json(serde_json::json!({"ok": false, "error": "no --store configured"})).into_response() };
